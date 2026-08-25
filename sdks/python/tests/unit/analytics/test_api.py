@@ -233,3 +233,37 @@ def test_track_event__paths_sharing_a_prefix__reported_separately(recording_work
         "opik_python_sdk__integration__bedrock",
         "opik_python_sdk__integration__bedrock__invoke_agent",
     ]
+
+
+def test_track_event__queue_full__event_not_left_claimed(recording_worker, monkeypatch):
+    """
+    Claiming happens before the hand-off. If the hand-off is refused the claim has to
+    go with it, or the event is lost for the rest of the process.
+    """
+
+    class FullWorker:
+        def enqueue(self, event):
+            return False
+
+    monkeypatch.setattr(api, "_WORKER", FullWorker())
+    analytics.track_event("client", "create_dataset")
+
+    assert api._ALREADY_REPORTED == set()
+
+    # A later call, once the queue has drained, still reports it.
+    monkeypatch.setattr(api, "_WORKER", recording_worker)
+    analytics.track_event("client", "create_dataset")
+
+    assert recording_worker.names == ["opik_python_sdk__client__create_dataset"]
+
+
+@pytest.mark.parametrize("action", [None, 123, object(), b"bytes"])
+def test_track_event__action_is_not_a_string__does_not_raise(action, recording_worker):
+    """
+    `track_event` runs inside the user-facing methods it reports on, so a bad call
+    site must degrade to reporting nothing rather than breaking the method. Composing
+    the name is where that used to escape.
+    """
+    api.track_event("client", action)
+
+    assert recording_worker.names == []

@@ -14,6 +14,8 @@ import textwrap
 import pytest
 
 from opik.analytics import api
+from opik.analytics import worker as worker_module
+from opik import environment_details
 
 FORK_SCRIPT = textwrap.dedent(
     """
@@ -111,3 +113,29 @@ def test_reset_after_fork__drops_the_worker_but_keeps_what_was_reported(monkeypa
     assert api._WORKER is None
     assert api._ALREADY_REPORTED == {("opik_python_sdk__client__init",)}
     assert api._LOCK is not original_lock
+
+
+@pytest.fixture
+def fresh_context():
+    environment_details.collect_context_once.cache_clear()
+    yield
+    environment_details.collect_context_once.cache_clear()
+
+
+def test_reset_after_fork__session_properties_rebuilt(fresh_context):
+    """
+    `pid` and `session_id` describe one process. Left cached, a forked child reports
+    under its parent's identity and the two cannot be told apart downstream.
+
+    `session_properties` holds no cache of its own; it reads through to
+    `environment_details`, so clearing that is what has to rebuild the identity.
+    """
+    before = dict(worker_module.session_properties())
+
+    environment_details._reset_after_fork()
+    api._reset_after_fork()
+
+    after = worker_module.session_properties()
+
+    assert after["session_id"] != before["session_id"]
+    assert after["pid"] == before["pid"]  # same process here; the id is what proves it

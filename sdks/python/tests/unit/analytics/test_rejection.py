@@ -1,8 +1,9 @@
 """
-The destination can retire the SDK, or one version of it, by answering with a
-rejecting status — it can tell versions apart from the `User-Agent` this client
-sends. That only stops the traffic if the SDK takes the answer seriously, which is
-what these cover.
+What the SDK does once the destination has turned it down.
+
+`test_sender.py` covers which answers count as a rejection; these cover the reaction
+to one - the worker thread stopping, and reporting staying off for the rest of the
+process. A rejection is only a kill switch if it actually stops the traffic.
 """
 
 import json
@@ -12,53 +13,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from opik.analytics import api, comet_stats, worker as worker_module
+from opik import config
+from opik.analytics import api, worker as worker_module
 
 
-def _sender_answering(status):
-    class Client:
-        def __init__(self):
-            self.requests = 0
-
-        def post(self, url, **kwargs):
-            self.requests += 1
-            return type("Response", (), {"status_code": status})()
-
-    sender = comet_stats.Sender.__new__(comet_stats.Sender)
-    sender._url = "http://collector.invalid"
-    sender._client = Client()
-    return sender
-
-
-def _events(count):
-    return [
-        worker_module.Event(name=f"opik_python_sdk__client__method_{i}", properties={})
-        for i in range(count)
-    ]
-
-
-@pytest.mark.parametrize("status", sorted(comet_stats.REJECTED_STATUSES))
-def test_send__rejecting_status__raises_so_the_worker_can_stop(status):
-    sender = _sender_answering(status)
-
-    with pytest.raises(worker_module.ReportingRejected):
-        sender.send(_events(5))
-
-    # Gave up on the first answer rather than working through the batch.
-    assert sender._client.requests == 1
-
-
-@pytest.mark.parametrize("status", [429, 500, 502, 503])
-def test_send__transient_status__keeps_going(status):
-    """`try later` is not `stop`; giving up here would lose events to a blip."""
-    sender = _sender_answering(status)
-
-    sender.send(_events(5))
-
-    assert sender._client.requests == 5
-
-
-def test_worker__rejected__stops_and_tells_the_caller_side():
+def test_worker__rejected__stops_and_tells_the_caller_side(analytics_events):
     stopped = []
     attempted = []
 
@@ -75,7 +34,7 @@ def test_worker__rejected__stops_and_tells_the_caller_side():
     )
     worker.start()
     try:
-        worker.enqueue(_events(1)[0])
+        worker.enqueue(analytics_events(1)[0])
         worker.flush(timeout=5)
 
         assert stopped == [True]
@@ -89,14 +48,14 @@ def test_worker__rejected__stops_and_tells_the_caller_side():
 
         # ... and nothing queued afterwards is sent.
         attempted.clear()
-        worker.enqueue(_events(1)[0])
+        worker.enqueue(analytics_events(1)[0])
         worker.flush(timeout=2)
         assert attempted == []
     finally:
         worker.close(timeout=5)
 
 
-def test_worker__ordinary_failure__keeps_running():
+def test_worker__ordinary_failure__keeps_running(analytics_events):
     stopped = []
 
     def send(events):
@@ -111,7 +70,7 @@ def test_worker__ordinary_failure__keeps_running():
     )
     worker.start()
     try:
-        worker.enqueue(_events(1)[0])
+        worker.enqueue(analytics_events(1)[0])
         worker.flush(timeout=5)
 
         assert stopped == []
@@ -169,12 +128,14 @@ def test_track_event__destination_rejects__whole_process_stops_reporting(
     monkeypatch.setattr(api, "_DISABLED", False)
     monkeypatch.setattr(api, "_ALREADY_REPORTED", set())
     monkeypatch.setattr(api, "_REPORTING_CODE", set())
+    # A real config with the destination overridden, not a stand-in object: this
+    # replaces `OpikConfig` for the whole SDK, and the worker thread reads it too
+    # when it builds the session properties. A stub with only the fields
+    # `_start_worker` happens to touch fails there instead, and the failure is
+    # swallowed - which looked like "the event vanished".
+    real_config = config.OpikConfig
     monkeypatch.setattr(
-        api.config,
-        "OpikConfig",
-        lambda **_: type(
-            "C", (), {"analytics_url": url, "check_tls_certificate": True}
-        )(),
+        api.config, "OpikConfig", lambda **_: real_config(analytics_url=url)
     )
 
     try:

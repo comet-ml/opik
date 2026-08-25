@@ -51,3 +51,22 @@ def test_analytics_url__defaults_to_the_collector_the_backend_uses(monkeypatch):
     monkeypatch.delenv("OPIK_ANALYTICS_URL", raising=False)
 
     assert config.OpikConfig().analytics_url == config.ANALYTICS_URL_DEFAULT
+
+
+def test_reporting_allowed__rule_without_a_name__still_decides(monkeypatch):
+    """
+    `register_rule` takes any callable, and a callable object has no `__name__`.
+    Reading it in the failure handler made the handler fail in turn.
+    """
+
+    class Boom:
+        def __call__(self, config_):
+            raise RuntimeError("boom")
+
+    class Quiet:
+        def __call__(self, config_):
+            return False
+
+    for rule in (Boom(), Quiet()):
+        monkeypatch.setattr(rules, "_RULES", [rule])
+        assert rules.reporting_allowed(config.OpikConfig()) is False

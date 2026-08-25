@@ -57,3 +57,14 @@ def test_event_names__every_component_is_separator_free():
     components = api.Component.__args__
 
     assert [c for c in components if api._LEVEL_SEPARATOR in c] == []
+
+
+def test_build_event_name__runtime_segment_with_the_separator__stays_splittable():
+    """
+    Every call site passes a literal and a test keeps those separator-free, but a
+    segment built at runtime would otherwise add levels that were never intended.
+    """
+    name = api._build_event_name("client", ("create__dataset",))
+
+    assert name == "opik_python_sdk__client__create_dataset"
+    assert len(name.split("__")) == 3

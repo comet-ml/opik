@@ -1,6 +1,6 @@
 import pytest
 
-from opik.analytics import api
+from opik.analytics import api, comet_stats, worker
 
 
 class RecordingWorker:
@@ -30,3 +30,40 @@ def recording_worker(monkeypatch):
     # registered by one test would be treated as an outer call by the next.
     monkeypatch.setattr(api, "_REPORTING_CODE", set())
     return worker
+
+
+@pytest.fixture
+def analytics_events():
+    """Builds a batch of events, for tests that only care how many there are."""
+
+    def build(count):
+        return [
+            worker.Event(name=f"opik_python_sdk__client__method_{i}", properties={})
+            for i in range(count)
+        ]
+
+    return build
+
+
+@pytest.fixture
+def sender_answering():
+    """
+    A real `Sender` with a stubbed HTTP client, so the loop and its error handling
+    are the code under test rather than the transport.
+    """
+
+    def build(status):
+        class Client:
+            def __init__(self):
+                self.requests = 0
+
+            def post(self, url, **kwargs):
+                self.requests += 1
+                return type("Response", (), {"status_code": status})()
+
+        sender = comet_stats.Sender.__new__(comet_stats.Sender)
+        sender._url = "http://collector.invalid"
+        sender._client = Client()
+        return sender
+
+    return build
