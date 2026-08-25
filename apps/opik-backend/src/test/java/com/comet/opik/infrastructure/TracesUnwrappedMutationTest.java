@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
+import lombok.NonNull;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -239,8 +240,10 @@ class TracesUnwrappedMutationTest {
 
     private String engineOf(String table) {
         return template.nonTransaction(connection -> {
-            var statement = connection.createStatement(
-                    "SELECT engine FROM system.tables WHERE database = :database AND name = :table")
+            var statement = connection.createStatement("""
+                    SELECT engine FROM system.tables WHERE database = :database AND name = :table
+                    SETTINGS log_comment = 'traces_unwrapped_mutation_test:engine_of'
+                    """)
                     .bind("database", DATABASE_NAME)
                     .bind("table", table);
             return Mono.from(statement.execute())
@@ -251,7 +254,7 @@ class TracesUnwrappedMutationTest {
 
     /** Mirrors {@code TracesDistributedWrapMutationTest.RetentionWindow}; see its Javadoc for the ±1s rationale. */
     @Builder(toBuilder = true)
-    private record RetentionWindow(UUID lowerBound, UUID middleId, UUID cutoffId) {
+    private record RetentionWindow(@NonNull UUID lowerBound, @NonNull UUID middleId, @NonNull UUID cutoffId) {
         private static RetentionWindow aroundNow() {
             var now = Instant.now();
             return RetentionWindow.builder()
