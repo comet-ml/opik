@@ -338,8 +338,8 @@ def configure(
         "configuration",
         "configure",
         "result",
-        clients=outcome.clients,
-        skills=outcome.skills,
+        clients_written=outcome.clients,
+        skills_installed=outcome.skills,
     )
 
 

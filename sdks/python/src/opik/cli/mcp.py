@@ -146,7 +146,10 @@ def configure(
         # Whether a client was named rather than picked: the agent-driven path.
         named_client=bool(hosts),
         client_count=len(hosts),
-        skills=str(skills_flag),
+        # The tri-state as passed, so "asked for it" stays separable from "never
+        # said". Named apart from the result event's boolean: one property key
+        # must not carry a string on one event and a bool on another.
+        skills_requested=str(skills_flag),
         local_server=local_server,
     )
 
@@ -202,8 +205,8 @@ def configure(
         "configuration",
         "mcp_configure",
         "result",
-        clients=outcome.clients,
-        skills=outcome.skills,
+        clients_written=outcome.clients,
+        skills_installed=outcome.skills,
     )
 
 
