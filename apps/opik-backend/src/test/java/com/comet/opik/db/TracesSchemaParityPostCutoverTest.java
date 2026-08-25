@@ -91,9 +91,14 @@ class TracesSchemaParityPostCutoverTest {
 
     @AfterAll
     void tearDown() throws Exception {
-        connection.close();
-        clickHouse.stop();
-        zookeeper.stop();
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } finally {
+            clickHouse.stop();
+            zookeeper.stop();
+        }
     }
 
     @Test
@@ -152,7 +157,7 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(5)
-    @DisplayName("the reference migration takes its post-cutover branch and marks the other one run")
+    @DisplayName("the reference migration takes its post-cutover branch and records the other as MARK_RAN")
     void referenceMigrationTakesThePostCutoverBranch() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
 
@@ -241,7 +246,7 @@ class TracesSchemaParityPostCutoverTest {
      */
     @Test
     @Order(7)
-    @DisplayName("an unguarded traces migration is rejected: it only reaches the wrapper")
+    @DisplayName("an unguarded traces migration applies cleanly and leaves wrapper-only drift the gate rejects")
     void unguardedMigrationIsRejected() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
 

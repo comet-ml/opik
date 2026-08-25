@@ -19,6 +19,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 
 import java.sql.Connection;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -70,9 +71,14 @@ class TracesSchemaParityPreCutoverTest {
 
     @AfterAll
     void tearDown() throws Exception {
-        connection.close();
-        clickHouse.stop();
-        zookeeper.stop();
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } finally {
+            clickHouse.stop();
+            zookeeper.stop();
+        }
     }
 
     @Test
@@ -107,7 +113,7 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(5)
-    @DisplayName("the reference migration takes its pre-cutover branch and marks the other one run")
+    @DisplayName("the reference migration takes its pre-cutover branch and records the other as MARK_RAN")
     void referenceMigrationTakesThePreCutoverBranch() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
 
@@ -156,7 +162,7 @@ class TracesSchemaParityPreCutoverTest {
      */
     @Test
     @Order(7)
-    @DisplayName("an unguarded traces migration is rejected: it never reaches the shadow")
+    @DisplayName("an unguarded traces migration applies cleanly and leaves shadow drift the gate rejects")
     void unguardedMigrationIsRejected() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
 
@@ -206,14 +212,10 @@ class TracesSchemaParityPreCutoverTest {
     @Order(10)
     @DisplayName("drift is caught: a column added to one table but not the other")
     void oneSidedColumnIsCaught(String table, String column) throws Exception {
-        execute("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining(column);
-
-        execute("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column)),
+                List.of("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column)),
+                column);
     }
 
     /**
@@ -233,20 +235,19 @@ class TracesSchemaParityPreCutoverTest {
     void projectionQueryDriftIsCaught() throws Exception {
         allowProjections(TRACES);
         allowProjections(SHADOW);
-        execute("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
-                .formatted(DATABASE_NAME, TRACES));
-        execute("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
-                .formatted(DATABASE_NAME, SHADOW));
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("proj_drift");
-
-        execute("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES));
-        execute("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, SHADOW));
-        restoreProjectionMode(TRACES);
-        restoreProjectionMode(SHADOW);
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
+                        .formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
+                                .formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, SHADOW),
+                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
+                                .formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
+                                .formatted(DATABASE_NAME, SHADOW)),
+                "proj_drift");
     }
 
     private void allowProjections(String table) throws Exception {
@@ -267,15 +268,10 @@ class TracesSchemaParityPreCutoverTest {
     @Order(15)
     @DisplayName("drift is caught: a shared column whose type changed on one table only")
     void oneSidedTypeChangeIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)".formatted(DATABASE_NAME, SHADOW));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("name")
-                .hasMessageContaining("LowCardinality");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)".formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW)),
+                "name", "LowCardinality");
     }
 
     /**
@@ -287,16 +283,11 @@ class TracesSchemaParityPreCutoverTest {
     @Order(16)
     @DisplayName("drift is caught: an allowlisted column that left its documented type")
     void allowlistedColumnLeavingItsDocumentedTypeIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("allowlisted column")
-                .hasMessageContaining("ttft");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
-                .formatted(DATABASE_NAME, SHADOW));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
+                        .formatted(DATABASE_NAME, SHADOW)),
+                "allowlisted column", "ttft");
     }
 
     /**
@@ -307,16 +298,12 @@ class TracesSchemaParityPreCutoverTest {
     @Order(17)
     @DisplayName("drift is caught: an allowlisted column that changed on traces")
     void allowlistedColumnDriftingOnTracesIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')".formatted(DATABASE_NAME, TRACES));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("allowlisted column")
-                .hasMessageContaining("start_time");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
-                .formatted(DATABASE_NAME, TRACES));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')"
+                        .formatted(DATABASE_NAME, TRACES)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
+                        .formatted(DATABASE_NAME, TRACES)),
+                "allowlisted column", "start_time");
     }
 
     /**
@@ -349,15 +336,11 @@ class TracesSchemaParityPreCutoverTest {
     @Order(13)
     @DisplayName("drift is caught: a skip index added to traces but not to the shadow")
     void skipIndexAddedToTracesAloneIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s ADD INDEX idx_drift_name name TYPE set(0) GRANULARITY 1"
-                .formatted(DATABASE_NAME, TRACES));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("idx_drift_name");
-
-        execute("ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s ADD INDEX idx_drift_name name TYPE set(0) GRANULARITY 1"
+                        .formatted(DATABASE_NAME, TRACES)),
+                List.of("ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES)),
+                "idx_drift_name");
     }
 
     /**
@@ -370,14 +353,10 @@ class TracesSchemaParityPreCutoverTest {
     @Order(18)
     @DisplayName("drift is caught: the shadow's is_deleted default flipped to 1")
     void shadowOnlyColumnDefaultDriftIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 1".formatted(DATABASE_NAME, SHADOW));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("is_deleted");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0".formatted(DATABASE_NAME, SHADOW));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 1".formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0".formatted(DATABASE_NAME, SHADOW)),
+                "is_deleted");
     }
 
     /**
@@ -404,6 +383,35 @@ class TracesSchemaParityPreCutoverTest {
         assertThat(schema.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
                 .as("`%s` must carry the reference index, defined as declared", schema.table())
                 .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
+    }
+
+    /**
+     * Injects drift, asserts the guard rejects it naming {@code expectedInMessage}, and restores the schema
+     * <b>whether or not the assertion held</b>.
+     * <p>
+     * The finally is the point. These negative tests share one container with every later {@code @Order}ed test, so a
+     * failing assertion that left its drift in place would cascade: the next tests fail for a reason unrelated to what
+     * they assert, and the real failure is buried. Restoring first, then re-asserting parity, also proves the cleanup
+     * actually worked rather than assuming it.
+     */
+    private void assertDriftIsCaught(List<String> inject, List<String> restore, String... expectedInMessage)
+            throws Exception {
+        for (var sql : inject) {
+            execute(sql);
+        }
+        try {
+            var thrown = assertThatThrownBy(
+                    () -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                    .isInstanceOf(AssertionError.class);
+            for (var expected : expectedInMessage) {
+                thrown.hasMessageContaining(expected);
+            }
+        } finally {
+            for (var sql : restore) {
+                execute(sql);
+            }
+        }
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     private boolean tableExists(String table) throws Exception {
