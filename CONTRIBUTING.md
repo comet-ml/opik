@@ -7,8 +7,8 @@ If you are looking for setup instructions and contribution workflows, start with
 - Local development setup: https://www.comet.com/docs/opik/contributing/guides/local-development
 
 You can also read and edit those docs directly in this repository:
-- `apps/opik-documentation/documentation/fern/docs/contributing/overview.mdx`
-- `apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx`
+- `apps/opik-documentation/documentation/fern/docs-v2/contributing/overview.mdx`
+- `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/local-development.mdx`
 
 Please review the CLA before contributing:
 - https://github.com/comet-ml/opik/blob/main/CLA.md
@@ -22,22 +22,22 @@ Please review the CLA before contributing:
 ## Component-specific guides
 - Backend:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/backend
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/backend.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/backend.mdx`
 - Frontend:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/frontend
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/frontend.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/frontend.mdx`
 - Python SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/python-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/python-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/python-sdk.mdx`
 - TypeScript SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/typescript-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/typescript-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/typescript-sdk.mdx`
 - Documentation:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/documentation
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/documentation.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/documentation.mdx`
 - Agent Optimizer SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/agent-optimizer-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/agent-optimizer-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/agent-optimizer-sdk.mdx`
 
 ## Fast path
 1. Open or confirm a tracked issue first (`Fixes #...` or `Resolves #...`).
