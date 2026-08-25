@@ -79,7 +79,11 @@ export class ConfigurationMembersPage {
           res.url().includes(`/workspace-roles/user/${encodeURIComponent(userName)}`),
       );
       await this.roleTrigger(userName).click();
-      await this.page.getByRole('option', { name: ROLE_NAME[role], exact: false }).click();
+      // exact: true matters once custom workspace roles exist alongside the
+      // 4 canonical ones — self-hosted EKS has roles like "Write role with
+      // Project Visibility" whose names also contain "Write", so a substring
+      // match resolves to multiple options and throws a strict-mode violation.
+      await this.page.getByRole('option', { name: ROLE_NAME[role], exact: true }).click();
       await settled;
       // The PUT resolving doesn't mean the cell has re-rendered with the new
       // value yet — give the trigger's own text a moment to catch up rather
