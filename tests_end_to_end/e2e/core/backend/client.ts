@@ -447,10 +447,16 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     /**
-     * By name, not id: the Python SDK's create_prompt returns the prompt
-     * VERSION id, so a caller holding that id would get a 404 for a prompt
-     * that is very much alive.
+     * The id `DELETE`/`GET /v1/private/prompts/{id}` expect. The Python SDK's
+     * create_prompt returns the prompt VERSION id instead, which 404s against
+     * both — so resolve by name rather than trusting the id it handed back.
      */
+    async findPromptIdByName(name: string): Promise<string | null> {
+      const page = await opik.api.prompts.getPrompts({ name, size: 50 });
+      const match = (page.content ?? []).find((p) => p.name === name);
+      return match?.id ? String(match.id) : null;
+    },
+
     async promptExistsByName(name: string): Promise<boolean> {
       const page = await opik.api.prompts.getPrompts({ name, size: 50 });
       return (page.content ?? []).some((p) => p.name === name);

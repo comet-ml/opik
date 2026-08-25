@@ -27,13 +27,17 @@ test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }
       const siblingName = `${testNamespace}-prompt-bystander`;
 
       await test.step('Seed a second prompt as a bystander', async () => {
-        const sibling = await sdkClient.python.createTextPrompt({
+        await sdkClient.python.createTextPrompt({
           name: siblingName,
           prompt: 'Bystander prompt: {{question}}',
           project_name: project.name,
         });
-        // Registered before the assertions so teardown survives a failure.
-        registerPromptCleanup(sibling.id, sibling.name);
+        // Resolve the id by name rather than using the one create returned:
+        // the SDK hands back the prompt VERSION id, which DELETE answers 404
+        // for, so registering it would silently leak the prompt.
+        const siblingId = await backendClient.findPromptIdByName(siblingName);
+        expect(siblingId, 'bystander prompt id resolves by name').not.toBeNull();
+        registerPromptCleanup(siblingId as string, siblingName);
       });
 
       await test.step('Both prompts are listed', async () => {
