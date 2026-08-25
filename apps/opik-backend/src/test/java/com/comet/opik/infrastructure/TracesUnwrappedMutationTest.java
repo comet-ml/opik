@@ -48,7 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The pre-cutover counterpart of {@link TracesDistributedWrapMutationTest}: the same {@code TraceDAO} mutation paths
  * with {@code databaseAnalyticsDataModel.tracesDistributedWrapEnabled} left at its default {@code false}, where
- * {@code traces} is still a plain {@code MergeTree} and {@code traces_local} does not exist at all.
+ * {@code traces} is still the {@code ReplicatedReplacingMergeTree} and {@code traces_local} does not exist at
+ * all.
  *
  * <p><b>Why both halves are needed.</b> {@code TraceDAOImpl#tracesMutationTable()} decides between two names from one
  * flag, so a routing test that only exercises the wrapped topology leaves the other branch unverified — an
@@ -58,9 +59,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code RetentionCatchUpJob}), so nothing else in the repository calls
  * {@code deleteForRetentionBounded} at all. This suite closes that gap and pins both branches of the resolver.
  *
- * <p>{@link #tracesIsAPlainMergeTreePreCutover} is the guard that keeps the positive tests honest, mirroring
+ * <p>{@link #tracesIsTheReplicatedReplacingMergeTreePreCutover} is the guard that keeps the positive tests honest, mirroring
  * {@code distributedTracesRejectsDirectMutation} in the wrapped suite: it proves the deletes above really ran against
- * an unwrapped {@code traces} rather than accidentally against a shard.
+ * the unwrapped {@code traces} rather than accidentally against a shard.
  *
  * <p>Dedicated, non-reused containers, as in the wrapped suite: nothing here renames a table, but the suite asserts
  * the pre-cutover topology as a precondition, so it has to own that topology rather than inherit it.
@@ -220,11 +221,12 @@ class TracesUnwrappedMutationTest {
     }
 
     /**
-     * The guard that keeps the deletes above honest: pre-cutover {@code traces} must be a local {@code MergeTree} and
+     * The guard that keeps the deletes above honest: pre-cutover {@code traces} must be the local
+     * {@code ReplicatedReplacingMergeTree} and
      * {@code traces_local} must not exist, so a mutation routed to the shard could not have silently succeeded.
      */
     @Test
-    void tracesIsAPlainMergeTreePreCutover() {
+    void tracesIsTheReplicatedReplacingMergeTreePreCutover() {
         // Pinned, not merely "not Distributed": the helper returns "" for a missing table and any other engine
         // (Memory, a plain MergeTree) would have satisfied a negative check, so an absent or wrong table passed.
         assertThat(engineOf("traces"))
