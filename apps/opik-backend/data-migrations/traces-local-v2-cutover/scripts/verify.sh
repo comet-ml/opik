@@ -151,8 +151,6 @@ ANCHOR="$(ch "SELECT toString(toMonday(min(created_at))) FROM $OLD_TABLE")"
 HORIZON="$(ch "SELECT toString(addWeeks(toMonday(max(created_at)), 1)) FROM $OLD_TABLE")"
 LAST_WEEK="$(ch "SELECT dateDiff('week', toDate('$ANCHOR'), toDate('$HORIZON')) - 1")"
 [[ -n "$TO_WEEK" ]] || TO_WEEK="$LAST_WEEK"
-# 'last-sealed' drops the newest week, the only one still taking writes. That is what a post-rollback compare wants: the
-# current week legitimately differs by the writes the rollback discarded, while a sealed week must match exactly.
 # Bound --to-week by the data rather than by a constant: every week past the last one with data is empty by construction,
 # so a larger value only ever walks empty windows. That makes this the natural place to catch the realistic mix-up — a
 # weekly PARTITION name (same weeks, different naming), which passes the integer test and otherwise walks millions of
@@ -164,11 +162,18 @@ if [[ "$TO_WEEK" =~ ^[0-9]+$ ]] && (( TO_WEEK > LAST_WEEK )); then
     echo "       offset instead, or 'last-sealed' for the last complete week, or omit the bound to cover every week." >&2
     exit 2
 fi
+# 'last-sealed' stops before the week still taking writes — what a post-rollback compare wants, since the current week
+# legitimately differs by the writes the rollback discarded while a sealed week must match exactly. That week is the
+# current CALENDAR week, not merely the newest week holding data: with ingestion idle, max(created_at) can already sit in
+# a sealed week, and LAST_WEEK - 1 would then skip it, leaving the newest populated week uncompared and a divergence
+# there reported as PASSED. Cap at LAST_WEEK so a quiet table still verifies everything it holds. now('UTC') matches
+# created_at's own timezone, so the boundary agrees with the anchor even where the server timezone is not UTC.
 if [[ "$TO_WEEK" == last-sealed ]]; then
-    TO_WEEK=$((LAST_WEEK - 1))
+    CURRENT_WEEK="$(ch "SELECT dateDiff('week', toDate('$ANCHOR'), toDate(toMonday(now('UTC'))))")"
+    TO_WEEK=$(( LAST_WEEK < CURRENT_WEEK - 1 ? LAST_WEEK : CURRENT_WEEK - 1 ))
     (( TO_WEEK >= FROM_WEEK )) || {
         echo "ERROR: --to-week last-sealed resolved to week $TO_WEEK, which is before --from-week $FROM_WEEK: all of" >&2
-        echo "       '$OLD_TABLE' sits in the newest (unsealed) week, so there is no sealed week to compare. Verify" >&2
+        echo "       '$OLD_TABLE' sits in the current (unsealed) week, so there is no sealed week to compare. Verify" >&2
         echo "       once a week has closed, or pass an explicit --to-week to include the current one." >&2
         exit 2
     }

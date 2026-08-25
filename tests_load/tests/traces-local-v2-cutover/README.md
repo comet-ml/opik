@@ -128,8 +128,11 @@ recreate_backend
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start>'
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start>' \
     --confirm-buffer-raised --confirm-retention-paused --skip-wrap
-#    Record the cutover_start it prints. Run the post-swap compare NOW, before writes resume — afterwards the current
-#    week legitimately diverges (live is a superset of the frozen backup), so bound it with --to-week last-sealed.
+#    Record the cutover_start it prints. Run the post-swap compare NOW, while writes are still held — and UNBOUNDED,
+#    because the current week is where the delta and the final deletion replay just landed, making it the week most worth
+#    comparing. Once writes resume, live legitimately outgrows the frozen backup and that week diverges for good; from
+#    then on the compare only means anything bounded, which skips exactly that week:
+#      $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --to-week last-sealed
 $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 
 # 9. Restore the buffer ceiling (unset the env var and recreate_backend), keeping traceColumnsNonNullable=true and
