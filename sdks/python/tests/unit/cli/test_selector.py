@@ -310,3 +310,97 @@ class TestPendingInput:
         finally:
             os.close(read_fd)
             os.close(write_fd)
+
+
+class TestInterpret:
+    """Terminal bytes to key token — the whole decision, as a pure function.
+
+    Extracted so the arrow-versus-Escape call is testable without a tty. It was
+    only reachable through a pty before, which is why the regression below shipped.
+    """
+
+    @pytest.mark.parametrize(
+        "data, expected",
+        [
+            (b"\x1b[A", selector.UP),
+            (b"\x1b[B", selector.DOWN),
+            (b"\x1b", selector.CANCEL),
+            (b"\r", selector.ACCEPT),
+            (b"\n", selector.ACCEPT),
+            (b" ", selector.TOGGLE),
+            (b"a", selector.TOGGLE_ALL),
+            (b"q", selector.CANCEL),
+            (b"\x03", selector.CANCEL),
+            (b"k", selector.UP),
+            (b"j", selector.DOWN),
+            (b"", selector.CANCEL),
+        ],
+    )
+    def test_decision_table(self, data, expected):
+        assert selector._interpret(data) == expected
+
+    @pytest.mark.parametrize("data", [b"\x1b[A", b"\x1b[B"])
+    def test_arrow_is_never_read_as_cancel(self, data):
+        """The reported regression: arrow keys closed the picker.
+
+        `sys.stdin.read(1)` pulled the whole `\\x1b[B` burst into the buffered
+        reader and returned only `\\x1b`; `select()` on the descriptor then saw
+        nothing pending, because the rest sat in userspace above the kernel. So
+        every arrow key looked like a bare Escape.
+        """
+        assert selector._interpret(data) != selector.CANCEL
+
+    def test_unknown_escape_sequence__is_ignored_not_cancelled(self):
+        """Home/End/F-keys must not close the picker."""
+        assert selector._interpret(b"\x1b[H") == ""
+
+    def test_arrow_arriving_split__still_reads_as_an_arrow(self):
+        """Two reads concatenated is the same input as one burst."""
+        assert selector._interpret(b"\x1b" + b"[B") == selector.DOWN
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX reader; the msvcrt path has no escape ambiguity to resolve.",
+)
+class TestReadKeyPosixUsesTheDescriptor:
+    """The reader must read the descriptor, not the buffered `sys.stdin`.
+
+    This is the shape of the reported bug rather than a restatement of it: with
+    `sys.stdin.read(1)`, an arrow key's whole `\x1b[B` burst landed in the
+    buffered reader and only `\x1b` came back, after which `select()` on the
+    descriptor saw nothing pending and the arrow became a cancellation. Reading
+    the descriptor directly is what fixes it, so that is what is asserted.
+    """
+
+    @staticmethod
+    def _run(monkeypatch, reads, pending=False):
+        """Drive the reader with scripted `os.read` results."""
+        monkeypatch.setattr(selector.sys, "stdin", mock.Mock(fileno=lambda: 99))
+        monkeypatch.setattr(
+            selector, "_has_pending_input", lambda descriptor, **kw: pending
+        )
+        # termios/tty are imported inside the reader (they do not exist on
+        # Windows), so patch the modules themselves rather than an attribute of
+        # `selector`.
+        monkeypatch.setattr("termios.tcgetattr", lambda fd: [])
+        monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
+        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
+        pulls = iter(reads)
+        monkeypatch.setattr(selector.os, "read", lambda fd, n: next(pulls))
+        return selector._read_key_posix()
+
+    def test_arrow_delivered_as_one_burst__is_an_arrow(self, monkeypatch):
+        assert self._run(monkeypatch, [b"\x1b[B"]) == selector.DOWN
+
+    def test_bare_escape_with_nothing_pending__cancels(self, monkeypatch):
+        assert self._run(monkeypatch, [b"\x1b"], pending=False) == selector.CANCEL
+
+    def test_escape_then_continuation__is_an_arrow_not_a_cancel(self, monkeypatch):
+        """A split sequence: the second read completes it."""
+        result = self._run(monkeypatch, [b"\x1b", b"[A"], pending=True)
+
+        assert result == selector.UP
+
+    def test_plain_character__needs_only_one_read(self, monkeypatch):
+        assert self._run(monkeypatch, [b" "]) == selector.TOGGLE

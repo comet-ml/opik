@@ -15,6 +15,7 @@ back to the numbered menu rather than failing.
 """
 
 import dataclasses
+import os
 import select
 import sys
 from typing import Callable, Iterable, List, Optional, Sequence, Set
@@ -34,6 +35,9 @@ console = rich.console.Console()
 #: takes this long to register, while the cost of too small a one is an arrow key
 #: being misread as cancellation.
 ESCAPE_WINDOW = 0.12
+
+#: Enough for any cursor-key sequence in one read.
+_READ_CHUNK = 8
 
 CURSOR = "❯"
 CHECKED = "◉"
@@ -201,6 +205,15 @@ def _has_pending_input(descriptor: int, timeout: float = ESCAPE_WINDOW) -> bool:
 
 
 def _read_key_posix() -> str:
+    """Read one keypress, telling a bare Escape from a cursor-key sequence.
+
+    Reads the descriptor directly rather than through ``sys.stdin``. The buffered
+    text stream pulls an arrow key's whole ``\x1b[B`` burst into its userspace
+    buffer and hands back only the ``\x1b`` — after which ``select()`` on the
+    descriptor sees nothing pending, because the rest is already buffered above
+    the kernel. That combination read every arrow key as a cancellation. Going
+    unbuffered keeps the descriptor the single source of truth.
+    """
     import termios
     import tty
 
@@ -210,23 +223,28 @@ def _read_key_posix() -> str:
         # cbreak, not raw: it leaves signal generation alone so Ctrl-C still
         # raises KeyboardInterrupt rather than arriving as a byte we must handle.
         tty.setcbreak(descriptor)
-        first = sys.stdin.read(1)
-        if first == "\x1b":
-            # Either a bare Escape or the start of a cursor-key sequence. A blind
-            # `read(1)` here blocked until the *next* keypress, so Escape appeared
-            # to do nothing and then swallowed whatever was pressed after it.
-            # An arrow key delivers its whole sequence at once, so if nothing is
-            # already buffered this was a bare Escape.
-            if not _has_pending_input(descriptor):
-                return CANCEL
-            if sys.stdin.read(1) != "[":
-                return CANCEL
-            return _ARROWS.get(sys.stdin.read(1), "")
-        return _normalise(first)
+        data = os.read(descriptor, _READ_CHUNK)
+        if data == b"\x1b" and _has_pending_input(descriptor):
+            # A bare Escape so far, but the continuation may still be in flight.
+            data += os.read(descriptor, _READ_CHUNK)
+        return _interpret(data)
     except KeyboardInterrupt:
         return CANCEL
     finally:
         termios.tcsetattr(descriptor, termios.TCSADRAIN, saved)
+
+
+def _interpret(data: bytes) -> str:
+    """Turn one read of terminal bytes into a key token."""
+    if not data:
+        return CANCEL
+    if data.startswith(b"\x1b["):
+        # A cursor key. Anything we do not map is ignored rather than treated as
+        # a cancellation — an unknown sequence must not close the picker.
+        return _ARROWS.get(data[2:3].decode("latin1"), "")
+    if data == b"\x1b":
+        return CANCEL
+    return _normalise(data[:1].decode("latin1"))
 
 
 def _read_key_windows() -> str:
