@@ -2,7 +2,32 @@ import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { makeBackendClient, uuid7 } from '../core/backend';
 import type { WorkspaceRoleMember } from '../fixtures/workspace-role-member.fixture';
-import { type AdminCtx, subjectOpikClient, adminOpikClient, attemptSucceeds } from './workspace-role-shared';
+import { type AdminCtx, subjectOpikClient, adminOpikClient, attemptSucceeds, isAuthorizationError } from './workspace-role-shared';
+
+/**
+ * Polls the admin read-back until presence matches `expectPersisted` or the
+ * timeout elapses, so search-index lag can't make a genuinely-permitted trace
+ * look denied. Returns immediately once the expectation is already met — a
+ * denied trace never appears, so the `expectPersisted: false` path resolves
+ * on the first check rather than paying the full timeout.
+ */
+async function pollTracesByName(
+  admin: ReturnType<typeof adminOpikClient>,
+  projectId: string,
+  traceName: string,
+  expectPersisted: boolean,
+  { timeoutMs = 15_000, pollIntervalMs = 1_500 } = {},
+): Promise<NonNullable<Awaited<ReturnType<typeof admin.api.traces.getTracesByProject>>['content']>> {
+  const start = Date.now();
+  let content: NonNullable<Awaited<ReturnType<typeof admin.api.traces.getTracesByProject>>['content']> = [];
+  do {
+    const found = await admin.api.traces.getTracesByProject({ projectId, search: traceName });
+    content = found.content ?? [];
+    if (content.some((t) => t.name === traceName) === expectPersisted) return content;
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+  } while (Date.now() - start < timeoutMs);
+  return content;
+}
 
 export async function logTraceAndVerify(
   member: WorkspaceRoleMember,
@@ -25,15 +50,16 @@ export async function logTraceAndVerify(
     let succeeded = true;
     try {
       await sdk.api.traces.createTrace({ name: restTraceName, projectName: project.name, startTime: new Date() });
-    } catch {
+    } catch (err) {
+      if (!isAuthorizationError(err)) throw err;
       succeeded = false;
     }
     expect
       .soft(succeeded, `${member.role}: expected direct REST trace creation to ${expectPersisted ? 'succeed' : 'be denied'}`)
       .toBe(expectPersisted);
 
-    const found = await admin.api.traces.getTracesByProject({ projectId, search: restTraceName });
-    for (const t of found.content ?? []) {
+    const found = await pollTracesByName(admin, projectId, restTraceName, expectPersisted);
+    for (const t of found) {
       if (t.id) createdTraceIds.push(t.id);
     }
   });
@@ -43,8 +69,8 @@ export async function logTraceAndVerify(
     sdk.trace({ name: sdkTraceName, projectName: project.name });
     await sdk.flush();
 
-    const found = await admin.api.traces.getTracesByProject({ projectId, search: sdkTraceName });
-    const persisted = (found.content ?? []).some((t) => t.name === sdkTraceName);
+    const found = await pollTracesByName(admin, projectId, sdkTraceName, expectPersisted);
+    const persisted = found.some((t) => t.name === sdkTraceName);
     expect
       .soft(
         persisted,
@@ -52,7 +78,7 @@ export async function logTraceAndVerify(
       )
       .toBe(expectPersisted);
 
-    for (const t of found.content ?? []) {
+    for (const t of found) {
       if (t.id) createdTraceIds.push(t.id);
     }
   });

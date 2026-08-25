@@ -16,13 +16,16 @@ export interface EnvConfig {
   // userEmail/userPassword/workspace above: those belong to the baseline
   // session's own org, this is a separate org's admin — the two must never be
   // required to share an org/workspace, so the workspace-role fixture targets
-  // adminWorkspace, never `workspace`. adminApiKey is the superuser admin-API-
-  // key used for disposable-user cleanup only, against adminBaseUrl; unrelated
-  // to adminEmail/adminPassword's org-admin session.
+  // adminWorkspace, never `workspace`. deleteUserApiKey is the superuser
+  // admin-API-key used for disposable-user cleanup only, against
+  // deleteUserBaseUrl; unrelated to adminEmail/adminPassword's org-admin
+  // session (and to AdminCtx.adminApiKey, the org-admin's own Opik API key
+  // used for workspace-scoped seeding/cleanup — a different credential that
+  // happens to share the word "admin").
   adminEmail: string | null;
   adminPassword: string | null;
-  adminApiKey: string | null;
-  adminBaseUrl: string | null;
+  deleteUserApiKey: string | null;
+  deleteUserBaseUrl: string | null;
   adminWorkspace: string | null;
 
   features: {
@@ -95,15 +98,19 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   // Org-admin session for the workspace-role permission suite — dedicated
   // OPIK_PERM_-prefixed vars (own account, own org) rather than reusing
   // comet-automation-tests' generic USER_EMAIL/PASSWORD, so it's unambiguous
-  // this identity belongs to the permission tests specifically. adminBaseUrl
+  // this identity belongs to the permission tests specifically. deleteUserBaseUrl
   // has no established default (it's a distinct internal admin host, not
   // necessarily rootBase) — leave null until wired for real in CI; consumers
-  // must treat a missing adminBaseUrl/adminApiKey as "cleanup unavailable",
-  // not throw.
+  // must treat a missing deleteUserBaseUrl/deleteUserApiKey as "cleanup
+  // unavailable", not throw.
   const adminEmail = env.OPIK_PERM_USER_EMAIL ?? null;
   const adminPassword = env.OPIK_PERM_USER_PASSWORD ?? null;
-  const adminApiKey = env.ADMIN_API_KEY ?? null;
-  const adminBaseUrl = env.ADMIN_BASE_URL ?? null;
+  const deleteUserApiKey = env.ADMIN_API_KEY ?? null;
+  // Trailing slash guaranteed: deleteCometUser builds `${deleteUserBaseUrl}delete-user`
+  // with no separator, so a misconfigured value without one would silently
+  // concatenate into a malformed URL rather than fail loudly.
+  const rawDeleteUserBaseUrl = env.ADMIN_BASE_URL ?? null;
+  const deleteUserBaseUrl = rawDeleteUserBaseUrl && !rawDeleteUserBaseUrl.endsWith('/') ? `${rawDeleteUserBaseUrl}/` : rawDeleteUserBaseUrl;
   // The workspace-role admin's own org/workspace — deliberately a separate
   // var from OPIK_WORKSPACE so the two credential sets never have to share an
   // org. Not defaulted to `workspace`: an unset value should hard-skip the
@@ -159,8 +166,8 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     apiKey,
     adminEmail,
     adminPassword,
-    adminApiKey,
-    adminBaseUrl,
+    deleteUserApiKey,
+    deleteUserBaseUrl,
     adminWorkspace,
     features: {
       ollie: boolFromEnv(env.OLLIE_ENABLED, defaults.ollie),

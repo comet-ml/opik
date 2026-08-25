@@ -212,9 +212,9 @@ export function getPermissionValue(
 }
 
 /**
- * Cleanup via the superuser admin API (`DELETE {adminBaseUrl}/delete-user`).
+ * Cleanup via the superuser admin API (`DELETE {deleteUserBaseUrl}/delete-user`).
  * The workspace-role-member fixture hard-skips the whole suite when
- * `adminApiKey`/`adminBaseUrl` aren't configured (see
+ * `deleteUserApiKey`/`deleteUserBaseUrl` aren't configured (see
  * `fixtures/workspace-role-member.fixture.ts`) specifically so this always
  * has what it needs to run — disposable users must not be left behind in a
  * real environment. This throws (rather than warns) if called anyway with
@@ -222,14 +222,14 @@ export function getPermissionValue(
  */
 export async function deleteCometUser(username: string): Promise<void> {
   const env = loadEnvConfig();
-  if (!env.adminApiKey || !env.adminBaseUrl) {
+  if (!env.deleteUserApiKey || !env.deleteUserBaseUrl) {
     throw new Error(
       `deleteCometUser("${username}"): ADMIN_API_KEY/ADMIN_BASE_URL not configured — the workspace-role-member fixture should have skipped before creating this user.`,
     );
   }
-  const res = await fetch(`${env.adminBaseUrl}delete-user?userName=${encodeURIComponent(username)}`, {
+  const res = await fetch(`${env.deleteUserBaseUrl}delete-user?userName=${encodeURIComponent(username)}`, {
     method: 'DELETE',
-    headers: { Authorization: env.adminApiKey },
+    headers: { Authorization: env.deleteUserApiKey },
   });
   if (!res.ok) {
     console.warn(

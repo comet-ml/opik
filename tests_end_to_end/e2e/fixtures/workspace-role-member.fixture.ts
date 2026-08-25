@@ -1,6 +1,7 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { test as base } from './base.fixture';
 import type { EnvConfig } from '../config/env.config';
+import { shouldLeaveArtifacts } from '../core/artifacts';
 import {
   addUserToWorkspace,
   assignWorkspaceRole,
@@ -43,8 +44,9 @@ export interface WorkspaceRoleTestContext {
   workspaceName: string;
   /**
    * The org-admin's own minted opik-backend API key, scoped to workspaceName.
-   * Named distinctly from EnvConfig.adminApiKey (the superuser delete-user
-   * key) — the two are unrelated credentials that happen to both be "admin".
+   * Named distinctly from EnvConfig.deleteUserApiKey (the superuser
+   * delete-user key) — the two are unrelated credentials that happen to
+   * both be "admin".
    */
   adminOpikApiKey: string;
   adminContext: BrowserContext;
@@ -60,12 +62,13 @@ export interface WorkspaceRoleTestContext {
  * session (adminEmail/adminPassword) targeting its own workspace
  * (adminWorkspace — never the baseline suite's `workspace`, so the two
  * credential sets never have to share an org) and the superuser admin API
- * (adminApiKey/adminBaseUrl) for guaranteed cleanup. All five are required —
- * partial config still hard-skips, since a run that can create users but not
- * delete them would leak disposable accounts into a real environment.
+ * (deleteUserApiKey/deleteUserBaseUrl) for guaranteed cleanup. All five are
+ * required — partial config still hard-skips, since a run that can create
+ * users but not delete them would leak disposable accounts into a real
+ * environment.
  */
 export function hasWorkspaceRoleTestCredentials(env: EnvConfig): boolean {
-  return Boolean(env.adminEmail && env.adminPassword && env.adminApiKey && env.adminBaseUrl && env.adminWorkspace);
+  return Boolean(env.adminEmail && env.adminPassword && env.deleteUserApiKey && env.deleteUserBaseUrl && env.adminWorkspace);
 }
 
 const ROLE_PREFIX: Record<WorkspaceRoleId, string> = {
@@ -75,6 +78,11 @@ const ROLE_PREFIX: Record<WorkspaceRoleId, string> = {
   [WORKSPACE_ROLE_ID.READ]: 'read',
 };
 
+/**
+ * Cleans up its own partial state on failure (signed-up user, browser
+ * context) rather than leaving it for the caller — a rejection from here must
+ * never leak a disposable account or context, whichever step it happened at.
+ */
 async function provisionMember(
   browser: Browser,
   adminContext: BrowserContext,
@@ -82,23 +90,55 @@ async function provisionMember(
   role: WorkspaceRoleId,
 ): Promise<WorkspaceRoleMember> {
   const credentials = await signUpCometUser(ROLE_PREFIX[role]);
-  await addUserToWorkspace(adminContext.request, workspaceId, credentials.username);
-  await assignWorkspaceRole(adminContext.request, credentials.username, workspaceId, role);
+  try {
+    await addUserToWorkspace(adminContext.request, workspaceId, credentials.username);
+    await assignWorkspaceRole(adminContext.request, credentials.username, workspaceId, role);
 
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  const apiKey = await loginCometUser(context.request, credentials.email, credentials.password);
-
-  return { role, ...credentials, apiKey, context, page };
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      const apiKey = await loginCometUser(context.request, credentials.email, credentials.password);
+      return { role, ...credentials, apiKey, context, page };
+    } catch (err) {
+      await context.close().catch(() => undefined);
+      throw err;
+    }
+  } catch (err) {
+    await deleteCometUser(credentials.username).catch(() => undefined);
+    throw err;
+  }
 }
 
 export interface WorkspaceRoleFixtures {
   workspaceRoleMembers: WorkspaceRoleTestContext;
 }
 
-export const test = base.extend<{}, WorkspaceRoleFixtures>({
+/** Worker-scoped so every test in the serial describe block can observe whether any of them failed, mirroring `shouldLeaveArtifacts` (test-scoped) for this worker-scoped fixture. */
+interface LeaveFailuresState {
+  leave: boolean;
+}
+
+export const test = base.extend<{ trackLeaveFailures: void }, WorkspaceRoleFixtures & { leaveFailuresState: LeaveFailuresState }>({
+  leaveFailuresState: [
+    async ({}, use) => {
+      await use({ leave: false });
+    },
+    { scope: 'worker' },
+  ],
+
+  // Auto so it observes every test in this file's worker without each test
+  // opting in — a worker-scoped fixture cannot read `testInfo` itself, so this
+  // test-scoped fixture relays the one bit `workspaceRoleMembers`' teardown needs.
+  trackLeaveFailures: [
+    async ({ leaveFailuresState }, use, testInfo) => {
+      await use();
+      if (shouldLeaveArtifacts(testInfo)) leaveFailuresState.leave = true;
+    },
+    { auto: true },
+  ],
+
   workspaceRoleMembers: [
-    async ({ browser, envConfig }, use) => {
+    async ({ browser, envConfig, leaveFailuresState }, use) => {
       // test.skip() is callable from within a fixture — it applies to
       // whichever test is currently resolving this fixture. Referenced via
       // `base` (not the `test` this file itself defines) to avoid a
@@ -119,12 +159,31 @@ export const test = base.extend<{}, WorkspaceRoleFixtures>({
       const workspaceName = envConfig.adminWorkspace!;
       const { organizationId, workspaceId } = await getWorkspaceIds(adminContext.request, workspaceName);
 
-      const [manage, write, annotate, read] = await Promise.all([
+      const results = await Promise.allSettled([
         provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.MANAGE),
         provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.WRITE),
         provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.ANNOTATE),
         provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.READ),
       ]);
+
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (rejected.length > 0) {
+        // provisionMember already cleaned up its own partial state on
+        // failure — this only has to roll back the siblings that fully
+        // succeeded, or they'd be orphaned by the throw below.
+        const fulfilled = results.filter((r): r is PromiseFulfilledResult<WorkspaceRoleMember> => r.status === 'fulfilled');
+        for (const r of fulfilled) {
+          await r.value.context.close().catch(() => undefined);
+          await deleteCometUser(r.value.username).catch(() => undefined);
+        }
+        await adminContext.close().catch(() => undefined);
+        throw new Error(
+          `workspaceRoleMembers: failed to provision ${rejected.length}/4 role members: ` +
+            rejected.map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason))).join('; '),
+        );
+      }
+
+      const [manage, write, annotate, read] = results.map((r) => (r as PromiseFulfilledResult<WorkspaceRoleMember>).value);
 
       await use({
         organizationId,
@@ -138,6 +197,13 @@ export const test = base.extend<{}, WorkspaceRoleFixtures>({
         annotate,
         read,
       });
+
+      if (leaveFailuresState.leave) {
+        console.warn(
+          '[workspaceRoleMembers] OPIK_LEAVE_FAILURES=true and a test in this suite failed — leaving role users/contexts for debugging',
+        );
+        return;
+      }
 
       const members = [manage, write, annotate, read];
       for (const member of members) {
