@@ -133,6 +133,8 @@ $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfil
 #    comparing. Once writes resume, live legitimately outgrows the frozen backup and that week diverges for good; from
 #    then on the compare only means anything bounded, which skips exactly that week:
 #      $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --to-week last-sealed
+#    ('last-sealed' excludes the current calendar week, so it covers the cutover week only in a same-week rehearsal —
+#     which a local run always is. Elsewhere, bound below cutover_start's week explicitly.)
 $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 
 # 9. Restore the buffer ceiling (unset the env var and recreate_backend), keeping traceColumnsNonNullable=true and
@@ -234,11 +236,12 @@ while stage A just empties the `traces_local_v2` shadow). A rollback leaves `tra
 re-seeding for the next iteration works without a fresh volume.
 
 To verify a rollback, use the **post-rollback table pair** — the `verify.sh` defaults do not apply (`traces_local_v2` is
-gone, so a bare run dies with `Unknown table … traces_local_v2`) — and bound it to the sealed weeks, because the current
-week legitimately diverges by the post-cutover writes the rollback discarded:
+gone, so a bare run dies with `Unknown table … traces_local_v2`) — and stop below the cutover window's own week, because
+that week legitimately diverges by the post-cutover writes the rollback discarded:
 
 ```bash
-$RUNBOOK/scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week last-sealed
+# rollback.sh prints this with --to-week already filled in — the last week wholly before cutover_start.
+$RUNBOOK/scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week <N>
 ```
 
 **Chaining the stages.** Stage A leaves you able to retry immediately (it truncates the shadow and leaves `traces`

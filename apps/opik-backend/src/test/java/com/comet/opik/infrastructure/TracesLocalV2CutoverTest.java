@@ -324,11 +324,10 @@ class TracesLocalV2CutoverTest {
         });
         execute("DROP TABLE IF EXISTS " + PARKED_BACKUP + " ON CLUSTER '{cluster}' SYNC", _ -> {
         });
-        // ON CLUSTER like every other statement in this reset (and like stage A's truncate), not bare. On a
-        // ReplicatedMergeTree a plain TRUNCATE only has to be applied by the local replica before the client returns,
-        // whereas ON CLUSTER makes the client wait for the distributed DDL task — a real barrier before the test body
-        // starts inserting. Without it the emptying can still be settling while a test writes, and a late DROP_RANGE can
-        // take the rows it just wrote with it, which surfaces much later as an inexplicably empty table.
+        // ON CLUSTER like every other statement in this reset (and like stage A's truncate), not bare: on a
+        // ReplicatedMergeTree a plain TRUNCATE need only be applied by the local replica before the client returns,
+        // whereas ON CLUSTER waits for the distributed DDL task — a real barrier before the test body inserts. Without
+        // one, the emptying can still be settling while a test writes, which is the shape of a rare empty-table flake.
         execute("TRUNCATE TABLE IF EXISTS traces ON CLUSTER '{cluster}'", _ -> {
         });
         execute("TRUNCATE TABLE IF EXISTS traces_local_v2 ON CLUSTER '{cluster}'", _ -> {

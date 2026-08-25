@@ -375,18 +375,12 @@ esac
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "Now in the canonical state: traces = original data (live), traces_post_rollback_backup = successor data (parked)."
-    # The divergence is bounded by the CUTOVER WINDOW, not by the calendar, so compute the offset of the last week wholly
-    # before cutover_start rather than telling the operator 'last-sealed'. That token drops the current calendar week,
-    # which is the same week only while the verify runs promptly; a run in a later week would include the window's own
-    # week and report its discarded writes as a fidelity failure. Same anchor math verify.sh uses on this table.
-    #
-    # Capped at verify.sh's own last populated week (its LAST_WEEK, from max(created_at)), because verify.sh rejects a
-    # --to-week beyond that. Without the cap an environment idle for a week or more before the cutover yields a bound
-    # above it and the printed command would exit instead of comparing anything. The cap is safe: it only binds when the
-    # window's week is already past the last populated one, in which case that week is out of range anyway.
-    #
-    # Non-fatal: the rollback itself has already succeeded here, so a blip computing an advisory number must not abort
-    # the script and swallow the NEXT steps below.
+    # The divergence is bounded by the CUTOVER WINDOW, not by the calendar, so print the offset of the last week wholly
+    # before cutover_start: unlike a calendar-relative bound it stays correct if the verify runs days later. Same anchor
+    # math verify.sh uses on this table, capped at its last populated week (LAST_WEEK, from max(created_at)) because
+    # verify.sh rejects a --to-week beyond that; the cap only binds when the window's week is already out of range, where
+    # the window is excluded anyway. Advisory, and the rollback has already succeeded — so keep it non-fatal rather than
+    # aborting the guidance below.
     bound_week="$(ch "SELECT least(
                           dateDiff('week', toMonday(min(created_at)), toMonday(toDateTime64('$CUTOVER_START', 6))) - 1,
                           dateDiff('week', toMonday(min(created_at)), toMonday(max(created_at)))

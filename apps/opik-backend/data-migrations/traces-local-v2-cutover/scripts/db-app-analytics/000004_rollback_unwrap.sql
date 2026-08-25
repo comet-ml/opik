@@ -6,19 +6,16 @@
 -- being the partitioned successor MergeTree and the `Distributed` wrapper is gone, landing in the post-EXCHANGE,
 -- pre-wrap state — a supported resting state the runbook already describes (`--skip-wrap` stops there).
 --
--- WHY THIS EXISTS SEPARATELY FROM STAGE C. Stage C is the only other statement that touches the wrap, and it bundles
--- four things: drop the wrapper, promote the parked original, park the successor, reverse-replay. That is the right
--- answer when the SUCCESSOR is suspect, but a disproportionate one when only the routing definition is: the wrapper
--- holds no data, yet stage C abandons the whole backfill, makes post-cutover writes non-live, runs the guard-less
--- reverse replay, reverts to the unpartitioned original, and leaves the sentinel/duration repair to do. This does none
--- of that. Two consequences worth stating:
+-- WHY THIS EXISTS SEPARATELY FROM STAGE C. Stage C is the only other statement that touches the wrap, but it bundles
+-- that with promoting the parked original, parking the successor and reverse-replaying — the right answer when the
+-- SUCCESSOR is suspect, a disproportionate one when only the routing definition is, since the wrapper holds no data. Two
+-- consequences (the runbook's "Un-wrap" section carries the full comparison):
 --   * It needs NO reverse-replay. The successor stays live, so no write is abandoned and no delete needs re-applying —
 --     the whole reason stage B/C carry `--cutover-start`, `--confirm-retention-paused` and
 --     `--accept-post-cutover-write-loss`. None apply here.
 --   * It works AFTER finalize.sh. Stages B and C both require `traces_pre_cutover_backup`, which finalize drops; this
---     needs only `traces` and `traces_local`. Since the documented order is wrap, soak, then finalize, post-wrap +
---     post-finalize is the expected steady state — and until this existed, a wrap fault discovered there had no
---     tooling answer at all.
+--     needs only `traces` and `traces_local`. Since the documented order is wrap, soak, then finalize, post-wrap and
+--     post-finalize is the expected steady state, and this is the only wrap recovery available there.
 --
 -- SCOPE LIMIT: this undoes SHARDING only. If the partitioned successor itself is the problem — a fidelity defect, a
 -- partition-count or merge-load regression, slower queries — un-wrapping changes none of it; use stage B/C (while the
