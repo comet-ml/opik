@@ -23,7 +23,7 @@ const DataTableLoadingError: React.FC<DataTableLoadingErrorProps> = ({
             variant="outline"
             size="sm"
             className="mt-2"
-            onClick={onRetry}
+            onClick={() => onRetry()}
           >
             Retry
           </Button>
