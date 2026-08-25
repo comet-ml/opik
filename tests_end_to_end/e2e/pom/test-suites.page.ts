@@ -68,6 +68,40 @@ export class TestSuitesPage {
   }
 
   /**
+   * Deletes via the row's actions menu and confirms. The confirm dialog's
+   * heading and its confirm button share the accessible name "Delete test
+   * suite", so the dialog is scoped by heading first and the button resolved
+   * by role within it.
+   *
+   * Test suites share storage with datasets, so this issues
+   * `DELETE /v1/private/datasets/{id}` — the same call the fixture teardown
+   * makes. The delete is a hard DELETE with no tombstone row.
+   */
+  async deleteTestSuiteByName(name: string): Promise<void> {
+    return test.step(`delete test suite "${name}" via row actions`, async () => {
+      const row = this.testSuiteRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const confirm = this.deleteTestSuiteConfirmDialog;
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Delete test suite' }).click();
+
+      await confirm.waitFor({ state: 'hidden' });
+      // The list refetches with a cached placeholder — wait for the row itself.
+      await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /** The destructive confirm dialog raised by the row's Delete action. */
+  get deleteTestSuiteConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Delete test suite' }),
+    });
+  }
+
+  /**
    * Opens the create sidebar in SDK mode. The empty state shows "Upload a file"
    * and "Use SDK" cards directly; once the list has rows the header button is a
    * dropdown trigger with the same two options. Handle both so the method works
