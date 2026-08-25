@@ -231,6 +231,32 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void stillScoresWhenSpanSizeAggregateFails() {
+            // Sizing is advisory: a failed aggregate must not abort the evaluation, because
+            // BaseRedisSubscriber would retry maxRetries times and then acknowledge the message,
+            // permanently dropping the thread. Degrade to the unenriched context and still persist.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("test_score")
+                    .value(BigDecimal.valueOf(0.95))
+                    .reason("ok")
+                    .build();
+            stubPythonScoringHappyPath(trace, project);
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+
+            scorer.score(message).block();
+
+            // No bulk fetch follows a failed aggregate — without a size we can't bound the heap cost.
+            verify(spanService, never()).getByTraceIds(any());
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+        }
+
+        @Test
         void fetchesSpansAndEnrichesConversation() {
             // The scorer fetches every span across the thread and the captured ChatMessage list sent to
             // the Python evaluator carries the spans nested under the assistant entry. Locks in the

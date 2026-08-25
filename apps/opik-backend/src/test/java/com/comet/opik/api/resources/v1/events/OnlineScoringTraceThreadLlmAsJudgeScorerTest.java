@@ -642,6 +642,27 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         }
 
         @Test
+        void stillScoresWhenSpanSizeAggregateFails() {
+            // Sizing is advisory: a failed aggregate must not abort the evaluation, because
+            // BaseRedisSubscriber would retry maxRetries times and then acknowledge the message,
+            // permanently dropping the thread. Degrade to the unenriched inline route and still persist.
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            Mockito.when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
+
+            scorer.score(message).block();
+
+            // No bulk fetch follows a failed aggregate — without a size we can't bound the heap cost.
+            verify(spanService, never()).getByTraceIds(any());
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+        }
+
+        @Test
         void skipsScoringWhenThreadHasNoTraces() {
             var message = sampleMessage();
 

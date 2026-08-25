@@ -55,6 +55,9 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         extends
             OnlineScoringBaseScorer<TraceThreadToScoreUserDefinedMetricPython> {
 
+    /** Sentinel for a span-size aggregate that could not be computed, distinct from a genuine 0 bytes. */
+    private static final long SPAN_SIZE_UNAVAILABLE = -1L;
+
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
     private final TraceThreadService traceThreadService;
@@ -219,14 +222,24 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         // score(...) sees the full call tree.
         var traceIds = traces.stream().map(Trace::id).collect(Collectors.toSet());
         var maxPreloadBytes = agenticToolsMaxPreloadBytes();
+        // Sizing is advisory, not a prerequisite: letting an aggregate failure propagate would abort the
+        // chain, and BaseRedisSubscriber would retry maxRetries times and then acknowledge the message —
+        // permanently dropping the evaluation. Degrade to the unenriched context instead.
         var spansSizeMono = spanService.getSpansSizeByTraceIds(traceIds)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName()));
+                        .put(RequestContext.USER_NAME, message.userName()))
+                .onErrorResume(error -> {
+                    log.warn("Span-size aggregate failed for thread '{}'; scoring with the unenriched"
+                            + " context", threadId, error);
+                    return Mono.just(SPAN_SIZE_UNAVAILABLE);
+                });
         return spansSizeMono
                 .flatMap(sizeBytes -> {
-                    var enrich = sizeBytes <= maxPreloadBytes;
-                    if (!enrich) {
+                    // Without a size we can't tell a small thread from one that would blow the heap, so
+                    // an unavailable aggregate skips enrichment rather than risking the bulk fetch.
+                    var enrich = sizeBytes != SPAN_SIZE_UNAVAILABLE && sizeBytes <= maxPreloadBytes;
+                    if (sizeBytes > maxPreloadBytes) {
                         try (var logContext = wrapWithMdc(mdc)) {
                             userFacingLogger.warn("""
                                     Thread span size estimate exceeds the enrichment cap; scoring with the \
