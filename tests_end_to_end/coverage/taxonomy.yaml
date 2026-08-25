@@ -22,7 +22,6 @@
 #
 #   tier    exactly one of @t1-smoke | @t2-cuj | @t3-nightly     -> drives coverage %
 #   suites  zero or more of @t1-stsaas | @provider-sanity        -> drives WHERE it runs
-#           | @release-gate | @release-gate:<version>
 #   area    exactly one @area:<area>                             -> from `areas:` keys below
 #   caps    one or more @cap:<area>.<capability>                 -> from `capabilities:` keys
 #
@@ -141,7 +140,6 @@ rules:
   # both numerator and denominator, and exempt from the area/cap tag lint.
   exempt_dirs:
     - _seed          # sdk-clients.spec.ts — harness self-test
-    - _release-gate  # ephemeral, version-stamped gate specs
   # Capabilities flagged `cloud_only: true` are excluded from the self-hosted
   # coverage view but counted in the cloud view. They depend on the out-of-tree
   # `comet` frontend plugin (PluginsStore) and cannot run self-hosted.
@@ -393,6 +391,7 @@ areas:
     spec_dir: prompts
     specs:
       - prompts/prompt-library-smoke.spec.ts
+      - prompts/prompt-delete.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -403,7 +402,7 @@ areas:
       version-history:         { covered: true,  tier: t1-smoke }
       compare-versions:        { covered: false }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
-      delete-prompt:           { covered: false }
+      delete-prompt:           { covered: true,  tier: t2-cuj }
 
     visual:
       prompt-library-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E07" }
@@ -537,6 +536,7 @@ areas:
     spec_dir: test-suites
     specs:
       - test-suites/test-suites-smoke.spec.ts
+      - test-suites/test-suite-delete.spec.ts
     capabilities:
       list-suites:           { covered: true,  tier: t1-smoke }
       create-suite-ui:       { covered: true,  tier: t1-smoke }
@@ -546,7 +546,7 @@ areas:
       run-suite-playground:  { covered: true,  tier: t1-smoke }
       pass-rate-display:     { covered: true,  tier: t1-smoke }
       global-assertions:     { covered: true,  tier: t1-smoke }
-      delete-suite:          { covered: false }
+      delete-suite:          { covered: true,  tier: t2-cuj }
 
     visual:
       test-suites-page:  { covered: true,  state: default, spec: "visual-comparison.spec.ts 05" }
@@ -563,6 +563,7 @@ areas:
       - experiments/experiments-compare.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
+      - experiments/experiment-delete.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -574,7 +575,7 @@ areas:
       configuration-tab:       { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: false }
-      delete-experiment:       { covered: false }
+      delete-experiment:       { covered: true,  tier: t2-cuj }
 
     visual:
       experiments-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 06" }
