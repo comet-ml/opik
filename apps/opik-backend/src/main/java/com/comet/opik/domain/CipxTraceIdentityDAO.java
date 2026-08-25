@@ -29,8 +29,10 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
  * create/update events (identity can arrive or change on a trace update); never reads the traces or
  * cipx_trace_identities tables. Identity fields are parsed from metadata in Java
  * ({@link TraceIdentityRow#from}). Plain INSERT relying on ReplacingMergeTree to merge by sorting
- * key; last_updated_at is left to the column DEFAULT now64(6). project_id must be non-empty, so
- * blank rows are dropped.
+ * key. last_updated_at — the engine's version column — is bound from the source event's publish time
+ * rather than left to the column DEFAULT now64(6): a trace can be upserted more than once and those
+ * inserts race in the async queue, so an ingestion-time version would let a delayed older snapshot
+ * overwrite a newer one. project_id must be non-empty, so blank rows are dropped.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -60,17 +62,20 @@ public class CipxTraceIdentityDAO {
             @NonNull String headShaStart,
             @NonNull String headShaEnd,
             boolean dirty,
-            int commitsInTrace,
-            int filesAdded,
-            int filesDeleted,
-            int linesAdded,
-            int linesDeleted,
-            int agentsDispatched,
-            int agentsLinked,
-            int agentsAmbiguous,
-            @NonNull String cipxVersion) {
+            long commitsInTrace,
+            long filesAdded,
+            long filesDeleted,
+            long linesAdded,
+            long linesDeleted,
+            long agentsDispatched,
+            long agentsLinked,
+            long agentsAmbiguous,
+            @NonNull String cipxVersion,
+            // ReplacingMergeTree version: the publish time of the event that produced this snapshot.
+            @NonNull Instant lastUpdatedAt) {
 
-        public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
+        public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime,
+                Instant lastUpdatedAt) {
             JsonNode session = metadata.path("cipx").path("session");
             JsonNode identity = session.path("identity");
             JsonNode repository = session.path("repository");
@@ -99,26 +104,35 @@ public class CipxTraceIdentityDAO {
                     .headShaStart(repository.path("head_sha").asText(""))
                     .headShaEnd(repository.path("head_sha_end").asText(""))
                     .dirty(repository.path("dirty").asBoolean(false))
-                    .commitsInTrace(repository.path("commits_in_trace").asInt(0))
-                    .filesAdded(repository.path("files_added").asInt(0))
-                    .filesDeleted(repository.path("files_deleted").asInt(0))
-                    .linesAdded(repository.path("lines_added").asInt(0))
-                    .linesDeleted(repository.path("lines_deleted").asInt(0))
-                    // Session-grain subagent link rollup. These are the ONLY
-                    // place cipx's worst attribution failure is visible: a
-                    // subagent whose dispatch was never observed looks
-                    // exactly like a main-loop turn, so no span carries a
-                    // link_failure_reason and only a missing increment here
+                    .commitsInTrace(asUInt32(repository.path("commits_in_trace")))
+                    .filesAdded(asUInt32(repository.path("files_added")))
+                    .filesDeleted(asUInt32(repository.path("files_deleted")))
+                    .linesAdded(asUInt32(repository.path("lines_added")))
+                    .linesDeleted(asUInt32(repository.path("lines_deleted")))
+                    // Session-grain subagent link rollup. These counters are
+                    // the only place cipx's worst attribution failure is
+                    // visible: a subagent whose dispatch was never observed
+                    // looks exactly like a main-loop turn, so no span carries
+                    // a link_failure_reason and only a missing increment here
                     // reveals it. They are session RUNNING TOTALS re-stamped
                     // on every trace upsert of that session, so a session
                     // with N traces leaves N rows holding N successive
                     // snapshots. Readers must take max() per session_id,
                     // never sum().
-                    .agentsDispatched(session.path("agents_dispatched").asInt(0))
-                    .agentsLinked(session.path("agents_linked").asInt(0))
-                    .agentsAmbiguous(session.path("agents_ambiguous").asInt(0))
+                    .agentsDispatched(asUInt32(session.path("agents_dispatched")))
+                    .agentsLinked(asUInt32(session.path("agents_linked")))
+                    .agentsAmbiguous(asUInt32(session.path("agents_ambiguous")))
                     .cipxVersion(session.path("cipx_version").asText(""))
+                    .lastUpdatedAt(lastUpdatedAt)
                     .build();
+        }
+
+        // UInt32 columns, and ClickHouse wraps an out-of-range literal mod 2^32 rather than
+        // rejecting it, so every way of getting this wrong is silent: asInt() makes 4294967295 a
+        // negative count in Java that only round-trips by accident, and anything past 2^32 wraps
+        // into a small plausible-looking one. Read the full range and clamp what is outside it.
+        private static long asUInt32(JsonNode value) {
+            return Math.clamp(value.asLong(0), 0L, 0xFFFF_FFFFL);
         }
     }
 
@@ -131,7 +145,7 @@ public class CipxTraceIdentityDAO {
                  billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                  files_added, files_deleted, lines_added, lines_deleted,
-                 agents_dispatched, agents_linked, agents_ambiguous, cipx_version)
+                 agents_dispatched, agents_linked, agents_ambiguous, cipx_version, last_updated_at)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -165,7 +179,8 @@ public class CipxTraceIdentityDAO {
                         :agents_dispatched<item.index>,
                         :agents_linked<item.index>,
                         :agents_ambiguous<item.index>,
-                        :cipx_version<item.index>
+                        :cipx_version<item.index>,
+                        :last_updated_at<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -195,7 +210,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 29 parameters per row tuple in template order. The bind order below
+        // (repeats dedup), then 30 parameters per row tuple in template order. The bind order below
         // must stay in lockstep with the INSERT tuple above — nothing checks it at compile time, and
         // a mismatch silently writes each value into the neighbouring column.
         statement.bind(0, workspaceId);
@@ -229,7 +244,8 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.agentsDispatched())
                     .bind(index++, row.agentsLinked())
                     .bind(index++, row.agentsAmbiguous())
-                    .bind(index++, row.cipxVersion());
+                    .bind(index++, row.cipxVersion())
+                    .bind(index++, ClickHouseDateTimeFormat.formatMicros(row.lastUpdatedAt()));
         }
 
         return statement.execute();

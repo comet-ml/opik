@@ -15,6 +15,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.CipxSpendDAO;
+import com.comet.opik.domain.CipxTraceIdentityDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -97,14 +98,17 @@ class CostIntelligenceIngestionTest {
     private SpanResourceClient spanResourceClient;
     private TraceResourceClient traceResourceClient;
     private CipxSpendDAO cipxSpendDAO;
+    private CipxTraceIdentityDAO cipxTraceIdentityDAO;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate,
-            TransactionTemplate mySqlTemplate, CipxSpendDAO cipxSpendDAO) {
+            TransactionTemplate mySqlTemplate, CipxSpendDAO cipxSpendDAO,
+            CipxTraceIdentityDAO cipxTraceIdentityDAO) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.clickHouseTemplate = clickHouseTemplate;
         this.mySqlTemplate = mySqlTemplate;
         this.cipxSpendDAO = cipxSpendDAO;
+        this.cipxTraceIdentityDAO = cipxTraceIdentityDAO;
 
         ClientSupportUtils.config(client);
 
@@ -702,6 +706,85 @@ class CostIntelligenceIngestionTest {
                 assertThat(getUserMappings(newEmail)).containsExactly(userUuid);
             });
         }
+
+        @Test
+        @DisplayName("every positional bind lands in its own column, across a multi-row identity insert")
+        void everyIdentityPositionalBindLandsInItsOwnColumn() {
+            var ws = newWorkspace();
+
+            // CipxTraceIdentityDAO binds 30 parameters per row by position and
+            // nothing checks that order against the INSERT tuple at compile
+            // time. A mismatch does not fail the insert — it writes each value
+            // into the neighbouring column. Two rows, deliberately: the bind
+            // index accumulates across rows, so a wrong stride corrupts the
+            // second tuple while a single-row test still passes.
+            var rowOne = sentinelIdentityRow(1);
+            var rowTwo = sentinelIdentityRow(2);
+
+            cipxTraceIdentityDAO.upsert(List.of(rowOne, rowTwo), ws.workspaceId(), USER).block();
+
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), rowOne);
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), rowTwo);
+        }
+
+        @Test
+        @DisplayName("a reordered re-upsert of one trace keeps the newer snapshot's counters")
+        void reorderedReUpsertKeepsTheNewerSnapshot() {
+            var ws = newWorkspace();
+
+            // A trace is upserted again whenever its identity changes on an update, and the two
+            // inserts race in the async queue. Both rows share the merge key, so ReplacingMergeTree
+            // keeps one — the one with the greater last_updated_at. Insert them in the wrong order:
+            // with an ingestion-time version the older snapshot would win and the session's running
+            // totals would go backwards, with no second source to recover them from.
+            var base = sentinelIdentityRow(3);
+            var newer = base.toBuilder()
+                    .agentsDispatched(90L)
+                    .lastUpdatedAt(base.lastUpdatedAt().plusMillis(10))
+                    .build();
+            var older = base.toBuilder().agentsDispatched(80L).build();
+
+            cipxTraceIdentityDAO.upsert(List.of(newer), ws.workspaceId(), USER).block();
+            cipxTraceIdentityDAO.upsert(List.of(older), ws.workspaceId(), USER).block();
+
+            var stored = getCipxIdentityAllColumns(base.traceId(), ws.workspaceId());
+            assertThat(stored).isPresent();
+            assertThat(stored.get().agentsDispatched())
+                    .as("agents_dispatched after the older snapshot was inserted last")
+                    .isEqualTo(90L);
+        }
+
+        @Test
+        @DisplayName("agent counters above Integer.MAX_VALUE land unnarrowed, past UInt32 they clamp")
+        void agentCountersAboveIntMaxLandUnnarrowed() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            // The counters are UInt32 columns and ClickHouse wraps an out-of-range literal mod 2^32
+            // instead of rejecting it, so a narrowing read corrupts them in silence. The values
+            // straddle the two boundaries rather than describe a plausible session: 2^32-1 is the
+            // column ceiling (asInt() would carry it as -1), 3e9 is past int, and 9999999999 is
+            // past the column and has to clamp instead of wrapping to 1410065407.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "4294967295", "3000000000",
+                            "9999999999"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).as("identity row for a trace whose counters exceed Integer.MAX_VALUE").isPresent();
+                assertThat(row.get().agentsDispatched()).as("agents_dispatched at the UInt32 ceiling")
+                        .isEqualTo(4294967295L);
+                assertThat(row.get().agentsLinked()).as("agents_linked above Integer.MAX_VALUE")
+                        .isEqualTo(3000000000L);
+                assertThat(row.get().agentsAmbiguous()).as("agents_ambiguous clamped to the UInt32 ceiling")
+                        .isEqualTo(4294967295L);
+            });
+        }
     }
 
     private WorkspaceContext newWorkspace() {
@@ -819,6 +902,145 @@ class CostIntelligenceIngestionTest {
                             row.get("turn_key", String.class),
                             row.get("parent_tool_use_id", String.class),
                             row.get("link_failure_reason", String.class)))));
+        }).blockOptional();
+    }
+
+    // One distinct value per column, derived from n so two rows never collide. project_id / trace_id
+    // / user_uuid are UUIDs because they are the merge key, and dirty alternates so a swap between
+    // the two rows shows up in it as well as in the counters.
+    private CipxTraceIdentityDAO.TraceIdentityRow sentinelIdentityRow(int n) {
+        long base = n * 1_000_000L;
+        return CipxTraceIdentityDAO.TraceIdentityRow.builder()
+                .projectId(UUID.randomUUID().toString())
+                .traceId(UUID.randomUUID().toString())
+                .startTime(Instant.ofEpochMilli(1_800_000_000_000L + n))
+                .userUuid(UUID.randomUUID().toString())
+                .userEmail("sentinel-" + n + "-email")
+                .userDisplayName("sentinel-" + n + "-display-name")
+                .repository("sentinel-" + n + "-repository")
+                .sessionId("sentinel-" + n + "-session-id")
+                .harness("sentinel-" + n + "-harness")
+                .schemaVersion(n * 100 + 1)
+                .billingMode("sentinel-" + n + "-billing-mode")
+                .plan("sentinel-" + n + "-plan")
+                .planUsageStatus("sentinel-" + n + "-plan-usage-status")
+                .organizationType("sentinel-" + n + "-organization-type")
+                .seatTier("sentinel-" + n + "-seat-tier")
+                .billingType("sentinel-" + n + "-billing-type")
+                .branch("sentinel-" + n + "-branch")
+                .headShaStart("sentinel-" + n + "-head-sha-start")
+                .headShaEnd("sentinel-" + n + "-head-sha-end")
+                .dirty(n % 2 == 1)
+                .commitsInTrace(base + 1)
+                .filesAdded(base + 2)
+                .filesDeleted(base + 3)
+                .linesAdded(base + 4)
+                .linesDeleted(base + 5)
+                .agentsDispatched(base + 6)
+                .agentsLinked(base + 7)
+                .agentsAmbiguous(base + 8)
+                .cipxVersion("sentinel-" + n + "-cipx-version")
+                .lastUpdatedAt(Instant.ofEpochMilli(1_700_000_000_000L + n))
+                .build();
+    }
+
+    // Asserts column by column with the column name as the description, so a bind-order regression
+    // reports which column received the wrong value rather than just "expected X but was Y".
+    private void assertEveryIdentityColumnHoldsItsOwnValue(String workspaceId,
+            CipxTraceIdentityDAO.TraceIdentityRow expected) {
+        var stored = getCipxIdentityAllColumns(expected.traceId(), workspaceId);
+        assertThat(stored).as("row for trace_id %s", expected.traceId()).isPresent();
+        var actual = stored.get();
+
+        assertThat(actual.workspaceId()).as("workspace_id").isEqualTo(workspaceId);
+        assertThat(actual.projectId()).as("project_id").isEqualTo(expected.projectId());
+        assertThat(actual.traceId()).as("trace_id").isEqualTo(expected.traceId());
+        assertThat(actual.startMs()).as("start_time").isEqualTo(expected.startTime().toEpochMilli());
+        assertThat(actual.userUuid()).as("user_uuid").isEqualTo(expected.userUuid());
+        assertThat(actual.userEmail()).as("user_email").isEqualTo(expected.userEmail());
+        assertThat(actual.userDisplayName()).as("user_display_name").isEqualTo(expected.userDisplayName());
+        assertThat(actual.repository()).as("repository").isEqualTo(expected.repository());
+        assertThat(actual.sessionId()).as("session_id").isEqualTo(expected.sessionId());
+        assertThat(actual.harness()).as("harness").isEqualTo(expected.harness());
+        assertThat(actual.schemaVersion()).as("schema_version").isEqualTo(expected.schemaVersion());
+        assertThat(actual.billingMode()).as("billing_mode").isEqualTo(expected.billingMode());
+        assertThat(actual.plan()).as("plan").isEqualTo(expected.plan());
+        assertThat(actual.planUsageStatus()).as("plan_usage_status").isEqualTo(expected.planUsageStatus());
+        assertThat(actual.organizationType()).as("organization_type").isEqualTo(expected.organizationType());
+        assertThat(actual.seatTier()).as("seat_tier").isEqualTo(expected.seatTier());
+        assertThat(actual.billingType()).as("billing_type").isEqualTo(expected.billingType());
+        assertThat(actual.branch()).as("branch").isEqualTo(expected.branch());
+        assertThat(actual.headShaStart()).as("head_sha_start").isEqualTo(expected.headShaStart());
+        assertThat(actual.headShaEnd()).as("head_sha_end").isEqualTo(expected.headShaEnd());
+        assertThat(actual.dirty()).as("dirty").isEqualTo(expected.dirty());
+        assertThat(actual.commitsInTrace()).as("commits_in_trace").isEqualTo(expected.commitsInTrace());
+        assertThat(actual.filesAdded()).as("files_added").isEqualTo(expected.filesAdded());
+        assertThat(actual.filesDeleted()).as("files_deleted").isEqualTo(expected.filesDeleted());
+        assertThat(actual.linesAdded()).as("lines_added").isEqualTo(expected.linesAdded());
+        assertThat(actual.linesDeleted()).as("lines_deleted").isEqualTo(expected.linesDeleted());
+        assertThat(actual.agentsDispatched()).as("agents_dispatched").isEqualTo(expected.agentsDispatched());
+        assertThat(actual.agentsLinked()).as("agents_linked").isEqualTo(expected.agentsLinked());
+        assertThat(actual.agentsAmbiguous()).as("agents_ambiguous").isEqualTo(expected.agentsAmbiguous());
+        assertThat(actual.cipxVersion()).as("cipx_version").isEqualTo(expected.cipxVersion());
+        assertThat(actual.lastUpdatedMs()).as("last_updated_at").isEqualTo(expected.lastUpdatedAt().toEpochMilli());
+    }
+
+    // Reads every column the DAO writes, including workspace_id and last_updated_at which the
+    // narrower getCipxIdentity does not project. Bind-order coverage is only as wide as the read.
+    private Optional<SentinelIdentityRow> getCipxIdentityAllColumns(String traceId, String workspaceId) {
+        String sql = """
+                SELECT
+                    workspace_id AS workspace_id,
+                    project_id AS project_id,
+                    trace_id AS trace_id,
+                    toUnixTimestamp64Milli(start_time) AS start_ms,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
+                    billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
+                    branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
+                    files_added, files_deleted, lines_added, lines_deleted,
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
+                    toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms
+                FROM cipx_trace_identities FINAL
+                WHERE workspace_id = :workspace_id AND trace_id = :trace_id
+                """;
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("workspace_id", workspaceId)
+                    .bind("trace_id", traceId);
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> SentinelIdentityRow.builder()
+                            .workspaceId(row.get("workspace_id", String.class))
+                            .projectId(row.get("project_id", String.class))
+                            .traceId(row.get("trace_id", String.class))
+                            .startMs(row.get("start_ms", Long.class))
+                            .userUuid(row.get("user_uuid", String.class))
+                            .userEmail(row.get("user_email", String.class))
+                            .userDisplayName(row.get("user_display_name", String.class))
+                            .repository(row.get("repository", String.class))
+                            .sessionId(row.get("session_id", String.class))
+                            .harness(row.get("harness", String.class))
+                            .schemaVersion(row.get("schema_version", Integer.class))
+                            .billingMode(row.get("billing_mode", String.class))
+                            .plan(row.get("plan", String.class))
+                            .planUsageStatus(row.get("plan_usage_status", String.class))
+                            .organizationType(row.get("organization_type", String.class))
+                            .seatTier(row.get("seat_tier", String.class))
+                            .billingType(row.get("billing_type", String.class))
+                            .branch(row.get("branch", String.class))
+                            .headShaStart(row.get("head_sha_start", String.class))
+                            .headShaEnd(row.get("head_sha_end", String.class))
+                            .dirty(row.get("dirty", Boolean.class))
+                            .commitsInTrace(row.get("commits_in_trace", Long.class))
+                            .filesAdded(row.get("files_added", Long.class))
+                            .filesDeleted(row.get("files_deleted", Long.class))
+                            .linesAdded(row.get("lines_added", Long.class))
+                            .linesDeleted(row.get("lines_deleted", Long.class))
+                            .agentsDispatched(row.get("agents_dispatched", Long.class))
+                            .agentsLinked(row.get("agents_linked", Long.class))
+                            .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
+                            .cipxVersion(row.get("cipx_version", String.class))
+                            .lastUpdatedMs(row.get("last_updated_ms", Long.class))
+                            .build())));
         }).blockOptional();
     }
 
@@ -1055,6 +1277,32 @@ class CostIntelligenceIngestionTest {
                 """.formatted(schemaVersion, harness, repository, userUuid, email, displayName));
     }
 
+    // The counters are interpolated as raw JSON so a test can put a value past Integer.MAX_VALUE on
+    // the wire, which is where the UInt32 columns' range gets lost or kept.
+    private static JsonNode traceCipxMetadataWithAgentCounters(String userUuid, String email, String dispatched,
+            String linked, String ambiguous) {
+        return JsonUtils.getJsonNodeFromString("""
+                {
+                  "cipx": {
+                    "session": {
+                      "schema_version": 3,
+                      "session_id": "cc-session-big-counters",
+                      "harness": "claude_code",
+                      "agents_dispatched": %s,
+                      "agents_linked": %s,
+                      "agents_ambiguous": %s,
+                      "cipx_version": "0.0.56",
+                      "identity": {
+                        "user_uuid": "%s",
+                        "email": "%s",
+                        "display_name": "Big Counters Dev"
+                      }
+                    }
+                  }
+                }
+                """.formatted(dispatched, linked, ambiguous, userUuid, email));
+    }
+
     // The identity envelope a proxy older than the agent-link rollup ships: session + identity, no
     // agents_* counters and no cipx_version.
     private static JsonNode traceCipxMetadataWithoutAgentRollup(String userUuid, String email) {
@@ -1205,14 +1453,14 @@ class CostIntelligenceIngestionTest {
                             .headShaStart(row.get("head_sha_start", String.class))
                             .headShaEnd(row.get("head_sha_end", String.class))
                             .dirty(row.get("dirty", Boolean.class))
-                            .commitsInTrace(row.get("commits_in_trace", Integer.class))
-                            .filesAdded(row.get("files_added", Integer.class))
-                            .filesDeleted(row.get("files_deleted", Integer.class))
-                            .linesAdded(row.get("lines_added", Integer.class))
-                            .linesDeleted(row.get("lines_deleted", Integer.class))
-                            .agentsDispatched(row.get("agents_dispatched", Integer.class))
-                            .agentsLinked(row.get("agents_linked", Integer.class))
-                            .agentsAmbiguous(row.get("agents_ambiguous", Integer.class))
+                            .commitsInTrace(row.get("commits_in_trace", Long.class))
+                            .filesAdded(row.get("files_added", Long.class))
+                            .filesDeleted(row.get("files_deleted", Long.class))
+                            .linesAdded(row.get("lines_added", Long.class))
+                            .linesDeleted(row.get("lines_deleted", Long.class))
+                            .agentsDispatched(row.get("agents_dispatched", Long.class))
+                            .agentsLinked(row.get("agents_linked", Long.class))
+                            .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
                             .build())));
         }).blockOptional();
@@ -1266,8 +1514,18 @@ class CostIntelligenceIngestionTest {
             String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
             String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
             String billingType,
-            String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
-            Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted,
-            Integer agentsDispatched, Integer agentsLinked, Integer agentsAmbiguous, String cipxVersion) {
+            String branch, String headShaStart, String headShaEnd, Boolean dirty, Long commitsInTrace,
+            Long filesAdded, Long filesDeleted, Long linesAdded, Long linesDeleted,
+            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion) {
+    }
+
+    @Builder
+    private record SentinelIdentityRow(String workspaceId, String projectId, String traceId, Long startMs,
+            String userUuid, String userEmail, String userDisplayName, String repository, String sessionId,
+            String harness, Integer schemaVersion, String billingMode, String plan, String planUsageStatus,
+            String organizationType, String seatTier, String billingType, String branch, String headShaStart,
+            String headShaEnd, Boolean dirty, Long commitsInTrace, Long filesAdded, Long filesDeleted,
+            Long linesAdded, Long linesDeleted, Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous,
+            String cipxVersion, Long lastUpdatedMs) {
     }
 }
