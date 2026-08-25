@@ -297,7 +297,7 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     echo
     echo "To re-apply the wrap later, once the cause is understood:"
     if [[ -n "$(traces_engine traces_pre_cutover_backup)" ]]; then
-        echo "  ./exchange_and_wrap.sh --database $DATABASE --wrap-only --confirm-maintenance --confirm-daos-retargeted"
+        echo "  ./exchange_and_wrap.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --wrap-only --confirm-maintenance --confirm-daos-retargeted"
         echo "  (flip tracesDistributedWrapEnabled back to true first, per the runbook's toggle/wrap ordering note)."
     else
         # Deliberately not printed as a runnable command: --wrap-only refuses without the parked original, and this is
@@ -389,12 +389,12 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "the cutover window's week legitimately mismatches by the post-cutover writes this rollback discarded, so stop"
     echo "before it. That week is fixed by cutover_start, so the bound does not drift if you verify later:"
     if [[ "$bound_week" =~ ^-?[0-9]+$ ]] && (( bound_week >= 0 )); then
-        echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week $bound_week"
+        echo "  ./verify.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --old-table traces --new-table traces_post_rollback_backup --to-week $bound_week"
     elif [[ "$bound_week" =~ ^-?[0-9]+$ ]]; then
         echo "  (none: every row in 'traces' predates no earlier week than the cutover window's own, so there is nothing"
         echo "   to compare below it. Skip the bounded compare.)"
     else
-        echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week <N>"
+        echo "  ./verify.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --old-table traces --new-table traces_post_rollback_backup --to-week <N>"
         echo "  where N could not be computed just now: it is the whole weeks between toMonday(min(created_at)) on"
         echo "  'traces' and cutover_start's Monday, minus 1."
     fi
