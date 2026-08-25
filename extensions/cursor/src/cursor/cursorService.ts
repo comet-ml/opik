@@ -115,9 +115,6 @@ export class CursorService {
       
       throw error; // Re-throw to let the caller handle it
     } finally {
-      // Always reset the processing flag, even if an error occurs
-      this.isProcessing = false;
-
       // Runs even when the upload above failed, so pending turns from earlier
       // cycles still get their usage.
       try {
@@ -128,6 +125,12 @@ export class CursorService {
       } catch (usageError) {
         captureException(usageError);
         console.error('Error enriching cursor usage:', usageError);
+      } finally {
+        // Held through enrichment, not released before it. Two overlapping
+        // interval callbacks would otherwise run tick() at the same time, and a
+        // late write of the pending list would drop turns that track() queued
+        // in between, leaving those spans without usage forever.
+        this.isProcessing = false;
       }
     }
 

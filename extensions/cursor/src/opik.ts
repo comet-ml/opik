@@ -93,18 +93,20 @@ export async function applyTurnUsage(
     const client = await createClient(apiKey);
 
     await client.api.spans.updateSpan(pending.spanId, {
-        traceId: pending.traceId,
-        projectName: pending.projectName,
-        model: usage.models[0],
-        provider: 'cursor',
-        usage: {
-            prompt_tokens: usage.inputTokens,
-            completion_tokens: usage.outputTokens,
-            total_tokens: usage.inputTokens + usage.outputTokens,
-            cache_read_input_tokens: usage.cacheReadTokens,
-            cache_creation_input_tokens: usage.cacheWriteTokens,
+        body: {
+            traceId: pending.traceId,
+            projectName: pending.projectName,
+            model: usage.models[0],
+            provider: 'cursor',
+            usage: {
+                prompt_tokens: usage.inputTokens,
+                completion_tokens: usage.outputTokens,
+                total_tokens: usage.inputTokens + usage.outputTokens,
+                cache_read_input_tokens: usage.cacheReadTokens,
+                cache_creation_input_tokens: usage.cacheWriteTokens,
+            },
+            totalEstimatedCost: usage.chargedCents / 100,
         },
-        totalEstimatedCost: usage.chargedCents / 100,
     });
 
     console.log(

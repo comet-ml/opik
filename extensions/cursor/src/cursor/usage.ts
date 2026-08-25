@@ -53,26 +53,18 @@ async function rpc<T>(method: string, token: string, body: unknown): Promise<T> 
     return await response.json() as T;
 }
 
-export async function getCursorUserId(stateDbPath: string): Promise<number | undefined> {
-    const token = await readAccessToken(stateDbPath);
-    if (!token) {
-        return undefined;
-    }
+async function fetchUserId(token: string): Promise<number | undefined> {
     const me = await rpc<{ userId?: number }>('GetMe', token, {});
     return me.userId;
 }
 
 async function fetchUsageByConversation(
-    stateDbPath: string,
+    token: string,
     userId: number,
     startMs: number,
     endMs: number
 ): Promise<Map<string, UsageEventDisplay[]>> {
-    const token = await readAccessToken(stateDbPath);
     const byConversation = new Map<string, UsageEventDisplay[]>();
-    if (!token) {
-        return byConversation;
-    }
 
     for (let page = 1; page <= 20; page++) {
         const result = await rpc<{
@@ -174,7 +166,7 @@ export function attributeUsageToTurns(
 
 export class UsageEnricher {
     private userId: number | undefined;
-    private userIdLookupFailed = false;
+    private userIdToken: string | undefined;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -201,6 +193,26 @@ export class UsageEnricher {
         updatePendingUsage(this.context, pending);
     }
 
+    // Keyed by token so that switching Cursor accounts re-resolves instead of
+    // pairing a stale user id with a new token.
+    private async resolveUserId(token: string): Promise<number | undefined> {
+        if (this.userId !== undefined && this.userIdToken === token) {
+            return this.userId;
+        }
+
+        try {
+            const userId = await fetchUserId(token);
+            if (userId !== undefined) {
+                this.userId = userId;
+                this.userIdToken = token;
+            }
+            return userId;
+        } catch (error) {
+            debugLog('[usage] GetMe failed, will retry', String(error));
+            return undefined;
+        }
+    }
+
     async tick(stateDbPath: string): Promise<void> {
         if (!this.isEnabled()) {
             return;
@@ -213,25 +225,27 @@ export class UsageEnricher {
             return;
         }
 
-        if (this.userId === undefined) {
-            if (this.userIdLookupFailed) {
-                return;
-            }
-            try {
-                this.userId = await getCursorUserId(stateDbPath);
-            } catch (error) {
-                debugLog('[usage] GetMe failed', String(error));
-            }
-            if (this.userId === undefined) {
-                this.userIdLookupFailed = true;
-                return;
-            }
+        // Read once per tick and reuse, so the user id and the token always come
+        // from the same sign-in.
+        const token = await readAccessToken(stateDbPath);
+        if (!token) {
+            // Cursor may not have written its token yet, for example when the
+            // extension activates before sign-in completes. Retrying on the next
+            // tick is correct; latching a failure here would disable enrichment
+            // for the rest of the session.
+            debugLog('[usage] no Cursor access token available yet, will retry');
+            return;
+        }
+
+        const userId = await this.resolveUserId(token);
+        if (userId === undefined) {
+            return;
         }
 
         const from = Math.min(...due.map(item => item.turnStartMs)) - 60000;
         let byConversation: Map<string, UsageEventDisplay[]>;
         try {
-            byConversation = await fetchUsageByConversation(stateDbPath, this.userId, from, now + 60000);
+            byConversation = await fetchUsageByConversation(token, userId, from, now + 60000);
         } catch (error) {
             debugLog('[usage] GetFilteredUsageEvents failed', String(error));
             for (const item of due) {
