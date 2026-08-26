@@ -273,8 +273,10 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MINIMAX_MINIMAX_M2_5("minimax/minimax-m2.5"),
     MINIMAX_MINIMAX_M2_5_FREE("minimax/minimax-m2.5:free"),
     MINIMAX_MINIMAX_M2_7("minimax/minimax-m2.7"),
+    MINIMAX_MINIMAX_M2_7_FREE("minimax/minimax-m2.7:free"),
     MINIMAX_MINIMAX_M3("minimax/minimax-m3"),
     MINIMAX_MINIMAX_M3_BATCH("minimax/minimax-m3:batch"),
+    MINIMAX_MINIMAX_M3_FREE("minimax/minimax-m3:free"),
     MISTRALAI_CODESTRAL_2501("mistralai/codestral-2501"),
     MISTRALAI_CODESTRAL_2508("mistralai/codestral-2508"),
     MISTRALAI_DEVSTRAL_2512("mistralai/devstral-2512"),
@@ -677,6 +679,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
 
     private static final Set<OpenRouterModelName> STRUCTURED_OUTPUT_SUPPORTED_MODELS = Set.of(
             ANTHROPIC_CLAUDE_OPUS_4_7,
+            ANTHROPIC_CLAUDE_OPUS_5,
             COHERE_COMMAND_A,
             COHERE_COMMAND_R7B_12_2024,
             COHERE_COMMAND_R_08_2024,
@@ -685,6 +688,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             DEEPSEEK_DEEPSEEK_R1,
             DEEPSEEK_DEEPSEEK_V4_FLASH,
             DEEPSEEK_DEEPSEEK_V4_PRO,
+            DEEPSEEK_DEEPSEEK_V4_PRO_0813,
             GOOGLE_GEMINI_2_0_FLASH_001,
             GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
             GOOGLE_GEMINI_2_5_FLASH,
