@@ -174,3 +174,57 @@ class TestClaudeStreamAggregation:
         assert backend_usage["original_usage.cacheReadInputTokens"] == 4096
         assert backend_usage["original_usage.inputTokens"] == 12
         assert backend_usage["original_usage.outputTokens"] == 7
+
+    def test_aggregate_chunks__message_delta_reports_null_cache__earlier_counts_kept(
+        self,
+    ):
+        # A later chunk can report a token field as null. Assigning it through would
+        # discard the real message_start count and, because the backend usage dict
+        # keeps only integers, drop the field from the span entirely.
+        chunks = _stream(
+            message_start_usage={
+                "input_tokens": 12,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 1024,
+                "cache_read_input_tokens": 4096,
+            },
+            invocation_metrics={},
+            message_delta_usage={
+                "output_tokens": 7,
+                "cache_creation_input_tokens": None,
+                "cache_read_input_tokens": None,
+            },
+        )
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+        backend_usage = llm_usage.build_opik_usage(
+            provider=opik.LLMProvider.BEDROCK, usage=response.usage
+        ).to_backend_compatible_full_usage_dict()
+
+        assert backend_usage["original_usage.cacheWriteInputTokens"] == 1024
+        assert backend_usage["original_usage.cacheReadInputTokens"] == 4096
+
+    def test_aggregate_chunks__metrics_report_null_cache__earlier_counts_kept(self):
+        chunks = _stream(
+            message_start_usage={
+                "input_tokens": 12,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 1024,
+                "cache_read_input_tokens": 4096,
+            },
+            invocation_metrics={
+                "inputTokenCount": 15,
+                "outputTokenCount": 9,
+                "cacheWriteInputTokenCount": None,
+                "cacheReadInputTokenCount": None,
+            },
+        )
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+        backend_usage = llm_usage.build_opik_usage(
+            provider=opik.LLMProvider.BEDROCK, usage=response.usage
+        ).to_backend_compatible_full_usage_dict()
+
+        assert backend_usage["original_usage.cacheWriteInputTokens"] == 1024
+        assert backend_usage["original_usage.cacheReadInputTokens"] == 4096
+        assert backend_usage["original_usage.inputTokens"] == 15
