@@ -389,7 +389,13 @@ Opik vous permet d'évaluer votre application LLM pendant le développement grâ
 
 Si vous trouvez Opik utile, envisagez de nous donner une étoile ! Votre soutien nous aide à faire grandir notre communauté et à continuer d'améliorer le produit.
 
-[![Graphique de l'historique des étoiles](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=comet-ml/opik&type=date&theme=dark&legend=top-left&sealed_token=BX74aJIfWUI5DCa9TnADwC6ULxwX2VtdZ6HviPALqS8Xcj3YntZYQ5vqr3EDa9erLGMfhUiQUemd2nNzerMfbZ7IUGKi8sY0oySymsC61B4kjAauFD79uTCuroSJ1DiPL6T_rU-3VVPAfz81jfZ7OaZ5duanlAUQ89Lmd2alCmLPC_cGPiP-FOYtGQHW" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=comet-ml/opik&type=date&legend=top-left&sealed_token=BX74aJIfWUI5DCa9TnADwC6ULxwX2VtdZ6HviPALqS8Xcj3YntZYQ5vqr3EDa9erLGMfhUiQUemd2nNzerMfbZ7IUGKi8sY0oySymsC61B4kjAauFD79uTCuroSJ1DiPL6T_rU-3VVPAfz81jfZ7OaZ5duanlAUQ89Lmd2alCmLPC_cGPiP-FOYtGQHW" />
+    <img alt="Graphique de l'historique des étoiles" src="https://api.star-history.com/chart?repos=comet-ml/opik&type=date&legend=top-left&sealed_token=BX74aJIfWUI5DCa9TnADwC6ULxwX2VtdZ6HviPALqS8Xcj3YntZYQ5vqr3EDa9erLGMfhUiQUemd2nNzerMfbZ7IUGKi8sY0oySymsC61B4kjAauFD79uTCuroSJ1DiPL6T_rU-3VVPAfz81jfZ7OaZ5duanlAUQ89Lmd2alCmLPC_cGPiP-FOYtGQHW" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 Contribuer

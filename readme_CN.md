@@ -389,7 +389,13 @@ Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/e
 
 如果你觉得 Opik 有用，请考虑给我们点个 star！你的支持将帮助我们壮大社区并持续改进产品。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=comet-ml/opik&type=date&theme=dark&legend=top-left&sealed_token=BX74aJIfWUI5DCa9TnADwC6ULxwX2VtdZ6HviPALqS8Xcj3YntZYQ5vqr3EDa9erLGMfhUiQUemd2nNzerMfbZ7IUGKi8sY0oySymsC61B4kjAauFD79uTCuroSJ1DiPL6T_rU-3VVPAfz81jfZ7OaZ5duanlAUQ89Lmd2alCmLPC_cGPiP-FOYtGQHW" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=comet-ml/opik&type=date&legend=top-left&sealed_token=BX74aJIfWUI5DCa9TnADwC6ULxwX2VtdZ6HviPALqS8Xcj3YntZYQ5vqr3EDa9erLGMfhUiQUemd2nNzerMfbZ7IUGKi8sY0oySymsC61B4kjAauFD79uTCuroSJ1DiPL6T_rU-3VVPAfz81jfZ7OaZ5duanlAUQ89Lmd2alCmLPC_cGPiP-FOYtGQHW" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=comet-ml/opik&type=date&legend=top-left&sealed_token=BX74aJIfWUI5DCa9TnADwC6ULxwX2VtdZ6HviPALqS8Xcj3YntZYQ5vqr3EDa9erLGMfhUiQUemd2nNzerMfbZ7IUGKi8sY0oySymsC61B4kjAauFD79uTCuroSJ1DiPL6T_rU-3VVPAfz81jfZ7OaZ5duanlAUQ89Lmd2alCmLPC_cGPiP-FOYtGQHW" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 参与贡献
