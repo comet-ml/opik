@@ -4595,7 +4595,10 @@ paths:
       tags:
       - LlmProviderKey
       summary: Update LLM Provider's ApiKey
-      description: Update LLM Provider's ApiKey
+      description: "Update LLM Provider's ApiKey. api_key and auth_config are mutually\
+        \ exclusive: setting a valid auth_config on a provider that holds a static\
+        \ api_key clears the stored key; send auth_config as an empty object to clear\
+        \ the recipe and switch back to a static key"
       operationId: updateLlmProviderApiKey
       parameters:
       - name: id
@@ -4614,6 +4617,54 @@ paths:
           description: No Content
         "401":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/llm-provider-key/auth-config/test:
+    post:
+      tags:
+      - LlmProviderKey
+      summary: Test a provider's dynamic token auth
+      description: "Runs the token fetch once, backend-side, and reports the token\
+        \ lifetime. The token itself is never returned. Send provider_id to test the\
+        \ stored config, auth_config to test submitted values, or both to resolve\
+        \ secret sentinels against the stored config."
+      operationId: testLlmProviderAuthConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderAuthCheck"
+      responses:
+        "200":
+          description: Token fetched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "400":
+          description: "Bad Request — the token fetch itself failed (unreachable URL,\
+            \ rejected credentials, malformed reply)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: "Unprocessable Content — the request is invalid (neither provider_id\
+            \ nor auth_config, or an invalid auth_config)"
           content:
             application/json:
               schema:
@@ -11507,7 +11558,15 @@ components:
           minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
@@ -12069,7 +12128,15 @@ components:
           minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
@@ -12423,7 +12490,15 @@ components:
           minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
@@ -12887,7 +12962,15 @@ components:
           minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
@@ -12991,7 +13074,15 @@ components:
           minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
@@ -18056,6 +18147,25 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    Credential_Public:
+      required:
+      - key
+      type: object
+      properties:
+        key:
+          maxLength: 250
+          minLength: 0
+          type: string
+        value:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        secret:
+          type: boolean
+          description: Secret values are encrypted at rest and never read back; once
+            true it cannot be unset
+      description: "Fields sent to the token URL. Values flagged as secret are write-only:\
+        \ they read back as the '__SECRET__' sentinel"
     ProviderApiKeyPage_Public:
       type: object
       properties:
@@ -18121,6 +18231,8 @@ components:
         base_url:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig_Public"
         created_at:
           type: string
           format: date-time
@@ -18140,6 +18252,74 @@ components:
           description: "If true, this provider is system-managed and cannot be edited\
             \ or deleted"
           readOnly: true
+    ProviderAuthConfig_Public:
+      type: object
+      properties:
+        token_url:
+          type: string
+          description: Auth service URL the credentials are sent to
+          example: https://developer.api.example.com/authentication/v1/token
+        send_as:
+          type: string
+          description: "How credentials are sent: form body (default), JSON body,\
+            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
+            \ the form body)"
+          enum:
+          - form
+          - json
+          - basic
+        credentials:
+          maxItems: 20
+          minItems: 0
+          type: array
+          description: "Fields sent to the token URL. Values flagged as secret are\
+            \ write-only: they read back as the '__SECRET__' sentinel"
+          items:
+            $ref: "#/components/schemas/Credential_Public"
+        token_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token in the reply; dot-path for nested replies
+          example: access_token
+        expires_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token lifetime in seconds in the reply; dot-path
+            for nested replies
+          example: expires_in
+        fallback_ttl_seconds:
+          maximum: 31536000
+          minimum: 0
+          type: integer
+          description: "Lifetime in seconds assumed when the reply doesn't state one,\
+            \ capped at one year; 0 disables caching for such replies. A reply-stated\
+            \ lifetime always wins"
+          format: int64
+      description: "Dynamic token auth recipe. When set, Opik fetches a short-lived\
+        \ bearer from the configured auth service instead of using a static api_key.\
+        \ Only supported for custom providers. Secret credential values read back\
+        \ masked."
+    Credential:
+      required:
+      - key
+      type: object
+      properties:
+        key:
+          maxLength: 250
+          minLength: 0
+          type: string
+        value:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        secret:
+          type: boolean
+          description: Secret values are encrypted at rest and never read back; once
+            true it cannot be unset
+      description: "Fields sent to the token URL. Values flagged as secret are write-only:\
+        \ they read back as the '__SECRET__' sentinel"
     ProviderApiKey:
       required:
       - provider
@@ -18188,6 +18368,8 @@ components:
         base_url:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig"
         created_at:
           type: string
           format: date-time
@@ -18207,6 +18389,73 @@ components:
           description: "If true, this provider is system-managed and cannot be edited\
             \ or deleted"
           readOnly: true
+    ProviderAuthConfig:
+      type: object
+      properties:
+        token_url:
+          type: string
+          description: Auth service URL the credentials are sent to
+          example: https://developer.api.example.com/authentication/v1/token
+        send_as:
+          type: string
+          description: "How credentials are sent: form body (default), JSON body,\
+            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
+            \ the form body)"
+          enum:
+          - form
+          - json
+          - basic
+        credentials:
+          maxItems: 20
+          minItems: 0
+          type: array
+          description: "Fields sent to the token URL. Values flagged as secret are\
+            \ write-only: they read back as the '__SECRET__' sentinel"
+          items:
+            $ref: "#/components/schemas/Credential"
+        token_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token in the reply; dot-path for nested replies
+          example: access_token
+        expires_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token lifetime in seconds in the reply; dot-path
+            for nested replies
+          example: expires_in
+        fallback_ttl_seconds:
+          maximum: 31536000
+          minimum: 0
+          type: integer
+          description: "Lifetime in seconds assumed when the reply doesn't state one,\
+            \ capped at one year; 0 disables caching for such replies. A reply-stated\
+            \ lifetime always wins"
+          format: int64
+      description: Dynamic token auth recipe. Send the '__SECRET__' sentinel as a
+        credential value to keep the stored secret; send an empty object to clear
+        the auth config.
+    Credential_Write:
+      required:
+      - key
+      type: object
+      properties:
+        key:
+          maxLength: 250
+          minLength: 0
+          type: string
+        value:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        secret:
+          type: boolean
+          description: Secret values are encrypted at rest and never read back; once
+            true it cannot be unset
+      description: "Fields sent to the token URL. Values flagged as secret are write-only:\
+        \ they read back as the '__SECRET__' sentinel"
     ProviderApiKey_Write:
       required:
       - provider
@@ -18251,6 +18500,78 @@ components:
         base_url:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig_Write"
+    ProviderAuthConfig_Write:
+      type: object
+      properties:
+        token_url:
+          type: string
+          description: Auth service URL the credentials are sent to
+          example: https://developer.api.example.com/authentication/v1/token
+        send_as:
+          type: string
+          description: "How credentials are sent: form body (default), JSON body,\
+            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
+            \ the form body)"
+          enum:
+          - form
+          - json
+          - basic
+        credentials:
+          maxItems: 20
+          minItems: 0
+          type: array
+          description: "Fields sent to the token URL. Values flagged as secret are\
+            \ write-only: they read back as the '__SECRET__' sentinel"
+          items:
+            $ref: "#/components/schemas/Credential_Write"
+        token_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token in the reply; dot-path for nested replies
+          example: access_token
+        expires_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token lifetime in seconds in the reply; dot-path
+            for nested replies
+          example: expires_in
+        fallback_ttl_seconds:
+          maximum: 31536000
+          minimum: 0
+          type: integer
+          description: "Lifetime in seconds assumed when the reply doesn't state one,\
+            \ capped at one year; 0 disables caching for such replies. A reply-stated\
+            \ lifetime always wins"
+          format: int64
+      description: "Dynamic token auth recipe. When set, Opik fetches a short-lived\
+        \ bearer from the configured auth service instead of using a static api_key.\
+        \ Only supported for custom providers. Secret credential values read back\
+        \ masked."
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
+    ProviderAuthCheck:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          description: Test the stored auth config of this provider; also the sentinel-resolution
+            target when auth_config is sent
+          format: uuid
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig"
     ProviderApiKeyUpdate:
       type: object
       properties:
@@ -18278,6 +18599,8 @@ components:
             type: string
         base_url:
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig"
     LocalRunnerLogEntry:
       required:
       - stream
@@ -22432,17 +22755,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Permission"
-    Result:
-      type: object
-      properties:
-        name:
-          type: string
-        current:
-          type: number
-          format: double
-        previous:
-          type: number
-          format: double
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end

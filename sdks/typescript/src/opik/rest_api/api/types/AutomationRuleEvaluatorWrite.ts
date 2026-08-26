@@ -47,6 +47,7 @@ export namespace AutomationRuleEvaluatorWrite {
         /** Project IDs for write operations (used when creating/updating rules) */
         projectIds?: string[];
         name: string;
+        /** Fraction of production (SDK-logged) items this rule scores, from 0 to 1. Trace rules ignore this value for experiment, playground and optimization traces and score them in full; span and thread rules only ever evaluate SDK-logged data. */
         samplingRate?: number;
         enabled?: boolean;
         /** Controls whether the rule fires on production traces, experiment traces, or both. Defaults to 'production' if omitted. */
