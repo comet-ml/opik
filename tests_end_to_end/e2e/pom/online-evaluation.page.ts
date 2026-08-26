@@ -103,6 +103,111 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * The Scope select. Identified by the value it displays rather than by
+   * position: the dialog holds several comboboxes (model, prompt template,
+   * score type) and only this one ever reads Trace / Thread / Span.
+   */
+  get scopeSelect(): Locator {
+    return this.dialog.getByRole('combobox').filter({ hasText: /^(Trace|Thread|Span)$/ });
+  }
+
+  /**
+   * The confirm raised when changing scope would discard editor state. The FE
+   * only shows it once `llmJudgeDetails` / `pythonCodeDetails` are dirty, so a
+   * caller that has typed into an editor will always meet it.
+   */
+  get scopeChangeConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      hasText: 'If you change the evaluation scope',
+    });
+  }
+
+  /**
+   * Switch the rule's scope, accepting the reset confirm.
+   *
+   * The confirm is not incidental: accepting it wipes the prompt, the model and
+   * every variable mapping, so a caller must re-enter the editor content it
+   * wants evaluated at the new scope.
+   */
+  async setScope(scope: 'Trace' | 'Thread' | 'Span'): Promise<void> {
+    return test.step(`switch rule scope to ${scope}`, async () => {
+      await this.scopeSelect.click();
+      await this.page.getByRole('option', { name: scope, exact: true }).click();
+
+      const confirm = this.scopeChangeConfirmDialog;
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Reset and continue' }).click();
+      await confirm.waitFor({ state: 'hidden' });
+
+      await expect(this.scopeSelect).toHaveText(scope);
+    });
+  }
+
+  /** Switch between the LLM-as-judge and Code metric editors. */
+  async setRuleType(type: 'LLM-as-judge' | 'Code metric'): Promise<void> {
+    return test.step(`switch rule type to ${type}`, async () => {
+      const radio = this.dialog.getByRole('radio', { name: type, exact: true });
+      await radio.click();
+      await expect(radio).toBeChecked();
+    });
+  }
+
+  /**
+   * Replace the whole content of the dialog's editor — the judge's prompt
+   * message under the LLM-as-judge type, the metric source under Code metric.
+   * Both render the same CodeMirror surface, and only one is mounted at a time.
+   */
+  async setEditorContent(content: string): Promise<void> {
+    return test.step('replace the editor content', async () => {
+      const editor = this.dialog.locator('.cm-content').first();
+      await editor.click();
+      await this.page.keyboard.press('ControlOrMeta+A');
+      await this.page.keyboard.press('Delete');
+      await this.page.keyboard.type(content);
+    });
+  }
+
+  /**
+   * The "Variable mapping (N)" header. N is the number of rows the section
+   * renders, which is the assertable half of the reserved-variable auto-fill:
+   * an auto-filled reserved variable is dropped from the list, so the count is
+   * how many variables are still the user's to map.
+   */
+  get variableMappingHeader(): Locator {
+    return this.dialog.getByText(/^Variable mapping \(\d+\)$/);
+  }
+
+  /**
+   * The green name tag of one variable-mapping row.
+   *
+   * Callers assert `toHaveCount(0)` / `toHaveCount(1)` rather than visibility,
+   * so "no row" is a first-class outcome — for an auto-filled reserved
+   * variable, it IS the success signal.
+   *
+   * The element-type intersection is load-bearing, not defensive tidying: the
+   * CodeMirror editor syntax-highlights a variable name into its own `<span>`,
+   * so `def score(self, output)` puts a second exact "output" in the dialog.
+   * The row label is a `Tag`, which renders a `<div>`. Without this, a
+   * variable that appears in the editor can never be shown to have NO row.
+   *
+   * A `data-testid` on `LLMPromptMessagesVariable` would express this directly
+   * — see the PR description for why it is proposed rather than added here.
+   */
+  variableMappingRow(variableName: string): Locator {
+    return this.dialog
+      .getByText(variableName, { exact: true })
+      .and(this.page.locator('div'));
+  }
+
+  /** Submit the add/edit dialog and wait for it to close. */
+  async submitRuleDialog(): Promise<void> {
+    return test.step('submit the rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
    * Delete a rule through the row's kebab menu, confirming the destructive
    * dialog. Resolves once the row is gone from the list.
    *
@@ -349,7 +454,7 @@ export class OnlineEvaluationPage {
    * closes it without selecting an option so the typed text persists as the
    * field's value (Enter would try to commit a non-existent listbox option).
    */
-  private async setVariableMapping(variableName: string, pathValue: string): Promise<void> {
+  async setVariableMapping(variableName: string, pathValue: string): Promise<void> {
     // Locate the cmdk-input by its surrounding row's label. Variable-mapping
     // rows look like:  <label>output</label> ... <input cmdk-input ... />
     // so we find the row by label text, then the cmdk-input inside it.

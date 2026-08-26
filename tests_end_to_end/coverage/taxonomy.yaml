@@ -636,6 +636,8 @@ areas:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-thread-scope-python-metric.spec.ts
+      - online-evaluation/online-evaluation-reserved-variables.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -643,7 +645,14 @@ areas:
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
+      # Thread scope is covered end to end: a trace_thread_user_defined_metric_python
+      # rule scores a closed 2-turn thread, and the spec asserts the enriched
+      # [{role, content, spans}] context the metric was handed, then the same
+      # score in the thread panel. Span scope is covered only through the create-rule
+      # dialog's scope-dependent reserved variables ({{span}} auto-fills, {{trace}}
+      # stops being reserved) — NO span-scope rule is evaluated by any spec, so a
+      # regression in span EVALUATION would still ship unnoticed.
+      rule-scope-thread-span:  { covered: true,  tier: t2-cuj, note: "thread scope end-to-end (rule -> enriched python context -> score -> thread panel); span scope only at the rule dialog, span-scope evaluation still uncovered" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch; binomial band 15-85%" }
       clone-rule:              { covered: false }
