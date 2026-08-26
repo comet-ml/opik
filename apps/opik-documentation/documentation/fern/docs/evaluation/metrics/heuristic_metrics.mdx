@@ -274,6 +274,8 @@ pip install bert-score
 
 `ChrF` computes the character n-gram F-score (`chrF` / `chrF++`). Adjust `beta`, `char_order`, and `word_order` to switch between the two variants.
 
+When several references are passed, the score is computed against each reference separately and the best (highest) score is returned.
+
 ```python
 from opik.evaluation.metrics import ChrF
 

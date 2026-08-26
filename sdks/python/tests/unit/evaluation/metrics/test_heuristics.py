@@ -464,10 +464,12 @@ def test_meteor_metric__default_backend__hands_nltk_pretokenized_input(monkeypat
     monkeypatch.setattr(meteor_module, "nltk", None)
     monkeypatch.setattr(meteor_module, "wordnet", None)
 
-    METEOR(track=False).score(output="the cat sat", reference="the cat ran")
+    result = METEOR(track=False).score(output="the cat sat", reference="the cat ran")
 
     assert recorded["hypothesis"] == ["the", "cat", "sat"]
     assert recorded["references"] == [["the", "cat", "ran"]]
+    assert result.value == pytest.approx(0.5)
+    assert result.reason == "METEOR score: 0.5000"
 
 
 def test_meteor_metric__legacy_nltk__raises_actionable_import_error(monkeypatch):

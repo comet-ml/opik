@@ -14,6 +14,14 @@ from opik.evaluation.metrics import base_metric, score_result
 # NLTK 3.6.5 switched `meteor_score` to pre-tokenized input; 3.6.4 and earlier
 # expect untokenized strings. Supporting both would mean branching on a release
 # from 2021, so the default backend requires the modern API and says so clearly.
+#
+# Upstream change: https://github.com/nltk/nltk/pull/2822 ("Accept pre-tokenized
+# references & hypothesis for METEOR calculation"), first shipped in 3.6.5 —
+# see https://github.com/nltk/nltk/blob/3.6.5/ChangeLog ("Version 3.6.5
+# 2021-10-11 ... METEOR evaluation now requires pre-tokenized input"). Compare
+# https://github.com/nltk/nltk/blob/3.6.4/nltk/translate/meteor_score.py#L343
+# with https://github.com/nltk/nltk/blob/3.6.5/nltk/translate/meteor_score.py#L347
+# for the signature change.
 MINIMUM_NLTK_VERSION = "3.6.5"
 
 try:
