@@ -1,34 +1,28 @@
 -- runbook traces-local-v2-cutover — ROLLBACK reverse-replay POSTCONDITION (driven by ../rollback.sh, after the replay)
+-- The gate test TracesLocalV2CutoverTest executes THIS file rather than a copy of it, so there is nothing to keep in
+-- step (unlike 000004_rollback_reverse_replay.sql, which the test reimplements inline).
 --
--- Counts ids the bridge recorded as deleted since cutover_start that are LIVE again on the restored `traces`. The answer
--- must be 0; anything else means the reverse replay did not take, and rows a user deleted after the cutover are being
--- served again.
+-- Counts ids the bridge recorded as deleted since cutover_start that are LIVE again on the restored `traces`. Must be 0;
+-- anything else means the reverse replay did not take, and rows a user deleted after the cutover are being served again.
 --
--- WHY THIS IS A SEPARATE ASSERTION AND NOT AN INFERENCE. The replay reports that its statement ran, not that the result
--- holds: a lightweight DELETE whose predicate matched nothing succeeds. And the fidelity compare cannot stand in for it —
--- verify.sh windows on `created_at`, and the post-rollback compare is bounded below the cutover window, so a row created
--- *inside* that window and deleted after it falls outside every window the compare looks at. This is the only check that
--- covers those rows.
+-- Why a separate assertion and not an inference from the replay or the fidelity compare: the replay reports that its
+-- statement ran, not that the result holds (a lightweight DELETE matching nothing succeeds), and verify.sh windows on
+-- `created_at` with the post-rollback compare bounded below the cutover window — so a row created *inside* that window
+-- and deleted after it falls outside every window the compare looks at.
 --
--- KEEP IN STEP WITH 000004_rollback_reverse_replay.sql. The key and the filters below are deliberately identical to the
--- replay's: same (workspace_id, project_id, id) tuple, same toFixedString(36) casts onto the bridge's String columns, and
--- the same project_id/deleted_id length guards. A check that filtered differently from the replay would either miss what
--- the replay missed or flag rows the replay was never asked to touch. Change one, change both.
+-- What 0 proves: every delete the bridge RECORDED in the window is masked. What it does not: capture runs after the
+-- delete and is best-effort by design (an auxiliary insert must never fail a user's delete), so a delete still in flight
+-- when this runs, or one whose capture errored, is invisible to the replay and to this check alike. Quiescing trace
+-- deletes before the promote is what bounds that — see the runbook — not this query.
 --
--- WHAT 0 PROVES, AND WHAT IT DOES NOT. It proves every delete the bridge *recorded* in the window is masked. It cannot
--- see a delete the bridge never recorded: capture runs after the delete succeeds and is best-effort by design (an
--- auxiliary insert must never fail a user's delete), so a delete still in flight when this runs, or one whose capture
--- errored, is invisible to the replay and to this check alike. That gap is closed by quiescing trace deletes before the
--- promote — see the runbook — not by this query.
+-- KEEP IN STEP WITH 000004_rollback_reverse_replay.sql: same (workspace_id, project_id, id) key, same toFixedString(36)
+-- casts onto the bridge's String columns, same length guards. A check filtered differently from the replay would either
+-- miss what the replay missed or flag rows the replay was never asked to touch. Change one, change both.
 --
--- clusterAllReplicas: the mask is per-replica state. The replay runs with lightweight_deletes_sync = 2, so it has
--- converged on every replica before the driver returns — reading every replica is what turns that into an observation
--- rather than an assumption, and it is where a replica that fell behind would show up.
---
--- uniqExact, not count(): reading every replica returns the same row once per replica, so count() would report a single
--- resurrected id as N on an N-replica shard. Counting distinct keys keeps the number meaning "ids live again" on any
--- topology, while still detecting a row that is masked on one replica and live on another (it counts once, which is
--- correct — one id needs attention). Same aggregate the backfill's reconciliation uses.
+-- clusterAllReplicas + uniqExact: the mask is per-replica state and the replay waits for every replica
+-- (lightweight_deletes_sync = 2), so reading them all makes convergence an observation rather than an assumption. That
+-- returns each row once per replica, so only a distinct count keeps the answer meaning "ids live again" — an id masked
+-- on one replica but live on another counts once, which is what an operator needs to act on.
 
 SELECT uniqExact(workspace_id, project_id, id) AS resurrected
 FROM clusterAllReplicas('{cluster}', ${ANALYTICS_DB_DATABASE_NAME}.traces)

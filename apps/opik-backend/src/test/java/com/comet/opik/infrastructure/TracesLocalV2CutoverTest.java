@@ -719,14 +719,11 @@ class TracesLocalV2CutoverTest {
      *
      * <p>Each phase pins one way the gate can lie:
      * <ul>
-     *   <li><b>a resurrected id → 1</b>, however many physical rows back it. The gate must count distinct keys: it
-     *   reads without {@code FINAL} over every replica, so an updated trace has several versions and a multi-replica
-     *   shard returns each row once per replica — counting rows would inflate an operator's damage estimate
-     *   mid-rollback. The phase seeds a second version, so swapping the distinct count for {@code count()} does fail
-     *   here — but only while those versions are un-merged, and a background merge may collapse them at any moment.
-     *   So treat it as a likely catch, not a guaranteed one: asserting the multiplicity itself would need merges
-     *   frozen, which these tests do not do, and the multi-replica dimension is not reproducible here at all. The
-     *   assertion is therefore written to hold either way.</li>
+     *   <li><b>a resurrected id → 1</b>, however many physical rows back it. The gate reads without {@code FINAL}
+     *   across every replica, so an updated trace has several versions and each row comes back once per replica —
+     *   counting rows would inflate an operator's damage estimate mid-rollback. The phase seeds a second version, but
+     *   asserts only the answer: pinning the multiplicity would need background merges frozen, which these tests do not
+     *   do, and the per-replica multiplicity is not reproducible on a single-replica container at all.</li>
      *   <li><b>two bridge events for one id → still 1.</b> A trace can be re-recorded (retry, re-delete), so the
      *   event count is not the id count either.</li>
      *   <li><b>masked → 0</b>, the passing case after a real replay, and the only result that ends a rollback.</li>
@@ -761,9 +758,8 @@ class TracesLocalV2CutoverTest {
                 .as("a live row bridged before cutover_start is outside the replay's window, so the gate reports 0")
                 .isZero();
 
-        // A post-cutover delete the replay did NOT mask. Given a second version so that, while it lasts, rows outnumber
-        // ids — but nothing here asserts on that multiplicity: a background merge may collapse the two versions at any
-        // moment, and only freezing merges would make it deterministic. See the Javadoc for where rows-vs-ids is pinned.
+        // A post-cutover delete the replay did NOT mask, given a second version so rows outnumber ids while it lasts.
+        // Nothing asserts on that multiplicity — a background merge may collapse it at any moment.
         var resurrected = mintIdsAt(1, weekInstant(1, 1));
         seedTraces(resurrected, workspaceId, projectId);
         insertRows(resurrected, workspaceId, projectId, "updated", _ -> Instant.now());
@@ -773,8 +769,8 @@ class TracesLocalV2CutoverTest {
                 .as("one resurrected id counts once, whether or not its two versions have merged")
                 .isEqualTo(1);
 
-        // Re-recorded delete: a second bridge event for the same id must not double it either. Unlike the versions
-        // above this IS deterministic — it would break a gate that joined the bridge instead of matching IN a set.
+        // A second bridge event for the same id must not double it either. Deterministic, unlike the versions above:
+        // it would fail a gate that joined the bridge instead of matching against it as a set.
         recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
         assertThat(verifyReplayPostcondition(cutoverStart))
                 .as("two bridge events for one id count once, not per event")
@@ -1696,32 +1692,34 @@ class TracesLocalV2CutoverTest {
      * Runs the <b>shipped</b> {@code 000004_rollback_verify_replay.sql}, substituting the same two placeholders
      * {@code rollback.sh} substitutes, and returns the count it reports.
      *
-     * <p>Deliberately not an inline copy, unlike the cutover statements above. The class-level rationale for inlining is
-     * to interleave seeding and assertions inside a multi-step sequence; this is a single terminal gate with nothing to
-     * interleave, and its whole contract is the number it returns — so a copy that drifted from the file would leave the
-     * shipped gate unverified while the test stayed green.
+     * <p>Deliberately not an inline copy, unlike the cutover statements above: the class inlines those so it can
+     * interleave seeding and assertions inside a multi-step sequence, and this is a single terminal gate whose whole
+     * contract is the number it returns. A drifting copy would leave the shipped gate unverified while the test
+     * stayed green.
      */
     private long verifyReplayPostcondition(String cutoverStart) {
+        var sql = readShippedGateSql()
+                .replace("${ANALYTICS_DB_DATABASE_NAME}", DATABASE_NAME)
+                .replace("${CUTOVER_START}", cutoverStart)
+                .strip()
+                .replaceAll(";$", "");
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql).execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
+                .block();
+    }
+
+    private String readShippedGateSql() {
         var relative = Path
                 .of("data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000004_rollback_verify_replay.sql");
         // Surefire runs from the module directory; fall back to the repo root so an IDE run resolves too.
         var path = Files.exists(relative) ? relative : Path.of("apps/opik-backend").resolve(relative);
-        String sql;
         try {
-            sql = Files.readString(path);
+            return Files.readString(path);
         } catch (IOException e) {
             throw new IllegalStateException("cannot read the shipped gate SQL at " + path.toAbsolutePath(), e);
         }
-        sql = sql.replace("${ANALYTICS_DB_DATABASE_NAME}", DATABASE_NAME)
-                .replace("${CUTOVER_START}", cutoverStart)
-                .strip()
-                .replaceAll(";$", "");
-        var statement = sql;
-        return template
-                .nonTransaction(connection -> Mono
-                        .from(connection.createStatement(statement).execute())
-                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
-                .block();
     }
 
     // --- query helpers -------------------------------------------------------------------------------------------

@@ -263,8 +263,10 @@ verify_replay_postcondition() {
         echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'traces'."
         return 0
     fi
-    # A failed client (dead port-forward, auth, network) yields empty or non-numeric output, which is "not verified" and
-    # not "N ids resurrected" — say which, so nobody reads a connection error as a damage count. Both fail the check.
+    # Never aborts: the promote already succeeded either way, and the operator still needs the flag-revert and repair
+    # guidance that prints after this. The failure travels in the exit code instead. A failed client (dead port-forward,
+    # auth, network) returns empty or non-numeric output, which is "not verified" rather than "N resurrected" — both fail
+    # the check, but only one is a connection problem, so say which.
     if ! [[ "$resurrected" =~ ^[0-9]+$ ]]; then
         echo "WARNING: reverse-replay postcondition COULD NOT BE EVALUATED — the query returned no usable count." >&2
         echo "         Treat the rollback as unverified, not as clean. Fix connectivity and re-run the check below." >&2
@@ -272,9 +274,6 @@ verify_replay_postcondition() {
         echo "WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live again" >&2
         echo "         on 'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
     fi
-    # Does not abort: the promote already succeeded, the estate is the restored original either way, and the operator
-    # still needs the flag-revert and repair guidance printed below. The failure is carried to the exit code instead, so
-    # the run cannot report success while ids deleted by a user are being served.
     echo "         Re-run the replay (idempotent), then this check repeats:" >&2
     echo "           ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --reverse-replay-only --cutover-start '$CUTOVER_START' --confirm-retention-paused" >&2
     return 1
@@ -493,8 +492,7 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "repair and the checks above are done (runbook: 'When the rollback is done')."
 fi
 
-# Stages B/C print their guidance in full above, then surface the postcondition in the exit code: a rollback that left
-# user-deleted rows live is not a success, and a caller or wrapper reading only $? must not be told otherwise.
+# Last, so the guidance above always prints: a caller reading only $? must not be told this rollback succeeded.
 if [[ "$REPLAY_CHECK_FAILED" != "0" ]]; then
     echo >&2
     echo "ROLLBACK INCOMPLETE: the reverse-replay postcondition failed (see the WARNING above). Exiting non-zero." >&2

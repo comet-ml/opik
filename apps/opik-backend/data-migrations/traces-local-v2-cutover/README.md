@@ -1076,10 +1076,10 @@ Use stage B/C while the parked original still exists.
 **What the reverse replay can and cannot re-apply.** It re-applies the deletes the bridge **recorded**. Capture runs
 after the delete succeeds and is best-effort by design — an auxiliary insert must never fail a user's delete — so a
 delete whose bridge row has not landed yet, or whose capture errored, is invisible to the replay *and* to its
-postcondition check, which reads the same bridge. That trace is live again on the restored original and the check still
-reports `0`. No query here can detect it; the bound is operational — **quiesce trace deletes before the promote**, not
-just reads, and let in-flight ones land first. It takes a delete concurrent with the promote, or a capture failure (the
-backend logs those), so the exposure is small, but `0` means "every recorded delete is masked", not "no delete escaped".
+postcondition check, which reads the same bridge: that trace is live again on the restored original while the check still
+reports `0`. No query here can detect it, so the bound is operational — **quiesce trace deletes before the promote**, not
+just reads, and let in-flight ones land. It takes a delete concurrent with the promote, or a capture failure (which the
+backend logs), so the exposure is small — but `0` means "every recorded delete is masked", not "no delete escaped".
 
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
 statements. Note what that means even when both succeed: from the moment the promote lands until the replay finishes,
@@ -1155,15 +1155,11 @@ Treat a stage B/C rollback as complete only when all of these hold:
       this box is **not applicable**: `verify.sh` has nothing to bound to, and an unbounded run would report the
       cutover week's expected divergence as a failure. Rely on the next box instead, which does not depend on a window.
 - [ ] **No deleted row resurrected** — `rollback.sh` printed `Reverse-replay postcondition OK`. It runs
-      `000004_rollback_verify_replay.sql` after every replay (stages B/C and `--reverse-replay-only`), counting the
-      distinct ids the bridge recorded as deleted since `cutover_start` that are live again on the restored `traces`,
-      across all replicas. A failure is a `WARNING` rather than an abort — the promote has already succeeded and the
-      guidance below still has to print — but it **exits non-zero**, so a wrapper reading only the status code is never
-      told a rollback that left deleted rows live was a success.
-      A separate assertion rather than an inference from the compare above: the replay reports that its statement ran,
-      not that the result holds, and a bridged delete of a row created *inside* the cutover window falls outside every
-      window the bounded compare looks at. On a `WARNING` the driver prints the `--reverse-replay-only` command to re-run
-      — the replay is idempotent, and the check repeats after it.
+      `000004_rollback_verify_replay.sql` after every replay (stages B/C and `--reverse-replay-only`); that file explains
+      why the compare above cannot stand in for it, and what a `0` does and does not prove. A failure prints a `WARNING`
+      rather than aborting — the promote has already succeeded and the guidance below still has to print — but the run
+      **exits non-zero**, and names the `--reverse-replay-only` command to re-run. The replay is idempotent and the
+      check repeats after it.
 - [ ] **Flags reverted and the restart landed on every instance** — `traceColumnsNonNullable`, plus
       `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
       unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
