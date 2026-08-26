@@ -256,7 +256,9 @@ public class CipxSpendBlockDAO {
             return switch (category) {
                 case "tool_io" -> toolServer.isEmpty() ? "built_in_tools" : "mcp_servers";
                 case "system_tools", "system_tools_deferred" -> "built_in_tools";
-                case "user_prompts" -> "user_prompts";
+                // slash_command is a user-invoked expansion — user-driven content, so it
+                // rides the user_prompts lane rather than the harness's static_overhead.
+                case "user_prompts", "slash_command" -> "user_prompts";
                 case "prior_assistant" -> "prior_assistant";
                 case "mcp_tools_active", "mcp_tools_deferred", "mcp_server_instructions" -> "mcp_servers";
                 case "skills_menu", "skills_loaded" -> "skills";
@@ -264,7 +266,10 @@ public class CipxSpendBlockDAO {
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
                 case "system_prompt", "env_info" -> "static_overhead";
-                case "auto_classifier", "agent_overhead" -> "static_overhead";
+                // identity_context here is the surviving framing (identity reminders +
+                // other <system-reminder> riders carved out of another parent); the pure
+                // identity_context/identity_context rows are dropped at ingestion.
+                case "auto_classifier", "agent_overhead", "identity_context" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -294,13 +299,13 @@ public class CipxSpendBlockDAO {
                 case "user_prompts" ->
                     chars < 1_000 ? "small" : chars < 10_000 ? "medium" : chars < 100_000 ? "large" : "xlarge";
                 case "file_attachments", "skills_menu", "skills_loaded", "custom_agents", "memory",
-                        "skill_invocations" ->
+                        "skill_invocations", "slash_command" ->
                     resource;
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
                 case "system_tools", "system_tools_deferred" -> toolName.isEmpty() ? "(unattributed)" : toolName;
                 case "prior_assistant" -> kind;
                 case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
-                case "system_prompt", "env_info", "auto_classifier", "agent_overhead" -> category;
+                case "system_prompt", "env_info", "auto_classifier", "agent_overhead", "identity_context" -> category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> toolName;

@@ -12,6 +12,9 @@
 --   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds
 --   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block
 --   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span (required; see the note below)
+--   ${MAX_INSERT_THREADS}                  threads for the INSERT SELECT pipeline. The driver OMITS this whole
+--                                          SETTINGS line when --max-insert-threads is unset, so the server's
+--                                          value is inherited; an explicit 0 forces no parallel execution.
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
@@ -24,6 +27,15 @@
 --     output-order guarantee, so inserted blocks may span/interleave partitions; the destination ReplacingMergeTree
 --     dedups regardless of insert order and background merges compact the parts. This is NOT a claim that rows arrive
 --     in sort-key order — do not rely on it (see README "Why slice by created_at").
+--   * SETTINGS max_insert_threads sizes the INSERT SELECT pipeline. The driver omits this line when
+--     --max-insert-threads is unset, so the server's configured value applies; an explicit 0 forces no parallel
+--     execution. Raising it parallelises the insert side, which here carries the per-row cost of materialising
+--     output_keys (a JSON parse of `output`). It has no effect unless the SELECT side is also parallel; see
+--     max_threads. Two costs: peak memory rises, and on this table that compounds with oversized `output`
+--     documents, so raise max_memory_usage alongside it; and each thread writes its own parts, so parts per
+--     partition grow -- compare against parts_to_throw_insert and parts_to_delay_insert as read from
+--     system.merge_tree_settings. For how to size the value, and for the measurements behind it, see
+--     backfill.sh's --max-insert-threads option docs.
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
 --   * SETTINGS max_partitions_per_insert_block is REQUIRED, not a tuning knob. Because the blocks above may span
@@ -89,6 +101,7 @@ WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
   AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_threads = ${MAX_INSERT_THREADS},
          log_comment = 'traces_local_v2_backfill:${WINDOW_LO}:${WINDOW_HI}';
 
 -- Per-window reconciliation is automated by backfill.sh (uniqExact of the dedup key, aborting on > 0.01% divergence);

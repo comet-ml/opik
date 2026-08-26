@@ -70,3 +70,29 @@ def test_score__with_context__routes_to_agentic_path():
         assert agentic.called
         assert not one_shot.called
         assert results == expected
+
+
+def test_agentic_retry_policy__empty_llm_response__retries_then_propagates():
+    """Agentic scoring retries empty responses like the one-shot path."""
+    from opik import exceptions
+    from opik.evaluation.suite_evaluators.agentic import judge as agentic_judge
+
+    calls = {"empty": 0, "auth": 0}
+
+    @agentic_judge._RETRY_POLICY
+    def raises_empty():
+        calls["empty"] += 1
+        raise exceptions.EmptyLLMResponseError("no content, no tool calls")
+
+    @agentic_judge._RETRY_POLICY
+    def raises_auth():
+        calls["auth"] += 1
+        raise exceptions.BaseLLMError("AuthenticationError: missing key")
+
+    with pytest.raises(exceptions.EmptyLLMResponseError):
+        raises_empty()
+    with pytest.raises(exceptions.BaseLLMError):
+        raises_auth()
+
+    assert calls["empty"] == 3, "empty responses are transient and retried"
+    assert calls["auth"] == 1, "permanent failures are not retried"

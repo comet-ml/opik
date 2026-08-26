@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ProviderApiKeyPublicProvider } from "./ProviderApiKeyPublicProvider.js";
+import { ProviderAuthConfigPublic } from "./ProviderAuthConfigPublic.js";
 
 export const ProviderApiKeyPublic: core.serialization.ObjectSchema<
     serializers.ProviderApiKeyPublic.Raw,
@@ -17,6 +18,7 @@ export const ProviderApiKeyPublic: core.serialization.ObjectSchema<
     headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     configuration: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     baseUrl: core.serialization.property("base_url", core.serialization.string().optional()),
+    authConfig: core.serialization.property("auth_config", ProviderAuthConfigPublic.optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -34,6 +36,7 @@ export declare namespace ProviderApiKeyPublic {
         headers?: Record<string, string> | null;
         configuration?: Record<string, string> | null;
         base_url?: string | null;
+        auth_config?: ProviderAuthConfigPublic.Raw | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

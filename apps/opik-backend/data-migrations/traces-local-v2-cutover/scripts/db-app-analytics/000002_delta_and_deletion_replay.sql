@@ -3,10 +3,11 @@
 -- Run this only after the whole backfill (step 1) is complete and reconciled.
 
 -- Step 0: The SQL below (delta-insert + deletion replay) is the single source driven by ../delta_replay.sh, which reads
--- this file, substitutes the placeholders and runs it — never run this file by hand. ALL FOUR placeholders it
--- substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the server as a literal and the
--- statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE} and
--- ${MAX_PARTITIONS_PER_INSERT_BLOCK}. Invocation:
+-- this file, substitutes the placeholders and runs it — never run this file by hand. It handles all five
+-- placeholders below, listed so a new one is never missed here (an unsubstituted ${...} reaches the server as a
+-- literal and the statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE},
+-- ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS} -- the last of which the driver instead REMOVES
+-- from the SETTINGS clause when --max-insert-threads is omitted, so the server's value is inherited. Invocation:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
 -- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with
@@ -42,12 +43,22 @@
 --   (a) created_at >= backfill_start                                  -- batch by created_at sub-windows
 --   (b) last_updated_at >= backfill_start AND created_at < backfill_start  -- the updates-to-old-rows arm; batch by
 --       last_updated_at sub-windows. (a) ∪ (b) equals the OR below, with no overlap.
--- CARRY THE FULL SETTINGS BLOCK BELOW ONTO BOTH PASSES, max_partitions_per_insert_block included. The driver does not
--- implement this split, so these two statements are hand-written, and arm (b) is precisely the updates-to-old-rows arm
--- named above as the far-future carrier — so the pass that most needs the partition bound is the one an operator writes
--- by hand. Omitting it there reintroduces the TOO_MANY_PARTS abort immediately before the EXCHANGE, which is exactly
--- what the setting on the single-statement form exists to prevent.
+-- Both passes are hand-written: the driver does not implement the split, so its substitution and guards do not
+-- apply to them. Prepare each pass as follows.
+--   1. Copy the SETTINGS block below onto both passes, max_partitions_per_insert_block included. Arm (b) is the
+--      updates-to-old-rows arm, so it carries the far-future ids and is the pass that most needs that bound;
+--      omitting it aborts the statement with TOO_MANY_PARTS immediately before the EXCHANGE.
+--   2. Replace every ${...} with a concrete value. A copied placeholder reaches the server as a literal and the
+--      statement fails.
+--   3. max_insert_threads has no value meaning "inherit": 0 forces no parallel execution rather than deferring to
+--      the server's setting. Either substitute the same thread count on both passes, or delete the whole line
+--      including its trailing comma from both, keeping max_partitions_per_insert_block and log_comment. Deleting
+--      is comma-safe only while the line sits between two others.
+--   4. Confirm no placeholder survives: `grep -n '\${' <your-statements>.sql` must print nothing.
 -- >>> BEGIN delta-insert
+-- max_insert_threads below sizes the INSERT SELECT pipeline, with the same semantics and costs as in 000001:
+-- omitted when --max-insert-threads is unset, an explicit 0 forcing no parallel execution. The delta writes to
+-- the same table through the same insert path, so pass the value used for the backfill.
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
     workspace_id,
@@ -102,6 +113,7 @@ WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
    OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_threads = ${MAX_INSERT_THREADS},
          log_comment = 'traces_local_v2_cutover:delta_insert';
 -- >>> END delta-insert
 
