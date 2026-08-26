@@ -1868,6 +1868,12 @@ redaction:
   # takes effect within authentication.apiKeyResolutionCacheTTLInSec (default 5s) rather than immediately.
   # Revocation is the direction that matters: for those few seconds a caller who has just lost it still reads
   # originals.
+  # NOT GUARDED: a client that reads masked content and writes it back persists the replacement over the
+  # original. Nothing rejects that - the write path is untouched by this feature, by design, since content is
+  # stored exactly as sent. A caller without the permission editing and saving a prompt, dataset item or
+  # experiment they have only ever seen masked will therefore overwrite stored content with the replacement.
+  # Out of scope here; it needs the write path to recognise the token or refuse the write, which is a separate
+  # decision about how much editing such a caller should be able to do at all.
   # NOT YET COVERED: the dataset CSV export (datasetExport.enabled, false by default) writes its file from a
   # background job with no caller, and the download streams those bytes without applying the rules. Enable the
   # export feature and an unpermitted caller can read stored content through it. Masking belongs on the download,
