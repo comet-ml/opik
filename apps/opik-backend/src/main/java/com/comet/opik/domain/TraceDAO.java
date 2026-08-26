@@ -1924,13 +1924,16 @@ class TraceDAOImpl implements TraceDAO {
      * project_id}, so no delete is ever project-less - also required once {@code traces} is a Distributed table
      * (OPIK-7455).
      * <p>
-     * {@code <if(partitions)>} adds the table's own weekly partition expression, bound as the exact set of partitions
-     * the batch's ids resolve to. Both conditions must hold for it to be emitted: the live table must be the weekly
-     * partitioned successor ({@link #tracesWeeklyPartitionPruningEnabled()}), and every id in the batch must be one whose
-     * partition can be derived exactly ({@link WeeklyPartitions#of}). Otherwise the predicate is omitted and the
-     * statement is byte-identical to the previous unbounded form. That is what preserves the original guarantee — a
-     * row whose {@code id_at} cannot be trusted is still deleted, because no id in such a batch is used to derive a
-     * partition.
+     * {@code <if(partitions)>} adds the table's own weekly partition expression, bound as the set of partitions the
+     * batch's ids resolve to. It is emitted whenever every id in the batch is one whose partition can be derived
+     * exactly ({@link WeeklyPartitions#of}); otherwise the predicate is omitted and the statement is byte-identical to
+     * the previous unbounded form. That is what preserves the original guarantee — a row whose {@code id_at} cannot be
+     * trusted is still deleted, because no id in such a batch is used to derive a partition.
+     * <p>
+     * No schema flag gates it. {@link WeeklyPartitions} derives a value per {@code id_at} type the mutation may meet
+     * — the legacy 32-bit {@code DateTime} of {@code traces} as well as the {@code DateTime64(0)} of the partitioned
+     * successor — so one rendered statement is correct on both sides of the cutover EXCHANGE, in either direction, with
+     * nothing to flip and nothing to revert on rollback.
      * <p>
      * Why it matters: a mutation selects parts at the <b>partition</b> stage, where the (workspace_id, project_id, id)
      * predicate prunes nothing, so deleting a handful of rows rewrote every part of the table. Measured on prod-test
@@ -3372,49 +3375,6 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Whether a trace mutation may prune to the partitions its ids resolve to ({@link WeeklyPartitions}). The flag
-     * enables the <b>pruning</b>, never the partitioning: it asserts that the live mutation target already is the
-     * weekly partitioned successor — {@code id_at} as {@code DateTime64(0, 'UTC')} under
-     * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} — which the cutover's
-     * EXCHANGE installs, not this flag.
-     * <p>
-     * This has to be its own flag because <b>neither existing schema flag marks the EXCHANGE, which is the moment the
-     * partitioning appears</b>, and both are wrong in a different direction:
-     * <ul>
-     *     <li>{@link #tracesDistributedWrapEnabled()} is too late. The wrap is a separate, deferrable step after the
-     *     EXCHANGE (it may be skipped entirely with {@code --skip-wrap} and applied weeks later with
-     *     {@code --wrap-only}), so between the two {@code traces} is already the partitioned successor while the flag is
-     *     still {@code false} — the state prod-test sat in. Gating on it would simply forgo the pruning there.</li>
-     *     <li>{@link #traceColumnsNonNullable()} is too early, which is the dangerous direction. It is a runtime
-     *     concern, not a schema one, and the runbook requires it rolled out to {@code true} on every instance
-     *     <b>before</b> the EXCHANGE (a rolling restart cannot be atomic with a metadata swap). Gating on it would emit
-     *     the predicate against the legacy {@code traces} for the whole rollout window.</li>
-     * </ul>
-     * Emitting it against the legacy table is not merely unhelpful, it is wrong: legacy {@code traces} has no
-     * {@code PARTITION BY} at all (one {@code all} partition, so nothing to prune) and declares {@code id_at} as a
-     * 32-bit {@code DateTime} that overflows past 2106, so a far-future id — the litellm ~2201 ids, real
-     * customer-facing rows — is stored under a wrapped recent timestamp that the derived partition cannot match. The
-     * delete would then match zero rows and report success.
-     * <p>
-     * Only ever {@code true} while {@code traces} really is that successor, so unlike its siblings it is safe to lag:
-     * {@code false} is the always-correct unbounded behaviour, and only {@code true} asserts something about the
-     * schema. Turn it on once the EXCHANGE is confirmed, and back off <b>before</b> a rollback stage B/C promotes the
-     * original.
-     */
-    private boolean tracesWeeklyPartitionPruningEnabled() {
-        return configuration.getDatabaseAnalyticsDataModel().tracesWeeklyPartitionPruningEnabled();
-    }
-
-    /**
-     * The partitions a delete batch may bound itself to, or empty to leave the mutation unbounded. Empty whenever the
-     * live table is not the partitioned successor, ahead of asking {@link WeeklyPartitions} at all — the derivation is
-     * only meaningful against a table that partitions on it.
-     */
-    private Optional<Set<Long>> weeklyPartitionsFor(Collection<UUID> ids) {
-        return tracesWeeklyPartitionPruningEnabled() ? WeeklyPartitions.of(ids) : Optional.empty();
-    }
-
-    /**
      * Binds input, output, metadata, and their slim versions (input_slim, output_slim) to a statement.
      * Centralizes the JSON conversion and binding logic for consistency across single and batch inserts.
      *
@@ -3587,9 +3547,10 @@ class TraceDAOImpl implements TraceDAO {
                     var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
                     var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
 
-                    // Prune to the batch's own partitions when the schema and every id in the batch allow it;
-                    // otherwise emit the unbounded form.
-                    var partitions = weeklyPartitionsFor(batch.stream().map(Pair::getRight).toList());
+                    // Prune to the batch's own partitions when every id in the batch allows it; otherwise emit the
+                    // unbounded form. Needs no schema flag: WeeklyPartitions derives a value per id_at type the
+                    // mutation may meet, so the set is correct on the legacy traces and on the partitioned successor.
+                    var partitions = WeeklyPartitions.of(batch.stream().map(Pair::getRight).toList());
                     // Flag only, exactly like distributed_wrap: the values reach ClickHouse via the bind below,
                     // never through the template, so the rendered SQL is constant regardless of batch contents.
                     partitions.ifPresent(_ -> template.add("partitions", true));
