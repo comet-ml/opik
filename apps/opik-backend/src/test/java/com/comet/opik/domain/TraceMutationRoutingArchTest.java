@@ -1,12 +1,13 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-import static com.tngtech.archunit.core.domain.properties.HasName.Predicates.name;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 
 /**
@@ -23,6 +24,10 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
  * table without failing the build. {@link TraceMutationSqlRoutingTest} covers the other half — that no SQL spells a
  * physical trace table name out.
  *
+ * <p><b>The caller predicates are owner-scoped.</b> Matching on method name alone would let any class declaring a
+ * method of the same name satisfy the exemption — an {@code OtherDao#tracesDistributedWrapEnabled()} reading the config
+ * directly would have passed, which is precisely the second reader these rules exist to forbid.
+ *
  * <p><b>Deliberately no {@code allowEmptyShould}</b>, unlike {@link TraceDeletionEventArchTest}: these rules select the
  * guarded method rather than its callers, so an empty selection means the method was renamed or removed and the rule is
  * no longer guarding anything. Failing then is the point.
@@ -34,6 +39,15 @@ class TraceMutationRoutingArchTest {
     private static final String RESOLVER = "tracesMutationTable";
 
     /**
+     * Exactly one method: the named one on the named class. Matching by name alone would exempt any class that happened
+     * to declare a method of that name, which is the very thing these rules forbid.
+     */
+    private static DescribedPredicate<JavaMethod> only(Class<?> owner, String methodName) {
+        return DescribedPredicate.describe("%s.%s".formatted(owner.getSimpleName(), methodName),
+                method -> method.getOwner().isEquivalentTo(owner) && method.getName().equals(methodName));
+    }
+
+    /**
      * The flag itself is read only by {@code TraceDAOImpl}'s accessor of the same name, whose Javadoc carries the
      * read/mutate split and the migration rules. A second reader is a second place that can get those wrong.
      */
@@ -41,7 +55,7 @@ class TraceMutationRoutingArchTest {
     static final ArchRule the_wrap_flag_is_read_in_exactly_one_place = methods()
             .that().areDeclaredIn(DatabaseAnalyticsDataModelConfig.class)
             .and().haveName(CONFIG_FLAG)
-            .should().onlyBeCalled().byMethodsThat(name(CONFIG_FLAG))
+            .should().onlyBeCalled().byMethodsThat(only(TraceDAOImpl.class, CONFIG_FLAG))
             .because("""
                     the sharding-readiness wrap flag must be read only by TraceDAOImpl#tracesDistributedWrapEnabled, \
                     which documents what the two topologies imply for reads, mutations and migrations
@@ -56,7 +70,7 @@ class TraceMutationRoutingArchTest {
     static final ArchRule the_mutation_table_is_decided_in_exactly_one_place = methods()
             .that().areDeclaredIn(TraceDAOImpl.class)
             .and().haveName(CONFIG_FLAG)
-            .should().onlyBeCalled().byMethodsThat(name(RESOLVER))
+            .should().onlyBeCalled().byMethodsThat(only(TraceDAOImpl.class, RESOLVER))
             .because("""
                     the physical table a trace mutation targets must be resolved only by \
                     TraceDAOImpl#tracesMutationTable, so there is exactly one line to audit when the topology changes
