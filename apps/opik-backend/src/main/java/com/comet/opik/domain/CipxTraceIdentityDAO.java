@@ -18,6 +18,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -83,7 +84,12 @@ public class CipxTraceIdentityDAO {
             if (userUuid.isEmpty()) {
                 userUuid = identity.path("user_id").asText("");
             }
-            return TraceIdentityRow.builder()
+            // One WARN per row, not per field. A malformed counter is almost never a one-row
+            // accident: a producer bug or a version skew rejects the SAME fields on every trace
+            // that fleet ships, and eight lines a row drowns whatever else is in the log. Collected
+            // across the eight asUInt32 call sites and emitted once below.
+            List<String> rejected = new ArrayList<>();
+            var row = TraceIdentityRow.builder()
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
@@ -104,11 +110,11 @@ public class CipxTraceIdentityDAO {
                     .headShaStart(repository.path("head_sha").asText(""))
                     .headShaEnd(repository.path("head_sha_end").asText(""))
                     .dirty(repository.path("dirty").asBoolean(false))
-                    .commitsInTrace(asUInt32(repository.path("commits_in_trace"), "commits_in_trace"))
-                    .filesAdded(asUInt32(repository.path("files_added"), "files_added"))
-                    .filesDeleted(asUInt32(repository.path("files_deleted"), "files_deleted"))
-                    .linesAdded(asUInt32(repository.path("lines_added"), "lines_added"))
-                    .linesDeleted(asUInt32(repository.path("lines_deleted"), "lines_deleted"))
+                    .commitsInTrace(asUInt32(repository.path("commits_in_trace"), "commits_in_trace", rejected))
+                    .filesAdded(asUInt32(repository.path("files_added"), "files_added", rejected))
+                    .filesDeleted(asUInt32(repository.path("files_deleted"), "files_deleted", rejected))
+                    .linesAdded(asUInt32(repository.path("lines_added"), "lines_added", rejected))
+                    .linesDeleted(asUInt32(repository.path("lines_deleted"), "lines_deleted", rejected))
                     // Session-grain subagent link rollup. These counters are
                     // the only place cipx's worst attribution failure is
                     // visible: a subagent whose dispatch was never observed
@@ -119,17 +125,24 @@ public class CipxTraceIdentityDAO {
                     // with N traces leaves N rows holding N successive
                     // snapshots. Readers must take max() per session_id,
                     // never sum().
-                    .agentsDispatched(asUInt32(session.path("agents_dispatched"), "agents_dispatched"))
-                    .agentsLinked(asUInt32(session.path("agents_linked"), "agents_linked"))
-                    .agentsAmbiguous(asUInt32(session.path("agents_ambiguous"), "agents_ambiguous"))
+                    .agentsDispatched(asUInt32(session.path("agents_dispatched"), "agents_dispatched", rejected))
+                    .agentsLinked(asUInt32(session.path("agents_linked"), "agents_linked", rejected))
+                    .agentsAmbiguous(asUInt32(session.path("agents_ambiguous"), "agents_ambiguous", rejected))
                     .cipxVersion(session.path("cipx_version").asText(""))
                     .lastUpdatedAt(lastUpdatedAt)
                     .build();
+            if (!rejected.isEmpty()) {
+                // Bounded and non-sensitive by construction: at most one entry per call site, each a
+                // literal field name plus a node type or a long — never the payload's own text.
+                log.warn("cipx metrics unusable, recorded 0: trace_id='{}' rejected={}", traceId, rejected);
+            }
+            return row;
         }
 
         // A UInt32 metric off the wire. Missing or null reads as 0 — that is the documented
         // meaning, and a daemon that dispatched nothing is a real zero. An integral value in
-        // [0, 2^32) passes through untouched. Anything else PRESENT records 0 and warns.
+        // [0, 2^32) passes through untouched. Anything else PRESENT records 0 and is named in
+        // the row's single rejection warning.
         //
         // Zero for those, never a saturating clamp. ClickHouse takes a UInt32 modulo 2^32
         // without complaint (measured: -1 stores as 4294967295, 9999999999 as 1410065407), so
@@ -140,20 +153,19 @@ public class CipxTraceIdentityDAO {
         // Zero degrades toward "nothing to report"; the ceiling invents the largest possible
         // claim. A clamp would also be redundant: asLong carries all of [2^31, 2^32) exactly,
         // so the only inputs it ever touched were already malformed.
-        private static long asUInt32(JsonNode value, String field) {
+        private static long asUInt32(JsonNode value, String field, List<String> rejected) {
             if (value.isMissingNode() || value.isNull()) {
                 return 0L;
             }
             // Fractional is malformed too, and routed with the text: asLong() would truncate 1.5
             // to a perfectly plausible 1. canConvertToLong also rejects a bignum past long.
             if (!value.isIntegralNumber() || !value.canConvertToLong()) {
-                log.warn("cipx metric is not a usable whole number, recording 0: field='{}' type='{}'",
-                        field, value.getNodeType());
+                rejected.add(field + ": not a whole number (" + value.getNodeType() + ")");
                 return 0L;
             }
             long raw = value.asLong();
             if (raw < 0L || raw > 0xFFFF_FFFFL) {
-                log.warn("cipx metric is outside UInt32, recording 0: field='{}' value={}", field, raw);
+                rejected.add(field + ": outside UInt32 (" + raw + ")");
                 return 0L;
             }
             return raw;
