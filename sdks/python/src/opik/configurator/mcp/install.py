@@ -86,7 +86,6 @@ def setup_mcp_server(
             "named. Pass `--ai-client <client>` to set it up unattended, or run "
             "`opik mcp configure` from a shell."
         )
-        # ANALYTICS: install skipped, reason="non_interactive_no_client".
         return []
 
     ambiguity = _workspace_ambiguity(
@@ -98,7 +97,6 @@ def setup_mcp_server(
     )
     if ambiguity is not None:
         display.problem(ambiguity)
-        # ANALYTICS: install skipped, reason="ambiguous_workspace".
         return []
 
     # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
@@ -131,7 +129,6 @@ def setup_mcp_server(
     )
     if server_spec is None:
         display.problem(unavailable_reason or "")
-        # ANALYTICS: install skipped, reason="uv_missing".
         return []
 
     candidates = _candidate_targets(host_keys)
@@ -143,7 +140,6 @@ def setup_mcp_server(
             )
         else:
             _report_no_host_detected(server_spec, display)
-        # ANALYTICS: install skipped, reason="no_host_detected" / "unknown_host".
         return []
 
     # Shown before anything is written, and before the confirmation below, so the
@@ -160,9 +156,6 @@ def setup_mcp_server(
         ],
     )
 
-    # ANALYTICS: install started. Carries the transport ("http" for the hosted
-    # server, "stdio" for uvx), the deployment class, and how many hosts were
-    # detected — the denominator every later stage is measured against.
     selected_targets = _confirm_targets(
         candidates, host_keys, assume_confirmed, display
     )
@@ -170,8 +163,6 @@ def setup_mcp_server(
         display.skipped(
             "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
         )
-        # ANALYTICS: install skipped, reason="declined" — the decline rate on the
-        # consent prompt, and the single most important number this flow owes.
         return []
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
@@ -208,11 +199,6 @@ def setup_mcp_server(
                 ["MCP server"],
                 [result.target_display_name for result in results if result.succeeded],
             )
-
-    # ANALYTICS: one install completed/failed event per host in `selected_targets`,
-    # labelled with `target.key`, the transport, and the verification outcome.
-    # Per-host rather than per-run: a run that writes Cursor and fails Codex is two
-    # different facts.
 
     return [
         target.key

@@ -62,7 +62,6 @@ def setup_skills(
     """
     supported = [key for key in host_keys if key in skills_roots.SUPPORTED_HOST_KEYS]
     if len(supported) == 0:
-        # ANALYTICS: skills install skipped, reason="no_supported_host".
         return InstallResult(
             succeeded=False,
             error=(
@@ -71,11 +70,9 @@ def setup_skills(
             ),
         )
 
-    # ANALYTICS: skills install started, with the host count.
     try:
         pack = skills_pack.download(ref=ref)
     except skills_pack.PackError as error:
-        # ANALYTICS: skills install failed, reason="download_failed".
         return InstallResult(succeeded=False, error=str(error))
 
     shared_dir = skills_roots.shared_skills_dir()
@@ -84,7 +81,6 @@ def setup_skills(
         for name, files in pack.skills.items():
             skills_pack.write_skill(shared_dir, name, files)
     except OSError as error:
-        # ANALYTICS: skills install failed, reason="write_failed".
         return InstallResult(
             succeeded=False, error=f"could not write {shared_dir}: {error}"
         )
@@ -107,7 +103,6 @@ def setup_skills(
         if failure is not None:
             link_errors[host_key] = failure
 
-    # ANALYTICS: skills install completed, with the host count and skill names.
     return InstallResult(
         succeeded=True,
         skills=pack.names,
@@ -138,7 +133,6 @@ def _link_for_host(
             _replace_with_link(link_root / name, shared_dir / name)
             linked.append(name)
         except OSError as error:
-            # ANALYTICS: skills link failed for this host.
             LOGGER.debug("Could not link %s into %s", name, link_root, exc_info=True)
             if failure is None:
                 failure = (
