@@ -1848,9 +1848,10 @@ redaction:
   enabled: ${OPIK_REDACTION_ENABLED:-false}
   # Default: [] with enabled=false. An empty set with enabled=true fails startup rather than masking nothing
   # while appearing to be on.
-  # NOTE ON SHAPE: this key names the mechanism (regex rules). If the enforcement mechanism is ever replaced,
-  # deployments configured on `rules` face a breaking migration. A `mode:` discriminator with the rules nested
-  # under it would make that additive instead; worth doing before this is enabled anywhere.
+  # NOT A STABLE CONTRACT YET: this key names the mechanism (regex rules), so replacing the mechanism means
+  # replacing the key. Left as-is deliberately - the feature is in beta and off by default, so the shape can
+  # change in a later PR rather than being generalised now for a successor that does not exist yet. Do not build
+  # tooling or deployment templates against `rules` on the assumption that it is fixed.
   # Default: [] (no rules, so nothing is redacted even when enabled)
   # Description: JSON array of {"regex", "replace"} applied in order to every string in a response, each rule
   # seeing the previous rule's output. "replace" is literal text: unlike the SDK anonymizer, backreferences are
