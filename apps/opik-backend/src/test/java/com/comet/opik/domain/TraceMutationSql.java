@@ -62,6 +62,44 @@ class TraceMutationSql {
         return mutation.substring(mutation.lastIndexOf(' ') + 1);
     }
 
+    /**
+     * Every table in the trace family, across both topologies and the cutover's intermediate states. Wider than the two
+     * physical mutation targets on purpose: {@code traces_local_v2} and {@code traces_pre_cutover_backup} are not
+     * mutation targets at all, so a mutation naming one is wrong in a different way — and equally unbindable.
+     */
+    private static final Set<String> TRACE_FAMILY_TABLES = Set.of(
+            "traces", "traces_local", "traces_local_v2", "traces_pre_cutover_backup");
+
+    /**
+     * Whether a mutation targets a trace table by any means other than the resolver placeholder.
+     *
+     * <p>The predicate for SQL assembled at runtime, where the arch rule's blanket "must be the placeholder" cannot
+     * apply: an inline literal may legitimately mutate an unrelated table, so {@code DELETE FROM spans} has to pass.
+     * Three cases are violations:
+     * <ul>
+     *   <li>a <b>trace-family table named directly</b> — including {@code traces_local_v2} and
+     *   {@code traces_pre_cutover_backup}, which the earlier two-name denylist let through;</li>
+     *   <li>any <b>other placeholder</b>, e.g. a typo'd {@code <traces_mutation_tables>} — nothing binds it, so it
+     *   reaches the server as literal text;</li>
+     *   <li>a qualified or quoted form of either, which {@link #normalizeTarget} reduces first.</li>
+     * </ul>
+     */
+    static boolean targetsATraceTableWithoutTheResolver(String mutation) {
+        var target = cleanTarget(targetOf(mutation));
+        if (RESOLVER_PLACEHOLDER.equals(target)) {
+            return false;
+        }
+        if (target.startsWith("<")) {
+            return true;
+        }
+        return TRACE_FAMILY_TABLES.contains(normalizeTarget(target));
+    }
+
+    /** An inline literal's target carries the Java closing quote and any statement punctuation; drop both. */
+    private static String cleanTarget(String target) {
+        return target.replaceAll("[\"\\s;,]+$", "");
+    }
+
     static boolean namesAPhysicalTraceTable(String mutation) {
         var target = mutation.substring(mutation.lastIndexOf(' ') + 1);
         return PHYSICAL_TRACE_TABLES.contains(normalizeTarget(target));
