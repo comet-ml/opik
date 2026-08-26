@@ -215,6 +215,16 @@ assert_topology() {
             }
             [[ -n "$(traces_engine traces_local)" ]] || { echo "ERROR: 'traces_local' (successor data) not found; topology is not a clean post-wrap state." >&2; exit 1; }
             [[ -n "$(traces_engine traces_pre_cutover_backup)" ]] || { echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; topology is not a clean post-wrap state." >&2; exit 1; }
+            # Stage C rotates `traces` out to the same 'traces_dist_old' the un-wrap uses, and RENAME cannot overwrite an
+            # existing name. The rotate is atomic per host, so a leftover fails cleanly rather than half-applying — but it
+            # fails as a bare "table already exists" mid-run. Refuse here instead, with the fix, exactly as --unwrap-only does.
+            [[ -z "$(traces_engine traces_dist_old)" ]] || {
+                echo "ERROR: stage C: '$DATABASE.traces_dist_old' already exists, so the atomic rotate cannot claim that name." >&2
+                echo "       It is the data-less ex-wrapper left by an earlier stage C / un-wrap whose DROP did not complete." >&2
+                echo "       Drop it and re-run:" >&2
+                echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"DROP TABLE IF EXISTS $DATABASE.traces_dist_old ON CLUSTER '{cluster}' SYNC\"" >&2
+                exit 1
+            }
             ;;
     esac
 }

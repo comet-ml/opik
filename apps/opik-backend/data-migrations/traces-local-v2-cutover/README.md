@@ -1327,6 +1327,20 @@ mismatched window).
 - the replay wall time is measured and logged (not asserted — it is environment-sensitive; the buffer-window sizing is
   done in the cutover rehearsal, not in CI).
 
+**What it does not cover.** The suite drives SQL directly, so nothing in the `scripts/` drivers is exercised by it — the
+drivers need a `clickhouse-client` binary that the backend test job does not install, and the repo has no bash harness.
+That has always excluded their argument validation and topology guards, which the cutover rehearsal covers instead. Note
+what it now also excludes, because these decide a verdict rather than reject an argument, and a wrong verdict from a
+fidelity gate is the failure mode this whole procedure is built to avoid:
+
+- `verify.sh` refusing to report `PASSED` when the bounds selected **no** window (an empty range compares nothing, so a
+  pass would be vacuous);
+- its `--to-week last-sealed` resolution — the current-calendar-week bound, capped at the last populated week;
+- its refusal when that resolution lands before `--from-week`, which is the all-data-in-the-current-week case.
+
+Each rests on manual verification. Exercise them in the rehearsal alongside the driver guards, and treat a change to any
+of the three as needing the same.
+
 Run it with: `mvn -o test -Dtest=TracesLocalV2CutoverTest` from `apps/opik-backend`.
 
 ## Monitoring and abort criteria
