@@ -1176,12 +1176,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7_FREE,
+      label: "minimax/minimax-m2.7:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
       label: "minimax/minimax-m3",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_BATCH,
       label: "minimax/minimax-m3:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_FREE,
+      label: "minimax/minimax-m3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,

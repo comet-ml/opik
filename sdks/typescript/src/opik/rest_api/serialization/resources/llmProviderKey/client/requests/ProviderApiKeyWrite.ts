@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
+import { ProviderAuthConfigWrite } from "../../../../types/ProviderAuthConfigWrite.js";
 import { ProviderApiKeyWriteProvider } from "../../types/ProviderApiKeyWriteProvider.js";
 
 export const ProviderApiKeyWrite: core.serialization.Schema<
@@ -16,6 +17,7 @@ export const ProviderApiKeyWrite: core.serialization.Schema<
     headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     configuration: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     baseUrl: core.serialization.property("base_url", core.serialization.string().optional()),
+    authConfig: core.serialization.property("auth_config", ProviderAuthConfigWrite.optional()),
 });
 
 export declare namespace ProviderApiKeyWrite {
@@ -27,5 +29,6 @@ export declare namespace ProviderApiKeyWrite {
         headers?: Record<string, string> | null;
         configuration?: Record<string, string> | null;
         base_url?: string | null;
+        auth_config?: ProviderAuthConfigWrite.Raw | null;
     }
 }
