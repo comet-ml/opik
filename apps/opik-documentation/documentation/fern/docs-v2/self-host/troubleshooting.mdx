@@ -138,23 +138,6 @@ Then set the flag to match:
 - `traces` is `Distributed` and `traces_local` exists → set the same key to `true` and restart.
 
 <Callout intent="warning">
-  **On Helm, an explicit env entry wins over the setting.** `configmap-backend.yaml` emits the derived
-  `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` key only when `component.backend.env` does not already
-  define it. So if your values file sets that variable directly, changing
-  `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` has **no effect** — the check keeps failing with the same
-  message and nothing you change appears to help.
-
-  Confirm what the pod actually received before changing anything else:
-
-  ```bash
-  kubectl exec deploy/opik-backend -- printenv ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED
-  ```
-
-  If that disagrees with the value you set, remove the explicit key from `component.backend.env` (preferred, so the
-  setting is the single source) or update it there instead.
-</Callout>
-
-<Callout intent="warning">
   **On Helm, an explicit env entry wins over the chart value.** The chart derives `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` from `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` **only when that key is not already set under `component.backend.env`** — an explicit entry there takes precedence. So if you change the top-level value, restart, and the check still reports the old expectation, you have a stale override: update or remove the `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` entry under `component.backend.env`. Confirm what the backend actually receives with `kubectl get configmap <release-name>-backend -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED}'`.
 </Callout>
 
