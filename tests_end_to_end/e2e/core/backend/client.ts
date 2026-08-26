@@ -458,8 +458,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     // which (unlike experiments/datasets) don't reuse an existing sweep path.
 
     async listDashboardsWithPrefix(prefix: string): Promise<ProjectRef[]> {
-      const page = await opik.api.dashboards.findDashboards({ name: prefix, size: 500 });
-      const content = page.content ?? [];
+      const content = await fetchAllPages((page) => opik.api.dashboards.findDashboards({ name: prefix, size: 500, page }), 500);
       return content
         .filter((d) => typeof d.name === 'string' && d.name.startsWith(prefix))
         .map((d) => ({ id: String(d.id), name: d.name as string }));
@@ -471,8 +470,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     async listAnnotationQueuesWithPrefix(prefix: string): Promise<ProjectRef[]> {
-      const page = await opik.api.annotationQueues.findAnnotationQueues({ name: prefix, size: 500 });
-      const content = page.content ?? [];
+      const content = await fetchAllPages((page) => opik.api.annotationQueues.findAnnotationQueues({ name: prefix, size: 500, page }), 500);
       return content
         .filter((q) => typeof q.name === 'string' && q.name.startsWith(prefix))
         .map((q) => ({ id: String(q.id), name: q.name as string }));
@@ -484,8 +482,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     async listPromptsWithPrefix(prefix: string): Promise<ProjectRef[]> {
-      const page = await opik.api.prompts.getPrompts({ name: prefix, size: 500 });
-      const content = page.content ?? [];
+      const content = await fetchAllPages((page) => opik.api.prompts.getPrompts({ name: prefix, size: 500, page }), 500);
       return content
         .filter((p) => typeof p.name === 'string' && p.name.startsWith(prefix))
         .map((p) => ({ id: String(p.id), name: p.name as string }));
@@ -501,8 +498,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     // be deleted by id, and rules don't cascade with their project's own
     // deletion (see automationRulesCleanup fixture's doc comment).
     async listAutomationRuleEvaluatorsWithPrefix(prefix: string): Promise<ProjectRef[]> {
-      const page = await opik.api.automationRuleEvaluators.findEvaluators({ name: prefix, size: 500 });
-      const content = page.content ?? [];
+      const content = await fetchAllPages((page) => opik.api.automationRuleEvaluators.findEvaluators({ name: prefix, size: 500, page }), 500);
       return content
         .filter((r) => typeof r.name === 'string' && r.name.startsWith(prefix))
         .map((r) => ({ id: String(r.id), name: r.name as string }));
@@ -513,10 +509,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({ body: { ids } });
     },
 
-    // findAlerts has no name filter — filtered client-side like the rest.
+    // findAlerts has no name filter — filtered client-side like the rest, and
+    // paginated through every alert in the workspace (not just `cuj-`-
+    // prefixed ones), since there's no server-side filter to shrink the set.
     async listAlertsWithPrefix(prefix: string): Promise<ProjectRef[]> {
-      const page = await opik.api.alerts.findAlerts({ size: 500 });
-      const content = page.content ?? [];
+      const content = await fetchAllPages((page) => opik.api.alerts.findAlerts({ size: 500, page }), 500);
       return content
         .filter((a) => typeof a.name === 'string' && a.name.startsWith(prefix))
         .map((a) => ({ id: String(a.id), name: a.name as string }));
@@ -528,8 +525,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {
-      const page = await opik.api.optimizations.findOptimizations({ name: prefix, size: 500 });
-      const content = page.content ?? [];
+      const content = await fetchAllPages((page) => opik.api.optimizations.findOptimizations({ name: prefix, size: 500, page }), 500);
       return content
         .filter((o) => typeof o.name === 'string' && o.name.startsWith(prefix))
         .map((o) => ({ id: String(o.id), name: o.name as string }));
@@ -1479,6 +1475,28 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     },
   };
+}
+
+/**
+ * Fetches every page of a `{ content, size, total }`-shaped listing — a
+ * single `size: 500` request silently drops anything past the 500th match,
+ * which orphan/teardown sweeps must not do (`listAlertsWithPrefix` especially:
+ * it has no server-side name filter, so its page holds every alert in the
+ * workspace, not just `cuj-`-prefixed ones).
+ */
+async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<{ content?: T[]; total?: number }>,
+  pageSize: number,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let page = 1; ; page++) {
+    const res = await fetchPage(page);
+    const content = res.content ?? [];
+    all.push(...content);
+    if (content.length < pageSize || (res.total !== undefined && all.length >= res.total)) {
+      return all;
+    }
+  }
 }
 
 function isNotFoundError(err: unknown): boolean {

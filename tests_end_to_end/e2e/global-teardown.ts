@@ -79,7 +79,12 @@ async function globalTeardown() {
   // never sees them. Mirrors hasWorkspaceRoleTestCredentials in
   // fixtures/workspace-role-member.fixture.ts; kept independent here so
   // global-teardown doesn't have to import a Playwright fixtures module.
-  if (hasWorkspaceRoleTestCredentials(env)) {
+  //
+  // Skipped when leaveFailures is set: workspaceRoleMembers/seededResources
+  // already skip their own rollback on a failed run for OPIK_LEAVE_FAILURES,
+  // and this run-scoped sweep would otherwise delete exactly what those
+  // fixtures just decided to leave for debugging.
+  if (hasWorkspaceRoleTestCredentials(env) && !env.leaveFailures) {
     try {
       console.log(`[global-teardown] Sweeping admin workspace "${env.adminWorkspace}" with prefix ${prefix}`);
       const adminApiKey = await loginCometUserRaw(env.adminEmail!, env.adminPassword!);

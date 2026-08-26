@@ -38,7 +38,7 @@ export interface WorkspaceRoleResourceFixtures {
 
 export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>({
   projectId: [
-    async ({ workspaceRoleMembers, envConfig }, use, workerInfo) => {
+    async ({ workspaceRoleMembers, envConfig, leaveFailuresState }, use, workerInfo) => {
       const ctx = adminCtx(workspaceRoleMembers);
       const backend = makeBackendClient(ctx.adminApiKey, ctx.workspaceName);
       // `cuj-{runId}-w{worker}-` lets global-setup's orphan sweep and
@@ -61,13 +61,15 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
         throw new Error(`Failed to resolve id for created anchor project "${name}"`);
       }
       await use(created.id);
+
+      if (leaveFailuresState.leave) return;
       await backend.deleteProject(created.id);
     },
     { scope: 'worker' },
   ],
 
   seededResources: [
-    async ({ workspaceRoleMembers, projectId, envConfig }, use, workerInfo) => {
+    async ({ workspaceRoleMembers, projectId, envConfig, leaveFailuresState }, use, workerInfo) => {
       const ctx = adminCtx(workspaceRoleMembers);
       const admin = adminOpikClient(ctx.adminApiKey, ctx.workspaceName);
       const backend = makeBackendClient(ctx.adminApiKey, ctx.workspaceName);
@@ -182,6 +184,11 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
       }
 
       await use(resources);
+
+      if (leaveFailuresState.leave) {
+        console.warn('[seededResources] OPIK_LEAVE_FAILURES=true and a test in this suite failed — leaving seeded resources for debugging');
+        return;
+      }
 
       for (const rollback of rollbacks.reverse()) {
         await rollback().catch(() => undefined);
