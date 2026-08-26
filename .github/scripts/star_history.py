@@ -1,40 +1,20 @@
 #!/usr/bin/env python3
-"""Render the "Star Us on GitHub" chart for the Opik READMEs.
+"""Render the GitHub stars chart for the Opik READMEs.
 
-Reads the running series from data.json, appends today's public star count,
-and writes a light and a dark SVG. Standard library only -- no pip install
-in CI, and no chart service at page-render time.
+Reads the series from data.json, appends today's public star count, and writes
+a light and a dark SVG. Standard library only.
 
-No font is embedded. An SVG loaded through <img> cannot fetch external
-resources, so a webfont would have to ship inline -- which is why
-star-history.com embeds xkcd Script (CC BY-NC 3.0, unusable here). The
-hand-drawn character comes from the feTurbulence filter rather than the
-typeface, so a system font stack costs almost nothing visually and takes
-each SVG from ~225 KB to ~21 KB with no font asset to license.
+    python3 .github/scripts/star_history.py [--data data.json] [--out DIR]
 
-GitHub restricted stargazer *history* to a repo's admins and collaborators on
-2026-06-30, but the *total* count stays public, so this needs no token at all.
-The historical curve was seeded once (see star_history_seed.py) and is carried
-forward in data.json.
-
-    python3 .github/scripts/star_history.py [--out DIR] [--data data.json]
-
-The series on the CDN is the source of truth. If it cannot be read, this
-exits non-zero rather than falling back to the committed seed -- rendering
-from the seed and republishing would overwrite every point accumulated
-since it was taken. Seeding is opt-in via --bootstrap and is meant to be
-run once, by hand.
-
-Setup and operator notes: .github/scripts/STAR_HISTORY.md
-See DND-1580.
+If data.json cannot be read the script exits non-zero rather than falling back
+to the committed seed. Seeding is opt-in via --bootstrap and run once, by hand.
 """
 import argparse, datetime as dt, json, pathlib, urllib.request
 
 REPO = "comet-ml/opik"
 API = f"https://api.github.com/repos/{REPO}"
 
-# Canvas geometry, lifted from the star-history.com SVG so the chart stays
-# visually identical to the one this replaces.
+# Canvas geometry, matching the chart this replaces.
 W, H = 800, 533.333
 OX, OY = 70, 60           # plot-group origin
 PW, PH = 700, 423.333     # plot area

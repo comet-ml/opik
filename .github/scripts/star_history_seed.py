@@ -2,14 +2,10 @@
 """One-off: build the initial star-history series from a full stargazer pull.
 
 Already run for comet-ml/opik on 2026-08-26 (21,616 stargazers, 1,164 daily
-points). Kept so the seed is reproducible. This is the only step that ever
-needed a token -- the weekly job runs off the public star count.
+points). Kept so the seed is reproducible; the weekly job needs no token.
 
-Reading stargazer *history* requires a fine-grained PAT on this repository
-with Contents: Read and write, which is how GitHub checks collaborator status
-on that endpoint since 2026-06-30. Revoke it once the seed is built.
-
-From anywhere in the repository:
+Reading stargazer history needs a fine-grained PAT on this repository with
+Contents: Read and write. Revoke it once the seed is built.
 
     gh api -H "Accept: application/vnd.github.star+json" \
       "repos/comet-ml/opik/stargazers?per_page=100" --paginate \
@@ -18,8 +14,6 @@ From anywhere in the repository:
     python3 .github/scripts/star_history_seed.py /tmp/starred_at.txt
 
 Writes star_history_seed.json next to this script, overwriting it.
-
-See DND-1580.
 """
 import argparse, collections, datetime as dt, json, pathlib
 

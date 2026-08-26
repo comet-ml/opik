@@ -1,17 +1,11 @@
-# Regenerates the README star-history chart and publishes it to cdn.comet.com.
+# Renders the GitHub stars chart for the READMEs and publishes the SVGs to
+# cdn.comet.com. The star total is public, so no GitHub token is needed; AWS
+# credentials come from OIDC. Nothing is written back to the repository.
 #
-# Needs no GitHub token: the total star count is public. Needs no long-lived
-# AWS key: credentials come from OIDC role assumption. Writes nothing back to
-# the repository -- the data and the rendered SVGs live on the CDN.
-#
-# The published data.json is the source of truth. If it cannot be read the job
-# fails rather than rebuilding from the committed seed, because publishing a
-# reseeded series would silently overwrite every point gathered since the seed
-# was taken. Seeding is a deliberate one-off: dispatch with bootstrap = true.
-#
-# Setup and operator notes: .github/scripts/STAR_HISTORY.md
-# See DND-1580.
-name: star-history
+# data.json on the CDN is the series. A run reads it, appends today's total,
+# re-renders both SVGs, and uploads. If it cannot be read the job fails rather
+# than reseeding, which would discard every point gathered so far.
+name: Create Github Stars History Chart
 
 on:
   schedule:
@@ -19,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       bootstrap:
-        description: "First run only: seed the series from the committed snapshot. Overwrites whatever is published."
+        description: "First run only: seed the series from the committed snapshot"
         type: boolean
         default: false
 
@@ -45,11 +39,9 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.CDN_PUBLISH_ROLE_ARN }}
-          role-session-name: star-history
+          role-session-name: Create Github Stars History Chart
           aws-region: us-east-1
 
-      # No `|| true` here on purpose: any read failure must stop the job before
-      # the publish step can overwrite the series with a reseeded one.
       - name: Fetch current series
         if: ${{ inputs.bootstrap != true }}
         run: aws s3 cp "$S3_PREFIX/data.json" data.json
@@ -66,8 +58,6 @@ jobs:
         env:
           DISTRIBUTION_ID: ${{ vars.CDN_DISTRIBUTION_ID }}
         run: |
-          # SVGs first, data.json last: it is the series pointer the next run
-          # reads, so it must not claim a point whose chart failed to upload.
           for theme in light dark; do
             aws s3 cp "out/star-history-$theme.svg" "$S3_PREFIX/star-history-$theme.svg" \
               --content-type image/svg+xml --cache-control max-age=300
@@ -78,14 +68,11 @@ jobs:
             --distribution-id "$DISTRIBUTION_ID" --paths "$CDN_PATHS"
 
   notify-slack:
-    name: "📢 Slack Notification"
+    name: "Slack Notification"
     runs-on: ubuntu-latest
     needs: publish
-    # Gated on main, and the notifier is checked out from main rather than the
-    # dispatched ref: this step holds a webhook secret, so it must never run
-    # code from a ref the dispatcher chose. publish fails by construction off
-    # main (the OIDC role trusts refs/heads/main only), which would otherwise
-    # hand any writer a reliable path to this step.
+    # Main only, and the notifier comes from main: this step holds a webhook
+    # secret and must not run code from a dispatched ref.
     if: always() && needs.publish.result == 'failure' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
