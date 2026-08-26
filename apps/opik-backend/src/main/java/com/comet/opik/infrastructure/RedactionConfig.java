@@ -61,7 +61,24 @@ public class RedactionConfig {
      */
     @JsonIgnore
     @AssertTrue(message = "redaction.rules must not be empty when redaction.enabled=true") public boolean isConfiguredWhenEnabled() {
-        return !enabled || (StringUtils.isNotBlank(rules) && !compile().isEmpty());
+        if (!enabled) {
+            return true;
+        }
+
+        if (StringUtils.isBlank(rules)) {
+            return false;
+        }
+
+        try {
+            return !compile().isEmpty();
+        } catch (RuntimeException malformed) {
+            // Not this constraint's business, and reporting it here makes it worse: a validator that throws
+            // surfaces as "HV000090: Unable to access isConfiguredWhenEnabled" with the cause discarded.
+            // Malformed JSON, a blank regex and an uncompilable pattern each surface at startup from
+            // RedactionService's constructor with their own message - JsonMappingException with the position,
+            // "redaction.rules[0].regex must not be blank", PatternSyntaxException with the index.
+            return true;
+        }
     }
 
     public RedactionRules compile() {

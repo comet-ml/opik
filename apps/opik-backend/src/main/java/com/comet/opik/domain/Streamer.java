@@ -66,7 +66,8 @@ public class Streamer {
                     ? redactionService.rules()
                     : RedactionRules.empty();
         } catch (RuntimeException outsideRequestScope) {
-            // See RedactionService.redactWhenCallerUnknown - one definition, consulted by both write paths.
+            // See RedactionService.redactWhenCallerUnknown for why a stream can answer this and the writer
+            // interceptor cannot.
             return redactionService.redactWhenCallerUnknown() ? redactionService.rules() : RedactionRules.empty();
         }
     }

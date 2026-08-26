@@ -55,11 +55,16 @@ public class RedactionService {
      * everyone else is redacted, so an empty or unresolved permission set means redacted.
      */
     /**
-     * What to do when there is no caller to decide against - a response written outside a request scope.
+     * What a stream does when there is no caller to decide against.
      * <p>
-     * Defined once because the two places that faced it answered it differently: the writer interceptor wrote
-     * values as stored, the streamer redacted them. Redacting is the answer, since a path that cannot establish
-     * who is reading cannot establish that the reader is permitted.
+     * Only {@code Streamer} asks, and only it can: it resolves the decision on the request thread and carries it,
+     * so reaching this means the stream genuinely has no caller, and redacting is right - a path that cannot
+     * establish who is reading cannot establish that the reader is permitted.
+     * <p>
+     * {@code RedactionWriterInterceptor} deliberately does not share this. It cannot tell "no caller" from
+     * "running on a thread where the request scope is not visible", and the second is ordinary: a
+     * {@code @Suspended AsyncResponse} resumed from a reactor thread lands there, so redacting would rewrite
+     * those payloads for permitted callers too.
      */
     public boolean redactWhenCallerUnknown() {
         return isEnabled();
