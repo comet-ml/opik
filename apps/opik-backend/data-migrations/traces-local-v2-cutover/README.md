@@ -983,21 +983,33 @@ and leaves the untouched live `traces` — there is no backup to soak or finaliz
 > it is irreversible in the moment, stages B/C require `--accept-post-cutover-write-loss`, and `rollback.sh` prints the
 > recovery pointer before the promote.
 
-**`cutover_start` must be the actual `EXCHANGE` moment — earlier is not safer, it is destructive.** The reverse replay
-is deliberately guard-less: it masks *every* id the bridge recorded in the window, unconditionally. Deletes that landed
-**before** the cutover were already applied to the original while it was live, so they need no replay — and any id that
-was deleted and then re-created before the cutover (a resurrection) is *legitimately live* in the parked original. Widen
-the window past the `EXCHANGE` and the replay masks those rows too, destroying data the rollback was supposed to
-preserve. This is not hypothetical: a production-shaped environment was found holding pre-cutover bridge events whose
-ids were live in the parked original, which an over-early `cutover_start` would have deleted.
+**Use exactly the `cutover_start` that `exchange_and_wrap.sh` printed — it is not a value to estimate, in either
+direction.** The driver captures it *before* the final deletion replay and *before* the `EXCHANGE`, deliberately, so the
+window covers every delete bridged from that instant onward — including those bridged during the replay and during the
+swap itself. Both ways of getting it wrong lose data, in opposite directions:
 
-Use the value `exchange_and_wrap.sh` printed. If it was lost, recover it rather than estimating — the `EXCHANGE` is
-recorded on the cluster:
+- **Earlier than the recorded value destroys data.** The reverse replay is guard-less: it masks every id the bridge
+  recorded in the window, unconditionally. Deletes from before the cutover were already applied to the original while it
+  was live, and any id deleted and then re-created before the cutover is *legitimately live* in the parked original.
+  Widening the window masks those rows too. Observed on a production-shaped environment: pre-cutover bridge events whose
+  ids were live in the parked original, which an over-early value would have deleted.
+- **Later resurrects data.** Reconstructing the boundary from the `EXCHANGE` itself — its `system.distributed_ddl_queue`
+  entry, say — lands *after* the capture, so every delete bridged in between is missed and those rows come back live on
+  the restored original. That gap is the final deletion replay's run time, which on a production-shaped table is minutes,
+  not seconds.
+
+If the printed value was lost, recover it from the driver's own capture query rather than reconstructing it — same
+statement that produced the value, so it is exact to within that query's duration:
 
 ```sql
-SELECT query_create_time, query FROM system.distributed_ddl_queue
-WHERE query ILIKE '%EXCHANGE TABLES%traces%' ORDER BY query_create_time DESC LIMIT 1;
+SELECT event_time_microseconds FROM clusterAllReplicas('{cluster}', system.query_log)
+WHERE log_comment = 'traces_local_v2_cutover:exchange_and_wrap'
+  AND query ILIKE '%now64(6)%' AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC LIMIT 1;
 ```
+
+Read it through `clusterAllReplicas` because the driver's session ran on one replica, and confirm the row is unique for
+the run you mean — more than one means more than one cutover, and the newest is not necessarily yours.
 
 Pick the stage by how far the cutover got:
 
