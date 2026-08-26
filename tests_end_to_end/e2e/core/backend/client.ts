@@ -451,6 +451,95 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         .map((p) => ({ id: String(p.id), name: p.name as string }));
     },
 
+    // ---- Sweep support for entity types outside the experiment/dataset/
+    // project trio above — used by global-setup's orphan sweep and
+    // global-teardown to clean up dashboards/queues/prompts/eval-rules/
+    // alerts/optimizations seeded by the workspace-role permission suite,
+    // which (unlike experiments/datasets) don't reuse an existing sweep path.
+
+    async listDashboardsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const page = await opik.api.dashboards.findDashboards({ name: prefix, size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((d) => typeof d.name === 'string' && d.name.startsWith(prefix))
+        .map((d) => ({ id: String(d.id), name: d.name as string }));
+    },
+
+    async deleteDashboardsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.dashboards.deleteDashboardsBatch({ ids });
+    },
+
+    async listAnnotationQueuesWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const page = await opik.api.annotationQueues.findAnnotationQueues({ name: prefix, size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((q) => typeof q.name === 'string' && q.name.startsWith(prefix))
+        .map((q) => ({ id: String(q.id), name: q.name as string }));
+    },
+
+    async deleteAnnotationQueuesBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.annotationQueues.deleteAnnotationQueueBatch({ ids });
+    },
+
+    async listPromptsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const page = await opik.api.prompts.getPrompts({ name: prefix, size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((p) => typeof p.name === 'string' && p.name.startsWith(prefix))
+        .map((p) => ({ id: String(p.id), name: p.name as string }));
+    },
+
+    async deletePromptsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.prompts.deletePromptsBatch({ ids });
+    },
+
+    // `projectId` is optional here — an eval rule created against the
+    // workspace-role suite's anchor project doesn't need it re-supplied to
+    // be deleted by id, and rules don't cascade with their project's own
+    // deletion (see automationRulesCleanup fixture's doc comment).
+    async listAutomationRuleEvaluatorsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const page = await opik.api.automationRuleEvaluators.findEvaluators({ name: prefix, size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((r) => typeof r.name === 'string' && r.name.startsWith(prefix))
+        .map((r) => ({ id: String(r.id), name: r.name as string }));
+    },
+
+    async deleteAutomationRuleEvaluatorsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({ body: { ids } });
+    },
+
+    // findAlerts has no name filter — filtered client-side like the rest.
+    async listAlertsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const page = await opik.api.alerts.findAlerts({ size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((a) => typeof a.name === 'string' && a.name.startsWith(prefix))
+        .map((a) => ({ id: String(a.id), name: a.name as string }));
+    },
+
+    async deleteAlertsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.alerts.deleteAlertBatch({ ids });
+    },
+
+    async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const page = await opik.api.optimizations.findOptimizations({ name: prefix, size: 500 });
+      const content = page.content ?? [];
+      return content
+        .filter((o) => typeof o.name === 'string' && o.name.startsWith(prefix))
+        .map((o) => ({ id: String(o.id), name: o.name as string }));
+    },
+
+    async deleteOptimizationsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.optimizations.deleteOptimizationsById({ ids });
+    },
+
     async listDatasetsWithPrefix(prefix: string): Promise<DatasetRef[]> {
       const page = await opik.api.datasets.findDatasets({ name: prefix, size: 500 });
       const content = page.content ?? [];

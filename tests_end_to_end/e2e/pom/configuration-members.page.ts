@@ -39,11 +39,9 @@ export class ConfigurationMembersPage {
     });
   }
 
-  async isTabVisible(): Promise<boolean> {
-    return this.page
-      .getByRole('tab', { name: 'Members' })
-      .isVisible()
-      .catch(() => false);
+  /** Use with `expect(...).toBeVisible()/.toBeHidden()` — `isVisible()` reads a single snapshot with no retry, so a still-loading page can read as "hidden" before the tab has had a chance to render. */
+  get membersTab(): Locator {
+    return this.page.getByRole('tab', { name: 'Members' });
   }
 
   memberRow(identifier: string): Locator {

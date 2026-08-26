@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { chromium } from '@playwright/test';
 import { loadEnvConfig, type EnvConfig } from './config/env.config';
 import { makeBackendClient } from './core/backend';
+import { loginCometUserRaw } from './core/comet/client';
 
 const E2E_DIR = __dirname;
 const RUN_ID_MARKER = path.resolve(E2E_DIR, '.e2e-run-id');
@@ -24,76 +25,57 @@ function parseRunIdTimestamp(name: string): number | null {
   );
 }
 
-async function sweepOrphans(apiKey: string | null): Promise<void> {
-  const backend = makeBackendClient(apiKey);
+/** One entity type's list+delete-one pair, shared by the sweep loop below. */
+async function sweepStaleWithPrefix(
+  label: string,
+  cutoff: number,
+  list: () => Promise<Array<{ id: string; name: string }>>,
+  deleteOne: (id: string) => Promise<void>,
+): Promise<void> {
+  try {
+    const stale = await list();
+    let sweptCount = 0;
+    for (const item of stale) {
+      const ts = parseRunIdTimestamp(item.name);
+      if (ts === null || ts >= cutoff) continue;
+      try {
+        await deleteOne(item.id);
+        sweptCount++;
+      } catch {
+        // Best-effort; another runner may have just deleted it.
+      }
+    }
+    if (sweptCount > 0) {
+      console.log(`[global-setup] Swept ${sweptCount} orphaned ${label} (>6h old)`);
+    }
+  } catch (e) {
+    console.warn(`[global-setup] ${label} orphan sweep warning (continuing):`, e);
+  }
+}
+
+/**
+ * Sweep order: experiments/dashboards/queues/prompts/rules/alerts/
+ * optimizations → datasets → projects, since the former all reference a
+ * dataset or project by id. Traces aren't swept here — they're project-scoped
+ * and expected to cascade with their project's own deletion (unlike
+ * automation rule evaluators, which `automationRulesCleanup`'s doc comment
+ * documents as the one exception to that).
+ */
+async function sweepOrphans(apiKey: string | null, workspaceName: string | null = null): Promise<void> {
+  const backend = makeBackendClient(apiKey, workspaceName);
   const cutoff = Date.now() - ORPHAN_MAX_AGE_MS;
+  const sweep = (label: string, list: () => Promise<Array<{ id: string; name: string }>>, deleteOne: (id: string) => Promise<void>) =>
+    sweepStaleWithPrefix(label, cutoff, list, deleteOne);
 
-  /** Sweep order: experiments → datasets → projects. Experiments reference datasets which reference projects. */
-  try {
-    const staleExperiments = await backend.listExperimentsWithPrefix('cuj-');
-    let sweptCount = 0;
-    for (const e of staleExperiments) {
-      const ts = parseRunIdTimestamp(e.name);
-      if (ts === null) continue;
-      if (ts < cutoff) {
-        try {
-          await backend.deleteExperiment(e.id);
-          sweptCount++;
-        } catch {
-          // Best-effort; another runner may have just deleted it.
-        }
-      }
-    }
-    if (sweptCount > 0) {
-      console.log(`[global-setup] Swept ${sweptCount} orphaned experiments (>6h old)`);
-    }
-  } catch (e) {
-    console.warn('[global-setup] experiment orphan sweep warning (continuing):', e);
-  }
-
-  try {
-    const staleDatasets = await backend.listDatasetsWithPrefix('cuj-');
-    let sweptCount = 0;
-    for (const d of staleDatasets) {
-      const ts = parseRunIdTimestamp(d.name);
-      if (ts === null) continue;
-      if (ts < cutoff) {
-        try {
-          await backend.deleteDataset(d.id);
-          sweptCount++;
-        } catch {
-          // Best-effort; another runner may have just deleted it.
-        }
-      }
-    }
-    if (sweptCount > 0) {
-      console.log(`[global-setup] Swept ${sweptCount} orphaned datasets (>6h old)`);
-    }
-  } catch (e) {
-    console.warn('[global-setup] dataset orphan sweep warning (continuing):', e);
-  }
-
-  try {
-    const stale = await backend.listProjectsWithPrefix('cuj-');
-    let sweptCount = 0;
-    for (const p of stale) {
-      const ts = parseRunIdTimestamp(p.name);
-      if (ts === null) continue;
-      if (ts < cutoff) {
-        try {
-          await backend.deleteProject(p.id);
-          sweptCount++;
-        } catch {
-          // Best-effort; another runner may have just deleted it.
-        }
-      }
-    }
-    if (sweptCount > 0) {
-      console.log(`[global-setup] Swept ${sweptCount} orphaned projects (>6h old)`);
-    }
-  } catch (e) {
-    console.warn('[global-setup] orphan sweep warning (continuing):', e);
-  }
+  await sweep('experiments', () => backend.listExperimentsWithPrefix('cuj-'), (id) => backend.deleteExperiment(id));
+  await sweep('dashboards', () => backend.listDashboardsWithPrefix('cuj-'), (id) => backend.deleteDashboardsBatch([id]));
+  await sweep('annotation queues', () => backend.listAnnotationQueuesWithPrefix('cuj-'), (id) => backend.deleteAnnotationQueuesBatch([id]));
+  await sweep('prompts', () => backend.listPromptsWithPrefix('cuj-'), (id) => backend.deletePromptsBatch([id]));
+  await sweep('automation rule evaluators', () => backend.listAutomationRuleEvaluatorsWithPrefix('cuj-'), (id) => backend.deleteAutomationRuleEvaluatorsBatch([id]));
+  await sweep('alerts', () => backend.listAlertsWithPrefix('cuj-'), (id) => backend.deleteAlertsBatch([id]));
+  await sweep('optimizations', () => backend.listOptimizationsWithPrefix('cuj-'), (id) => backend.deleteOptimizationsBatch([id]));
+  await sweep('datasets', () => backend.listDatasetsWithPrefix('cuj-'), (id) => backend.deleteDataset(id));
+  await sweep('projects', () => backend.listProjectsWithPrefix('cuj-'), (id) => backend.deleteProject(id));
 }
 
 /**
@@ -265,6 +247,20 @@ async function globalSetup() {
   const finalEnv = loadEnvConfig();
   await dismissWelcomeWizard(finalEnv);
   await sweepOrphans(finalEnv.apiKey);
+
+  // The workspace-role permission suite seeds its resources in a second,
+  // separate org/workspace under its own admin credentials — sweepOrphans
+  // above never sees them. Mirrors hasWorkspaceRoleTestCredentials in
+  // fixtures/workspace-role-member.fixture.ts; kept independent here so
+  // global-setup doesn't have to import a Playwright fixtures module.
+  if (finalEnv.adminEmail && finalEnv.adminPassword && finalEnv.deleteUserApiKey && finalEnv.deleteUserBaseUrl && finalEnv.adminWorkspace) {
+    try {
+      const adminApiKey = await loginCometUserRaw(finalEnv.adminEmail, finalEnv.adminPassword);
+      await sweepOrphans(adminApiKey, finalEnv.adminWorkspace);
+    } catch (e) {
+      console.warn('[global-setup] admin-workspace orphan sweep warning (continuing):', e);
+    }
+  }
 }
 
 export default globalSetup;

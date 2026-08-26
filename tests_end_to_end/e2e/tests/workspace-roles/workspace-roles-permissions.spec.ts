@@ -187,7 +187,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@area:worksp
     await test.step('Invite users: Members tab accessible', async () => {
       const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
       await membersPage.goto();
-      expect.soft(await membersPage.isTabVisible(), 'MANAGE should see the Members tab (isWorkspaceOwner)').toBe(true);
+      await expect.soft(membersPage.membersTab, 'MANAGE should see the Members tab (isWorkspaceOwner)').toBeVisible();
     });
 
     await test.step('Permission cross-check', async () => {
@@ -273,9 +273,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@area:worksp
     await test.step('Invite users: Members tab NOT accessible despite canInviteMembers=true', async () => {
       const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
       await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
-      expect
-        .soft(await membersPage.isTabVisible(), 'WRITE should NOT see the Members tab (isWorkspaceOwner requires MANAGE)')
-        .toBe(false);
+      await expect.soft(membersPage.membersTab, 'WRITE should NOT see the Members tab (isWorkspaceOwner requires MANAGE)').toBeHidden();
     });
 
     await test.step('Permission cross-check', async () => {
@@ -348,7 +346,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@area:worksp
       await expect.soft(member.page.getByRole('button', { name: 'Edit' }).first()).toBeHidden();
 
       const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
-      expect.soft(await membersPage.isTabVisible(), 'ANNOTATE should NOT see the Members tab').toBe(false);
+      await expect.soft(membersPage.membersTab, 'ANNOTATE should NOT see the Members tab').toBeHidden();
     });
 
     await test.step('Permission cross-check', async () => {
@@ -447,7 +445,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@area:worksp
       await expect.soft(member.page.getByRole('button', { name: 'Edit' }).first()).toBeHidden();
 
       const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
-      expect.soft(await membersPage.isTabVisible(), 'READ should NOT see the Members tab').toBe(false);
+      await expect.soft(membersPage.membersTab, 'READ should NOT see the Members tab').toBeHidden();
     });
 
     await test.step('Permission cross-check', async () => {

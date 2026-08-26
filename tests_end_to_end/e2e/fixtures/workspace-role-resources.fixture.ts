@@ -38,10 +38,15 @@ export interface WorkspaceRoleResourceFixtures {
 
 export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>({
   projectId: [
-    async ({ workspaceRoleMembers }, use) => {
+    async ({ workspaceRoleMembers, envConfig }, use, workerInfo) => {
       const ctx = adminCtx(workspaceRoleMembers);
       const backend = makeBackendClient(ctx.adminApiKey, ctx.workspaceName);
-      const name = `e2e-workspace-roles-${Date.now()}`;
+      // `cuj-{runId}-w{worker}-` lets global-setup's orphan sweep and
+      // global-teardown find and remove these if this run gets SIGKILLed or
+      // CI-timed-out before reaching the rollbacks below — see
+      // sweepWorkspace in global-teardown.ts / sweepOrphans in global-setup.ts.
+      const ns = `${envConfig.cujPrefix}-w${workerInfo.workerIndex}`;
+      const name = `${ns}-workspace-roles-${Date.now()}`;
       await backend.createProject(name);
       const [created] = await backend.listProjectsWithPrefix(name);
       if (!created) {
@@ -62,10 +67,12 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
   ],
 
   seededResources: [
-    async ({ workspaceRoleMembers, projectId }, use) => {
+    async ({ workspaceRoleMembers, projectId, envConfig }, use, workerInfo) => {
       const ctx = adminCtx(workspaceRoleMembers);
       const admin = adminOpikClient(ctx.adminApiKey, ctx.workspaceName);
       const backend = makeBackendClient(ctx.adminApiKey, ctx.workspaceName);
+      // Same sweepable namespace as the projectId fixture above.
+      const ns = `${envConfig.cujPrefix}-w${workerInfo.workerIndex}`;
 
       // If any create call below throws, everything created by an earlier
       // one in this same setup would otherwise leak — nothing runs past a
@@ -76,7 +83,7 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
       const rollbacks: Array<() => Promise<unknown>> = [];
       const runSetup = async (): Promise<SeededResources> => {
         const dashboard = await admin.api.dashboards.createDashboard({
-          name: `e2e-seed-dashboard-${Date.now()}`,
+          name: `${ns}-e2e-seed-dashboard-${Date.now()}`,
           config: {},
         });
         if (!dashboard.id) {
@@ -85,7 +92,7 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
         rollbacks.push(() => admin.api.dashboards.deleteDashboard(dashboard.id!));
 
         const datasetId = uuid7();
-        const datasetName = `e2e-seed-dataset-${Date.now()}`;
+        const datasetName = `${ns}-e2e-seed-dataset-${Date.now()}`;
         await admin.api.datasets.createDataset({ id: datasetId, name: datasetName });
         rollbacks.push(() => admin.api.datasets.deleteDataset(datasetId));
 
@@ -93,16 +100,16 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
         await admin.api.annotationQueues.createAnnotationQueue({
           id: queueId,
           projectId,
-          name: `e2e-seed-queue-${Date.now()}`,
+          name: `${ns}-e2e-seed-queue-${Date.now()}`,
           scope: 'trace',
         });
         rollbacks.push(() => admin.api.annotationQueues.deleteAnnotationQueueBatch({ ids: [queueId] }));
 
         const promptId = uuid7();
-        await admin.api.prompts.createPrompt({ id: promptId, name: `e2e-seed-prompt-${Date.now()}` });
+        await admin.api.prompts.createPrompt({ id: promptId, name: `${ns}-e2e-seed-prompt-${Date.now()}` });
         rollbacks.push(() => admin.api.prompts.deletePrompt(promptId));
 
-        const evalRuleName = `e2e-seed-eval-rule-${Date.now()}`;
+        const evalRuleName = `${ns}-e2e-seed-eval-rule-${Date.now()}`;
         await admin.api.automationRuleEvaluators.createAutomationRuleEvaluator({
           type: 'llm_as_judge',
           name: evalRuleName,
@@ -120,7 +127,7 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
         const alertId = uuid7();
         await admin.api.alerts.createAlert({
           id: alertId,
-          name: `e2e-seed-alert-${Date.now()}`,
+          name: `${ns}-e2e-seed-alert-${Date.now()}`,
           webhook: { url: 'https://example.com/e2e-seed-webhook' },
         });
         rollbacks.push(() => admin.api.alerts.deleteAlertBatch({ ids: [alertId] }));
@@ -129,10 +136,10 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
         if (!project) throw new Error(`seededResources: anchor project "${projectId}" not found`);
 
         const traceId = uuid7();
-        await admin.api.traces.createTrace({ id: traceId, name: `e2e-seed-trace-${Date.now()}`, projectName: project.name, startTime: new Date() });
+        await admin.api.traces.createTrace({ id: traceId, name: `${ns}-e2e-seed-trace-${Date.now()}`, projectName: project.name, startTime: new Date() });
         rollbacks.push(() => backend.deleteTraces([traceId]));
 
-        const seedProjectName = `e2e-seed-project-${Date.now()}`;
+        const seedProjectName = `${ns}-e2e-seed-project-${Date.now()}`;
         await backend.createProject(seedProjectName);
         const [seedProject] = await backend.listProjectsWithPrefix(seedProjectName);
         if (!seedProject) throw new Error(`Failed to resolve id for seeded project "${seedProjectName}"`);
@@ -141,7 +148,7 @@ export const test = workspaceRoleTest.extend<{}, WorkspaceRoleResourceFixtures>(
         const optimizationId = uuid7();
         await admin.api.optimizations.createOptimization({
           id: optimizationId,
-          name: `e2e-seed-optimization-${Date.now()}`,
+          name: `${ns}-e2e-seed-optimization-${Date.now()}`,
           datasetName,
           objectiveName: 'accuracy',
           status: 'running',

@@ -108,6 +108,25 @@ export async function loginCometUser(
   return apiKey;
 }
 
+/** Same as `loginCometUser`, via plain `fetch` for callers outside a test worker (global-setup/global-teardown) that have no Playwright `APIRequestContext` to hand. */
+export async function loginCometUserRaw(email: string, password: string): Promise<string> {
+  const root = cometRootBaseUrl();
+  const res = await fetch(`${root}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, plainTextPassword: password }),
+  });
+  if (!res.ok) {
+    throw new Error(`loginCometUserRaw("${email}") failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  }
+  const json = (await res.json()) as { apiKeys?: string[] };
+  const apiKey = json.apiKeys?.[0];
+  if (!apiKey) {
+    throw new Error(`loginCometUserRaw("${email}"): login response had no apiKeys`);
+  }
+  return apiKey;
+}
+
 export interface WorkspaceIds {
   workspaceId: string;
   organizationId: string;
