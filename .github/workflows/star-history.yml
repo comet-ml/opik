@@ -38,7 +38,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ vars.CDN_PUBLISH_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CDN_PUBLISH_ROLE_ARN }}
           role-session-name: Create Github Stars History Chart
           aws-region: us-east-1
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Publish
         env:
-          DISTRIBUTION_ID: ${{ vars.CDN_DISTRIBUTION_ID }}
+          DISTRIBUTION_ID: ${{ secrets.CDN_DISTRIBUTION_ID }}
         run: |
           for theme in light dark; do
             aws s3 cp "out/star-history-$theme.svg" "$S3_PREFIX/star-history-$theme.svg" \
