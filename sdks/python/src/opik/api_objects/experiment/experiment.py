@@ -324,21 +324,35 @@ class Experiment:
         score_results: List["score_result.ScoreResult"],
         *,
         preserve_unrelated: bool = False,
-    ) -> None:
-        """Log experiment-level scores to the backend."""
+    ) -> List["score_result.ScoreResult"]:
+        """Log scores, optionally retaining persisted scores not being recomputed.
+
+        ``preserve_unrelated`` reads current scores, replaces recomputed names, and defaults to false.
+        """
         experiment_scores: List[rest_api_types.ExperimentScore] = []
+        effective_scores: List["score_result.ScoreResult"] = []
         recomputed_names = {score_result_.name for score_result_ in score_results}
 
         if preserve_unrelated:
+            from opik.evaluation.metrics import score_result as score_result_module
+
             existing_experiment = self.get_experiment_data()
             existing_scores = existing_experiment.experiment_scores or []
-            experiment_scores.extend(
-                rest_api_types.ExperimentScore(name=score.name, value=score.value)
-                for score in existing_scores
-                if score.name not in recomputed_names
-            )
+            for score in existing_scores:
+                if score.name not in recomputed_names:
+                    experiment_scores.append(
+                        rest_api_types.ExperimentScore(
+                            name=score.name, value=score.value
+                        )
+                    )
+                    effective_scores.append(
+                        score_result_module.ScoreResult(
+                            name=score.name, value=score.value
+                        )
+                    )
 
         for score_result_ in score_results:
+            effective_scores.append(score_result_)
             if score_result_.scoring_failed:
                 continue
 
@@ -352,3 +366,5 @@ class Experiment:
             id=self.id,
             experiment_scores=experiment_scores,
         )
+
+        return effective_scores

@@ -962,7 +962,10 @@ def evaluate_experiment(
 
     # Log experiment scores to backend
     if computed_experiment_scores:
-        experiment.log_experiment_scores(score_results=computed_experiment_scores)
+        experiment.log_experiment_scores(
+            score_results=computed_experiment_scores,
+            preserve_unrelated=True,
+        )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset_.id,
@@ -1641,11 +1644,15 @@ def evaluate_resume(
         test_results=merged.test_results,
     )
     if merged_scores:
-        context.experiment.log_experiment_scores(
+        persisted_scores = context.experiment.log_experiment_scores(
             score_results=merged_scores,
             preserve_unrelated=True,
         )
-    merged.experiment_scores = merged_scores
+        merged.experiment_scores = (
+            persisted_scores if isinstance(persisted_scores, list) else merged_scores
+        )
+    else:
+        merged.experiment_scores = merged_scores
 
     return merged
 
