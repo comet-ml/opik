@@ -719,9 +719,14 @@ class TracesLocalV2CutoverTest {
      *
      * <p>Each phase pins one way the gate can lie:
      * <ul>
-     *   <li><b>resurrected id with two versions → 1.</b> {@code traces} is a {@code ReplacingMergeTree} and the gate
-     *   reads it without {@code FINAL}, so a trace that was updated has more than one row; counting rows would report
-     *   one resurrected id as 2 and inflate an operator's damage estimate mid-rollback.</li>
+     *   <li><b>a resurrected id → 1</b>, however many physical rows back it. The gate must count distinct keys: it
+     *   reads without {@code FINAL} over every replica, so an updated trace has several versions and a multi-replica
+     *   shard returns each row once per replica — counting rows would inflate an operator's damage estimate
+     *   mid-rollback. The phase seeds a second version, so swapping the distinct count for {@code count()} does fail
+     *   here — but only while those versions are un-merged, and a background merge may collapse them at any moment.
+     *   So treat it as a likely catch, not a guaranteed one: asserting the multiplicity itself would need merges
+     *   frozen, which these tests do not do, and the multi-replica dimension is not reproducible here at all. The
+     *   assertion is therefore written to hold either way.</li>
      *   <li><b>two bridge events for one id → still 1.</b> A trace can be re-recorded (retry, re-delete), so the
      *   event count is not the id count either.</li>
      *   <li><b>masked → 0</b>, the passing case after a real replay, and the only result that ends a rollback.</li>
@@ -733,7 +738,7 @@ class TracesLocalV2CutoverTest {
      * </ul>
      */
     @Test
-    void reverseReplayPostconditionGateCountsResurrectedIdsNotRowsOrEvents() {
+    void reverseReplayPostconditionGateCountsDistinctResurrectedIdsInTheReplaysWindowAndFullKey() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var otherProjectId = ID_GENERATOR.generateId();
@@ -756,21 +761,20 @@ class TracesLocalV2CutoverTest {
                 .as("a live row bridged before cutover_start is outside the replay's window, so the gate reports 0")
                 .isZero();
 
-        // A post-cutover delete the replay did NOT mask — given a second version, so rows outnumber ids.
+        // A post-cutover delete the replay did NOT mask. Given a second version so that, while it lasts, rows outnumber
+        // ids — but nothing here asserts on that multiplicity: a background merge may collapse the two versions at any
+        // moment, and only freezing merges would make it deterministic. See the Javadoc for where rows-vs-ids is pinned.
         var resurrected = mintIdsAt(1, weekInstant(1, 1));
         seedTraces(resurrected, workspaceId, projectId);
         insertRows(resurrected, workspaceId, projectId, "updated", _ -> Instant.now());
         recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
 
-        // Negative control: without it, "counts once" could pass simply because there was only ever one row to count.
-        assertThat(rawRowCount("traces", idStrings(resurrected), workspaceId))
-                .as("negative control: the resurrected id really does have more than one row")
-                .isEqualTo(2);
         assertThat(verifyReplayPostcondition(cutoverStart))
-                .as("one resurrected id with two ReplacingMergeTree versions counts once, not per row")
+                .as("one resurrected id counts once, whether or not its two versions have merged")
                 .isEqualTo(1);
 
-        // Re-recorded delete: a second bridge event for the same id must not double it either.
+        // Re-recorded delete: a second bridge event for the same id must not double it either. Unlike the versions
+        // above this IS deterministic — it would break a gate that joined the bridge instead of matching IN a set.
         recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
         assertThat(verifyReplayPostcondition(cutoverStart))
                 .as("two bridge events for one id count once, not per event")
@@ -1730,24 +1734,6 @@ class TracesLocalV2CutoverTest {
         var sql = """
                 SELECT uniqExact(id) AS c
                 FROM %s FINAL
-                WHERE workspace_id = :workspace_id
-                  AND id IN :ids
-                """.formatted(table);
-        return template
-                .nonTransaction(connection -> Mono
-                        .from(connection.createStatement(sql)
-                                .bind("workspace_id", workspaceId)
-                                .bind("ids", ids)
-                                .execute())
-                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class)))))
-                .block();
-    }
-
-    /** Raw live rows (mask-honored, no {@code FINAL}) — the ReplacingMergeTree versions {@link #liveCount} collapses. */
-    private long rawRowCount(String table, Set<String> ids, String workspaceId) {
-        var sql = """
-                SELECT count() AS c
-                FROM %s
                 WHERE workspace_id = :workspace_id
                   AND id IN :ids
                 """.formatted(table);
