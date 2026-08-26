@@ -1874,8 +1874,13 @@ redaction:
   # A value whose rules cannot be evaluated within the internal match budget is masked whole rather than returned
   # (see MatchBudget). Anchored rules never approach it; an unanchored one on a long token will, and the value is
   # then withheld rather than shown.
-  # Callers with no credentials reading a public project are redacted too: an anonymous reader cannot hold the
-  # permission, so the public view shows the redacted content rather than what is stored. The MCP OAuth route resolves the
+  # trace_original_data_view is a workspace-scoped grant, so only a member of the workspace can hold it. That
+  # settles what a public project shows: a viewer who is not a member is never a holder, so with this enabled the
+  # public view is redacted, always. A member who holds it reads originals on public and private projects alike.
+  # The mechanism follows from where permissions are set - the public fallback in RemoteAuthService.authenticate
+  # runs only after member authentication has failed, and it sets workspace, visibility and a "Public" user name
+  # but no permissions. An empty permission set is redacted, so no separate public-visibility branch is needed.
+  # The MCP OAuth route resolves the
   # caller from a username header rather than an authenticated principal, so on a deployment that enables it the
   # gate is only as strong as the network boundary in front of the platform's auth endpoint.
   # An environment name auto-created from a trace is exempt as an entity name, so a value that survives the
