@@ -860,7 +860,7 @@ server's major version, either way:
   official `clickhouse/clickhouse-server` image (set `CLICKHOUSE_CLIENT_IMAGE` to your server version) and dials out to
   `CLICKHOUSE_HOST`; for a ClickHouse on the host's own loopback, add `--network=host` via `CLICKHOUSE_CLIENT_DOCKER_OPTS`.
 
-**The only manual actions are not SQL:** (1) raising/restoring the async-insert buffer ceiling
+**In the forward sequence, the only manual actions are not SQL:** (1) raising/restoring the async-insert buffer ceiling
 (`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3 — see
 ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it); (2) flipping
 `databaseAnalyticsDataModel.traceColumnsNonNullable` to `true` in lockstep with the EXCHANGE (and back on rollback) —
@@ -868,7 +868,20 @@ see "The final cutover window"; (3) flipping `databaseAnalyticsDataModel.tracesD
 the un-wrap — see "Un-wrap"; and (4) the go/no-go judgement between steps. All four are *backend config* / judgement
 changes (env + rolling restart, or a config push) that these DB-facing scripts cannot and should not make: the mechanism
 is deployment-specific, so the drivers name the flag and the ordering and leave the rollout to the operator. They are
-deliberately operator-owned; none involves typing SQL.
+deliberately operator-owned, and none of them involves typing SQL.
+
+**Recovery is where hand-run SQL does appear**, so the claim above is about the forward sequence and not about the whole
+runbook. Two kinds, both deliberate and documented where they occur:
+
+- **Procedural**, in one place only: the retry's `RENAME` of the parked backup back to `traces_local_v2` (see "Retrying
+  the cutover after a stage B/C rollback"). It is unautomated on purpose — it reuses data whose trustworthiness may be
+  the reason the rollback happened — so the operator runs it having read the guards.
+- **Remediation the drivers print rather than perform**, when a guard refuses or a step needs finishing by hand: the
+  post-rollback sentinel repair's two `ALTER … UPDATE`s (which need column grants the rollback set deliberately omits —
+  see the privileges row above), clearing a leftover `traces_dist_old`, and completing an interrupted forward `RENAME`.
+
+All of it runs against the same database and connection the drivers use, and each statement is printed in full at the
+point it becomes necessary — the drivers never withhold one, and never run it for you.
 
 ## Naming and the parked backup
 
