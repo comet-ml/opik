@@ -15,6 +15,12 @@
 -- the same project_id/deleted_id length guards. A check that filtered differently from the replay would either miss what
 -- the replay missed or flag rows the replay was never asked to touch. Change one, change both.
 --
+-- WHAT 0 PROVES, AND WHAT IT DOES NOT. It proves every delete the bridge *recorded* in the window is masked. It cannot
+-- see a delete the bridge never recorded: capture runs after the delete succeeds and is best-effort by design (an
+-- auxiliary insert must never fail a user's delete), so a delete still in flight when this runs, or one whose capture
+-- errored, is invisible to the replay and to this check alike. That gap is closed by quiescing trace deletes before the
+-- promote — see the runbook — not by this query.
+--
 -- clusterAllReplicas: the mask is per-replica state. The replay runs with lightweight_deletes_sync = 2, so it has
 -- converged on every replica before the driver returns — reading every replica is what turns that into an observation
 -- rather than an assumption, and it is where a replica that fell behind would show up.

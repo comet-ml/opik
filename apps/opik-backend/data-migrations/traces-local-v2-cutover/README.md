@@ -1073,6 +1073,14 @@ Use stage B/C while the parked original still exists.
 > maintenance moment / with reads quiesced. `finalize.sh` is **exempt** — it renames only the parked backup / disposable
 > shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
 
+**What the reverse replay can and cannot re-apply.** It re-applies the deletes the bridge **recorded**. Capture runs
+after the delete succeeds and is best-effort by design — an auxiliary insert must never fail a user's delete — so a
+delete whose bridge row has not landed yet, or whose capture errored, is invisible to the replay *and* to its
+postcondition check, which reads the same bridge. That trace is live again on the restored original and the check still
+reports `0`. No query here can detect it; the bound is operational — **quiesce trace deletes before the promote**, not
+just reads, and let in-flight ones land first. It takes a delete concurrent with the promote, or a capture failure (the
+backend logs those), so the exposure is small, but `0` means "every recorded delete is masked", not "no delete escaped".
+
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
 statements. Note what that means even when both succeed: from the moment the promote lands until the replay finishes,
 the restored original is live with the post-cutover deletes **not yet re-applied**, so traces a user deleted after the

@@ -21,6 +21,9 @@ import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -706,6 +709,92 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(survivors.subList(1, survivors.size())), workspaceId))
                 .as("reverse-replay is idempotent: a repeat run drops no live survivor")
                 .isEqualTo(survivors.size() - 1);
+    }
+
+    /**
+     * The reverse-replay postcondition gate: {@code 0} means every delete the bridge recorded since {@code cutover_start}
+     * is masked on the restored {@code traces}, and any other number is an incomplete rollback serving rows users
+     * deleted. Unlike the rest of this class it executes the <b>shipped</b>
+     * {@code 000004_rollback_verify_replay.sql} rather than an inline copy (see {@link #verifyReplayPostcondition}).
+     *
+     * <p>Each phase pins one way the gate can lie:
+     * <ul>
+     *   <li><b>resurrected id with two versions → 1.</b> {@code traces} is a {@code ReplacingMergeTree} and the gate
+     *   reads it without {@code FINAL}, so a trace that was updated has more than one row; counting rows would report
+     *   one resurrected id as 2 and inflate an operator's damage estimate mid-rollback.</li>
+     *   <li><b>two bridge events for one id → still 1.</b> A trace can be re-recorded (retry, re-delete), so the
+     *   event count is not the id count either.</li>
+     *   <li><b>masked → 0</b>, the passing case after a real replay, and the only result that ends a rollback.</li>
+     *   <li><b>bridged under one project, alive under another → 0.</b> Ids are client-supplied and reusable across
+     *   projects; a gate matching on {@code id} alone would report a live row the replay was never asked to touch.</li>
+     *   <li><b>bridged before {@code cutover_start} → 0.</b> A trace deleted and recreated before the cutover is
+     *   legitimately live while still carrying a bridge event; without the window filter the gate would call that a
+     *   failed rollback and send the operator chasing a delete the replay was never asked to re-apply.</li>
+     * </ul>
+     */
+    @Test
+    void reverseReplayPostconditionGateCountsResurrectedIdsNotRowsOrEvents() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var otherProjectId = ID_GENERATOR.generateId();
+
+        // Exact-count ids throughout (mintIds is per-week), so every expected number below is self-evident.
+        // Deleted, bridged, then recreated — all BEFORE the cutover line. It is legitimately live, and its bridge event
+        // is outside the replay's window, so the gate must not mistake it for a resurrection the replay missed.
+        var preWindow = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(preWindow, workspaceId, projectId);
+        recordDeletionEvents(idStrings(preWindow), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(idStrings(preWindow), workspaceId, projectId);
+        insertRows(preWindow, workspaceId, projectId, "recreated", _ -> Instant.now());
+
+        var cutoverStart = nowMicros();
+
+        assertThat(liveCount("traces", idStrings(preWindow), workspaceId))
+                .as("negative control: the pre-window row is live again after being recreated")
+                .isEqualTo(1);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("a live row bridged before cutover_start is outside the replay's window, so the gate reports 0")
+                .isZero();
+
+        // A post-cutover delete the replay did NOT mask — given a second version, so rows outnumber ids.
+        var resurrected = mintIdsAt(1, weekInstant(1, 1));
+        seedTraces(resurrected, workspaceId, projectId);
+        insertRows(resurrected, workspaceId, projectId, "updated", _ -> Instant.now());
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
+
+        // Negative control: without it, "counts once" could pass simply because there was only ever one row to count.
+        assertThat(rawRowCount("traces", idStrings(resurrected), workspaceId))
+                .as("negative control: the resurrected id really does have more than one row")
+                .isEqualTo(2);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("one resurrected id with two ReplacingMergeTree versions counts once, not per row")
+                .isEqualTo(1);
+
+        // Re-recorded delete: a second bridge event for the same id must not double it either.
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("two bridge events for one id count once, not per event")
+                .isEqualTo(1);
+
+        // The passing case: the replay masks it, the gate clears.
+        reverseReplay(cutoverStart);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("after the replay masks the bridged delete, the gate reports 0")
+                .isZero();
+
+        // Full-key scope: id reused across projects, bridged and masked in one, alive in the other.
+        var reused = mintIdsAt(1, weekInstant(2, 1));
+        seedTraces(reused, workspaceId, projectId);
+        seedTraces(reused, workspaceId, otherProjectId);
+        recordDeletionEvents(idStrings(reused), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(idStrings(reused), workspaceId, projectId);
+
+        assertThat(liveCount("traces", idStrings(reused), workspaceId))
+                .as("negative control: the reused id is still live under the other project")
+                .isEqualTo(1);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("a live row under a project the bridge never named is not a resurrection")
+                .isZero();
     }
 
     /**
@@ -1599,6 +1688,38 @@ class TracesLocalV2CutoverTest {
         });
     }
 
+    /**
+     * Runs the <b>shipped</b> {@code 000004_rollback_verify_replay.sql}, substituting the same two placeholders
+     * {@code rollback.sh} substitutes, and returns the count it reports.
+     *
+     * <p>Deliberately not an inline copy, unlike the cutover statements above. The class-level rationale for inlining is
+     * to interleave seeding and assertions inside a multi-step sequence; this is a single terminal gate with nothing to
+     * interleave, and its whole contract is the number it returns — so a copy that drifted from the file would leave the
+     * shipped gate unverified while the test stayed green.
+     */
+    private long verifyReplayPostcondition(String cutoverStart) {
+        var relative = Path
+                .of("data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000004_rollback_verify_replay.sql");
+        // Surefire runs from the module directory; fall back to the repo root so an IDE run resolves too.
+        var path = Files.exists(relative) ? relative : Path.of("apps/opik-backend").resolve(relative);
+        String sql;
+        try {
+            sql = Files.readString(path);
+        } catch (IOException e) {
+            throw new IllegalStateException("cannot read the shipped gate SQL at " + path.toAbsolutePath(), e);
+        }
+        sql = sql.replace("${ANALYTICS_DB_DATABASE_NAME}", DATABASE_NAME)
+                .replace("${CUTOVER_START}", cutoverStart)
+                .strip()
+                .replaceAll(";$", "");
+        var statement = sql;
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(statement).execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
+                .block();
+    }
+
     // --- query helpers -------------------------------------------------------------------------------------------
 
     /** Distinct live (mask-honored) ids from {@code table} within {@code ids} — collapses ReplacingMergeTree versions. */
@@ -1609,6 +1730,24 @@ class TracesLocalV2CutoverTest {
         var sql = """
                 SELECT uniqExact(id) AS c
                 FROM %s FINAL
+                WHERE workspace_id = :workspace_id
+                  AND id IN :ids
+                """.formatted(table);
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("workspace_id", workspaceId)
+                                .bind("ids", ids)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class)))))
+                .block();
+    }
+
+    /** Raw live rows (mask-honored, no {@code FINAL}) — the ReplacingMergeTree versions {@link #liveCount} collapses. */
+    private long rawRowCount(String table, Set<String> ids, String workspaceId) {
+        var sql = """
+                SELECT count() AS c
+                FROM %s
                 WHERE workspace_id = :workspace_id
                   AND id IN :ids
                 """.formatted(table);

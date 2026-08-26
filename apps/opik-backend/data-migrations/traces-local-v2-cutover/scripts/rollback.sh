@@ -250,9 +250,8 @@ assert_topology() {
     esac
 }
 
-# Run one rollback .sql file wholesale, substituting the placeholders. Each file is exactly one stage's statements.
-# Same sourcing contract as run_file (versioned .sql, same two placeholders) but captures the value so the driver can
-# assert on it rather than leaving a number on the operator's screen to interpret.
+# Same sourcing contract as run_file (versioned .sql, same two placeholders), but captures the returned value so the
+# driver asserts on it instead of leaving a number on the operator's screen to interpret.
 verify_replay_postcondition() {
     local file="$SQL_DIR/000004_rollback_verify_replay.sql" sql resurrected
     [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
@@ -264,11 +263,18 @@ verify_replay_postcondition() {
         echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'traces'."
         return 0
     fi
+    # A failed client (dead port-forward, auth, network) yields empty or non-numeric output, which is "not verified" and
+    # not "N ids resurrected" — say which, so nobody reads a connection error as a damage count. Both fail the check.
+    if ! [[ "$resurrected" =~ ^[0-9]+$ ]]; then
+        echo "WARNING: reverse-replay postcondition COULD NOT BE EVALUATED — the query returned no usable count." >&2
+        echo "         Treat the rollback as unverified, not as clean. Fix connectivity and re-run the check below." >&2
+    else
+        echo "WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live again" >&2
+        echo "         on 'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
+    fi
     # Does not abort: the promote already succeeded, the estate is the restored original either way, and the operator
     # still needs the flag-revert and repair guidance printed below. The failure is carried to the exit code instead, so
-    # the run cannot report success while ids a user deleted are being served.
-    echo "WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live again on" >&2
-    echo "         'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
+    # the run cannot report success while ids deleted by a user are being served.
     echo "         Re-run the replay (idempotent), then this check repeats:" >&2
     echo "           ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --reverse-replay-only --cutover-start '$CUTOVER_START' --confirm-retention-paused" >&2
     return 1
