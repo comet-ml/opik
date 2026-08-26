@@ -17,6 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 import uniq from "lodash/uniq";
 import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
@@ -25,6 +26,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
 import useTracesOrSpansExist from "@/hooks/useTracesOrSpansExist";
@@ -74,7 +76,10 @@ import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
-import { generateSelectColumDef } from "@/shared/DataTable/utils";
+import {
+  generateSelectColumDef,
+  getVirtualizationConfig,
+} from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
@@ -107,7 +112,9 @@ import {
   buildSpanDurationTarget,
   buildSpanErrorTarget,
 } from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
-import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreCell, {
+  resolveFeedbackScoreCell,
+} from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -118,6 +125,7 @@ import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/Thre
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -524,6 +532,7 @@ type TracesSpansTabProps = {
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
@@ -532,6 +541,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   onLogsTypeChange,
   projectId,
   projectName,
+  dateRangeConfig,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
@@ -545,6 +555,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
     excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...dateRangeConfig,
   });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
@@ -922,7 +933,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [setSearch, clearAllChips, setEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
-    () => data?.content ?? [],
+    () => uniqBy(data?.content ?? [], "id"),
     [data?.content],
   );
 
@@ -1030,7 +1041,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
+          cell: resolveFeedbackScoreCell(label) as never,
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
@@ -1147,7 +1158,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       onCommentsReply: (row?: Trace | Span) => {
         handleRowClick(row, DetailsActionSection.Comments);
       },
-      enableUserFeedbackEditing: true,
     }),
     [handleRowClick],
   );
@@ -1334,6 +1344,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsData,
     metadataColumnsOrder,
   ]);
+
+  const virtualization = useMemo(
+    () => getVirtualizationConfig(columns.length, rows.length || (size ?? 0)),
+    [columns.length, rows.length, size],
+  );
 
   const columnsToExport = useMemo(() => {
     return columns
@@ -1604,6 +1619,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             />
           }
           TableWrapper={PageBodyStickyTableWrapper}
+          TableBody={DataTableVirtualBody}
+          columnVirtualization={virtualization}
+          rowVirtualization={virtualization}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}

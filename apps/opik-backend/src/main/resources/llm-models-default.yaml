@@ -185,9 +185,6 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
-  - id: "gemini-3.1-flash-lite-preview"
-    label: "Gemini 3.1 Flash Lite Preview"
-    structuredOutput: true
   - id: "gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
     structuredOutput: true
@@ -231,11 +228,17 @@ gemini:
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-lite-image"
+  - id: "gemini-3.1-flash-lite-preview"
+    structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-pro-vision"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.7-flash"
+    qualifiedName: "vertex_ai/gemini-3.7-flash"
+    label: "Gemini 3.7 Flash"
+    structuredOutput: true
   - id: "gemini-3.6-flash"
     qualifiedName: "vertex_ai/gemini-3.6-flash"
     label: "Gemini 3.6 Flash"
@@ -399,6 +402,7 @@ openrouter:
     label: "anthropic/claude-opus-4.8:batch"
   - id: "anthropic/claude-opus-5"
     label: "anthropic/claude-opus-5"
+    structuredOutput: true
   - id: "anthropic/claude-opus-5-fast"
     label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-opus-5:batch"
@@ -561,6 +565,8 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-0731"
     label: "deepseek/deepseek-v4-flash-0731"
+  - id: "deepseek/deepseek-v4-flash-vision-exp"
+    label: "deepseek/deepseek-v4-flash-vision-exp"
   - id: "deepseek/deepseek-v4-flash:free"
     label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
@@ -568,6 +574,9 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-pro-0813"
     label: "deepseek/deepseek-v4-pro-0813"
+    structuredOutput: true
+  - id: "dots-studio/dots-3-note-preview:free"
+    label: "dots-studio/dots-3-note-preview:free"
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
@@ -806,6 +815,10 @@ openrouter:
     structuredOutput: true
   - id: "meta/muse-spark-1.2"
     label: "meta/muse-spark-1.2"
+    structuredOutput: true
+  - id: "meta/muse-spark-1.2-contributor"
+    label: "meta/muse-spark-1.2-contributor"
+    structuredOutput: true
   - id: "microsoft/mai-ds-r1"
     label: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
@@ -843,10 +856,14 @@ openrouter:
     label: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
+  - id: "minimax/minimax-m2.7:free"
+    label: "minimax/minimax-m2.7:free"
   - id: "minimax/minimax-m3"
     label: "minimax/minimax-m3"
   - id: "minimax/minimax-m3:batch"
     label: "minimax/minimax-m3:batch"
+  - id: "minimax/minimax-m3:free"
+    label: "minimax/minimax-m3:free"
   - id: "mistralai/codestral-2501"
     label: "mistralai/codestral-2501"
     structuredOutput: true
@@ -1493,6 +1510,8 @@ openrouter:
     label: "qwen/qwen3.7-plus"
   - id: "qwen/qwen3.8-2.4t-a95b"
     label: "qwen/qwen3.8-2.4t-a95b"
+  - id: "qwen/qwen3.8-27b"
+    label: "qwen/qwen3.8-27b"
   - id: "qwen/qwen3.8-max"
     label: "qwen/qwen3.8-max"
   - id: "qwen/qwq-32b"
@@ -1525,6 +1544,8 @@ openrouter:
     label: "sao10k/l3.1-euryale-70b"
   - id: "sao10k/l3.3-euryale-70b"
     label: "sao10k/l3.3-euryale-70b"
+  - id: "stealth/ox-alpha"
+    label: "stealth/ox-alpha"
   - id: "stepfun-ai/step3"
     label: "stepfun-ai/step3"
   - id: "stepfun/step-3.5-flash"
@@ -1537,6 +1558,12 @@ openrouter:
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
     label: "tencent/hunyuan-a13b-instruct"
+  - id: "tencent/hy-mt2-1.8b"
+    label: "tencent/hy-mt2-1.8b"
+  - id: "tencent/hy-mt2-30b-a3b"
+    label: "tencent/hy-mt2-30b-a3b"
+  - id: "tencent/hy-mt2-7b"
+    label: "tencent/hy-mt2-7b"
   - id: "tencent/hy3"
     label: "tencent/hy3"
   - id: "tencent/hy3-preview"
@@ -1559,8 +1586,12 @@ openrouter:
     label: "thinkingmachines/inkling"
   - id: "thinkingmachines/inkling-small"
     label: "thinkingmachines/inkling-small"
+  - id: "thinkingmachines/inkling-small:free"
+    label: "thinkingmachines/inkling-small:free"
   - id: "thinkingmachines/inkling:batch"
     label: "thinkingmachines/inkling:batch"
+  - id: "thinkingmachines/inkling:free"
+    label: "thinkingmachines/inkling:free"
   - id: "thudm/glm-4.1v-9b-thinking"
     label: "thudm/glm-4.1v-9b-thinking"
     reasoning: true
@@ -1660,6 +1691,10 @@ openrouter:
     label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5.2:batch"
     label: "z-ai/glm-5.2:batch"
+  - id: "z-ai/glm-5.2:free"
+    label: "z-ai/glm-5.2:free"
+  - id: "z-ai/glm-5.3"
+    label: "z-ai/glm-5.3"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"
@@ -1684,5 +1719,7 @@ openrouter:
     label: "~openai/gpt-mini-latest"
   - id: "~x-ai/grok-latest"
     label: "~x-ai/grok-latest"
+  - id: "~z-ai/glm-latest"
+    label: "~z-ai/glm-latest"
   - id: "google/gemini-2.0-flash-001"
     structuredOutput: true

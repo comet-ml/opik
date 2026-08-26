@@ -1,0 +1,29 @@
+## Experiment Traces Are Now a Logs Tab
+
+Experiment traces were previously reachable only through a small "Go to logs" link tucked into the metadata row, easy to miss — users who couldn't find it would conclude nothing had been logged. They're now a dedicated **Logs** tab on the experiment page, always scoped to that experiment or, when comparing, to every experiment in the comparison. Comparing experiments that live in different projects now shows an explicit message instead of silently dropping traces, since logs are read per project.
+
+The tab carries its own toolbar (just the columns selector, matching the other experiment tabs) and its own saved column/sort/filter configuration, so setting it up doesn't overwrite what you've configured in the Playground or trial overlay views. The Playground's "view trace" link on an experiment result now opens this tab directly instead of a dead-end overlay.
+
+## Bug Fixes & Improvements
+
+- **LLM-as-judge online-eval rules score more consistently** — Built-in judge prompt templates and the scoring engine disagreed on whether a judge's answer should be a flat or nested JSON object, so a rule could non-deterministically return an empty score depending on which shape the model happened to pick. The engine now accepts both shapes, correctly parses quoted numbers (`"0.8"` no longer becomes `0.0`) and common boolean spellings (yes/no, pass/fail, on/off), and reports — rather than silently drops — a score name the rule doesn't recognize. Judge prompts are also no longer HTML-escaped before being sent, which had been corrupting values like base64 data URLs assembled from template variables.
+
+- **Unsupported LLM features now return a clear 400 instead of a mysterious 500** — Requesting a capability the selected provider doesn't support (for example, requiring tool choice against a model that can't do it) previously failed with a generic server error and, for online-scoring rules, burned through the full retry budget before the message was dropped. It's now reported immediately as a 400 naming the unsupported feature, for both regular and streaming requests.
+
+- **Fixed a Vertex AI thread leak that could exhaust a backend pod** — Every LLM call routed through Vertex AI built a brand-new client whose background threads were never released, which could accumulate to thousands of threads per pod over time and eventually require a restart. The client is now created and closed per request instead.
+
+- **Optimization cost totals now include GEPA reflection spend** — LLM calls the optimizer makes internally during GEPA reflection belong to no single trial, so they were billed but excluded from a run's total cost, undercounting real spend. That spend is now traced, tagged with the run, and included in `total_optimization_cost` (`opik-optimizer` 3.2.0). Upgrade both packages together — `pip install -U "opik-optimizer>=3.2.0" "gepa>=0.1.0"` — raising `gepa` on its own breaks at runtime against the older reflection-template format that 3.2.0 no longer speaks.
+
+- **Self-hosted: per-component image registry override, and a demo-data job fix** — The Helm chart now lets you set a separate image registry for the backend, frontend, or Python backend individually, falling back to the chart-wide registry when unset. The demo-data job also now honors a component's configured image repository instead of always defaulting to `opik-python-backend`.
+
+## Performance Improvements
+
+- **Faster trace counts on projects using guardrails filters** — The traces-count query that fires on every Logs page load always joined against guardrails results and sorted every row to deduplicate, even when no guardrails filter was applied. Both are now skipped unless actually needed, cutting rows read roughly in half and cutting measured P99 latency by about 90% on production workspaces.
+
+- **Faster trace lookups by thread ID** — Filtering traces or threads by thread ID wasn't engaging an existing prefilter, so a lookup could scan a project's entire span history just to find one thread's traces. The prefilter now engages for thread-scoped lookups, cutting measured production query times from multiple seconds to under 200ms.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.23...2.2.29)
+
+_Releases_: `2.2.25`, `2.2.26`, `2.2.27`, `2.2.28`, `2.2.29`

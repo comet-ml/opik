@@ -6,6 +6,10 @@ env:
   ALLURE_ENDPOINT: https://comet.testops.cloud/
   ALLURE_PROJECT_ID: 1
   ALLURE_RESULTS: allure-results
+  # The sdk-driver service runs the SDK outside pytest for the whole suite, so
+  # without this its traffic would land in the usage analytics as a real user's.
+  OPIK_ANALYTICS_ENABLE: false
+  OPIK_SENTRY_ENABLE: false
 
 on:
   workflow_dispatch:
@@ -63,7 +67,7 @@ jobs:
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
       - name: Setup uv & Python
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: '3.12'
 
@@ -106,6 +110,8 @@ jobs:
         env:
           TIER: ${{ github.event.inputs.tier || 't1' }}
           ALLURE_LAUNCH_NAME: "Opik v2 E2E ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
+          # The dockerized backend reaches the host-run mock token service via the docker0 host IP
+          MOCK_AUTH_URL_FOR_BACKEND: http://172.17.0.1:9878
         run: |
           # Point both the allure-playwright reporter and allurectl at the same
           # absolute results dir, then stream results to TestOps via allurectl watch.

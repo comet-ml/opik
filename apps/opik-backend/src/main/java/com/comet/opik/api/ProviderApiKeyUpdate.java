@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
@@ -27,7 +28,11 @@ public record ProviderApiKeyUpdate(
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) Map<String, String> headers,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) Map<String, String> configuration,
-        @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String baseUrl) {
+        @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String baseUrl,
+        @JsonView({ProviderApiKey.View.Public.class,
+                ProviderApiKey.View.Write.class}) @Valid @Schema(description = "Dynamic token auth recipe. Send the '"
+                        + ProviderAuthConfig.SECRET_SENTINEL
+                        + "' sentinel as a credential value to keep the stored secret; send an empty object to clear the auth config.") ProviderAuthConfig authConfig) {
 
     @Override
     public String toString() {

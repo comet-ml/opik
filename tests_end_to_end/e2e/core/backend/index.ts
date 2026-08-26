@@ -4,7 +4,13 @@ export {
   type ProjectRef,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
+  type DatasetItemWithTagsRef,
   type DatasetVersionRef,
+  type RawApiResult,
+  type BackendSort,
+  type MetricSeries,
+  type MetricInterval,
+  type WorkspaceMetricType,
   type ProjectStatsRef,
   type ExperimentRefDetail,
   type TestSuiteRef as BackendTestSuiteRef,
@@ -12,7 +18,19 @@ export {
   type FeedbackScoreRef,
   type TraceDetail,
   type AutomationRuleRef,
+  type AutomationRuleDetail,
+  type AutomationRuleLogRef,
+  type TraceJsonSection,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
+  type ThreadRowRef,
+  type ThreadDetail,
+  type StatPercentiles,
+  type ThreadStatValue,
+  numericStat,
+  type BackendFilter,
+  type ReadWindow,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
+export { uuid7 } from './uuid7';
+export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';

@@ -75,6 +75,22 @@ The extension automatically registers an Opik MCP (Model Context Protocol) serve
 
 The MCP server integration is enabled by default and requires no additional configuration. For more details about the MCP server, see the [opik-mcp package](https://www.npmjs.com/package/opik-mcp).
 
+## Token usage and cost
+
+Each logged conversation turn also records how many tokens it used and what it cost. You will
+see the model, the prompt and completion tokens, the cache read and write tokens, and an
+estimated cost on the LLM span of every trace.
+
+These numbers come from Cursor itself, using the Cursor account you are already signed in to.
+You do not need a separate API key, and you do not need to be a team admin.
+
+The token counts arrive a few seconds after the conversation is logged, so a trace may briefly
+appear without them. A turn that did not result in a billable request, such as one you
+cancelled, keeps its trace but has no usage attached.
+
+To turn this off, set `Opik: Usage Enrichment Enabled` to false in the extension settings. Your
+conversations are still logged, just without token counts or cost.
+
 ## Viewing your conversations
 
 Once the extension is installed and configured, all your conversations will be available in the `cursor` project in Opik. To

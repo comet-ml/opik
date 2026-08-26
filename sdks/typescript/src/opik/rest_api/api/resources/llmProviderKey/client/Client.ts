@@ -324,7 +324,7 @@ export class LlmProviderKeyClient {
     }
 
     /**
-     * Update LLM Provider's ApiKey
+     * Update LLM Provider's ApiKey. api_key and auth_config are mutually exclusive: setting a valid auth_config on a provider that holds a static api_key clears the stored key; send auth_config as an empty object to clear the recipe and switch back to a static key
      *
      * @param {string} id
      * @param {OpikApi.ProviderApiKeyUpdate} request
@@ -406,6 +406,101 @@ export class LlmProviderKeyClient {
             _response.rawResponse,
             "PATCH",
             "/v1/private/llm-provider-key/{id}",
+        );
+    }
+
+    /**
+     * Runs the token fetch once, backend-side, and reports the token lifetime. The token itself is never returned. Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.
+     *
+     * @param {OpikApi.ProviderAuthCheck} request
+     * @param {LlmProviderKeyClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ForbiddenError}
+     * @throws {@link OpikApi.NotFoundError}
+     * @throws {@link OpikApi.UnprocessableEntityError}
+     *
+     * @example
+     *     await client.llmProviderKey.testLlmProviderAuthConfig()
+     */
+    public testLlmProviderAuthConfig(
+        request: OpikApi.ProviderAuthCheck = {},
+        requestOptions?: LlmProviderKeyClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.Result> {
+        return core.HttpResponsePromise.fromPromise(this.__testLlmProviderAuthConfig(request, requestOptions));
+    }
+
+    private async __testLlmProviderAuthConfig(
+        request: OpikApi.ProviderAuthCheck = {},
+        requestOptions?: LlmProviderKeyClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.Result>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/llm-provider-key/auth-config/test",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.ProviderAuthCheck.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.Result.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 403:
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/llm-provider-key/auth-config/test",
         );
     }
 }

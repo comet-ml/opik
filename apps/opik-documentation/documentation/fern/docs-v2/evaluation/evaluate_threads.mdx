@@ -119,6 +119,55 @@ lambda x: x["content"]["user_question"]
 Don't want to deal with transformations because your traces don't have a consistent format? Try using LLM-based transformations, language models are good at this!.
 </Tip>
 
+#### Evaluating RAG agents with retrieved context
+
+Relevance and faithfulness metrics need to know what the agent's answer was grounded on. If your agent
+retrieves documents, pass a third transform, `trace_context_transform`, to extract them:
+
+```python
+from opik.evaluation import evaluate_threads
+from opik.evaluation.metrics import ConversationalCoherenceMetric
+
+results = evaluate_threads(
+    project_name="rag_chatbot",
+    filter_string='id = "0197ad2a"',
+    eval_project_name="rag_chatbot_evaluation",
+    metrics=[ConversationalCoherenceMetric()],
+    trace_input_transform=lambda x: x["input"],
+    trace_output_transform=lambda x: x["output"],
+    trace_context_transform=lambda trace: trace.metadata["retrieved_docs"],
+)
+```
+
+Unlike the other two transforms, which receive `trace.input` and `trace.output`, `trace_context_transform`
+receives the **whole trace object**, because the retrieved documents can be logged anywhere - in
+`trace.metadata`, `trace.output` or `trace.input`. It should return a list of strings, or `None` for turns
+with no context.
+
+The extracted context is attached to the agent message produced by the same trace:
+
+```json
+[
+    {
+        "role": "user",
+        "content": "input string from trace 1"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 1",
+        "context": ["document retrieved for trace 1"]
+    }
+]
+```
+
+<Note>
+`ConversationalCoherenceMetric` is context aware: the retrieved documents are shown to its judge as background,
+so it can make a better informed relevancy call - what it measures is unchanged. Metrics that don't need the
+context ignore it, and the built-in prompts render `role` and `content` explicitly, so adding a context
+transform never changes their scores. If you write
+your own context-aware metric, set that attribute on it - see the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric).
+</Note>
+
 #### Using filter string
 
 The `evaluate_threads` function takes a filter string as an argument. This string is used to select the threads that

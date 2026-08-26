@@ -79,6 +79,36 @@ Create the state a page needs through the bridge or SDK before you open the brow
 
 An empty project shows only the empty state; a dataset with no items shows only the "create item" CTA. If your page needs rows, sort order, or a pass/fail mix to be meaningful, the fixture must seed that shape. Reuse existing fixtures (`project`, `dataset`, `trace`, `experiment`, `testSuite`) where they fit; add a new one only when the shape genuinely differs. Verify teardown: some entities cascade with the project, some need explicit deletion — check and clean up what you create.
 
+**Adding a fixture is normal.** Extending `fixtures/` (or `core/backend/client.ts`) is
+the expected way to seed and tear down, not a scope overrun to apologise for. Reuse first;
+when nothing fits, add one.
+
+## Teardown belongs in a fixture, not in the test body
+
+If a test creates an entity, a fixture owns its deletion. Playwright runs fixture teardown
+whether the test passes, fails, or times out, so a fixture gets you the guarantee a
+`try`/`finally` is reaching for — without putting cleanup mechanics in the middle of the
+assertions, where it also escapes `test.step()` and so never appears in the trace or the
+Allure timeline.
+
+Two shapes, depending on when the id exists:
+
+- **Known upfront** — a plain fixture that seeds in setup and deletes after `use()`
+  (`project`, `dataset`, `experiment`, `bystanderExperiment`, …).
+- **Not known until mid-test** — a register-callback fixture: the test calls it the moment
+  the id exists, and the fixture drains its registry at teardown. See
+  `registerPromptCleanup` and `registerDatasetCleanup`. Reach for this when a test creates
+  something a seed fixture cannot predict, e.g. an entity recreated after a delete.
+
+A destructive-action test wants a **bystander** — a second entity it never touches — so
+that "the target disappeared" cannot also be satisfied by a delete that took the whole
+project. `bystanderExperiment`, `bystanderTestSuite` and `bystanderPrompt` exist for this.
+
+Beware ids that are not the id you think: the Python SDK's `create_prompt` returns the
+prompt **version** id, and `DELETE /v1/private/prompts/{id}` answers 404 for it — so
+teardown registered with that id silently leaks. Resolve via
+`backendClient.findPromptIdByName(name, projectId)`.
+
 ## Verify the test render before blaming the backend
 
 When something "isn't appearing," the usual cause is a DOM race (a loading spinner still up, an eventually-consistent write not yet landed), not a backend regression. Read the failure trace artifact first — `npx playwright show-trace` — and confirm the page actually finished rendering before concluding the data is missing. For genuinely async state (online scoring rules, ingestion lag), poll with `expect.poll(...)` rather than a fixed `setTimeout`.
@@ -137,5 +167,3 @@ python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/covera
 ```
 
 Expect `0 problem(s)`. Full grammar: `tests_end_to_end/TESTING-TAGS.md`.
-
-**Exception — release-gate specs.** Dev-authored release-gate tests are the one case that does *not* follow the rules above: they live at `tests/_release-gate/<lead-ticket>.spec.ts` (not `tests/<feature>/`) and carry `@release-gate` + `@release-gate:<version>` instead of a tier tag, so they stay out of the curated `@t1-smoke`/`@t2-cuj`/`@t3-nightly` suites. They are governed by `.agents/skills/explore-feature/release-gate-contract.md`, not this file. If you're following these conventions, treat a spec under `_release-gate/` as intentional, not a violation.
