@@ -1,0 +1,15 @@
+name: star-history
+
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: "Start a new series from the committed seed. First publish only."
+        type: boolean
+        default: false
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Placeholder. Real implementation is on the DND-1580 branch."
