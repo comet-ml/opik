@@ -1635,13 +1635,16 @@ def evaluate_resume(
         previous_test_results=previous_test_results,
     )
 
-    # Log only the merged set so a failed aggregate cannot leave a stale slice score.
+    # Log merged aggregates while preserving persisted scores not recomputed here.
     merged_scores = evaluation_result.compute_experiment_scores(
         experiment_scoring_functions=experiment_scoring_functions,
         test_results=merged.test_results,
     )
-    if experiment_scoring_functions:
-        context.experiment.log_experiment_scores(score_results=merged_scores)
+    if merged_scores:
+        context.experiment.log_experiment_scores(
+            score_results=merged_scores,
+            preserve_unrelated=True,
+        )
     merged.experiment_scores = merged_scores
 
     return merged

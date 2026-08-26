@@ -419,6 +419,7 @@ class TestMergeWithPreviouslyCompleted:
         logged_kwargs = context.experiment.log_experiment_scores.call_args.kwargs
         assert logged_kwargs["score_results"][0].name == "mean_equals"
         assert logged_kwargs["score_results"][0].value == 0.5
+        assert logged_kwargs["preserve_unrelated"] is True
         assert mock_evaluate_task.call_args.kwargs["log_experiment_scores"] is False
 
     def test_failed_aggregate_clears_previous_backend_value(self):
@@ -459,7 +460,8 @@ class TestMergeWithPreviouslyCompleted:
 
         assert result.experiment_scores[0].scoring_failed is True
         context.experiment.log_experiment_scores.assert_called_once_with(
-            score_results=result.experiment_scores
+            score_results=result.experiment_scores,
+            preserve_unrelated=True,
         )
 
 

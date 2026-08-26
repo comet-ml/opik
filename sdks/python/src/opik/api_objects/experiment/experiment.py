@@ -322,9 +322,21 @@ class Experiment:
     def log_experiment_scores(
         self,
         score_results: List["score_result.ScoreResult"],
+        *,
+        preserve_unrelated: bool = False,
     ) -> None:
         """Log experiment-level scores to the backend."""
         experiment_scores: List[rest_api_types.ExperimentScore] = []
+        recomputed_names = {score_result_.name for score_result_ in score_results}
+
+        if preserve_unrelated:
+            existing_experiment = self.get_experiment_data()
+            existing_scores = existing_experiment.experiment_scores or []
+            experiment_scores.extend(
+                rest_api_types.ExperimentScore(name=score.name, value=score.value)
+                for score in existing_scores
+                if score.name not in recomputed_names
+            )
 
         for score_result_ in score_results:
             if score_result_.scoring_failed:
