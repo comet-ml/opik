@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.db;
+package com.comet.opik.infrastructure.db.healthchecks;
 
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.QueryResponse;
@@ -15,7 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import static com.comet.opik.infrastructure.db.AbstractClickHouseHealthCheck.SELECT_1_QUERY;
+import static com.comet.opik.infrastructure.db.healthchecks.AbstractClickHouseHealthCheck.SELECT_1_QUERY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;

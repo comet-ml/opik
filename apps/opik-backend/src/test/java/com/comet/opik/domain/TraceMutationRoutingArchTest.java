@@ -1,9 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
+import com.comet.opik.infrastructure.db.healthchecks.ClickHouseTracesTopologyHealthCheck;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
-import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaCodeUnit;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -15,6 +16,7 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
+import static com.tngtech.archunit.core.domain.JavaConstructor.CONSTRUCTOR_NAME;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 
@@ -41,6 +43,14 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
  * method of the same name satisfy the exemption — an {@code OtherDao#tracesDistributedWrapEnabled()} reading the config
  * directly would have passed, which is precisely the second reader these rules exist to forbid.
  *
+ * <p><b>The one other permitted reader is {@link ClickHouseTracesTopologyHealthCheck}, and only because it routes
+ * nothing.</b> What the first rule protects is the routing decision: a second place that branches on the flag is a
+ * second place that can name the wrong table. The probe branches on it to <em>assert</em> it against the live
+ * {@code system.tables} topology and report a mismatch at readiness — it issues no mutation and picks no table, so it
+ * cannot get the read/mutate split wrong. It is exempted by name on its own class, like the DAO accessor, so this is an
+ * allowlist of two rather than a loosened rule; a third reader still fails the build. The exemption is on its
+ * constructor because the flag is read once at injection.
+ *
  * <p><b>Deliberately no {@code allowEmptyShould}</b>, unlike {@link TraceDeletionEventArchTest}: these rules select the
  * guarded method rather than its callers, so an empty selection means the method was renamed or removed and the rule is
  * no longer guarding anything. Failing then is the point.
@@ -52,26 +62,34 @@ class TraceMutationRoutingArchTest {
     private static final String RESOLVER = "tracesMutationTable";
 
     /**
-     * Exactly one method: the named one on the named class. Matching by name alone would exempt any class that happened
-     * to declare a method of that name, which is the very thing these rules forbid.
+     * Exactly one code unit: the named one on the named class. Matching by name alone would exempt any class that
+     * happened to declare a member of that name, which is the very thing these rules forbid. Typed on
+     * {@link JavaCodeUnit} rather than {@code JavaMethod} so the same helper can name a constructor
+     * ({@link #CONSTRUCTOR_NAME}); it still satisfies {@code byMethodsThat}, since a method is a code unit.
      */
-    private static DescribedPredicate<JavaMethod> only(Class<?> owner, String methodName) {
-        return DescribedPredicate.describe("%s.%s".formatted(owner.getSimpleName(), methodName),
-                method -> method.getOwner().isEquivalentTo(owner) && method.getName().equals(methodName));
+    private static DescribedPredicate<JavaCodeUnit> only(Class<?> owner, String memberName) {
+        return DescribedPredicate.describe("%s.%s".formatted(owner.getSimpleName(), memberName),
+                codeUnit -> codeUnit.getOwner().isEquivalentTo(owner) && codeUnit.getName().equals(memberName));
     }
 
     /**
-     * The flag itself is read only by {@code TraceDAOImpl}'s accessor of the same name, whose Javadoc carries the
-     * read/mutate split and the migration rules. A second reader is a second place that can get those wrong.
+     * The flag is read by {@code TraceDAOImpl}'s accessor of the same name, whose Javadoc carries the read/mutate split
+     * and the migration rules, and by the readiness probe that asserts it against the live topology. A third reader is
+     * a third place that can get the split wrong. {@code byCodeUnitsThat} rather than {@code byMethodsThat} because the
+     * probe reads the flag in its constructor, and a constructor is not a {@code JavaMethod} — so the method-only form
+     * could never have admitted it, only reported it.
      */
     @ArchTest
-    static final ArchRule the_wrap_flag_is_read_in_exactly_one_place = methods()
+    static final ArchRule the_wrap_flag_is_read_only_by_the_dao_accessor_and_the_readiness_probe = methods()
             .that().areDeclaredIn(DatabaseAnalyticsDataModelConfig.class)
             .and().haveName(CONFIG_FLAG)
-            .should().onlyBeCalled().byMethodsThat(only(TraceDAOImpl.class, CONFIG_FLAG))
+            .should().onlyBeCalled().byCodeUnitsThat(only(TraceDAOImpl.class, CONFIG_FLAG)
+                    .or(only(ClickHouseTracesTopologyHealthCheck.class, CONSTRUCTOR_NAME)))
             .because("""
                     the sharding-readiness wrap flag must be read only by TraceDAOImpl#tracesDistributedWrapEnabled, \
-                    which documents what the two topologies imply for reads, mutations and migrations
+                    which documents what the two topologies imply for reads, mutations and migrations, and by \
+                    ClickHouseTracesTopologyHealthCheck, which asserts the flag against the live `traces` engine and \
+                    routes nothing
                     """);
 
     /**
