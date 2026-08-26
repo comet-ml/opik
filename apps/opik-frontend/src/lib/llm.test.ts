@@ -98,6 +98,12 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
   it("preserves a deliberate empty-string mapping rather than re-applying the sentinel", () => {
     // Treating "" as "not set" would silently clobber an API caller's explicit
     // `spans: ""` on every prompt re-parse.
+    //
+    // Note this state is reachable only via the API: the rule dialog's own schema
+    // rejects an empty mapping value (`.min(1)` plus the JSONPath/sentinel regex in
+    // AddEditRuleDialog/schema.ts), so the editor will not produce or re-submit one.
+    // The resolver still must not rewrite it — preserving a value it cannot author is
+    // what keeps an API-created rule's prompt re-parse non-destructive.
     expect(
       resolveTraceEvaluatorVariableDefault(
         "spans",

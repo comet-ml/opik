@@ -110,8 +110,8 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .onErrorResume(error -> {
-                    log.warn("Span-size aggregate failed for thread '{}'; scoring without span enrichment",
-                            threadId, error);
+                    log.warn("Span-size aggregate failed for workspace '{}' and thread '{}'; scoring without"
+                            + " span enrichment", workspaceId, threadId, error);
                     return Mono.just(SPAN_SIZE_UNAVAILABLE);
                 });
     }
