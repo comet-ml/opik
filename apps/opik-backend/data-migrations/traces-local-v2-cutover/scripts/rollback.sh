@@ -431,6 +431,11 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "pre-cutover shadow), the one irreversible step."
     echo
     echo "NEXT, on the restored original (see README 'Rolling back the traceColumnsNonNullable flip'):"
+    if [[ "$STAGE" == "C" ]]; then
+        echo "  0. Set databaseAnalyticsDataModel.tracesDistributedWrapEnabled=false and roll-restart. Stage C removed the"
+        echo "     wrapper and parked 'traces_local', so a stale true sends trace DELETEs at a table that no longer exists"
+        echo "     (Code 60 UNKNOWN_TABLE). Nothing else consults the flag, so the window is delete-path-only."
+    fi
     echo "  1. Set databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance."
     echo "     (Config push or rolling restart, whichever this deployment uses — the mechanism is outside these"
     echo "     DB-facing scripts by design; see the runbook, \"The only manual actions are not SQL\".)"

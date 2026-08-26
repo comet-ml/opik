@@ -1094,7 +1094,9 @@ through the replay, not merely across the rename. A failure *between* the two ne
 
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
-complete until they land.
+complete until they land. **After stage C specifically, `tracesDistributedWrapEnabled` must go back to `false` first**:
+the stage removed the wrapper and parked `traces_local`, so a stale `true` aims trace deletes at a table that no longer
+exists (`Code 60`). That is the second of the two flags the stage comparison table counts for stage C.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
    **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
