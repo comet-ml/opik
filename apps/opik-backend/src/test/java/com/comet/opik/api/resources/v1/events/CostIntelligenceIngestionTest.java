@@ -788,59 +788,44 @@ class CostIntelligenceIngestionTest {
             });
         }
 
-        @Test
-        @DisplayName("a malformed counter records 0 rather than a number that reads as real")
-        void malformedAgentCountersRecordZero() {
+        // A producer bug, a version skew, a hand-edited envelope: the field is PRESENT but is not a
+        // count. Nothing here may be laundered into a plausible number — the read has to decide,
+        // rather than let the column decide for it. Two kinds, kept as separately named cases
+        // because they are stopped by different guards and a failure has to say which one gave way.
+        @DisplayName("a counter that is present but unusable records 0, never a number that reads as real")
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                // Not a JSON number at all. The negative is the one with teeth: text and a boolean
+                // parse to 0 anyway, while ClickHouse takes a UInt32 modulo 2^32, so -5 would land
+                // as 4294967291 and read as real.
+                "malformed  | \"not-a-number\" | -5  | true",
+                // The one malformed shape that IS a JSON number, so it reaches further than the
+                // others: canConvertToLong() is true for 1.5, so only the isIntegralNumber() guard
+                // stops asLong() truncating a count to a perfectly plausible 1.
+                "fractional | 1.5              | 2.9 | 3000000000.5",
+        })
+        void presentButUnusableAgentCountersRecordZero(String kind, String dispatched, String linked,
+                String ambiguous) {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
             String userUuid = UUID.randomUUID().toString();
             String email = "dev-" + UUID.randomUUID() + "@acme.com";
 
-            // A producer bug, a version skew, a hand-edited envelope: the field is PRESENT but is not
-            // a count. Nothing here may be laundered into a plausible number — a negative would wrap
-            // to a huge UInt32 and text would parse to 0 either way, so the read has to decide rather
-            // than let the column decide for it.
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "\"not-a-number\"", "-5", "true"))
+                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, dispatched, linked, ambiguous))
                     .build();
             traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
 
+            // The case name is repeated into every description: awaitility reports the last assertion
+            // error on timeout, and that message is what names the input that gave way.
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var row = getCipxIdentity(trace.id(), ws.workspaceId());
                 assertThat(row).as("the row still lands — one bad metric must not lose the identity").isPresent();
-                assertThat(row.get().agentsDispatched()).as("textual agents_dispatched records 0").isEqualTo(0L);
-                assertThat(row.get().agentsLinked()).as("negative agents_linked records 0, not 4294967291")
+                assertThat(row.get().agentsDispatched()).as("[%s] agents_dispatched=%s", kind, dispatched)
                         .isEqualTo(0L);
-                assertThat(row.get().agentsAmbiguous()).as("boolean agents_ambiguous records 0").isEqualTo(0L);
-            });
-        }
-
-        @Test
-        @DisplayName("a fractional counter records 0 rather than truncating to a plausible count")
-        void fractionalAgentCountersRecordZero() {
-            var ws = newWorkspace();
-            String projectName = "cipx-" + UUID.randomUUID();
-            String userUuid = UUID.randomUUID().toString();
-            String email = "dev-" + UUID.randomUUID() + "@acme.com";
-
-            // The one malformed shape that IS a JSON number, so it reaches further than the others:
-            // these are dispatch counts, and a count is never fractional. Truncating 1.5 to 1 is the
-            // quietest form of the failure the whole helper exists to prevent — unlike text or a
-            // boolean, the result looks exactly like a count the producer meant to send.
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "1.5", "2.9", "3000000000.5"))
-                    .build();
-            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
-
-            await().atMost(30, SECONDS).untilAsserted(() -> {
-                var row = getCipxIdentity(trace.id(), ws.workspaceId());
-                assertThat(row).as("the row still lands — one bad metric must not lose the identity").isPresent();
-                assertThat(row.get().agentsDispatched()).as("agents_dispatched 1.5 records 0, not 1").isEqualTo(0L);
-                assertThat(row.get().agentsLinked()).as("agents_linked 2.9 records 0, not 2").isEqualTo(0L);
-                assertThat(row.get().agentsAmbiguous())
-                        .as("agents_ambiguous 3000000000.5 records 0, not 3000000000")
+                assertThat(row.get().agentsLinked()).as("[%s] agents_linked=%s", kind, linked).isEqualTo(0L);
+                assertThat(row.get().agentsAmbiguous()).as("[%s] agents_ambiguous=%s", kind, ambiguous)
                         .isEqualTo(0L);
             });
         }
