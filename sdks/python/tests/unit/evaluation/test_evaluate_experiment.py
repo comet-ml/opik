@@ -235,6 +235,54 @@ def test_evaluate_experiment__deduplicates_successful_scores(fake_backend):
     )
 
 
+@pytest.mark.parametrize("invalid_score", [None, object()])
+def test_evaluate_experiment__records_invalid_scores(fake_backend, invalid_score):
+    mock_experiment = _make_mock_experiment()
+    mock_dataset = _make_mock_dataset()
+    test_cases = [_make_test_case()]
+    mock_test_results = [mock.Mock(score_results=[])]
+
+    def compute_scores(_):
+        return [invalid_score]
+
+    with mock.patch.object(
+        rest_operations,
+        "get_experiment_with_unique_name",
+        return_value=mock_experiment,
+    ):
+        with mock.patch.object(
+            opik_client.Opik, "get_dataset", return_value=mock_dataset
+        ):
+            with mock.patch.object(
+                rest_operations, "get_experiment_test_cases", return_value=test_cases
+            ):
+                with mock.patch.object(
+                    rest_operations,
+                    "get_trace_project_name",
+                    return_value="test-project",
+                ):
+                    with mock.patch.object(
+                        url_helpers,
+                        "get_experiment_url_by_id",
+                        return_value="http://example.com/exp",
+                    ):
+                        with mock.patch.object(
+                            engine.EvaluationEngine,
+                            "score_test_cases",
+                            return_value=mock_test_results,
+                        ):
+                            result = evaluation.evaluate_experiment(
+                                experiment_name="exp-name",
+                                scoring_metrics=[],
+                                experiment_scoring_functions=[compute_scores],
+                                verbose=0,
+                            )
+
+    assert len(result.experiment_scores) == 1
+    assert result.experiment_scores[0].scoring_failed is True
+    assert "expected ScoreResult" in result.experiment_scores[0].reason
+
+
 def test_evaluate_experiment__with_experiment_id__uses_get_by_id(fake_backend):
     mock_experiment = _make_mock_experiment(id="explicit-exp-id")
     mock_dataset = _make_mock_dataset()

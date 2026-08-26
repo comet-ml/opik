@@ -27,9 +27,34 @@ def compute_experiment_scores(
             scores = score_function(test_results)
             # Handle Union[ScoreResult, List[ScoreResult]]
             if isinstance(scores, list):
-                all_scores.extend(scores)
-            else:
+                all_scores.extend(
+                    score
+                    if isinstance(score, score_result.ScoreResult)
+                    else score_result.ScoreResult(
+                        name=getattr(score_function, "__name__", type(score_function).__name__),
+                        value=0.0,
+                        reason=(
+                            "Experiment scoring function returned "
+                            f"{type(score).__name__}; expected ScoreResult."
+                        ),
+                        scoring_failed=True,
+                    )
+                    for score in scores
+                )
+            elif isinstance(scores, score_result.ScoreResult):
                 all_scores.append(scores)
+            else:
+                all_scores.append(
+                    score_result.ScoreResult(
+                        name=getattr(score_function, "__name__", type(score_function).__name__),
+                        value=0.0,
+                        reason=(
+                            "Experiment scoring function returned "
+                            f"{type(scores).__name__}; expected ScoreResult."
+                        ),
+                        scoring_failed=True,
+                    )
+                )
         except Exception as e:
             LOGGER.warning(
                 "Failed to compute experiment score: %s",

@@ -62,11 +62,28 @@ MODALITY_SUPPORT_DOC_URL = (
 
 
 def _deduplicate_experiment_scores(
-    scores: List[score_result.ScoreResult],
+    scores: List[object],
 ) -> List[score_result.ScoreResult]:
     deduplicated: List[score_result.ScoreResult] = []
     successful_positions: Dict[str, int] = {}
     for score in scores:
+        if not isinstance(score, score_result.ScoreResult):
+            LOGGER.warning(
+                "Experiment scoring function returned %s; marking the score as failed.",
+                type(score).__name__,
+            )
+            deduplicated.append(
+                score_result.ScoreResult(
+                    name="invalid_experiment_score",
+                    value=0.0,
+                    reason=(
+                        "Experiment scoring function returned "
+                        f"{type(score).__name__}; expected ScoreResult."
+                    ),
+                    scoring_failed=True,
+                )
+            )
+            continue
         if score.scoring_failed:
             deduplicated.append(score)
             continue
