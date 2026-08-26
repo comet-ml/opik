@@ -3,8 +3,11 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.infrastructure.redaction.RedactionRule;
 import com.comet.opik.infrastructure.redaction.RedactionRules;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
@@ -37,7 +40,7 @@ public class RedactionConfig {
     @Data
     public static class Rule {
         @JsonProperty
-        private String regex;
+        @NotBlank private String regex;
 
         /** Empty is meaningful: it removes the match instead of replacing it. */
         @JsonProperty
@@ -48,6 +51,17 @@ public class RedactionConfig {
      * Parses and compiles the rule set. Called once at startup so a malformed regex or malformed JSON stops
      * the deployment rather than silently disabling redaction at request time.
      */
+    /**
+     * Enabled with nothing to apply would leave every response exactly as stored while the deployment believes
+     * its content is protected. Nothing about that is visible from outside: no error, no failed request. It is
+     * the same reasoning that makes a malformed regex fail startup rather than silently disabling redaction, and
+     * an empty rule set is the case that reasoning missed.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "redaction.rules must not be empty when redaction.enabled=true") public boolean isConfiguredWhenEnabled() {
+        return !enabled || (StringUtils.isNotBlank(rules) && !compile().isEmpty());
+    }
+
     public RedactionRules compile() {
         if (StringUtils.isBlank(rules)) {
             return RedactionRules.empty();
