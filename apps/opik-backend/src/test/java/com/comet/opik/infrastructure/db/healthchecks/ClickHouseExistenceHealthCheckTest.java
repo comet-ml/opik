@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.db;
+package com.comet.opik.infrastructure.db.healthchecks;
 
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.GenericRecord;

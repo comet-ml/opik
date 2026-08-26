@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.db;
+package com.comet.opik.infrastructure.db.healthchecks;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;

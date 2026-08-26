@@ -154,6 +154,9 @@ databaseAnalyticsDataModel:
   #   `traces`. Post-wrap, changes to `traces` split by kind: row mutations (DELETE) + MATERIALIZE COLUMN/ADD INDEX/
   #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
+  #   This value is asserted against the live topology by the `clickhouse-traces-topology` readiness check below: set it
+  #   wrong in either direction and the backend fails readiness at startup with a message naming the flag and the
+  #   observed engine, rather than serving traffic whose trace deletes are guaranteed to fail.
   tracesDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED:-false}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
@@ -233,6 +236,27 @@ health:
     # Toggle-gated (databaseAnalytics.coldStorageDiskHealthCheckEnabled). Off by default so deployments without tier
     # storage are unaffected. When on, a node that can't reach the cold_s3 S3 disk must be pulled from rotation.
     - name: clickhouse-cold-storage-disk
+      critical: true
+      type: ready
+    # Fail-fast assertion that databaseAnalyticsDataModel.tracesDistributedWrapEnabled matches the actual `traces`
+    # topology: flag on -> `traces` is Distributed and `traces_local` exists; flag off -> `traces` is any engine of the
+    # MergeTree family that takes mutations directly - the check matches on the `MergeTree` suffix, so MergeTree,
+    # ReplicatedMergeTree and ClickHouse Cloud's SharedMergeTree variants all satisfy it. Not toggle-gated on
+    # purpose — flag off over a MergeTree `traces` is the default
+    # everywhere, so only a genuine misconfiguration trips it, and either mismatch direction breaks trace deletes
+    # (code 36/48 one way, 60 the other) with no symptom until the first delete. Critical so such an install is pulled
+    # from rotation instead of serving traffic it cannot mutate; re-evaluated continuously, so it clears itself once
+    # the operator brings flag and topology back in step. Note that `critical: true` also gates /is-alive/ping, which
+    # ignores `type` (IsAliveResource filters on isCritical alone) - so a mismatch reports the server as down to SDKs,
+    # exactly as the `clickhouse`, `db`, `redis` and `mysql` ready checks above already do. That is intended here: the
+    # install is misconfigured and needs an operator, and buffering beats accepting traffic it cannot fully serve.
+    # Scope is the node that answers: `system.tables` is node-local and the probe does not fan out with
+    # clusterAllReplicas, which needs REMOTE + CLUSTER grants the app user isn't guaranteed to hold and would take
+    # every pod out of rotation whenever a single replica is unreachable. So a divergence confined to some replicas
+    # (an ON CLUSTER DDL still propagating, or one that failed on a host) degrades into sporadic unhealthy reports
+    # rather than a fleet-wide outage; the cluster-wide "did this DDL reach every replica" gate lives in the cutover's
+    # exchange_and_wrap.sh / finalize.sh, and the self-host troubleshooting page carries the query for operators.
+    - name: clickhouse-traces-topology
       critical: true
       type: ready
     - name: mysql
