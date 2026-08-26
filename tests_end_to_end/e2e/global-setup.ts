@@ -4,7 +4,7 @@ import { chromium } from '@playwright/test';
 import { loadEnvConfig, type EnvConfig } from './config/env.config';
 import { makeBackendClient } from './core/backend';
 import { deleteCometUser, loginCometUserRaw } from './core/comet/client';
-import { readStalePendingUsers, clearPendingUsersFile } from './core/comet/pending-users-registry';
+import { readStalePendingUsers, clearPendingUser } from './core/comet/pending-users-registry';
 
 const E2E_DIR = __dirname;
 const RUN_ID_MARKER = path.resolve(E2E_DIR, '.e2e-run-id');
@@ -268,18 +268,26 @@ async function globalSetup() {
   // listing — sweepOrphans above can't reach them. readStalePendingUsers
   // reads whatever workspace-role-member.fixture.ts's own crash-recovery
   // registry left behind by a run that never got to its own teardown (>6h
-  // old, so a run still in progress is never touched).
+  // old, so a run still in progress is never touched), scoped to this env's
+  // own deleteUserBaseUrl so a registry left by a different environment is
+  // never acted on.
   if (finalEnv.deleteUserApiKey && finalEnv.deleteUserBaseUrl) {
     try {
-      const staleUsers = await readStalePendingUsers(ORPHAN_MAX_AGE_MS);
+      const staleUsers = await readStalePendingUsers(ORPHAN_MAX_AGE_MS, finalEnv.deleteUserBaseUrl);
       if (staleUsers.length > 0) {
+        let sweptCount = 0;
         for (const username of staleUsers) {
-          await deleteCometUser(username).catch((err) =>
-            console.warn(`[global-setup] could not delete orphaned role user "${username}":`, err),
-          );
+          try {
+            await deleteCometUser(username);
+            await clearPendingUser(username);
+            sweptCount++;
+          } catch (err) {
+            // Left in the registry — an unconfirmed delete must not be
+            // forgotten, or the next run's sweep can never retry it.
+            console.warn(`[global-setup] could not delete orphaned role user "${username}":`, err);
+          }
         }
-        await clearPendingUsersFile();
-        console.log(`[global-setup] Swept ${staleUsers.length} orphaned role user(s) (>6h old)`);
+        if (sweptCount > 0) console.log(`[global-setup] Swept ${sweptCount} orphaned role user(s) (>6h old)`);
       }
     } catch (e) {
       console.warn('[global-setup] orphaned role user sweep warning (continuing):', e);

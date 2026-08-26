@@ -89,9 +89,10 @@ async function provisionMember(
   adminContext: BrowserContext,
   workspaceId: string,
   role: WorkspaceRoleId,
+  pendingUsersTarget: string,
 ): Promise<WorkspaceRoleMember> {
   const credentials = await signUpCometUser(ROLE_PREFIX[role]);
-  await registerPendingUser(credentials.username);
+  await registerPendingUser(credentials.username, pendingUsersTarget);
   try {
     await addUserToWorkspace(adminContext.request, workspaceId, credentials.username);
     await assignWorkspaceRole(adminContext.request, credentials.username, workspaceId, role);
@@ -163,11 +164,12 @@ export const test = base.extend<{ trackLeaveFailures: void }, WorkspaceRoleFixtu
       const workspaceName = envConfig.adminWorkspace!;
       const { organizationId, workspaceId } = await getWorkspaceIds(adminContext.request, workspaceName);
 
+      const pendingUsersTarget = envConfig.deleteUserBaseUrl!;
       const results = await Promise.allSettled([
-        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.MANAGE),
-        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.WRITE),
-        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.ANNOTATE),
-        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.READ),
+        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.MANAGE, pendingUsersTarget),
+        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.WRITE, pendingUsersTarget),
+        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.ANNOTATE, pendingUsersTarget),
+        provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.READ, pendingUsersTarget),
       ]);
 
       const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
