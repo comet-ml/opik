@@ -328,12 +328,19 @@ class ReadTimeRedactionResourceTest {
                 .contains("[EMAIL]")
                 .contains("[PHONE]");
 
-        // The same job read through the synchronous endpoint, which the interceptor has always covered: the two
-        // representations of one job have to agree, and before the decision travelled with the request they did
-        // not.
-        var fetched = runnersClient.getJob(jobId, MEMBER_API_KEY, WORKSPACE_NAME);
+        // The same job as a permitted caller sees it, which bounds what redaction was allowed to touch: every
+        // other field has to survive intact. Asserting only on inputs() would pass just as well if the rules
+        // had also rewritten agent_name, blueprint_name or the metadata on their way out.
+        var stored = runnersClient.getJob(jobId, ADMIN_API_KEY, WORKSPACE_NAME);
 
-        assertThat(fetched.inputs()).isEqualTo(polled.inputs());
+        assertThat(stored.inputs().toString()).contains(EMAIL).contains(PHONE);
+        assertThat(polled).isEqualTo(stored.toBuilder().inputs(polled.inputs()).build());
+
+        // And the two representations of one job have to agree with each other, which is the part that a
+        // thread-bound decision got wrong: before it travelled with the request, only the synchronous read
+        // was masked.
+        assertThat(runnersClient.getJob(jobId, MEMBER_API_KEY, WORKSPACE_NAME).inputs())
+                .isEqualTo(polled.inputs());
     }
 
     @Test
@@ -342,14 +349,19 @@ class ReadTimeRedactionResourceTest {
         // Failing closed on the async path instead of carrying the decision rewrote this response too, for a
         // caller who is allowed to see it and whose permission was never consulted.
         UUID runnerId = connectRunner(ADMIN_API_KEY);
-        createJobWithPii(runnerId, ADMIN_API_KEY);
+        UUID jobId = createJobWithPii(runnerId, ADMIN_API_KEY);
 
+        LocalRunnerJob polled;
         try (var response = runnersClient.callNextJob(runnerId, ADMIN_API_KEY, WORKSPACE_NAME)) {
             assertThat(response.getStatus()).isEqualTo(200);
-            assertThat(response.readEntity(LocalRunnerJob.class).inputs().toString())
-                    .contains(EMAIL)
-                    .contains(PHONE);
+            polled = response.readEntity(LocalRunnerJob.class);
         }
+
+        assertThat(polled.inputs().toString()).contains(EMAIL).contains(PHONE);
+
+        // Whole job, not just inputs: "reaches a permitted caller as stored" is a claim about the entire
+        // response, and the interceptor either leaves it alone or it does not.
+        assertThat(polled).isEqualTo(runnersClient.getJob(jobId, ADMIN_API_KEY, WORKSPACE_NAME));
     }
 
     @Test
