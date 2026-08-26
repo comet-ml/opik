@@ -73,7 +73,11 @@ public class Streamer {
 
     private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
         try {
-            outputStream.write(JsonNodeRedactor.redact(JsonUtils.readTree(item), rules, item.getClass()));
+            // deepCopy: JsonUtils.readTree is convertValue, which returns the same instance when handed a
+            // JsonNode, and the redactor rewrites in place. Today every caller passes a POJO so the tree is
+            // already fresh, but a future Flux<JsonNode> would have its source mutated underneath it, silently.
+            outputStream.write(JsonNodeRedactor.redact(JsonUtils.readTree(item).deepCopy(), rules,
+                    item.getClass()));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
