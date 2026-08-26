@@ -97,6 +97,27 @@ class MatchBudgetTest {
     }
 
     @Test
+    @DisplayName("the budget is bounded above as well as below, so the largest value cannot buy 20s of CPU")
+    void theBudgetIsBoundedAboveAsWellAsBelow() {
+        // 100 accesses per character is unbounded in the one variable a caller controls: at the 100 MB
+        // jacksonConfig.maxStringLength permits, it is 10.5 billion accesses, ~20s on a request thread.
+        int maxStringLength = 104_857_600;
+
+        assertThat(MatchBudget.limitFor(maxStringLength)).isEqualTo(1_000_000_000L);
+        // Still generous where it binds: ~9.5 accesses per character at that size, against the 1.0-3.2 a
+        // legitimate anchored rule was measured to use.
+        assertThat((double) MatchBudget.limitFor(maxStringLength) / maxStringLength).isGreaterThan(9.0);
+    }
+
+    @Test
+    @DisplayName("the ceiling does not bind on the values the scaled allowance was written for")
+    void theCeilingDoesNotBindOnOrdinaryValues() {
+        assertThat(MatchBudget.limitFor(0)).isEqualTo(100_000L);
+        assertThat(MatchBudget.limitFor(1_000)).isEqualTo(100_000L);
+        assertThat(MatchBudget.limitFor(5_000_000)).isEqualTo(500_000_000L);
+    }
+
+    @Test
     @DisplayName("a replacement is emitted literally, not with its own escaping visible")
     void aReplacementIsEmittedLiterally() {
         // Matcher.quoteReplacement escapes $ and \ for appendReplacement to undo. Appending the quoted form

@@ -15,7 +15,9 @@ import lombok.NonNull;
  * Anchoring the pattern removes it, which is why the configuration says to. Advice is not a control, though, so
  * this makes the bound real: the matcher reads the value through a {@link CharSequence} that counts accesses and
  * aborts past a budget. On real payloads the counting costs about 4%, because the values are short; the runaway
- * case stops in single-digit milliseconds regardless of how long the input is.
+ * case stops after the budget's worth of accesses however long the input is, which is why the budget has a
+ * ceiling as well as a floor - measured, an access costs about 2 ns, so what the ceiling buys is the difference
+ * between about a second and about twenty.
  * <p>
  * Aborting {@link #EXCEEDED} means the value is masked whole rather than returned: a rule that could not be
  * evaluated is not evidence that the value is safe to show.
@@ -31,7 +33,7 @@ record MatchBudget(long limit) {
      * exceeds it almost immediately - at 32 KB the quadratic case wants ~500M accesses against an allowance of
      * ~3M.
      * <p>
-     * Scaled rather than absolute because an absolute ceiling fails closed on size alone:
+     * Scaled rather than absolute because a purely absolute ceiling fails closed on size alone:
      * {@code jacksonConfig.maxStringLength} permits 100 MB, so a fixed 2M budget would destroy a perfectly
      * anchored 5 MB value that contains no match at all, purely from the forward scan.
      */
@@ -40,8 +42,28 @@ record MatchBudget(long limit) {
     /** Floor, so a short value still gets room for legitimate backtracking. */
     private static final long MINIMUM = 100_000L;
 
+    /**
+     * Ceiling, so the largest permitted value cannot buy a correspondingly large amount of CPU.
+     * <p>
+     * The scaled allowance alone is unbounded in the only variable a caller controls: {@code maxStringLength}
+     * permits a 100 MB value, which at 100 accesses per character is 10.5 billion accesses - measured at ~2 ns
+     * each, some 20 seconds on a request thread, per rule, for one read. Capping the count caps the time.
+     * <p>
+     * Set where it cannot reach a legitimate rule. Measured over 10 MB values, the anchored patterns the
+     * configuration recommends - e-mail, telephone, card, JWT - consume between 1.0 and 3.2 accesses per
+     * character, matching or not. A billion leaves ~9.5 per character at the largest value {@code
+     * maxStringLength} allows and does not bind at all below 10 MB, where the scaled allowance is the smaller of
+     * the two; the worst case it admits is about two seconds rather than twenty.
+     */
+    private static final long CEILING = 1_000_000_000L;
+
     static MatchBudget forValue(@NonNull String value) {
-        return new MatchBudget(Math.max(MINIMUM, ALLOWANCE_PER_CHARACTER * value.length()));
+        return new MatchBudget(limitFor(value.length()));
+    }
+
+    /** Split out so the bounds can be asserted without allocating a 100 MB string to assert them against. */
+    static long limitFor(int length) {
+        return Math.min(CEILING, Math.max(MINIMUM, ALLOWANCE_PER_CHARACTER * length));
     }
 
     /** Thrown and caught inside a single {@code apply}; carries no stack trace, since nothing inspects it. */
