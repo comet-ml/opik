@@ -66,8 +66,8 @@ public class Streamer {
                     ? redactionService.rules()
                     : RedactionRules.empty();
         } catch (RuntimeException outsideRequestScope) {
-            // No caller to decide against: redact, because this path cannot prove the reader is permitted.
-            return redactionService.rules();
+            // See RedactionService.redactWhenCallerUnknown - one definition, consulted by both write paths.
+            return redactionService.redactWhenCallerUnknown() ? redactionService.rules() : RedactionRules.empty();
         }
     }
 

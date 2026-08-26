@@ -54,6 +54,17 @@ public class RedactionService {
      * Whether this caller's responses must be redacted. Holding the original-data permission exempts them;
      * everyone else is redacted, so an empty or unresolved permission set means redacted.
      */
+    /**
+     * What to do when there is no caller to decide against - a response written outside a request scope.
+     * <p>
+     * Defined once because the two places that faced it answered it differently: the writer interceptor wrote
+     * values as stored, the streamer redacted them. Redacting is the answer, since a path that cannot establish
+     * who is reading cannot establish that the reader is permitted.
+     */
+    public boolean redactWhenCallerUnknown() {
+        return isEnabled();
+    }
+
     public boolean shouldRedactFor(Set<String> permissions) {
         return isEnabled()
                 && (permissions == null

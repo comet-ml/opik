@@ -46,8 +46,9 @@ public class RedactionWriterInterceptor implements WriterInterceptor {
         try {
             return requestContext.get().isRedactResponse();
         } catch (RuntimeException outsideRequestScope) {
-            // Written outside a request (an error page, say): nothing to decide against, so write as stored.
-            return false;
+            // No caller to decide against. See RedactionService.redactWhenCallerUnknown for why this redacts
+            // rather than writing as stored, and why both paths now consult one definition of it.
+            return redactionService.redactWhenCallerUnknown();
         }
     }
 }
