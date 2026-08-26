@@ -27,6 +27,7 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
     @Mapping(expression = "java(Boolean.FALSE)", target = "returnThinking")
+    @Mapping(expression = "java(GeminiThinkingConfigMapper.fromCustomParameters(request.customParameters()))", target = "thinkingConfig")
     GoogleAiGeminiChatModel toGeminiChatModel(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
             boolean logRequests, boolean logResponses);
@@ -37,6 +38,7 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
     @Mapping(expression = "java(Boolean.FALSE)", target = "returnThinking")
+    @Mapping(expression = "java(GeminiThinkingConfigMapper.fromCustomParameters(request.customParameters()))", target = "thinkingConfig")
     GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
             boolean logRequests, boolean logResponses);
