@@ -13,7 +13,7 @@ from opik.configurator.interactive_helpers import (
     ask_user_for_approval_default_no,
     is_interactive,
 )
-from opik.configurator import assistants as assistant_policy
+from opik.configurator import consent
 from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
 from opik.configurator import skills
@@ -153,19 +153,16 @@ class OpikConfigurator:
     def _skills_host_keys(self) -> Optional[List[str]]:
         """Hosts to install the skill pack for, or ``None`` to skip."""
         detected = skills.detected_host_keys()
-        decision = assistant_policy.skills_decision(
-            install_skills=self.install_skills,
-            automatic_approvals=self.automatic_approvals,
+        verdict = consent.resolve(
+            self.install_skills,
+            assume_yes=self.automatic_approvals,
             interactive=is_interactive(),
-            detected=detected,
+            anything_detected=len(detected) > 0,
         )
-        if decision is assistant_policy.Decision.SKIP:
-            return None
-        if decision is assistant_policy.Decision.PROCEED:
-            return detected
-        return (
-            detected if ask_user_for_approval(assistant_policy.SKILLS_PROMPT) else None
+        granted = consent.granted(
+            verdict, lambda: ask_user_for_approval(consent.SKILLS_PROMPT)
         )
+        return detected if granted else None
 
     def _maybe_setup_mcp_server(self) -> None:
         if not self._should_setup_mcp_server():
@@ -188,25 +185,22 @@ class OpikConfigurator:
     def _should_setup_mcp_server(self) -> bool:
         """Decide whether to offer registering the Opik MCP server.
 
-        The rules and the wording live in ``configurator.assistants``; this only
-        wires them to the configurator's state and does the asking.
+        The rules and the wording live in ``configurator.consent``; this only wires
+        them to the configurator's state and does the asking.
         """
         detected = mcp.detected_host_names()
-        decision = assistant_policy.mcp_decision(
-            install_mcp=self.install_mcp,
-            automatic_approvals=self.automatic_approvals,
+        verdict = consent.resolve(
+            self.install_mcp,
+            assume_yes=self.automatic_approvals,
             interactive=is_interactive(),
-            detected=detected,
+            anything_detected=len(detected) > 0,
         )
-        if decision is not assistant_policy.Decision.ASK:
-            return decision is assistant_policy.Decision.PROCEED
+        return consent.granted(verdict, lambda: self._ask_about_mcp(detected))
 
+    def _ask_about_mcp(self, detected: List[str]) -> bool:
+        """Ask, recording that the prompt already named the detected hosts."""
         self._mcp_prompt_named_detected_hosts = True
-        return ask_user_for_approval_default_no(assistant_policy.mcp_prompt(detected))
-
-    def _mcp_prompt(self) -> str:
-        """Kept as a seam for tests that assert on the prompt wording."""
-        return assistant_policy.mcp_prompt(mcp.detected_host_names())
+        return ask_user_for_approval_default_no(consent.mcp_prompt(detected))
 
     def _configure_cloud(self) -> None:
         """

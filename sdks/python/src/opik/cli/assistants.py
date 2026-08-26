@@ -4,33 +4,27 @@ Both ``opik mcp configure`` and the tail of ``opik configure`` do the same thing
 register the server, then offer the skill pack — so it lives here once rather than
 being assembled twice.
 
-The server goes in first and the pack is offered after it, rather than asking the
-user to choose between them up front: by the time the question arrives they can
-see what just happened, and the pack only makes sense for hosts the server was
-actually registered with.
+The two halves are independent: either can run without the other. They were welded
+together once, because the skill pack installs into the clients the server was just
+registered with, and reusing that list was easier than deriving it. The cost was
+that "skills but not the server" could not be expressed, so ``--no-install-mcp``
+silently registered the server anyway. The list now falls back to what is detected,
+which is what makes both halves optional.
 
-Kept in the CLI layer because it renders: ``configurator`` is reachable from
-``opik.configure()``, which is a library call and keeps its plain-text prompts.
+This module does not decide anything: ``configurator.consent`` does that, and the
+caller passes the answers in. Kept in the CLI layer because it renders —
+``configurator`` is reachable from ``opik.configure()``, which is a library call
+and keeps its plain-text prompts.
 """
 
-import logging
+import click
 from typing import Any, List, Mapping, NamedTuple, Optional
 
-import click
-
 from opik.cli import install_view
-from opik.configurator import interactive_helpers
+from opik.configurator import consent
 from opik.configurator import mcp as mcp_installer
 from opik.configurator import skills as skills_installer
-from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import roots as skills_roots
-
-LOGGER = logging.getLogger(__name__)
-
-SKILL_PACK_PITCH = (
-    "It teaches your assistant how to instrument code with Opik, wire up "
-    "integrations, and run test suites."
-)
 
 
 class Outcome(NamedTuple):
@@ -50,77 +44,85 @@ NOTHING_DONE = Outcome(clients=0, skills=False)
 
 def setup(
     setup_params: Mapping[str, Any],
-    force_local_server: bool = False,
+    *,
+    install_mcp: bool,
+    skills: consent.Verdict,
     host_keys: Optional[List[str]] = None,
-    skills_flag: Optional[bool] = None,
+    force_local_server: bool = False,
     assume_confirmed: bool = False,
 ) -> Outcome:
-    """Register the MCP server, then offer the skill pack for the same assistants.
+    """Register the MCP server and/or install the skill pack.
 
     ``setup_params`` is the connection block ``configurator.mcp`` needs — api key,
     workspace, base and api urls, deployment flags.
+
+    The skill-pack question is asked here rather than by the caller, because it
+    must land after the server's results table — see :func:`_ask_about_skill_pack`.
+
+    ``install_mcp`` is already resolved: the question names the clients it would
+    write to, so the caller asks it before this runs. ``skills`` arrives as a
+    verdict instead, because that question is deliberately asked *after* the
+    server's results table, so the user answers it with the outcome in front of
+    them.
     """
-    configured_hosts = mcp_installer.setup_mcp_server(
-        **dict(setup_params),
-        force_local_server=force_local_server,
-        host_keys=host_keys,
-        # `--install-mcp` names no client, so the flag itself is the consent that
-        # lets this run without a terminal, and it covers whatever is detected.
-        assume_confirmed=assume_confirmed,
-        view=install_view.RichInstallView(),
-        # The closing "restart your assistant" line is printed once, at the end of
-        # the whole step, rather than by each half.
-        announce_next_steps=False,
+    configured_hosts = (
+        mcp_installer.setup_mcp_server(
+            **dict(setup_params),
+            force_local_server=force_local_server,
+            host_keys=host_keys,
+            assume_confirmed=assume_confirmed,
+            view=install_view.RichInstallView(),
+            # The closing "restart your assistant" line is printed once, at the end
+            # of the whole step, rather than by each half.
+            announce_next_steps=False,
+        )
+        if install_mcp
+        else []
     )
 
-    if not configured_hosts:
-        # Nothing was registered, so there is no assistant to add a pack to and
-        # the installer has already explained why.
-        return NOTHING_DONE
+    # Where the pack goes: the clients we just registered, or — when the server
+    # step was declined or skipped — whatever is on this machine. An empty list is
+    # passed through rather than special-cased, because `setup_skills` already
+    # names the clients it could not place the pack in, and it is the part that
+    # knows which locations are supported.
+    skills_targets = configured_hosts or skills_installer.detected_host_keys()
 
     view = install_view.RichInstallView()
-    components = ["MCP server"]
-    skills_installed = False
+    installed_skills = False
 
-    if _wants_skill_pack(skills_flag, view):
+    if consent.granted(skills, _ask_about_skill_pack):
         with view.step("Fetching the Opik skill pack"):
-            result = skills_installer.setup_skills(configured_hosts)
-        if install_view.render_skill_pack(result, view):
-            components.append("skill pack")
-            skills_installed = True
+            result = skills_installer.setup_skills(skills_targets)
+        installed_skills = install_view.render_skill_pack(result, view)
 
-    view.done(components, skills_roots.display_names(configured_hosts))
-
-    return Outcome(clients=len(configured_hosts), skills=skills_installed)
-
-
-def _wants_skill_pack(skills_flag: Optional[bool], view: mcp_view.InstallView) -> bool:
-    """Whether to add the skill pack, asking only when the flags left it open.
-
-    Recommended, and so defaulted to yes: the server gives an assistant the tools
-    and the pack gives it the knowledge of how to use them, and the telemetry says
-    the second half is where installs stall.
-
-    Without a terminal there is nobody to ask, and asking anyway aborted the run
-    *after* the server had already been registered. An explicit ``--skills`` is
-    the asking in that case, exactly as ``--install-mcp`` is for the server.
-    """
-    if skills_flag is not None:
-        return skills_flag
-
-    if not interactive_helpers.is_interactive():
-        view.note(
-            "Skipping the Opik skill pack: no interactive terminal. Pass "
-            "`--skills` to install it without being asked."
+    components = [
+        name
+        for name, done in (
+            ("MCP server", bool(configured_hosts)),
+            ("skill pack", installed_skills),
         )
-        return False
+        if done
+    ]
+    if not components:
+        return NOTHING_DONE
 
-    # The assistants are not named again: the results table directly above this
-    # already lists them, and repeating three of them buries the question.
+    view.done(
+        components, skills_roots.display_names(configured_hosts or skills_targets)
+    )
+
+    return Outcome(clients=len(configured_hosts), skills=installed_skills)
+
+
+def _ask_about_skill_pack() -> bool:
+    """Offer the skill pack, once the server step's results are on screen.
+
+    The clients are not named again: the results table directly above this already
+    lists them, and repeating three of them buries the question.
+    """
     install_view.console.print()
     return click.confirm(
         click.style("Recommended", fg="green")
         + ": also install the Opik skill pack?\n"
-        + click.style(SKILL_PACK_PITCH, dim=True),
+        + click.style(consent.SKILL_PACK_PITCH, dim=True),
         default=True,
     )

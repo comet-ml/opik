@@ -2610,11 +2610,18 @@ class TestSkillsHostKeys:
 
     @patch("opik.configurator.configure.skills.detected_host_keys", return_value=[])
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__flag_but_nothing_detected__returns_none(
+    def test_skills_host_keys__flag_but_nothing_detected__returns_empty(
         self, mock_is_interactive, mock_detected
     ):
+        """An explicit request is honoured even with nothing to install into.
+
+        It used to skip silently, which left someone who passed
+        `install_skills=True` with no clue why nothing happened. The empty list
+        reaches `setup_skills`, which names the locations it knows and is the part
+        that actually knows them.
+        """
         configurator = OpikConfigurator(install_skills=True)
-        assert configurator._skills_host_keys() is None
+        assert configurator._skills_host_keys() == []
 
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]

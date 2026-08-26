@@ -10,7 +10,9 @@ import opik.url_helpers as url_helpers
 from opik import analytics
 from opik.cli import configure as configure_cli
 from opik.cli import assistants
+from opik.cli import install_view
 from opik.cli import status_view
+from opik.configurator import consent
 from opik.configurator import interactive_helpers
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
@@ -190,11 +192,29 @@ def configure(
                 "Opik configuration is still incomplete; aborting MCP install."
             )
 
+    # Running this command *is* the consent for the server — that is what the
+    # command does — so only the skill pack is still a question here.
+    skills_verdict = consent.resolve(
+        skills_flag,
+        # No `-y` on this command, and nothing to detect-or-not: a named client
+        # counts as something to install into even when it was not auto-detected.
+        assume_yes=False,
+        interactive=interactive_helpers.is_interactive(),
+        anything_detected=bool(host_keys) or len(mcp_targets.detected_targets()) > 0,
+    )
+    if skills_verdict.reason is consent.Reason.NO_TERMINAL:
+        install_view.console.print(
+            "  Skipping the Opik skill pack: no terminal to ask in. Pass --skills "
+            "to install it without being asked.",
+            style="yellow",
+        )
+
     outcome = assistants.setup(
-        setup_params=params,
+        params,
+        install_mcp=True,
+        skills=skills_verdict,
         force_local_server=local_server,
         host_keys=host_keys,
-        skills_flag=skills_flag,
     )
 
     # A sibling of the entry event, not a nested one: reporting is suppressed

@@ -137,7 +137,7 @@ class TestAssistantConfirmation:
             mock.patch.object(configure_cli.click, "confirm") as confirm,
         ):
             confirm.return_value = False
-            configure_cli._confirm_assistant_step()
+            configure_cli._ask_about_mcp(["Claude Code"])
 
         assert confirm.call_args.kwargs["default"] is False
 

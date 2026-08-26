@@ -1,9 +1,8 @@
 """Configure command for Opik CLI."""
 
-import logging
 import os
 import urllib.parse
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 import click
 
@@ -12,11 +11,9 @@ from opik import analytics
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
-from opik.configurator import assistants as assistant_policy
+from opik.configurator import consent
 from opik.configurator import configure as opik_configure, interactive_helpers
 from opik.configurator import mcp as mcp_installer
-
-LOGGER = logging.getLogger(__name__)
 
 
 def _setup_assistants(
@@ -25,96 +22,115 @@ def _setup_assistants(
     install_skills: Optional[bool],
     automatic_approvals: bool,
 ) -> assistants.Outcome:
-    """The CLI's assistant step: selectors and formatted output.
+    """The CLI's assistant step: resolve consent, then hand off to the installers.
 
-    `-y` deliberately does not reach into another tool's configuration, and an
-    explicit `--no-install-mcp` with `--no-install-skills` means neither.
+    Both questions go through :func:`consent.resolve`, so this function no longer
+    holds a policy of its own — it wires the flags to it and does the asking.
     """
-    if install_mcp is False and install_skills is False:
-        return assistants.NOTHING_DONE
-    if install_mcp is None and install_skills is None and automatic_approvals:
-        # `-y` alone is not a request to edit another tool's config, so this is a
-        # skip — and it is the one an agent is most likely to hit, because `-y` is
-        # what the previous error told it to add.
-        _announce_assistant_skip()
-        return assistants.NOTHING_DONE
+    interactive = interactive_helpers.is_interactive()
+    detected = mcp_installer.detected_host_names()
+    situation = dict(
+        assume_yes=automatic_approvals,
+        interactive=interactive,
+        anything_detected=len(detected) > 0,
+    )
 
-    skills_flag = install_skills
-    if install_mcp is False:
-        # Server declined outright: only the pack is on the table.
-        if skills_flag is False:
-            return assistants.NOTHING_DONE
-        return assistants.setup(setup_params, skills_flag=True, host_keys=None)
+    mcp_verdict = consent.resolve(install_mcp, **situation)
+    skills_verdict = consent.resolve(install_skills, **situation)
 
-    # An explicit `--install-mcp` is the request; only an unflagged run needs to ask.
-    if install_mcp is None and not _confirm_assistant_step():
+    wants_mcp = consent.granted(mcp_verdict, lambda: _ask_about_mcp(detected))
+
+    # "Set Opik up for your AI client?" is the umbrella question for this whole
+    # step, not just the server half — so answering no to it declines the pack
+    # too. Only a flag naming the pack outranks that, and a flag never leaves the
+    # verdict at ASK.
+    if not wants_mcp and mcp_verdict.decision is consent.Decision.ASK:
+        if skills_verdict.decision is consent.Decision.ASK:
+            skills_verdict = consent.Verdict(
+                consent.Decision.SKIP, consent.Reason.DECLINED
+            )
+
+    if not wants_mcp and skills_verdict.decision is consent.Decision.SKIP:
+        _announce_skip(mcp_verdict, skills_verdict)
         return assistants.NOTHING_DONE
 
     return assistants.setup(
         setup_params,
-        skills_flag=skills_flag,
-        assume_confirmed=install_mcp is True,
+        install_mcp=wants_mcp,
+        skills=skills_verdict,
+        # A named flag covers whatever is detected, so the installer's own client
+        # picker would be a question the user already answered. Having been asked
+        # is different: the prompt named the clients but not which of them, so the
+        # picker is where that gets chosen.
+        assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
 
 
-def _announce_assistant_skip() -> None:
-    """Say that the assistant step was skipped, and how to include it.
-
-    Staying silent reported "configuration completed successfully" to a caller
-    that had also asked for the MCP server, with no way to notice the difference
-    between "configured Opik" and "configured Opik and your client".
-
-    Shown with a terminal too. `-y` reads as yes-to-everything, so someone who
-    typed it chose "stop asking me questions", not "skip my editor" — the same
-    surprise an agent hits, and worth the one line either way.
-    """
-    console = install_view.console
-    console.print(
-        "  Skipped AI client setup: nothing named it, so nothing was written to "
-        "your AI client's config.",
-        style="yellow",
-    )
-    console.print(
-        "  To include it:  opik configure --install-mcp --install-skills",
-        style="dim",
-    )
-
-
-def _confirm_assistant_step() -> bool:
+def _ask_about_mcp(detected: List[str]) -> bool:
     """Ask before touching any assistant's configuration.
 
     `opik configure` is about writing ``~/.opik.config``; registering an MCP
     server edits files owned by other tools, which is a different kind of
     permission and should not be assumed just because the user configured Opik.
-    Dropping straight into the host picker made the wider question unaskable —
+    Dropping straight into the client picker made the wider question unaskable —
     there was no way to answer "no, just configure Opik".
 
     Not asked on `opik mcp configure`: running that command *is* the answer.
-    Defaults to no, matching `opik configure -y`'s refusal to reach into
-    another tool's config.
+    Defaults to no, matching `-y`'s refusal to reach into another tool's config.
     """
-    detected = mcp_installer.detected_host_names()
-    if len(detected) == 0:
-        # Nothing found to register, so there is nothing worth asking about.
-        return False
-
-    if not interactive_helpers.is_interactive():
-        _announce_assistant_skip()
-        return False
-
     console = install_view.console
     console.print()
     console.print("  Set Opik up for your AI client?", style="bold")
-    # One sentence per print: the host list varies in length, and folding it into
+    # One sentence per print: the client list varies in length, and folding it into
     # a line with a hardcoded wrap pushed the rest past the terminal width and
     # lost the indent on the continuation.
-    console.print(f"  Found {assistant_policy.readable_list(detected)}.", style="dim")
+    console.print(f"  Found {consent.readable_list(detected)}.", style="dim")
     console.print(
         "  The Opik MCP server lets it read traces, log scores and run\n"
         "  experiments from chat.",
         style="dim",
     )
     return click.confirm("", default=False)
+
+
+#: Skips worth mentioning, and how to say them. A skip the user asked for
+#: (``--no-install-mcp``) or one with nothing to act on needs no explanation;
+#: these two look like the command silently did less than it was asked to.
+_SKIP_NOTES = {
+    consent.Reason.NO_TERMINAL: (
+        "Skipped AI client setup: no terminal to ask in, and no --install-mcp or "
+        "--install-skills flag was passed."
+    ),
+    consent.Reason.ASSUME_YES: (
+        "Skipped AI client setup: -y answers Opik's own questions, and does not "
+        "write to another tool's configuration."
+    ),
+}
+
+
+def _announce_skip(
+    mcp_verdict: consent.Verdict, skills_verdict: consent.Verdict
+) -> None:
+    """Say that the assistant step was skipped, and how to include it.
+
+    Staying silent reported "configuration completed successfully" to a caller
+    that had also asked for the MCP server, with no way to notice the difference
+    between "configured Opik" and "configured Opik and your client".
+
+    The reason comes from the verdict rather than being inferred here. Inferring it
+    is how an unattended run — which has no terminal *and* is handed ``-y`` by the
+    command — ended up being told that ``-y`` was why, having never passed it.
+    """
+    note = _SKIP_NOTES.get(mcp_verdict.reason) or _SKIP_NOTES.get(skills_verdict.reason)
+    if note is None:
+        return
+
+    console = install_view.console
+    console.print(f"  {note}", style="yellow")
+    console.print(
+        "  To include it:  opik configure --install-mcp --install-skills",
+        style="dim",
+    )
 
 
 def _is_comet_cloud_host(url: str) -> bool:

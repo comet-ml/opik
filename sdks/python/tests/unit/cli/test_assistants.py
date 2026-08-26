@@ -1,12 +1,23 @@
-"""Tests for the shared "set Opik up for your AI assistant" step."""
+"""Tests for the shared "set Opik up for your AI client" step.
 
-from unittest import mock
+This module composes two installers; it no longer decides anything. The decisions
+arrive as `consent.Verdict`s, and their table is tested in
+`tests/unit/configurator/test_consent.py` — so what is left to check here is
+composition: which halves run, what the pack is installed into, and what the
+closing block claims.
+"""
 
 import pathlib
+from unittest import mock
 
 import pytest
 
 from opik.cli import assistants
+from opik.configurator import consent
+
+PROCEED = consent.Verdict(consent.Decision.PROCEED, consent.Reason.REQUESTED)
+DECLINE = consent.Verdict(consent.Decision.SKIP, consent.Reason.DECLINED)
+ASK = consent.Verdict(consent.Decision.ASK, consent.Reason.ASKING)
 
 
 def _params():
@@ -19,20 +30,6 @@ def _params():
         "self_hosted_comet": False,
         "check_tls_certificate": True,
     }
-
-
-@pytest.fixture
-def mcp_spy(monkeypatch):
-    spy = mock.Mock(return_value=["cursor"])
-    monkeypatch.setattr(assistants.mcp_installer, "setup_mcp_server", spy)
-    return spy
-
-
-@pytest.fixture
-def skills_spy(monkeypatch):
-    spy = mock.Mock(return_value=_install_result())
-    monkeypatch.setattr(assistants.skills_installer, "setup_skills", spy)
-    return spy
 
 
 def _install_result(succeeded=True, **overrides):
@@ -49,6 +46,27 @@ def _install_result(succeeded=True, **overrides):
 
 
 @pytest.fixture
+def mcp_spy(monkeypatch):
+    spy = mock.Mock(return_value=["cursor"])
+    monkeypatch.setattr(assistants.mcp_installer, "setup_mcp_server", spy)
+    return spy
+
+
+@pytest.fixture
+def skills_spy(monkeypatch):
+    spy = mock.Mock(return_value=_install_result())
+    monkeypatch.setattr(assistants.skills_installer, "setup_skills", spy)
+    return spy
+
+
+@pytest.fixture(autouse=True)
+def detected(monkeypatch):
+    monkeypatch.setattr(
+        assistants.skills_installer, "detected_host_keys", lambda: ["vscode"]
+    )
+
+
+@pytest.fixture
 def rich_view(monkeypatch):
     """A view whose `step` is a real context manager, unlike a bare Mock."""
     view = mock.MagicMock()
@@ -58,12 +76,6 @@ def rich_view(monkeypatch):
     return view
 
 
-@pytest.fixture(autouse=True)
-def interactive(monkeypatch):
-    """Default every test to a terminal; the non-interactive cases opt out."""
-    monkeypatch.setattr(assistants.interactive_helpers, "is_interactive", lambda: True)
-
-
 @pytest.fixture
 def confirm(monkeypatch):
     spy = mock.Mock(return_value=True)
@@ -71,219 +83,161 @@ def confirm(monkeypatch):
     return spy
 
 
-def _view():
-    return mock.MagicMock()
+class TestTheHalvesAreIndependent:
+    """Either step can run without the other.
 
+    They used to be welded together — `setup` registered the server as its first
+    act, whatever it was asked for — so `--no-install-mcp` could not be honoured.
+    """
 
-class TestSetup:
-    def test_setup__registers_the_server_without_asking_first(
-        self, mcp_spy, skills_spy, confirm, rich_view
+    def test_mcp_declined__server_is_not_registered(
+        self, mcp_spy, skills_spy, rich_view
     ):
-        """Running the command is the answer; there is no what-to-install question."""
-        assistants.setup(_params(), host_keys=["cursor"])
+        assistants.setup(_params(), install_mcp=False, skills=PROCEED)
+
+        mcp_spy.assert_not_called()
+
+    def test_mcp_declined__pack_still_installs(self, mcp_spy, skills_spy, rich_view):
+        assistants.setup(_params(), install_mcp=False, skills=PROCEED)
+
+        skills_spy.assert_called_once()
+
+    def test_mcp_declined__pack_goes_to_detected_clients(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """With no server step there is no list of clients it reached."""
+        assistants.setup(_params(), install_mcp=False, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == ["vscode"]
+
+    def test_pack_declined__server_still_registers(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        outcome = assistants.setup(_params(), install_mcp=True, skills=DECLINE)
 
         mcp_spy.assert_called_once()
-        assert mcp_spy.call_args.kwargs["host_keys"] == ["cursor"]
+        skills_spy.assert_not_called()
+        assert outcome == assistants.Outcome(clients=1, skills=False)
 
-    def test_setup__offers_the_pack_after_the_server(
-        self, mcp_spy, skills_spy, confirm, rich_view
+    def test_both_declined__nothing_runs(self, mcp_spy, skills_spy, rich_view):
+        outcome = assistants.setup(_params(), install_mcp=False, skills=DECLINE)
+
+        mcp_spy.assert_not_called()
+        skills_spy.assert_not_called()
+        assert outcome is assistants.NOTHING_DONE
+
+
+class TestPackTargets:
+    def test_pack_goes_to_the_clients_the_server_reached(
+        self, mcp_spy, skills_spy, rich_view
     ):
-        assistants.setup(_params(), host_keys=["cursor"])
+        mcp_spy.return_value = ["cursor", "codex"]
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == ["cursor", "codex"]
+
+    def test_server_registered_nothing__falls_back_to_detected(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        mcp_spy.return_value = []
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == ["vscode"]
+
+
+class TestAsking:
+    def test_verdict_ask__prompts(self, mcp_spy, skills_spy, rich_view, confirm):
+        assistants.setup(_params(), install_mcp=True, skills=ASK)
 
         confirm.assert_called_once()
-        assert skills_spy.call_args.args[0] == ["cursor"]
+        skills_spy.assert_called_once()
 
-    def test_setup__the_pack_is_recommended_and_defaults_to_yes(
-        self, mcp_spy, skills_spy, confirm, rich_view
+    def test_verdict_ask__declining_installs_only_the_server(
+        self, mcp_spy, skills_spy, rich_view, confirm
     ):
-        assistants.setup(_params(), host_keys=["cursor"])
+        confirm.return_value = False
+
+        assistants.setup(_params(), install_mcp=True, skills=ASK)
+
+        skills_spy.assert_not_called()
+
+    def test_decided_verdicts__never_prompt(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        for verdict in (PROCEED, DECLINE):
+            assistants.setup(_params(), install_mcp=True, skills=verdict)
+
+        confirm.assert_not_called()
+
+    def test_the_pack_is_recommended_and_defaults_to_yes(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        assistants.setup(_params(), install_mcp=True, skills=ASK)
 
         assert confirm.call_args.kwargs["default"] is True
         assert "Recommended" in confirm.call_args.args[0]
 
-    def test_setup__declining_the_pack__installs_only_the_server(
-        self, mcp_spy, skills_spy, confirm, rich_view
+    def test_the_prompt_does_not_relist_the_clients(
+        self, mcp_spy, skills_spy, rich_view, confirm
     ):
-        confirm.return_value = False
+        """The results table directly above it just named them."""
+        assistants.setup(_params(), install_mcp=True, skills=ASK)
 
-        assistants.setup(_params(), host_keys=["cursor"])
+        assert "cursor" not in confirm.call_args.args[0].lower()
 
-        mcp_spy.assert_called_once()
-        skills_spy.assert_not_called()
 
-    def test_setup__pack_offered_for_the_hosts_the_server_reached(
-        self, monkeypatch, skills_spy, confirm, rich_view
-    ):
-        """Not the requested hosts — the ones that actually got registered."""
-        monkeypatch.setattr(
-            assistants.mcp_installer,
-            "setup_mcp_server",
-            mock.Mock(return_value=["claude-code"]),
-        )
+class TestClosingBlock:
+    def test_one_closing_block_for_the_whole_step(self, mcp_spy, skills_spy, rich_view):
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
-        assistants.setup(_params(), host_keys=["claude-code", "codex"])
-
-        assert skills_spy.call_args.args[0] == ["claude-code"]
-
-    def test_setup__server_registered_nothing__offers_nothing(
-        self, monkeypatch, skills_spy, confirm, rich_view
-    ):
-        """No assistant was configured, so there is none to add a pack to."""
-        monkeypatch.setattr(
-            assistants.mcp_installer, "setup_mcp_server", mock.Mock(return_value=[])
-        )
-
-        assistants.setup(_params())
-
-        confirm.assert_not_called()
-        skills_spy.assert_not_called()
-
-    def test_setup__skills_flag_true__installs_without_asking(
-        self, mcp_spy, skills_spy, confirm, rich_view
-    ):
-        assistants.setup(_params(), host_keys=["cursor"], skills_flag=True)
-
-        confirm.assert_not_called()
-        skills_spy.assert_called_once()
-
-    def test_setup__skills_flag_false__skips_without_asking(
-        self, mcp_spy, skills_spy, confirm, rich_view
-    ):
-        assistants.setup(_params(), host_keys=["cursor"], skills_flag=False)
-
-        confirm.assert_not_called()
-        skills_spy.assert_not_called()
-
-    def test_setup__only_one_closing_block_for_the_whole_step(
-        self, mcp_spy, skills_spy, confirm, rich_view
-    ):
-        """Each half used to print "restart your assistant" independently."""
-        assistants.setup(_params(), host_keys=["cursor"])
-
-        # The server half is told to stay quiet; the pack half never announced
-        # anything of its own, and the closing block is printed once, here.
+        assert rich_view.done.call_count == 1
         assert mcp_spy.call_args.kwargs["announce_next_steps"] is False
-        rich_view.done.assert_called_once()
 
-    def test_setup__done_block_lists_both_components(
-        self, mcp_spy, skills_spy, confirm, rich_view
-    ):
-        assistants.setup(_params(), host_keys=["cursor"])
+    def test_lists_both_components(self, mcp_spy, skills_spy, rich_view):
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
         assert rich_view.done.call_args.args[0] == ["MCP server", "skill pack"]
 
-    def test_setup__done_block_omits_a_pack_that_failed(
-        self, mcp_spy, monkeypatch, confirm, rich_view
-    ):
-        """Reporting a pack we could not install would be a lie."""
-        monkeypatch.setattr(
-            assistants.skills_installer,
-            "setup_skills",
-            mock.Mock(return_value=_install_result(succeeded=False)),
-        )
+    def test_omits_a_pack_that_failed(self, mcp_spy, skills_spy, rich_view):
+        skills_spy.return_value = _install_result(succeeded=False)
 
-        assistants.setup(_params(), host_keys=["cursor"])
+        outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
         assert rich_view.done.call_args.args[0] == ["MCP server"]
+        assert outcome.skills is False
 
-    def test_setup__non_interactive_without_a_flag__skips_the_pack(
-        self, mcp_spy, skills_spy, monkeypatch, rich_view
-    ):
-        """Asking aborted the run *after* the server had been registered."""
-        monkeypatch.setattr(
-            assistants.interactive_helpers, "is_interactive", lambda: False
+    def test_omits_a_server_that_reached_nothing(self, mcp_spy, skills_spy, rich_view):
+        mcp_spy.return_value = []
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert rich_view.done.call_args.args[0] == ["skill pack"]
+
+
+class TestPassThrough:
+    def test_local_server_flag(self, mcp_spy, skills_spy, rich_view):
+        assistants.setup(
+            _params(), install_mcp=True, skills=DECLINE, force_local_server=True
         )
-        confirm_spy = mock.Mock(side_effect=AssertionError("must not prompt"))
-        monkeypatch.setattr(assistants.click, "confirm", confirm_spy)
-
-        assistants.setup(_params(), host_keys=["cursor"])
-
-        skills_spy.assert_not_called()
-
-    def test_setup__non_interactive_with_skills_flag__installs(
-        self, mcp_spy, skills_spy, monkeypatch, rich_view
-    ):
-        monkeypatch.setattr(
-            assistants.interactive_helpers, "is_interactive", lambda: False
-        )
-        monkeypatch.setattr(
-            assistants.click,
-            "confirm",
-            mock.Mock(side_effect=AssertionError("must not prompt")),
-        )
-
-        assistants.setup(_params(), host_keys=["cursor"], skills_flag=True)
-
-        skills_spy.assert_called_once()
-
-    def test_setup__local_server_flag__is_passed_through(
-        self, mcp_spy, skills_spy, confirm, rich_view
-    ):
-        assistants.setup(_params(), force_local_server=True, host_keys=["cursor"])
 
         assert mcp_spy.call_args.kwargs["force_local_server"] is True
 
-
-class TestWantsSkillPack:
-    def test_explicit_true__no_question(self, confirm):
-        assert assistants._wants_skill_pack(True, _view()) is True
-        confirm.assert_not_called()
-
-    def test_explicit_false__no_question(self, confirm):
-        assert assistants._wants_skill_pack(False, _view()) is False
-        confirm.assert_not_called()
-
-    def test_non_interactive__does_not_ask(self, monkeypatch):
-        monkeypatch.setattr(
-            assistants.interactive_helpers, "is_interactive", lambda: False
-        )
-        confirm_spy = mock.Mock(side_effect=AssertionError("must not prompt"))
-        monkeypatch.setattr(assistants.click, "confirm", confirm_spy)
-        view = _view()
-
-        assert assistants._wants_skill_pack(None, view) is False
-        view.note.assert_called_once()
-        assert "--skills" in view.note.call_args.args[0]
-
-    def test_unset__asks_without_relisting_the_assistants(self, confirm):
-        """The results table right above already names them."""
-        assistants._wants_skill_pack(None, _view())
-
-        prompt = confirm.call_args.args[0]
-        assert "skill pack" in prompt
-        assert "Cursor" not in prompt
-
-
-class TestNonInteractiveSafety:
-    """The pack offer must never abort a run that already changed the machine."""
-
-    def test_setup__no_terminal__server_still_succeeds(
-        self, monkeypatch, mcp_spy, skills_spy, rich_view
-    ):
-        monkeypatch.setattr(
-            assistants.interactive_helpers, "is_interactive", lambda: False
-        )
-        monkeypatch.setattr(
-            assistants.click,
-            "confirm",
-            mock.Mock(side_effect=AssertionError("must not prompt")),
+    def test_host_keys_and_assume_confirmed(self, mcp_spy, skills_spy, rich_view):
+        assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=DECLINE,
+            host_keys=["codex"],
+            assume_confirmed=True,
         )
 
-        assistants.setup(_params(), host_keys=["cursor"])
+        assert mcp_spy.call_args.kwargs["host_keys"] == ["codex"]
+        assert mcp_spy.call_args.kwargs["assume_confirmed"] is True
 
-        mcp_spy.assert_called_once()
-        skills_spy.assert_not_called()
-        # The run still reports completion rather than dying half-way.
-        rich_view.done.assert_called_once()
-        assert rich_view.done.call_args.args[0] == ["MCP server"]
+    def test_connection_block(self, mcp_spy, skills_spy, rich_view):
+        assistants.setup(_params(), install_mcp=True, skills=DECLINE)
 
-    def test_setup__no_terminal__says_how_to_opt_in(
-        self, monkeypatch, mcp_spy, skills_spy, rich_view
-    ):
-        monkeypatch.setattr(
-            assistants.interactive_helpers, "is_interactive", lambda: False
-        )
-
-        assistants.setup(_params(), host_keys=["cursor"])
-
-        assert "--skills" in rich_view.note.call_args.args[0]
+        assert mcp_spy.call_args.kwargs["api_key"] == "key"
+        assert mcp_spy.call_args.kwargs["workspace"] == "acme-ai"

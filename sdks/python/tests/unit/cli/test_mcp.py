@@ -8,6 +8,7 @@ from click.testing import CliRunner
 
 from opik.cli import cli
 from opik.cli import mcp as mcp_cli
+from opik.configurator import consent
 from opik.config import OpikConfig
 
 
@@ -65,8 +66,8 @@ class TestInstallCommand:
 
         assert result.exit_code == 0
         setup_spy.assert_called_once()
-        assert setup_spy.call_args.kwargs["setup_params"]["api_key"] == "key"
-        assert setup_spy.call_args.kwargs["setup_params"]["workspace"] == "acme-ai"
+        assert setup_spy.call_args.args[0]["api_key"] == "key"
+        assert setup_spy.call_args.args[0]["workspace"] == "acme-ai"
         assert setup_spy.call_args.kwargs["force_local_server"] is False
 
     def test_install__local_server_flag__forces_local(self):
@@ -141,7 +142,7 @@ class TestInstallCommand:
         assert result.exit_code == 0
         configure_spy.assert_called_once_with(install_mcp=False)
         setup_spy.assert_called_once()
-        assert setup_spy.call_args.kwargs["setup_params"]["api_key"] == "new-key"
+        assert setup_spy.call_args.args[0]["api_key"] == "new-key"
 
     def test_status__lists_sdk_env_and_host_drift(self):
         runner = CliRunner()
@@ -206,7 +207,7 @@ class TestInstallCommand:
 
         assert result.exit_code == 0
         setup_spy.assert_called_once()
-        assert setup_spy.call_args.kwargs["setup_params"]["use_local"] is True
+        assert setup_spy.call_args.args[0]["use_local"] is True
 
 
 class TestHostFlag:
@@ -401,8 +402,9 @@ class TestDelegatesToTheSharedStep:
         assert result.exit_code == 0
         kwargs = setup_spy.call_args.kwargs
         assert kwargs["host_keys"] == ["cursor"]
-        assert kwargs["skills_flag"] is False
-        assert kwargs["setup_params"]["api_key"] == "key"
+        assert kwargs["skills"].reason is consent.Reason.DECLINED
+        assert kwargs["install_mcp"] is True, "running this command is the consent"
+        assert setup_spy.call_args.args[0]["api_key"] == "key"
 
     def test_configure__local_server_flag__is_passed_through(self):
         runner = CliRunner()
