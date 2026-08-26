@@ -26,7 +26,12 @@ interface CustomProviderEntry {
   provider_type: 'custom';
   provider_name: string;
   base_url: string;
-  api_key_env_var: string;
+  /** Env var holding the static API key (external gateways). */
+  api_key_env_var?: string;
+  /** Literal static API key (hermetic mock entries only — never real secrets). */
+  api_key?: string;
+  /** OAuth2 client credentials mode (OPIK-7940) instead of a static key. */
+  auth?: { token_url: string; client_id: string; client_secret: string };
   models: ModelEntry[];
 }
 
@@ -61,8 +66,11 @@ test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@ar
     }) => {
       test.setTimeout(180_000);
 
-      const apiKey = process.env[provider.api_key_env_var];
-      test.skip(!apiKey, `${provider.api_key_env_var} not set in this env`);
+      const auth = provider.provider_type === 'custom' ? provider.auth : undefined;
+      const apiKey =
+        ('api_key' in provider ? provider.api_key : undefined) ??
+        (provider.api_key_env_var ? process.env[provider.api_key_env_var] : undefined);
+      test.skip(!apiKey && !auth, `${provider.api_key_env_var} not set in this env`);
 
       const offered = await test.step(
         `Ensure ${provider.provider_name} provider key is configured`,
@@ -73,8 +81,15 @@ test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@ar
             return cfg.ensureCustomProviderConfigured({
               providerName: provider.provider_name,
               baseUrl: provider.base_url,
-              apiKey: apiKey!,
+              apiKey,
               models: provider.models.map((m) => m.name).join(','),
+              ...(auth && {
+                auth: {
+                  tokenUrl: auth.token_url,
+                  clientId: auth.client_id,
+                  clientSecret: auth.client_secret,
+                },
+              }),
             });
           }
           return cfg.ensureProviderConfigured(provider.provider_name, apiKey!);

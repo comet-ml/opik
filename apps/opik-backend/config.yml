@@ -1203,6 +1203,31 @@ partitionMetrics:
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
 
 # LLM providers client configuration
+# Configuration for dynamic token auth on custom LLM providers (auth_config recipes)
+llmProviderTokenAuth:
+  # Default: 0.25
+  # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
+  refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
+  # Default: 10s
+  # Description: Timeout for the token fetch call to the configured auth service
+  fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
+  # Default: 15s
+  # Description: Lease time for the cross-pod single-flight lock around a token fetch
+  lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
+  # Default: 1000000
+  # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
+  maxResponseChars: ${LLM_PROVIDER_TOKEN_AUTH_MAX_RESPONSE_CHARS:-1000000}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: requires https and resolves the host before connecting, refusing loopback,
+  #     link-local (including the cloud metadata endpoint 169.254.169.254), RFC 1918 private
+  #     ranges, IPv6 unique-local (fc00::/7), multicast, wildcard, and unresolvable hosts
+  #   - relaxed: no destination restrictions, for deployments whose auth service is internal
+  # Description: SSRF guard applied to the customer-supplied token URL before each fetch. This
+  # strict default protects cloud; note that the docker-compose and Helm distributions ship
+  # 'relaxed' explicitly, so self-hosted installs are NOT covered by this default
+  destinationGuard: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-strict}
+
 llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up

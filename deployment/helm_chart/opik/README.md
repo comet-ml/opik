@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.39](https://img.shields.io/badge/Version-2.2.39-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.39](https://img.shields.io/badge/AppVersion-2.2.39-informational?style=flat-square)
+![Version: 2.2.40](https://img.shields.io/badge/Version-2.2.40-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.40](https://img.shields.io/badge/AppVersion-2.2.40-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -249,6 +249,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS | string | `"300"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_ENABLED | string | `"false"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_URL | string | `""` |  |
+| component.backend.env.LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
