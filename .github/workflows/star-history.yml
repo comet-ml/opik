@@ -66,12 +66,14 @@ jobs:
         env:
           DISTRIBUTION_ID: ${{ vars.CDN_DISTRIBUTION_ID }}
         run: |
-          aws s3 cp out/data.json "$S3_PREFIX/data.json" \
-            --content-type application/json --cache-control max-age=300
+          # SVGs first, data.json last: it is the series pointer the next run
+          # reads, so it must not claim a point whose chart failed to upload.
           for theme in light dark; do
             aws s3 cp "out/star-history-$theme.svg" "$S3_PREFIX/star-history-$theme.svg" \
               --content-type image/svg+xml --cache-control max-age=300
           done
+          aws s3 cp out/data.json "$S3_PREFIX/data.json" \
+            --content-type application/json --cache-control max-age=300
           aws cloudfront create-invalidation \
             --distribution-id "$DISTRIBUTION_ID" --paths "$CDN_PATHS"
 
