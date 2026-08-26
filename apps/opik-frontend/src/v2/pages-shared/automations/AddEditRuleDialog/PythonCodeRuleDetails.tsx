@@ -12,8 +12,10 @@ import { Label } from "@/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
-import { resolveTraceEvaluatorVariableDefault } from "@/lib/llm";
+import {
+  reservedPythonMetricVariablesForScope,
+  resolveTraceEvaluatorVariableDefault,
+} from "@/lib/llm";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {
@@ -37,6 +39,10 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   const autocompleteType = isSpanScope
     ? TRACE_DATA_TYPE.spans
     : TRACE_DATA_TYPE.traces;
+
+  // Scope-appropriate reserved set, as LLMJudgeRuleDetails does — `spans` is a
+  // trace-scope sentinel that span scope's schema rejects.
+  const reservedVariables = reservedPythonMetricVariablesForScope(scope);
 
   return (
     <>
@@ -71,6 +77,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                                   v,
                                   currentArguments[v],
                                   scope,
+                                  reservedVariables,
                                 );
                             });
                         } catch (e) {
@@ -121,7 +128,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 datasetColumnNames={datasetColumnNames}
                 type={autocompleteType}
                 includeIntermediateNodes
-                reservedSentinels={RESERVED_TRACE_EVALUATOR_VARIABLES}
+                reservedSentinels={reservedVariables}
               />
             );
           }}

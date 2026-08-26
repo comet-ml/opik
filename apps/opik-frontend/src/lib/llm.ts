@@ -8,7 +8,10 @@ import {
   TextPart,
 } from "@/types/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
+import {
+  RESERVED_SPAN_EVALUATOR_VARIABLES,
+  RESERVED_TRACE_EVALUATOR_VARIABLES,
+} from "@/constants/llm";
 import { generateRandomString } from "@/lib/utils";
 
 export const generateDefaultLLMPromptMessage = (
@@ -305,18 +308,38 @@ export const parseChatTemplateToLLMMessages = (
 };
 
 /**
+ * The reserved-variable set a Python-metric editor must pass for {@code scope}.
+ *
+ * <p>Span scope gets the empty {@link RESERVED_SPAN_EVALUATOR_VARIABLES}: a span has no
+ * sub-spans, and {@code PythonCodeDetailsSpanFormSchema} accepts only
+ * {@code input}/{@code output}/{@code metadata} paths — so auto-filling the trace
+ * {@code spans} sentinel would fail validation on a row the sentinel filter hides from
+ * the mapping list, leaving the dialog unsubmittable with nothing visible to correct.
+ * Thread scope has no argument mapping at all, so the value is unused there.
+ */
+export const reservedPythonMetricVariablesForScope = (
+  scope: EVALUATORS_RULE_SCOPE,
+): Readonly<Record<string, string>> =>
+  scope === EVALUATORS_RULE_SCOPE.span
+    ? RESERVED_SPAN_EVALUATOR_VARIABLES
+    : RESERVED_TRACE_EVALUATOR_VARIABLES;
+
+/**
  * Resolve the value for one template variable in an LLM-as-judge / Python-metric
  * rule. Existing user-supplied mapping wins; otherwise on trace or span scope a
  * reserved variable auto-fills to its sentinel value (so {{spans}} / {{trace}} on
  * trace scope and {{span}} on span scope work without the user picking a path);
  * otherwise empty. Centralized so the rule-detail editors stay in sync.
  *
- * <p>{@code reservedVariables} defaults to the shared {@code spans}-only set; the
- * LLM-judge editors pass the scope-appropriate set —
+ * <p>{@code reservedVariables} defaults to the shared {@code spans}-only set, but every
+ * caller passes the set matching its rule type AND scope, because a name reserved in one
+ * combination is an invalid mapping in another. LLM judges pass
  * {@link RESERVED_TRACE_LLM_JUDGE_VARIABLES} (adds {@code trace}) on trace scope and
- * {@link RESERVED_SPAN_LLM_JUDGE_VARIABLES} ({@code span}) on span scope. The
- * Python-metric editors keep the default, because the Python scorer backend only
- * injects `spans`.
+ * {@link RESERVED_SPAN_LLM_JUDGE_VARIABLES} ({@code span}) on span scope. Python metrics
+ * pass {@link RESERVED_TRACE_EVALUATOR_VARIABLES} on trace scope — the scorer backend
+ * only injects {@code spans}, so {@code trace} is deliberately absent — and the empty
+ * {@link RESERVED_SPAN_EVALUATOR_VARIABLES} on span scope, where a span has no sub-spans
+ * and the form schema rejects the {@code spans} sentinel outright.
  */
 export const resolveTraceEvaluatorVariableDefault = (
   variableName: string,
