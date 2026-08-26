@@ -9,11 +9,17 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..core.serialization import convert_and_respect_annotation_metadata
+from ..errors.bad_request_error import BadRequestError
 from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.provider_api_key_page_public import ProviderApiKeyPagePublic
 from ..types.provider_api_key_public import ProviderApiKeyPublic
+from ..types.provider_auth_config import ProviderAuthConfig
+from ..types.provider_auth_config_write import ProviderAuthConfigWrite
+from ..types.result import Result
 from .types.provider_api_key_write_provider import ProviderApiKeyWriteProvider
 
 # this is used as the default value for optional parameters
@@ -107,6 +113,7 @@ class RawLlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfigWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -129,6 +136,8 @@ class RawLlmProviderKeyClient:
 
         base_url : typing.Optional[str]
 
+        auth_config : typing.Optional[ProviderAuthConfigWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -147,6 +156,9 @@ class RawLlmProviderKeyClient:
                 "headers": headers,
                 "configuration": configuration,
                 "base_url": base_url,
+                "auth_config": convert_and_respect_annotation_metadata(
+                    object_=auth_config, annotation=ProviderAuthConfigWrite, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -243,10 +255,11 @@ class RawLlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
-        Update LLM Provider's ApiKey
+        Update LLM Provider's ApiKey. api_key and auth_config are mutually exclusive: setting a valid auth_config on a provider that holds a static api_key clears the stored key; send auth_config as an empty object to clear the recipe and switch back to a static key
 
         Parameters
         ----------
@@ -265,6 +278,8 @@ class RawLlmProviderKeyClient:
 
         base_url : typing.Optional[str]
 
+        auth_config : typing.Optional[ProviderAuthConfig]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -282,6 +297,9 @@ class RawLlmProviderKeyClient:
                 "headers": headers,
                 "configuration": configuration,
                 "base_url": base_url,
+                "auth_config": convert_and_respect_annotation_metadata(
+                    object_=auth_config, annotation=ProviderAuthConfig, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -316,6 +334,105 @@ class RawLlmProviderKeyClient:
                 )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def test_llm_provider_auth_config(
+        self,
+        *,
+        provider_id: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[Result]:
+        """
+        Runs the token fetch once, backend-side, and reports the token lifetime. The token itself is never returned. Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.
+
+        Parameters
+        ----------
+        provider_id : typing.Optional[str]
+            Test the stored auth config of this provider; also the sentinel-resolution target when auth_config is sent
+
+        auth_config : typing.Optional[ProviderAuthConfig]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[Result]
+            Token fetched
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key/auth-config/test",
+            method="POST",
+            json={
+                "provider_id": provider_id,
+                "auth_config": convert_and_respect_annotation_metadata(
+                    object_=auth_config, annotation=ProviderAuthConfig, direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    Result,
+                    parse_obj_as(
+                        type_=Result,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -418,6 +535,7 @@ class AsyncRawLlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfigWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -440,6 +558,8 @@ class AsyncRawLlmProviderKeyClient:
 
         base_url : typing.Optional[str]
 
+        auth_config : typing.Optional[ProviderAuthConfigWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -458,6 +578,9 @@ class AsyncRawLlmProviderKeyClient:
                 "headers": headers,
                 "configuration": configuration,
                 "base_url": base_url,
+                "auth_config": convert_and_respect_annotation_metadata(
+                    object_=auth_config, annotation=ProviderAuthConfigWrite, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -554,10 +677,11 @@ class AsyncRawLlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
-        Update LLM Provider's ApiKey
+        Update LLM Provider's ApiKey. api_key and auth_config are mutually exclusive: setting a valid auth_config on a provider that holds a static api_key clears the stored key; send auth_config as an empty object to clear the recipe and switch back to a static key
 
         Parameters
         ----------
@@ -576,6 +700,8 @@ class AsyncRawLlmProviderKeyClient:
 
         base_url : typing.Optional[str]
 
+        auth_config : typing.Optional[ProviderAuthConfig]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -593,6 +719,9 @@ class AsyncRawLlmProviderKeyClient:
                 "headers": headers,
                 "configuration": configuration,
                 "base_url": base_url,
+                "auth_config": convert_and_respect_annotation_metadata(
+                    object_=auth_config, annotation=ProviderAuthConfig, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -627,6 +756,105 @@ class AsyncRawLlmProviderKeyClient:
                 )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def test_llm_provider_auth_config(
+        self,
+        *,
+        provider_id: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[Result]:
+        """
+        Runs the token fetch once, backend-side, and reports the token lifetime. The token itself is never returned. Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.
+
+        Parameters
+        ----------
+        provider_id : typing.Optional[str]
+            Test the stored auth config of this provider; also the sentinel-resolution target when auth_config is sent
+
+        auth_config : typing.Optional[ProviderAuthConfig]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[Result]
+            Token fetched
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key/auth-config/test",
+            method="POST",
+            json={
+                "provider_id": provider_id,
+                "auth_config": convert_and_respect_annotation_metadata(
+                    object_=auth_config, annotation=ProviderAuthConfig, direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    Result,
+                    parse_obj_as(
+                        type_=Result,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

@@ -79,7 +79,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
-    private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
+    @VisibleForTesting
+    static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
                 SELECT DISTINCT id, thread_id
                 FROM (
@@ -494,7 +495,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
-    private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
+    @VisibleForTesting
+    static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
                 SELECT DISTINCT id, thread_id
                 FROM (
@@ -566,6 +568,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         AND thread_id IN (SELECT thread_id FROM traces_final_ids)
                     <endif>
                 <endif>
+                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -1012,7 +1015,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * 1. First level: Uses the same thread aggregation as SELECT_TRACES_THREADS_BY_PROJECT_IDS (reusing the exact CTEs and aggregation logic)
      * 2. Second level: Wraps the thread results and calculates stats across all threads (AVG, SUM, quantiles)
      ***/
-    private static final String SELECT_TRACE_THREADS_STATS = """
+    @VisibleForTesting
+    static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
                 threads.workspace_id as workspace_id,
                 threads.project_id as project_id,
@@ -1360,11 +1364,26 @@ class ThreadDAOImpl implements ThreadDAO {
      * in the thread list and count queries. Mirrors {@code TraceDAO#shouldUseTraceIdPrefilter}.
      *
      * <p>Only activates when there are narrowing predicates beyond the workspace/project/uuid-range filters:
-     * either a free-text search or a TRACE-strategy filter ({@code <filters>}). When neither is present,
-     * the downstream CTEs apply the uuid range directly, skipping the prefilter scan.
+     * a free-text search, a TRACE-strategy filter ({@code <filters>}), or the thread_id EQUAL pushdown
+     * ({@code traces_pushdown_filter}). When none is present, the downstream CTEs apply the uuid range
+     * directly, skipping the prefilter scan.
+     *
+     * <p>OPIK-7919: a thread_id EQUAL filter is a TRACE_THREAD-strategy filter, so it sets
+     * {@code trace_thread_filters} / {@code traces_pushdown_filter} but never {@code filters}. Without the
+     * third condition the prefilter stayed off for every single-thread lookup, and spans_deduped deduped
+     * the whole project before being LEFT JOINed against one thread's traces — 6M rows / 1.2 GiB and ~5s
+     * for a LIMIT 1 read on production. traces_final_ids already renders the same thread_id predicate, so
+     * enabling it here narrows the spans scan to that thread's trace ids.
+     *
+     * <p>Only {@code traces_pushdown_filter} is included, not {@code trace_thread_filters} at large: the
+     * other TRACE_THREAD filters (status, tags, ...) are applied by the outer query, not inside
+     * traces_final_ids, so they would not narrow the prefilter scan and would pay for it for nothing.
      */
-    private static boolean shouldUseTracesFinalIdsPrefilter(TraceSearchCriteria criteria, ST template) {
-        return criteria.searchText() != null || template.getAttribute("filters") != null;
+    @VisibleForTesting
+    static boolean shouldUseTracesFinalIdsPrefilter(TraceSearchCriteria criteria, ST template) {
+        return criteria.searchText() != null
+                || template.getAttribute("filters") != null
+                || template.getAttribute("traces_pushdown_filter") != null;
     }
 
     /**

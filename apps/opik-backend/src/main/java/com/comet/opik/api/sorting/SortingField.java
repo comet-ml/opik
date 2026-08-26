@@ -1,12 +1,15 @@
 package com.comet.opik.api.sorting;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -14,12 +17,20 @@ import java.util.UUID;
 public record SortingField(
         @NotBlank String field,
         Direction direction,
-        String bindKeyParam) {
+        // bindKeyParam feeds a SQL parameter placeholder name (see bindKey()), so it is an internal
+        // value derived server-side only: @JsonIgnore keeps it off the JSON API surface entirely (neither
+        // serialized nor deserialized). It is null for static (non-dynamic) fields and a server-generated
+        // safe identifier for dynamic fields (see the canonical constructor).
+        @JsonIgnore @Nullable String bindKeyParam) {
 
-    // Canonical constructor with auto-generation of bindKeyParam for dynamic fields
+    private static final Pattern SAFE_BIND_KEY_PARAM = Pattern.compile("[A-Za-z0-9_]+");
+
+    // Canonical constructor. bindKeyParam is rendered into a SQL placeholder name, so for dynamic
+    // fields it must always be a server-generated safe identifier. Regenerate it whenever it is
+    // missing or is not a safe identifier, so no client-influenced value can reach the SQL.
     public SortingField {
-        // Auto-generate bindKeyParam for dynamic fields if not provided
-        if (bindKeyParam == null && field != null && field.contains(".")) {
+        if (field != null && field.contains(".")
+                && (bindKeyParam == null || !SAFE_BIND_KEY_PARAM.matcher(bindKeyParam).matches())) {
             bindKeyParam = UUID.randomUUID().toString().replace("-", "");
         }
     }

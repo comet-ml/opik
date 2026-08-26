@@ -486,6 +486,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "bytedance-seed/seed-1.6-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_1_TURBO,
+      label: "bytedance-seed/seed-2-1-turbo",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_0_CODE,
       label: "bytedance-seed/seed-2.0-code",
     },
@@ -640,12 +644,24 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash-0731",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP,
+      label: "deepseek/deepseek-v4-flash-vision-exp",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
       label: "deepseek/deepseek-v4-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO,
       label: "deepseek/deepseek-v4-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO_0813,
+      label: "deepseek/deepseek-v4-pro-0813",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
+      label: "dots-studio/dots-3-note-preview:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
@@ -790,6 +806,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH_BATCH,
       label: "google/gemini-3.6-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_7_FLASH,
+      label: "google/gemini-3.7-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_7_FLASH_BATCH,
+      label: "google/gemini-3.7-flash:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -1076,6 +1100,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta/muse-spark-1.2",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2_CONTRIBUTOR,
+      label: "meta/muse-spark-1.2-contributor",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
       label: "microsoft/mai-ds-r1",
     },
@@ -1148,12 +1176,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7_FREE,
+      label: "minimax/minimax-m2.7:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
       label: "minimax/minimax-m3",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_BATCH,
       label: "minimax/minimax-m3:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_FREE,
+      label: "minimax/minimax-m3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
@@ -2337,6 +2373,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.7-plus",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_2_4T_A95B,
+      label: "qwen/qwen3.8-2.4t-a95b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_27B,
+      label: "qwen/qwen3.8-27b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_MAX,
       label: "qwen/qwen3.8-max",
     },
@@ -2397,6 +2441,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "sao10k/l3.3-euryale-70b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.STEALTH_OX_ALPHA,
+      label: "stealth/ox-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.STEPFUN_AI_STEP3,
       label: "stepfun-ai/step3",
     },
@@ -2419,6 +2467,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
       label: "tencent/hunyuan-a13b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY_MT2_1_8B,
+      label: "tencent/hy-mt2-1.8b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY_MT2_30B_A3B,
+      label: "tencent/hy-mt2-30b-a3b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY_MT2_7B,
+      label: "tencent/hy-mt2-7b",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
@@ -2465,8 +2525,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thinkingmachines/inkling-small",
     },
     {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_SMALL_FREE,
+      label: "thinkingmachines/inkling-small:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_BATCH,
       label: "thinkingmachines/inkling:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_FREE,
+      label: "thinkingmachines/inkling:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
@@ -2561,6 +2629,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_6,
+      label: "x-ai/grok-4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
       label: "x-ai/grok-build-0.1",
     },
@@ -2649,6 +2721,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5.2:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2_FREE,
+      label: "z-ai/glm-5.2:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3,
+      label: "z-ai/glm-5.3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
     },
@@ -2696,9 +2776,17 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
       label: "~x-ai/grok-latest",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_LATEST,
+      label: "~z-ai/glm-latest",
+    },
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      label: "Gemini 3.7 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
       label: "Gemini 3.6 Flash",
@@ -2718,10 +2806,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
       label: "Gemini 3.1 Flash Lite",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-      label: "Gemini 3.1 Flash Lite Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
@@ -2762,6 +2846,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+      label: "Gemini 3.7 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
       label: "Gemini 3.6 Flash",

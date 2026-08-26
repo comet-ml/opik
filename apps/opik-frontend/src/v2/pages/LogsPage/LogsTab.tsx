@@ -2,12 +2,14 @@ import React from "react";
 import TracesSpansTab from "@/v2/pages/LogsPage/TracesSpansTab/TracesSpansTab";
 import ThreadsTab from "@/v2/pages/LogsPage/ThreadsTab/ThreadsTab";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 type LogsTabProps = {
   projectId: string;
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 const LogsTab: React.FC<LogsTabProps> = ({
@@ -15,6 +17,7 @@ const LogsTab: React.FC<LogsTabProps> = ({
   projectName,
   logsType,
   onLogsTypeChange,
+  dateRangeConfig,
 }) => {
   const renderContent = () => {
     switch (logsType) {
@@ -25,6 +28,7 @@ const LogsTab: React.FC<LogsTabProps> = ({
             projectName={projectName}
             logsType={logsType}
             onLogsTypeChange={onLogsTypeChange}
+            dateRangeConfig={dateRangeConfig}
           />
         );
       case LOGS_TYPE.traces:
@@ -36,6 +40,7 @@ const LogsTab: React.FC<LogsTabProps> = ({
             projectName={projectName}
             logsType={logsType}
             onLogsTypeChange={onLogsTypeChange}
+            dateRangeConfig={dateRangeConfig}
           />
         );
       case LOGS_TYPE.spans:
@@ -47,6 +52,7 @@ const LogsTab: React.FC<LogsTabProps> = ({
             projectName={projectName}
             logsType={logsType}
             onLogsTypeChange={onLogsTypeChange}
+            dateRangeConfig={dateRangeConfig}
           />
         );
     }

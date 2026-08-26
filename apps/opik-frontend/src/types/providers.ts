@@ -196,6 +196,7 @@ export enum PROVIDER_MODEL_TYPE {
   BAIDU_QIANFAN_OCR_FAST_FREE = "baidu/qianfan-ocr-fast:free",
   BYTEDANCE_SEED_SEED_1_6 = "bytedance-seed/seed-1.6",
   BYTEDANCE_SEED_SEED_1_6_FLASH = "bytedance-seed/seed-1.6-flash",
+  BYTEDANCE_SEED_SEED_2_1_TURBO = "bytedance-seed/seed-2-1-turbo",
   BYTEDANCE_SEED_SEED_2_0_CODE = "bytedance-seed/seed-2.0-code",
   BYTEDANCE_SEED_SEED_2_0_LITE = "bytedance-seed/seed-2.0-lite",
   BYTEDANCE_SEED_SEED_2_0_MINI = "bytedance-seed/seed-2.0-mini",
@@ -234,8 +235,11 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V3_2_SPECIALE = "deepseek/deepseek-v3.2-speciale",
   DEEPSEEK_DEEPSEEK_V4_FLASH = "deepseek/deepseek-v4-flash",
   DEEPSEEK_DEEPSEEK_V4_FLASH_0731 = "deepseek/deepseek-v4-flash-0731",
+  DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP = "deepseek/deepseek-v4-flash-vision-exp",
   DEEPSEEK_DEEPSEEK_V4_FLASH_FREE = "deepseek/deepseek-v4-flash:free",
   DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
+  DEEPSEEK_DEEPSEEK_V4_PRO_0813 = "deepseek/deepseek-v4-pro-0813",
+  DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE = "dots-studio/dots-3-note-preview:free",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
   GOOGLE_GEMINI_2_0_FLASH_001 = "google/gemini-2.0-flash-001",
@@ -273,6 +277,8 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_5_FLASH_BATCH = "google/gemini-3.5-flash:batch",
   GOOGLE_GEMINI_3_6_FLASH = "google/gemini-3.6-flash",
   GOOGLE_GEMINI_3_6_FLASH_BATCH = "google/gemini-3.6-flash:batch",
+  GOOGLE_GEMINI_3_7_FLASH = "google/gemini-3.7-flash",
+  GOOGLE_GEMINI_3_7_FLASH_BATCH = "google/gemini-3.7-flash:batch",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -344,6 +350,7 @@ export enum PROVIDER_MODEL_TYPE {
   META_MUSE_GLIMMER_30B = "meta/muse-glimmer-30b",
   META_MUSE_SPARK_1_1 = "meta/muse-spark-1.1",
   META_MUSE_SPARK_1_2 = "meta/muse-spark-1.2",
+  META_MUSE_SPARK_1_2_CONTRIBUTOR = "meta/muse-spark-1.2-contributor",
   MICROSOFT_MAI_DS_R1 = "microsoft/mai-ds-r1",
   MICROSOFT_MAI_DS_R1_FREE = "microsoft/mai-ds-r1:free",
   MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT = "microsoft/phi-3-medium-128k-instruct",
@@ -362,8 +369,10 @@ export enum PROVIDER_MODEL_TYPE {
   MINIMAX_MINIMAX_M2_5 = "minimax/minimax-m2.5",
   MINIMAX_MINIMAX_M2_5_FREE = "minimax/minimax-m2.5:free",
   MINIMAX_MINIMAX_M2_7 = "minimax/minimax-m2.7",
+  MINIMAX_MINIMAX_M2_7_FREE = "minimax/minimax-m2.7:free",
   MINIMAX_MINIMAX_M3 = "minimax/minimax-m3",
   MINIMAX_MINIMAX_M3_BATCH = "minimax/minimax-m3:batch",
+  MINIMAX_MINIMAX_M3_FREE = "minimax/minimax-m3:free",
   MISTRALAI_CODESTRAL_2501 = "mistralai/codestral-2501",
   MISTRALAI_CODESTRAL_2508 = "mistralai/codestral-2508",
   MISTRALAI_DEVSTRAL_2512 = "mistralai/devstral-2512",
@@ -659,6 +668,8 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_7_FLASH = "qwen/qwen3.7-flash",
   QWEN_QWEN3_7_MAX = "qwen/qwen3.7-max",
   QWEN_QWEN3_7_PLUS = "qwen/qwen3.7-plus",
+  QWEN_QWEN3_8_2_4T_A95B = "qwen/qwen3.8-2.4t-a95b",
+  QWEN_QWEN3_8_27B = "qwen/qwen3.8-27b",
   QWEN_QWEN3_8_MAX = "qwen/qwen3.8-max",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
@@ -674,12 +685,16 @@ export enum PROVIDER_MODEL_TYPE {
   SAO10K_L3_1_70B_HANAMI_X1 = "sao10k/l3.1-70b-hanami-x1",
   SAO10K_L3_1_EURYALE_70B = "sao10k/l3.1-euryale-70b",
   SAO10K_L3_3_EURYALE_70B = "sao10k/l3.3-euryale-70b",
+  STEALTH_OX_ALPHA = "stealth/ox-alpha",
   STEPFUN_AI_STEP3 = "stepfun-ai/step3",
   STEPFUN_STEP_3_5_FLASH = "stepfun/step-3.5-flash",
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
   STEPFUN_STEP_3_7_FLASH = "stepfun/step-3.7-flash",
   SWITCHPOINT_ROUTER = "switchpoint/router",
   TENCENT_HUNYUAN_A13B_INSTRUCT = "tencent/hunyuan-a13b-instruct",
+  TENCENT_HY_MT2_1_8B = "tencent/hy-mt2-1.8b",
+  TENCENT_HY_MT2_30B_A3B = "tencent/hy-mt2-30b-a3b",
+  TENCENT_HY_MT2_7B = "tencent/hy-mt2-7b",
   TENCENT_HY3 = "tencent/hy3",
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
@@ -691,7 +706,9 @@ export enum PROVIDER_MODEL_TYPE {
   THEDRUMMER_UNSLOPNEMO_12B = "thedrummer/unslopnemo-12b",
   THINKINGMACHINES_INKLING = "thinkingmachines/inkling",
   THINKINGMACHINES_INKLING_SMALL = "thinkingmachines/inkling-small",
+  THINKINGMACHINES_INKLING_SMALL_FREE = "thinkingmachines/inkling-small:free",
   THINKINGMACHINES_INKLING_BATCH = "thinkingmachines/inkling:batch",
+  THINKINGMACHINES_INKLING_FREE = "thinkingmachines/inkling:free",
   THUDM_GLM_4_1V_9B_THINKING = "thudm/glm-4.1v-9b-thinking",
   TNGTECH_DEEPSEEK_R1T_CHIMERA = "tngtech/deepseek-r1t-chimera",
   TNGTECH_DEEPSEEK_R1T_CHIMERA_FREE = "tngtech/deepseek-r1t-chimera:free",
@@ -715,6 +732,7 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_20_MULTI_AGENT_BETA = "x-ai/grok-4.20-multi-agent-beta",
   X_AI_GROK_4_3 = "x-ai/grok-4.3",
   X_AI_GROK_4_5 = "x-ai/grok-4.5",
+  X_AI_GROK_4_6 = "x-ai/grok-4.6",
   X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
@@ -737,6 +755,8 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5_2 = "z-ai/glm-5.2",
   Z_AI_GLM_5_2_BATCH = "z-ai/glm-5.2:batch",
+  Z_AI_GLM_5_2_FREE = "z-ai/glm-5.2:free",
+  Z_AI_GLM_5_3 = "z-ai/glm-5.3",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
   ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
@@ -749,6 +769,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_LATEST = "~openai/gpt-latest",
   OPENAI_GPT_MINI_LATEST = "~openai/gpt-mini-latest",
   X_AI_GROK_LATEST = "~x-ai/grok-latest",
+  Z_AI_GLM_LATEST = "~z-ai/glm-latest",
 
   //   <----- gemini
   AQA = "aqa",
@@ -775,6 +796,7 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_5_FLASH = "gemini-3.5-flash",
   GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
   GEMINI_3_6_FLASH = "gemini-3.6-flash",
+  GEMINI_3_7_FLASH = "gemini-3.7-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
   GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
@@ -802,6 +824,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
   VERTEX_AI_GEMINI_3_5_FLASH_LITE = "vertex_ai/gemini-3.5-flash-lite",
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
+  VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
 }
 
 export interface ProviderModelsMap {
@@ -841,6 +864,34 @@ export interface ProviderKeyConfiguration {
   openai_pipeline_mode?: OpenAiPipelineMode;
 }
 
+/** Read-back sentinel for secret credential values: the backend never returns a stored secret,
+ * it returns this marker instead. Submitting it back means "keep the stored value". */
+export const AUTH_SECRET_SENTINEL = "__SECRET__";
+
+export const AUTH_SEND_AS_VALUES = ["form", "json", "basic"] as const;
+export type AuthSendAs = (typeof AUTH_SEND_AS_VALUES)[number];
+
+export interface ProviderAuthCredential {
+  key: string;
+  value: string;
+  /** Secret values are encrypted at rest and read back masked; once true it cannot be unset. */
+  secret: boolean;
+}
+
+/** Dynamic token auth recipe (OPIK-7940): how to fetch a short-lived bearer before LLM calls.
+ * Presence on a provider means token mode; an empty object on update clears it (back to static). */
+export interface ProviderAuthConfig {
+  token_url: string;
+  send_as?: AuthSendAs;
+  credentials: ProviderAuthCredential[];
+  /** Field holding the token in the reply; dot-path for nested replies (e.g. "result.jwt"). */
+  token_field?: string;
+  /** Field holding the lifetime in seconds in the reply; dot-path supported. */
+  expires_field?: string;
+  /** Lifetime assumed when the reply doesn't state one; 0 means such tokens are not cached. */
+  fallback_ttl_seconds?: number;
+}
+
 export interface BaseProviderKey {
   id: string;
   created_at: string;
@@ -848,6 +899,7 @@ export interface BaseProviderKey {
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
+  auth_config?: ProviderAuthConfig;
   read_only: boolean;
 }
 
@@ -875,7 +927,7 @@ export type ProviderObject =
   | OllamaProviderObject;
 
 export type PartialProviderKeyUpdate = Partial<
-  Omit<BaseProviderKey, "provider">
+  Omit<BaseProviderKey, "provider" | "auth_config">
 > & {
   id?: string;
   provider?: PROVIDER_TYPE;
@@ -883,6 +935,8 @@ export type PartialProviderKeyUpdate = Partial<
   base_url?: string;
   provider_name?: string;
   headers?: Record<string, string>;
+  /** Full recipe to set, or an empty object to clear (switch back to static key). */
+  auth_config?: ProviderAuthConfig | Record<string, never>;
 };
 
 export type ReasoningEffort =
