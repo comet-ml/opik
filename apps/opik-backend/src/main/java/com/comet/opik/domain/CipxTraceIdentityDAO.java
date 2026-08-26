@@ -147,13 +147,13 @@ public class CipxTraceIdentityDAO {
             // Fractional is malformed too, and routed with the text: asLong() would truncate 1.5
             // to a perfectly plausible 1. canConvertToLong also rejects a bignum past long.
             if (!value.isIntegralNumber() || !value.canConvertToLong()) {
-                log.warn("cipx metric '{}' is not a usable whole number ({}); recording 0", field,
-                        value.getNodeType());
+                log.warn("cipx metric is not a usable whole number, recording 0: field='{}' type='{}'",
+                        field, value.getNodeType());
                 return 0L;
             }
             long raw = value.asLong();
             if (raw < 0L || raw > 0xFFFF_FFFFL) {
-                log.warn("cipx metric '{}' is outside UInt32 ({}); recording 0", field, raw);
+                log.warn("cipx metric is outside UInt32, recording 0: field='{}' value={}", field, raw);
                 return 0L;
             }
             return raw;
