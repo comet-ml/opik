@@ -8,7 +8,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,18 +33,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Trace Mutation SQL Routing")
 class TraceMutationSqlRoutingTest {
 
-    /**
-     * A mutation and the token it targets. Deliberately narrow: the three statement kinds a {@code Distributed} table
-     * rejects, which are exactly the ones that must be routed to the shard.
-     */
-    private static final Pattern MUTATION_TARGET = Pattern
-            .compile("(?i)\\b(DELETE\\s+FROM|ALTER\\s+TABLE|OPTIMIZE\\s+TABLE)\\s+(\\S+)");
-
     /** Single-line Java string literals, escapes included. Text blocks are covered by the constants scan instead. */
     private static final Pattern STRING_LITERAL = Pattern.compile("\"(?:[^\"\\\\\\n]|\\\\.)*\"");
-
-    /** The names a mutation must never name directly; {@code tracesMutationTable()} decides between them. */
-    private static final Set<String> PHYSICAL_TRACE_TABLES = Set.of("traces", "traces_local");
 
     private static final Path TRACE_DAO_SOURCE = Path.of("src/main/java/com/comet/opik/domain/TraceDAO.java");
 
