@@ -1886,6 +1886,11 @@ redaction:
   # gpt-4o-2024-08-06 under a date rule. Content placed in those two fields is therefore returned as stored.
   # Structural properties (project_name, thread_id, dataset_name and similar lookup keys) are exempt:
   # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
-  # its keys are named. Anchor patterns so they cannot start mid-token — an unanchored local part such as
-  # [\w.+-]+@... is quadratic on long base64 payloads and will stall reads.
+  # its keys are named.
+  # thread_id specifically is exempt by decision, not by oversight. It is chosen by the caller and used for
+  # navigation and grouping, so what goes in it is the instrumentation's responsibility - the same contract as
+  # object keys above. Do not put content there that the workspace's readers may not see.
+  # Anchor patterns so they cannot start mid-token — an unanchored local part such as [\w.+-]+@... is quadratic
+  # on long base64 payloads. The match budget now bounds that rather than leaving it to the pattern, but an
+  # anchored rule is still the difference between exact masking and a value withheld whole.
   rules: '${OPIK_REDACTION_RULES:-[]}'
