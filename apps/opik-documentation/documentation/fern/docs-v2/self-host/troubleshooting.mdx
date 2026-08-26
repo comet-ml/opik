@@ -120,19 +120,26 @@ WHERE database = 'opik' AND name IN ('traces', 'traces_local');
 </Callout>
 
 ```sql
--- Same lookup across every replica: the engine must be identical on all of them.
-SELECT hostName() AS host, name, engine
+-- Same lookup, every replica. Compare down each table separately: one table's engine must be
+-- the same on every host. The two tables are expected to differ from each other: after the
+-- wrap `traces` is `Distributed` and `traces_local` is a `(Replicated)MergeTree`, which is the
+-- healthy shape, not a mismatch.
+SELECT name, hostName() AS host, engine
 FROM clusterAllReplicas('{cluster}', system.tables)
 WHERE database = '<database_name>' AND name IN ('traces', 'traces_local')
-ORDER BY host, name;
+ORDER BY name, host;
 ```
 
-Substitute `{cluster}` (your cluster macro, from `SELECT * FROM system.macros`) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper. If the engine differs across hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
+Substitute `{cluster}` (your cluster macro, from `SELECT * FROM system.macros`) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper. If a **single table's** engine differs between hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
 
 Then set the flag to match:
 
 - `traces` is a `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` → set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled: false` (Helm) or `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=false` (Docker Compose or plain environment), then restart the backend.
 - `traces` is `Distributed` and `traces_local` exists → set the same key to `true` and restart.
+
+<Callout intent="warning">
+  **On Helm, an explicit env entry wins over the chart value.** The chart derives `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` from `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` **only when that key is not already set under `component.backend.env`** — an explicit entry there takes precedence. So if you change the top-level value, restart, and the check still reports the old expectation, you have a stale override: update or remove the `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` entry under `component.backend.env`. Confirm what the backend actually receives with `kubectl get configmap <release-name>-backend -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED}'`.
+</Callout>
 
 The check re-evaluates on every probe, so readiness returns on its own once the two sides agree — no further action beyond the restart that picks up the new setting.
 
