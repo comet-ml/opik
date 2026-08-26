@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.redaction.RedactionRules;
 import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.inject.OutOfScopeException;
 import com.google.inject.ProvisionException;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -56,7 +57,7 @@ public class Streamer {
         return outputStream;
     }
 
-    private RedactionRules resolveRules() {
+    RedactionRules resolveRules() {
         if (!redactionService.isEnabled()) {
             return RedactionRules.empty();
         }
@@ -66,17 +67,32 @@ public class Streamer {
             return context != null && context.isRedactResponse()
                     ? redactionService.rules()
                     : RedactionRules.empty();
-        } catch (ProvisionException outsideRequestScope) {
-            // ProvisionException, not RuntimeException: catching everything turned a ProvisionException, a
-            // provider bug or a fault in isRedactResponse() into the unknown-caller policy, so a defect came back
-            // as a successful redacted stream instead of failing. And not OutOfScopeException either - Guice
-            // wraps that at the provider boundary, which is why AnalyticsService.resolveIdentity catches
-            // ProvisionException for this same "no request scope" case.
-            //
+        } catch (ProvisionException provisionException) {
+            // Only the missing request scope gets the fallback. Guice reports that as a ProvisionException
+            // wrapping an OutOfScopeException at the provider boundary - which is why this cannot catch
+            // OutOfScopeException directly, and why AnalyticsService.resolveIdentity catches ProvisionException
+            // for the same case. Every other ProvisionException is a provider bug or a fault in
+            // isRedactResponse(), and answering those with the unknown-caller policy would return a defect as a
+            // successful redacted stream, so they propagate.
+            if (!isOutsideRequestScope(provisionException)) {
+                throw provisionException;
+            }
+
+            log.debug("No request scope for this stream, applying the unknown-caller redaction policy");
+
             // See RedactionService.redactWhenCallerUnknown for why a stream can answer this and the writer
             // interceptor cannot.
             return redactionService.redactWhenCallerUnknown() ? redactionService.rules() : RedactionRules.empty();
         }
+    }
+
+    private static boolean isOutsideRequestScope(ProvisionException exception) {
+        for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof OutOfScopeException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
