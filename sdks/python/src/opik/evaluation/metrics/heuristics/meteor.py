@@ -1,4 +1,5 @@
-from typing import Any, Callable, Optional, Sequence, Union
+import re
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 try:
     import nltk  # type: ignore
@@ -7,7 +8,6 @@ except ImportError:  # pragma: no cover - optional dependency
     nltk = None
     wordnet = None
 
-from opik import semantic_version
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -23,6 +23,39 @@ from opik.evaluation.metrics import base_metric, score_result
 # with https://github.com/nltk/nltk/blob/3.6.5/nltk/translate/meteor_score.py#L347
 # for the signature change.
 MINIMUM_NLTK_VERSION = "3.6.5"
+MINIMUM_NLTK_VERSION_INFO = (3, 6, 5)
+
+# NLTK reports two-component versions for several real releases ("3.5", "3.4",
+# "3.3") and used prerelease suffixes in the past ("3.0a3"), so the version
+# string cannot be fed to a strict SemVer parser — it would raise ValueError on
+# exactly the old installs this guard exists to reject. Read the leading numeric
+# components instead.
+_VERSION_RE = re.compile(r"^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?P<suffix>\S*)")
+_PRERELEASE_RE = re.compile(r"^[-._]?(a|b|c|rc|alpha|beta|dev|pre)", re.IGNORECASE)
+
+
+def _is_below_minimum_nltk_version(version: str) -> bool:
+    """Whether `version` is known to predate `MINIMUM_NLTK_VERSION`.
+
+    Version strings that cannot be read at all — such as the ``"unknown (...)"``
+    fallback a broken install can report — return `False`. Refusing to build the
+    metric because a version string was unparseable would be worse than letting
+    NLTK speak for itself, and `_scorer` turns the resulting `TypeError` into an
+    actionable error anyway.
+    """
+    match = _VERSION_RE.match(version)
+    if match is None:
+        return False
+
+    parsed: Tuple[int, ...] = tuple(
+        int(part) if part else 0 for part in match.group(1, 2, 3)
+    )
+    if parsed == MINIMUM_NLTK_VERSION_INFO:
+        # A prerelease of the minimum version ("3.6.5rc1") predates its API;
+        # a post-release or local version ("3.6.5.post1", "3.6.5+local") does not.
+        return _PRERELEASE_RE.match(match.group("suffix")) is not None
+    return parsed < MINIMUM_NLTK_VERSION_INFO
+
 
 try:
     from nltk.translate import meteor_score as nltk_meteor_score
@@ -83,14 +116,11 @@ class METEOR(base_metric.BaseMetric):
                     " `pip install nltk` or provide `meteor_fn`."
                 )
 
-            if (
-                nltk is not None
-                and semantic_version.SemanticVersion.parse(nltk.__version__)
-                < MINIMUM_NLTK_VERSION
-            ):
+            installed_version = getattr(nltk, "__version__", "")
+            if nltk is not None and _is_below_minimum_nltk_version(installed_version):
                 raise ImportError(
                     f"METEOR metric requires nltk >= {MINIMUM_NLTK_VERSION}, but "
-                    f"{nltk.__version__} is installed. Earlier versions expect "
+                    f"{installed_version} is installed. Earlier versions expect "
                     "untokenized input. Upgrade via `pip install -U nltk` or supply "
                     "`meteor_fn`."
                 )
@@ -129,6 +159,17 @@ class METEOR(base_metric.BaseMetric):
                             gamma=gamma,
                         )
                     )
+                except TypeError as error:
+                    # Only reachable when the version guard could not read
+                    # `nltk.__version__`: NLTK < 3.6.5 rejects the tokenized
+                    # input built above. Keep NLTK's own message so a genuine
+                    # type error is not misreported as a version problem.
+                    raise MetricComputationError(
+                        f"NLTK rejected the pre-tokenized METEOR input: {error}. "
+                        f"This usually means nltk < {MINIMUM_NLTK_VERSION} is "
+                        "installed, which expects untokenized strings. Upgrade via "
+                        "`pip install -U nltk` or supply `meteor_fn`."
+                    ) from error
                 except LookupError as error:
                     raise MetricComputationError(
                         "NLTK resource requirement for METEOR not satisfied. "

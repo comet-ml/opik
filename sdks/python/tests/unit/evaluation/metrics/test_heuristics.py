@@ -488,6 +488,83 @@ def test_meteor_metric__legacy_nltk__raises_actionable_import_error(monkeypatch)
         METEOR(track=False)
 
 
+@pytest.mark.parametrize(
+    "installed_version",
+    [
+        # NLTK ships two-component versions for real releases, which a strict
+        # SemVer parser rejects outright instead of reporting as too old.
+        "3.5",
+        "3.4",
+        "3.2.5",
+        "3.0a3",
+        # A prerelease of the minimum version predates its API.
+        "3.6.5rc1",
+        "3.6.5-rc1",
+    ],
+)
+def test_meteor_metric__unsupported_nltk_versions__raise_import_error(
+    monkeypatch, installed_version
+):
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", object())
+    monkeypatch.setattr(
+        meteor_module, "nltk", types.SimpleNamespace(__version__=installed_version)
+    )
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    with pytest.raises(ImportError, match="requires nltk >= 3.6.5"):
+        METEOR(track=False)
+
+
+@pytest.mark.parametrize(
+    "installed_version",
+    [
+        "3.6.5",
+        "3.9.4",
+        "3.6.5.post1",
+        "3.6.5+local",
+        "4.0.0",
+        # A version string that cannot be read at all must not block construction.
+        "unknown (unknown)",
+        "",
+    ],
+)
+def test_meteor_metric__supported_nltk_versions__construct(
+    monkeypatch, installed_version
+):
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", object())
+    monkeypatch.setattr(
+        meteor_module, "nltk", types.SimpleNamespace(__version__=installed_version)
+    )
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    assert METEOR(track=False) is not None
+
+
+def test_meteor_metric__nltk_rejects_tokenized_input__raises_metric_error(monkeypatch):
+    # The version guard is skipped when `nltk.__version__` is unreadable, so an
+    # ancient NLTK still surfaces as an actionable error rather than a raw
+    # TypeError from inside NLTK.
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    class _LegacyMeteor:
+        @staticmethod
+        def meteor_score(references, hypothesis, alpha, beta, gamma):
+            raise TypeError('"hypothesis" expects pre-tokenized hypothesis')
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", _LegacyMeteor)
+    monkeypatch.setattr(
+        meteor_module, "nltk", types.SimpleNamespace(__version__="unknown (unknown)")
+    )
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    with pytest.raises(MetricComputationError, match="nltk < 3.6.5"):
+        METEOR(track=False).score(output="hyp", reference="ref")
+
+
 def test_meteor_metric__default_nltk_backend__scores_without_error():
     # NLTK's meteor_score requires pre-tokenized input; before the fix the default
     # backend passed raw strings and every call raised
