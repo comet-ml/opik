@@ -118,14 +118,16 @@ class TraceMutationRoutingArchTest {
                     }
                     for (var mutation : TraceMutationSql.findMutations(sql)) {
                         mutationsScanned++;
-                        if (TraceMutationSql.namesAPhysicalTraceTable(mutation)) {
+                        if (TraceMutationSql.targetsAnythingOtherThanTheResolver(mutation)) {
                             events.add(SimpleConditionEvent.violated(item, """
-                                    %s.%s declares `%s`. Every trace mutation must target <traces_mutation_table>, \
-                                    which TraceDAOImpl#tracesMutationTable resolves from the wrap flag: naming \
-                                    `traces` breaks every cut-over install (a Distributed table rejects mutations), \
-                                    and naming `traces_local` breaks every install that has not cut over (no such \
-                                    table).\
-                                    """.formatted(item.getSimpleName(), field.getName(), mutation)));
+                                    %s.%s declares `%s`. Every trace mutation must target %s, which \
+                                    TraceDAOImpl#tracesMutationTable resolves from the wrap flag and \
+                                    selectTracesMutationTable binds: naming `traces` breaks every cut-over install (a \
+                                    Distributed table rejects mutations), naming `traces_local` breaks every install \
+                                    that has not cut over (no such table), and any other target is never bound at all \
+                                    — it reaches the server as literal placeholder text.\
+                                    """.formatted(item.getSimpleName(), field.getName(), mutation,
+                                    TraceMutationSql.RESOLVER_PLACEHOLDER)));
                         }
                     }
                 }

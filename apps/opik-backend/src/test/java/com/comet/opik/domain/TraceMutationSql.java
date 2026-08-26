@@ -42,6 +42,26 @@ class TraceMutationSql {
         return mutations;
     }
 
+    /** The only target a trace mutation may name: the placeholder {@code selectTracesMutationTable} binds. */
+    static final String RESOLVER_PLACEHOLDER = "<traces_mutation_table>";
+
+    /**
+     * Whether a mutation targets anything other than the resolver placeholder.
+     * <p>
+     * An allowlist, deliberately, where this began as a denylist of {@code traces} / {@code traces_local}. Rejecting
+     * only the two known-bad names left everything else passing: a template naming {@code traces_local_v2}, or carrying
+     * a typo'd placeholder like {@code <traces_mutation_tables>}, would satisfy the rule while never being bound by
+     * {@code selectTracesMutationTable} — so it would render with the placeholder text intact and fail at the server.
+     * Requiring the exact placeholder closes the whole space instead of two points in it.
+     */
+    static boolean targetsAnythingOtherThanTheResolver(String mutation) {
+        return !RESOLVER_PLACEHOLDER.equals(targetOf(mutation));
+    }
+
+    private static String targetOf(String mutation) {
+        return mutation.substring(mutation.lastIndexOf(' ') + 1);
+    }
+
     static boolean namesAPhysicalTraceTable(String mutation) {
         var target = mutation.substring(mutation.lastIndexOf(' ') + 1);
         return PHYSICAL_TRACE_TABLES.contains(normalizeTarget(target));
