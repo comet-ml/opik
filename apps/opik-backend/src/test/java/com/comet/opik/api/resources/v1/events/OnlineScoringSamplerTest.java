@@ -277,6 +277,35 @@ class OnlineScoringSamplerTest {
         }
 
         @Test
+        void scoresPickedPythonRuleOnExperimentTracesWhenToggleIsEnabled() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(true);
+            var evaluator = createPythonEvaluator(0.0f, EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+        }
+
+        @Test
+        void skipsPickedPythonRuleOnExperimentTracesWhenToggleIsDisabled() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(false);
+            var evaluator = createPythonEvaluator(0.0f, EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
         void skipsUnpickedProductionScopedRuleOnExperimentTraces() {
             var picked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
             var unpicked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
@@ -823,11 +852,16 @@ class OnlineScoringSamplerTest {
     }
 
     private AutomationRuleEvaluatorUserDefinedMetricPython createPythonEvaluator(float samplingRate) {
+        return createPythonEvaluator(samplingRate, EvalTriggerScope.BOTH);
+    }
+
+    private AutomationRuleEvaluatorUserDefinedMetricPython createPythonEvaluator(float samplingRate,
+            EvalTriggerScope triggerScope) {
         return podamFactory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
                 .projects(toProjects(Set.of(projectId)))
                 .samplingRate(samplingRate)
                 .enabled(true)
-                .triggerScope(EvalTriggerScope.BOTH)
+                .triggerScope(triggerScope)
                 .filters(List.of())
                 .build();
     }
