@@ -1,5 +1,7 @@
 package com.comet.opik.db;
 
+import lombok.Builder;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.io.IOException;
@@ -90,11 +92,27 @@ class TracesSchemaParity {
     static final String BACKUP = "traces_pre_cutover_backup";
 
     /**
-     * {@code is_deleted} is the successor's {@code ReplacingMergeTree} delete meta-column (000101). It is engine
-     * bookkeeping rather than trace data, which is why it has no counterpart on {@code traces} and why the cutover
-     * backfill deliberately omits it so it defaults to 0.
+     * The columns that exist on the shadow and have no counterpart on {@code traces}, pinned rather than merely named.
+     * <p>
+     * These are the one blind spot of the type comparison below: it iterates the columns of {@code traces} and looks
+     * each up on the shadow, so a shadow-only column is never reached by it. Left unpinned, {@code is_deleted} could
+     * become {@code DEFAULT 1} and every row the cutover copies would materialise as a tombstone — the backfill omits
+     * the column precisely so it takes its default, so the default is the whole contract.
      */
-    static final Set<String> SHADOW_ONLY_COLUMNS = Set.of("is_deleted");
+    static final Map<String, ShadowOnlyColumn> SHADOW_ONLY_COLUMNS = Map.of(
+            "is_deleted", ShadowOnlyColumn.builder()
+                    .type("UInt8")
+                    .defaultKind("DEFAULT")
+                    .defaultExpression("0")
+                    .reason("the ReplacingMergeTree delete meta-column (000101); the cutover backfill omits it so "
+                            + "every copied row defaults to alive")
+                    .build());
+
+    /** A shadow-only column's full declared contract. */
+    @Builder(toBuilder = true)
+    record ShadowOnlyColumn(@NonNull String type, @NonNull String defaultKind, @NonNull String defaultExpression,
+            @NonNull String reason) {
+    }
 
     /**
      * Skip indices the successor adds because its layout needs them and {@code traces} cannot use them:
@@ -115,25 +133,44 @@ class TracesSchemaParity {
      * grow into a blanket exemption.
      */
     static final Map<String, BaselineTypeDifference> BASELINE_TYPE_DIFFERENCES = Map.of(
-            "start_time", new BaselineTypeDifference("DateTime64(9, 'UTC')", "DateTime64(6, 'UTC')",
-                    "nanosecond -> microsecond precision; nothing ingested needs finer (000101)"),
-            "created_at", new BaselineTypeDifference("DateTime64(9, 'UTC')", "DateTime64(6, 'UTC')",
-                    "nanosecond -> microsecond precision; nothing ingested needs finer (000101)"),
-            "end_time", new BaselineTypeDifference("Nullable(DateTime64(9, 'UTC'))", "DateTime64(6, 'UTC')",
-                    "Nullable -> non-nullable with an epoch sentinel, dropping the null-mask overhead (000101)"),
-            "ttft", new BaselineTypeDifference("Nullable(Float64)", "Float64",
-                    "Nullable -> non-nullable with a NaN sentinel (000101)"),
-            "duration", new BaselineTypeDifference("Nullable(Float64)", "Float64",
-                    "Nullable -> non-nullable, materialized from the sentinels rather than a null check (000101)"),
-            "id_at", new BaselineTypeDifference("DateTime('UTC')", "DateTime64(0, 'UTC')",
-                    "DateTime -> DateTime64(0), honest past 2106 so a far-future UUIDv7 partitions correctly (000114)"));
+            "start_time", BaselineTypeDifference.builder()
+                    .tracesType("DateTime64(9, 'UTC')")
+                    .shadowType("DateTime64(6, 'UTC')")
+                    .reason("nanosecond -> microsecond precision; nothing ingested needs finer (000101)")
+                    .build(),
+            "created_at", BaselineTypeDifference.builder()
+                    .tracesType("DateTime64(9, 'UTC')")
+                    .shadowType("DateTime64(6, 'UTC')")
+                    .reason("nanosecond -> microsecond precision; nothing ingested needs finer (000101)")
+                    .build(),
+            "end_time", BaselineTypeDifference.builder()
+                    .tracesType("Nullable(DateTime64(9, 'UTC'))")
+                    .shadowType("DateTime64(6, 'UTC')")
+                    .reason("Nullable -> non-nullable with an epoch sentinel, dropping the null-mask overhead (000101)")
+                    .build(),
+            "ttft", BaselineTypeDifference.builder()
+                    .tracesType("Nullable(Float64)")
+                    .shadowType("Float64")
+                    .reason("Nullable -> non-nullable with a NaN sentinel (000101)")
+                    .build(),
+            "duration", BaselineTypeDifference.builder()
+                    .tracesType("Nullable(Float64)")
+                    .shadowType("Float64")
+                    .reason("Nullable -> non-nullable, materialized from the sentinels rather than a null check (000101)")
+                    .build(),
+            "id_at", BaselineTypeDifference.builder()
+                    .tracesType("DateTime('UTC')")
+                    .shadowType("DateTime64(0, 'UTC')")
+                    .reason("DateTime -> DateTime64(0), honest past 2106 so a far-future UUIDv7 partitions correctly (000114)")
+                    .build());
 
     /**
      * One allowlisted difference, pinned on <b>both</b> sides rather than merely asserted to exist. Recording only that
      * the types differ would let either side drift to an unrelated type — {@code traces.start_time} becoming
      * {@code String}, say — while still "differing" and so still being excused.
      */
-    record BaselineTypeDifference(String tracesType, String shadowType, String reason) {
+    @Builder(toBuilder = true)
+    record BaselineTypeDifference(@NonNull String tracesType, @NonNull String shadowType, @NonNull String reason) {
     }
 
     /**
@@ -167,8 +204,8 @@ class TracesSchemaParity {
                         read-facing column parity: every column on `%s` must exist on the `%s` shadow (and vice versa, \
                         beyond the documented engine meta-columns %s). A change that adds or drops a column on one \
                         without the other leaves the cutover promoting a table that does not match the live one.\
-                        """, TRACES, SHADOW, SHADOW_ONLY_COLUMNS)
-                .containsExactlyInAnyOrderElementsOf(union(traces.columnNames(), SHADOW_ONLY_COLUMNS));
+                        """, TRACES, SHADOW, SHADOW_ONLY_COLUMNS.keySet())
+                .containsExactlyInAnyOrderElementsOf(union(traces.columnNames(), SHADOW_ONLY_COLUMNS.keySet()));
 
         // Type parity for every shared column outside the documented baseline. This is the leg that catches a
         // precision narrowed on one table only, or a String quietly becoming LowCardinality(String) on one side: the
@@ -188,6 +225,26 @@ class TracesSchemaParity {
                             """,
                             name, TRACES, SHADOW)
                     .isEqualTo(column.type());
+        });
+
+        // The shadow-only columns, which the loop above cannot reach because they have no counterpart on `traces`.
+        // Nothing else checks them at all, so their declared contract is pinned here in full.
+        SHADOW_ONLY_COLUMNS.forEach((name, expected) -> {
+            var column = shadowColumns.get(name);
+            assertThat(column)
+                    .as("the `%s` shadow must carry `%s` — %s", SHADOW, name, expected.reason())
+                    .isNotNull();
+            assertThat(column.type()).as("shadow-only column `%s` type (%s)", name, expected.reason())
+                    .isEqualTo(expected.type());
+            assertThat(column.defaultKind()).as("shadow-only column `%s` default kind (%s)", name, expected.reason())
+                    .isEqualTo(expected.defaultKind());
+            assertThat(column.defaultExpression())
+                    .as("""
+                            shadow-only column `%s` default expression (%s). The cutover backfill omits this column so \
+                            it takes its default, which makes the default the entire contract: change it and every \
+                            copied row is written with the wrong value.\
+                            """, name, expected.reason())
+                    .isEqualTo(expected.defaultExpression());
         });
 
         // Each allowlisted difference is pinned on both sides. Merely requiring the types to differ would excuse an
@@ -229,8 +286,8 @@ class TracesSchemaParity {
                 .as("""
                         the `%s` shadow must accept exactly the backfilled columns plus its engine meta-columns %s \
                         (which the backfill deliberately omits so they take their defaults)\
-                        """, SHADOW, SHADOW_ONLY_COLUMNS)
-                .containsExactlyInAnyOrderElementsOf(union(backfillColumns, SHADOW_ONLY_COLUMNS));
+                        """, SHADOW, SHADOW_ONLY_COLUMNS.keySet())
+                .containsExactlyInAnyOrderElementsOf(union(backfillColumns, SHADOW_ONLY_COLUMNS.keySet()));
 
         // The column sets above say the right columns are carried; this says they are carried to the right places.
         assertBackfillInsertMatchesSelect();

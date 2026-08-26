@@ -19,6 +19,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 
 import java.sql.Connection;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -70,9 +71,14 @@ class TracesSchemaParityPreCutoverTest {
 
     @AfterAll
     void tearDown() throws Exception {
-        connection.close();
-        clickHouse.stop();
-        zookeeper.stop();
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } finally {
+            clickHouse.stop();
+            zookeeper.stop();
+        }
     }
 
     @Test
@@ -100,6 +106,97 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
+     * The reference migration's pre-cutover branch, applied to the topology it is written for. Proves the two facts the
+     * pattern rests on: {@code liquibase-clickhouse} honours a formatted-SQL {@code sqlCheck} precondition with
+     * {@code onFail:MARK_RAN}, so one file can serve both topologies; and the branch that does run reaches both the live
+     * table and the shadow, leaving parity intact.
+     */
+    @Test
+    @Order(5)
+    @DisplayName("the reference migration takes its pre-cutover branch and records the other as MARK_RAN")
+    void referenceMigrationTakesThePreCutoverBranch() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.PRE_CUTOVER_CHANGESET))
+                .as("on a pre-cutover install the pre-cutover branch must run")
+                .isEqualTo(TracesDdlReferenceFixture.EXECUTED);
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.POST_CUTOVER_CHANGESET))
+                .as("""
+                        the post-cutover branch must be recorded MARK_RAN, not left unrun: it is marked applied without \
+                        executing, so a later startup never retries it against the wrong topology\
+                        """)
+                .isEqualTo(TracesDdlReferenceFixture.MARK_RAN);
+
+        // The read-facing field and the storage-only index both reach both tables pre-cutover.
+        var traces = TableSchema.read(connection, DATABASE_NAME, TRACES);
+        var shadow = TableSchema.read(connection, DATABASE_NAME, SHADOW);
+        assertReferenceFieldContract(traces);
+        assertReferenceFieldContract(shadow);
+        assertReferenceIndexContract(traces);
+        assertReferenceIndexContract(shadow);
+
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * Idempotency: the guarded branches are all {@code IF [NOT] EXISTS} and the skipped one is recorded {@code MARK_RAN},
+     * so a second apply — a restarting replica, a re-run after a partial failure — must be a no-op rather than an error.
+     */
+    @Test
+    @Order(6)
+    @DisplayName("re-applying the reference migration is a no-op")
+    void reApplyingTheReferenceMigrationIsANoOp() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, TracesDdlReferenceFixture.CHANGELOG))
+                .as("both branches stay recorded as applied, so nothing is left to run")
+                .isEmpty();
+
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The negative control that makes the pattern load-bearing: the same change written the ordinary unguarded way
+     * applies without error and leaves the shadow behind, and this gate rejects it. A pull request shaped like this
+     * cannot merge.
+     */
+    @Test
+    @Order(7)
+    @DisplayName("an unguarded traces migration applies cleanly and leaves shadow drift the gate rejects")
+    void unguardedMigrationIsRejected() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
+
+        assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
+                .as("the unguarded ALTER does reach the live table — it fails silently, which is the problem")
+                .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+        assertThat(TableSchema.read(connection, DATABASE_NAME, SHADOW).columnNames())
+                .as("...and never reaches the shadow the cutover will promote")
+                .doesNotContain(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        execute("ALTER TABLE %s.%s DROP COLUMN %s"
+                .formatted(DATABASE_NAME, TRACES, TracesDdlReferenceFixture.UNGUARDED_COLUMN));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The fixtures do write Liquibase ledger rows, so this pins that they stay additive: the shipped changelog is still
+     * fully applied afterwards. Listing its unrun changesets also revalidates every recorded checksum, so a fixture
+     * that had disturbed a shipped ledger row would fail here rather than in some unrelated suite later.
+     */
+    @Test
+    @Order(8)
+    @DisplayName("applying the fixtures leaves the shipped changelog intact")
+    void applyingTheFixturesLeavesTheShippedChangelogIntact() {
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
+                .as("the shipped changelog must remain fully applied, with nothing pending or invalidated")
+                .isEmpty();
+    }
+
+    /**
      * Both directions of the same mistake — a column that reached one table and not the other — parameterized because
      * the arrange/act/assert is identical and only the target differs. Both directions are covered deliberately: a
      * migration writer is far likelier to forget the shadow, but a shadow-only change is equally broken.
@@ -115,14 +212,10 @@ class TracesSchemaParityPreCutoverTest {
     @Order(10)
     @DisplayName("drift is caught: a column added to one table but not the other")
     void oneSidedColumnIsCaught(String table, String column) throws Exception {
-        execute("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining(column);
-
-        execute("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column)),
+                List.of("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column)),
+                column);
     }
 
     /**
@@ -142,20 +235,19 @@ class TracesSchemaParityPreCutoverTest {
     void projectionQueryDriftIsCaught() throws Exception {
         allowProjections(TRACES);
         allowProjections(SHADOW);
-        execute("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
-                .formatted(DATABASE_NAME, TRACES));
-        execute("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
-                .formatted(DATABASE_NAME, SHADOW));
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("proj_drift");
-
-        execute("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES));
-        execute("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, SHADOW));
-        restoreProjectionMode(TRACES);
-        restoreProjectionMode(SHADOW);
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
+                        .formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
+                                .formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, SHADOW),
+                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
+                                .formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
+                                .formatted(DATABASE_NAME, SHADOW)),
+                "proj_drift");
     }
 
     private void allowProjections(String table) throws Exception {
@@ -176,15 +268,10 @@ class TracesSchemaParityPreCutoverTest {
     @Order(15)
     @DisplayName("drift is caught: a shared column whose type changed on one table only")
     void oneSidedTypeChangeIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)".formatted(DATABASE_NAME, SHADOW));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("name")
-                .hasMessageContaining("LowCardinality");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)".formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW)),
+                "name", "LowCardinality");
     }
 
     /**
@@ -196,16 +283,11 @@ class TracesSchemaParityPreCutoverTest {
     @Order(16)
     @DisplayName("drift is caught: an allowlisted column that left its documented type")
     void allowlistedColumnLeavingItsDocumentedTypeIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("allowlisted column")
-                .hasMessageContaining("ttft");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
-                .formatted(DATABASE_NAME, SHADOW));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
+                        .formatted(DATABASE_NAME, SHADOW)),
+                "allowlisted column", "ttft");
     }
 
     /**
@@ -216,16 +298,12 @@ class TracesSchemaParityPreCutoverTest {
     @Order(17)
     @DisplayName("drift is caught: an allowlisted column that changed on traces")
     void allowlistedColumnDriftingOnTracesIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')".formatted(DATABASE_NAME, TRACES));
-
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("allowlisted column")
-                .hasMessageContaining("start_time");
-
-        execute("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
-                .formatted(DATABASE_NAME, TRACES));
-        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')"
+                        .formatted(DATABASE_NAME, TRACES)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
+                        .formatted(DATABASE_NAME, TRACES)),
+                "allowlisted column", "start_time");
     }
 
     /**
@@ -258,14 +336,81 @@ class TracesSchemaParityPreCutoverTest {
     @Order(13)
     @DisplayName("drift is caught: a skip index added to traces but not to the shadow")
     void skipIndexAddedToTracesAloneIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s ADD INDEX idx_drift_name name TYPE set(0) GRANULARITY 1"
-                .formatted(DATABASE_NAME, TRACES));
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s ADD INDEX idx_drift_name name TYPE set(0) GRANULARITY 1"
+                        .formatted(DATABASE_NAME, TRACES)),
+                List.of("ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES)),
+                "idx_drift_name");
+    }
 
-        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("idx_drift_name");
+    /**
+     * The one column the type comparison structurally cannot reach — it exists on the shadow and has no counterpart on
+     * {@code traces} — and the one where the <i>default</i> is the whole contract. The cutover backfill deliberately
+     * omits {@code is_deleted} so it takes its default; flip that default to 1 and every row the cutover copies
+     * materialises as a {@code ReplacingMergeTree} tombstone, which is a silent, total data loss at swap time.
+     */
+    @Test
+    @Order(18)
+    @DisplayName("drift is caught: the shadow's is_deleted default flipped to 1")
+    void shadowOnlyColumnDefaultDriftIsCaught() throws Exception {
+        assertDriftIsCaught(
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 1".formatted(DATABASE_NAME, SHADOW)),
+                List.of("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0".formatted(DATABASE_NAME, SHADOW)),
+                "is_deleted");
+    }
 
-        execute("ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES));
+    /**
+     * The reference field must arrive as the exact column the migration declares. Presence alone would be satisfied by
+     * a {@code UInt32}, or by an {@code ALIAS} where a {@code MATERIALIZED} was intended — both of which change the
+     * read contract while passing a name check.
+     */
+    private void assertReferenceFieldContract(TableSchema schema) {
+        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(column)
+                .as("`%s` must carry the reference field on `%s`", TracesDdlReferenceFixture.DERIVED_COLUMN,
+                        schema.table())
+                .isNotNull();
+        assertThat(column.type()).as("reference field type on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+        assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+        assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
+    }
+
+    /** Likewise the index: the same name with a different type, expression or granularity is a different index. */
+    private void assertReferenceIndexContract(TableSchema schema) {
+        assertThat(schema.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+                .as("`%s` must carry the reference index, defined as declared", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
+    }
+
+    /**
+     * Injects drift, asserts the guard rejects it naming {@code expectedInMessage}, and restores the schema
+     * <b>whether or not the assertion held</b>.
+     * <p>
+     * The finally is the point. These negative tests share one container with every later {@code @Order}ed test, so a
+     * failing assertion that left its drift in place would cascade: the next tests fail for a reason unrelated to what
+     * they assert, and the real failure is buried. Restoring first, then re-asserting parity, also proves the cleanup
+     * actually worked rather than assuming it.
+     */
+    private void assertDriftIsCaught(List<String> inject, List<String> restore, String... expectedInMessage)
+            throws Exception {
+        for (var sql : inject) {
+            execute(sql);
+        }
+        try {
+            var thrown = assertThatThrownBy(
+                    () -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                    .isInstanceOf(AssertionError.class);
+            for (var expected : expectedInMessage) {
+                thrown.hasMessageContaining(expected);
+            }
+        } finally {
+            for (var sql : restore) {
+                execute(sql);
+            }
+        }
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
