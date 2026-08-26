@@ -1,27 +1,55 @@
 import copy
 import logging
-from typing import Any, Dict, Optional, List, Tuple, TypeVar, Type
+from typing import Any, Dict, Optional, List, Set, Tuple, TypeVar, Type
 
 from . import logging_messages
 
 LOGGER = logging.getLogger(__name__)
 
+_MAX_FLATTEN_DEPTH = 20
+
 
 def flatten_dict(
-    d: Dict[str, Any], parent_key: str, delim: str = "."
+    d: Dict[str, Any],
+    parent_key: str,
+    delim: str = ".",
+    _depth: int = 0,
+    _seen: Optional[Set[int]] = None,
 ) -> Dict[str, Any]:
-    """
-    The current implementation does not have max depth restrictions or cyclic references handling!
-    """
+    if _seen is None:
+        _seen = set()
+
+    dict_id = id(d)
+    if dict_id in _seen:
+        LOGGER.warning("Cyclic reference detected in flatten_dict, skipping")
+        return {}
+
+    if _depth >= _MAX_FLATTEN_DEPTH:
+        LOGGER.warning(
+            "Max depth (%d) reached in flatten_dict, returning remaining value as-is",
+            _MAX_FLATTEN_DEPTH,
+        )
+        return {parent_key: d} if parent_key else {}
+
+    _seen.add(dict_id)
     items = []  # type: ignore
 
     for key, value in d.items():
         new_key = f"{parent_key}{delim}{key}" if parent_key else key
         if isinstance(value, dict):
-            items.extend(flatten_dict(value, parent_key=new_key, delim=delim).items())
+            items.extend(
+                flatten_dict(
+                    value,
+                    parent_key=new_key,
+                    delim=delim,
+                    _depth=_depth + 1,
+                    _seen=_seen,
+                ).items()
+            )
         else:
             items.append((new_key, value))
 
+    _seen.discard(dict_id)
     return dict(items)
 
 
