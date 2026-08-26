@@ -164,6 +164,35 @@ traces_endtime_type() {
     ch "SELECT type FROM system.columns WHERE database = '$DATABASE' AND table = '$1' AND name = 'end_time'"
 }
 
+# Stage C and --unwrap-only both rotate `traces` out to 'traces_dist_old', and RENAME cannot overwrite an existing name. A
+# leftover fails the rotate cleanly (it is atomic per host) but as a bare "table already exists", so refuse here with the
+# remedy instead. Shared so the two cannot drift.
+#
+# Only claim it IS the data-less ex-wrapper, and only suggest dropping it, once the engine says so. Presence under this name
+# is convention, not proof: the suggested DROP is ON CLUSTER, so if anything else held the name, following that advice
+# would destroy it on every replica. A Distributed table is a routing definition and holds no rows, which is what makes the
+# drop safe in the expected case — and the only thing that does.
+assert_traces_dist_old_free() {
+    local context="$1" engine definition
+    engine="$(traces_engine traces_dist_old)"
+    [[ -n "$engine" ]] || return 0
+    echo "ERROR: $context: '$DATABASE.traces_dist_old' already exists, so the atomic rotate cannot claim that name." >&2
+    if [[ "$engine" == "Distributed" ]]; then
+        # TSVRaw: the default TabSeparated escapes the quotes in engine_full, so the printed DDL would not match what the
+        # operator sees in ClickHouse.
+        definition="$(ch "SELECT engine_full FROM system.tables WHERE database = '$DATABASE' AND name = 'traces_dist_old' FORMAT TSVRaw" 2>/dev/null || true)"
+        echo "       It is the data-less ex-wrapper left by an earlier stage C / un-wrap whose DROP did not complete." >&2
+        [[ -z "$definition" ]] || echo "       Definition: $definition" >&2
+        echo "       Dropping it loses no rows — a Distributed table only routes. Confirm the target above, then:" >&2
+        echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"DROP TABLE IF EXISTS $DATABASE.traces_dist_old ON CLUSTER '{cluster}' SYNC\"" >&2
+    else
+        echo "       It is engine='$engine', NOT the data-less Distributed ex-wrapper this name is reserved for, so it may" >&2
+        echo "       hold rows. Deliberately NOT suggesting a DROP here: that statement is ON CLUSTER and would apply on" >&2
+        echo "       every replica. Identify what owns this name and resolve it by hand." >&2
+    fi
+    exit 1
+}
+
 # The migration walks traces through three shapes; a stage is only valid in one of them:
 #   pre-EXCHANGE       -> traces is a *MergeTree with Nullable end_time (the original schema)      -> stage A
 #   post-EXCHANGE      -> traces is a *MergeTree with non-Nullable end_time (the successor schema) -> stage B
@@ -215,16 +244,7 @@ assert_topology() {
             }
             [[ -n "$(traces_engine traces_local)" ]] || { echo "ERROR: 'traces_local' (successor data) not found; topology is not a clean post-wrap state." >&2; exit 1; }
             [[ -n "$(traces_engine traces_pre_cutover_backup)" ]] || { echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; topology is not a clean post-wrap state." >&2; exit 1; }
-            # Stage C rotates `traces` out to the same 'traces_dist_old' the un-wrap uses, and RENAME cannot overwrite an
-            # existing name. The rotate is atomic per host, so a leftover fails cleanly rather than half-applying — but it
-            # fails as a bare "table already exists" mid-run. Refuse here instead, with the fix, exactly as --unwrap-only does.
-            [[ -z "$(traces_engine traces_dist_old)" ]] || {
-                echo "ERROR: stage C: '$DATABASE.traces_dist_old' already exists, so the atomic rotate cannot claim that name." >&2
-                echo "       It is the data-less ex-wrapper left by an earlier stage C / un-wrap whose DROP did not complete." >&2
-                echo "       Drop it and re-run:" >&2
-                echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"DROP TABLE IF EXISTS $DATABASE.traces_dist_old ON CLUSTER '{cluster}' SYNC\"" >&2
-                exit 1
-            }
+            assert_traces_dist_old_free "stage C"
             ;;
     esac
 }
@@ -274,16 +294,7 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
         echo "       real rollback performs. Refusing — resolve the topology by hand." >&2
         exit 1
     }
-    # RENAME cannot overwrite an existing name, so a leftover 'traces_dist_old' (from an earlier stage C or un-wrap whose
-    # RENAME landed but whose DROP did not, followed by a re-wrap) would fail the rotate below with a bare
-    # "table already exists". Report it here instead: it is data-less, so the fix is simply to drop it.
-    [[ -z "$(traces_engine traces_dist_old)" ]] || {
-        echo "ERROR: --unwrap-only: '$DATABASE.traces_dist_old' already exists, so the atomic rotate below cannot claim that" >&2
-        echo "       name. It is the data-less ex-wrapper left by an earlier stage C / un-wrap whose DROP did not complete." >&2
-        echo "       Drop it and re-run:" >&2
-        echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"DROP TABLE IF EXISTS $DATABASE.traces_dist_old ON CLUSTER '{cluster}' SYNC\"" >&2
-        exit 1
-    }
+    assert_traces_dist_old_free "--unwrap-only"
     echo "NOTE: reversing the Distributed wrap only. The partitioned successor stays live, so nothing is promoted and no" >&2
     echo "      deletes are replayed; this lands in the post-EXCHANGE, pre-wrap state." >&2
     run_file 000004_rollback_unwrap.sql
