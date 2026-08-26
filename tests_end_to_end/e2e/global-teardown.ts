@@ -73,6 +73,29 @@ async function globalTeardown() {
     console.warn('[global-teardown] project sweep warning:', e);
   }
 
+  // Provider keys are swept here rather than in the fixture that seeds them:
+  // built-in provider keys are WORKSPACE-GLOBAL and unique per provider, so
+  // concurrent tests share one row and a per-test delete would pull it out from
+  // under a test still using it. See `fixtures/builtin-provider-key.fixture.ts`.
+  // Only rows whose `name` carries this run's prefix can match, so an
+  // operator's real key is never in scope.
+  try {
+    const providerKeys = await backend.listProviderKeysWithNamePrefix(prefix);
+    if (providerKeys.length === 0) {
+      console.log('  no provider keys to sweep');
+    }
+    for (const k of providerKeys) {
+      try {
+        await backend.deleteProviderKey(k.id);
+        console.log(`  deleted ${k.provider} provider key ${k.name}`);
+      } catch (e) {
+        console.warn(`  provider key ${k.name} delete warning:`, e);
+      }
+    }
+  } catch (e) {
+    console.warn('[global-teardown] provider key sweep warning:', e);
+  }
+
   if (!env.leaveFailures) {
     try {
       await fs.rm(path.resolve(E2E_DIR, env.scratchRoot, runId), { recursive: true, force: true });

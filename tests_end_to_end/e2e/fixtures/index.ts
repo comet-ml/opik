@@ -4,6 +4,10 @@ export type {
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
+export type {
+  BuiltInProviderKeysFixture,
+  BuiltInProviderKeyFixtures,
+} from './builtin-provider-key.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type {
   BystanderExperimentRef,

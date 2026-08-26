@@ -1,6 +1,8 @@
 import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { ModelParametersPanel } from './model-parameters';
+import { selectModelFromProvider, type ProviderScopedModel } from './model-picker';
 
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
@@ -100,6 +102,62 @@ export class OnlineEvaluationPage {
   /** Dialog root, scoped by testid. */
   get dialog(): Locator {
     return this.page.getByTestId('add-edit-rule-dialog');
+  }
+
+  /** The add/edit dialog's LLM model picker. */
+  get modelPicker(): Locator {
+    return this.dialog
+      .getByRole('combobox')
+      .filter({ has: this.page.getByTestId('select-a-llm-model') });
+  }
+
+  /** The Model parameters popover inside the add/edit dialog. */
+  get modelParameters(): ModelParametersPanel {
+    return new ModelParametersPanel(this.page, this.dialog);
+  }
+
+  /**
+   * Open a rule's edit dialog through its row kebab, without changing anything.
+   *
+   * `setRuleEnabledByName` does the same navigation on its way to the switch;
+   * this exists for tests that only need to read what the dialog hydrated from
+   * the persisted rule.
+   */
+  async openEditRuleDialog(name: string): Promise<void> {
+    return test.step(`open the edit dialog for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.dialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Submit the add/edit dialog and wait for it to close. */
+  async submitRuleDialog(): Promise<void> {
+    return test.step('submit the rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /** Type the rule's name into the open add/edit dialog. */
+  async fillRuleName(name: string): Promise<void> {
+    return test.step(`fill rule name "${name}"`, async () => {
+      await this.dialog.getByRole('textbox', { name: 'Rule name' }).fill(name);
+    });
+  }
+
+  /**
+   * Pick the judge's model through its provider's submenu.
+   *
+   * `fillAndSubmitCreateRuleDialogLLMJudge` picks by search instead, which is
+   * fine for the single-provider models it uses; a Gemini model label is
+   * published by both Gemini and Vertex AI, so it has to be addressed by
+   * provider (see `selectModelFromProvider`).
+   */
+  async selectJudgeModel(model: ProviderScopedModel): Promise<void> {
+    await selectModelFromProvider(this.page, this.modelPicker, model);
   }
 
   /**
