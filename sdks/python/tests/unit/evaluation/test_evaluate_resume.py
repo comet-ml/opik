@@ -414,3 +414,4 @@ class TestMergeWithPreviouslyCompleted:
         logged_kwargs = context.experiment.log_experiment_scores.call_args.kwargs
         assert logged_kwargs["score_results"][0].name == "mean_equals"
         assert logged_kwargs["score_results"][0].value == 0.5
+        assert mock_evaluate_task.call_args.kwargs["log_experiment_scores"] is False

@@ -561,6 +561,7 @@ def _evaluate_task(
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
     source: TraceSource,
+    log_experiment_scores: bool = True,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -614,7 +615,7 @@ def _evaluate_task(
     _try_notifying_about_experiment_completion(experiment)
 
     # Log experiment scores to backend
-    if computed_experiment_scores:
+    if computed_experiment_scores and log_experiment_scores:
         experiment.log_experiment_scores(score_results=computed_experiment_scores)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -1539,6 +1540,7 @@ def evaluate_resume(
         trial_count=context.default_runs_per_item,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
+        log_experiment_scores=False,
     )
 
     merged = evaluation_result.merge_resume_results(
@@ -1546,12 +1548,7 @@ def evaluate_resume(
         previous_test_results=previous_test_results,
     )
 
-    # ``_evaluate_task`` already logged ``experiment_scoring_functions``
-    # over the freshly-replayed slice. Recompute over the merged set and
-    # overwrite — the final write reflects the whole experiment, which
-    # is what the user (and downstream readers) actually want. We're OK
-    # with a brief slice-only window on the backend between the two
-    # writes; rate-limit / concurrent-read risk is negligible here.
+    # Log only the merged set so a failed aggregate cannot leave a stale slice score.
     merged_scores = evaluation_result.compute_experiment_scores(
         experiment_scoring_functions=experiment_scoring_functions,
         test_results=merged.test_results,
