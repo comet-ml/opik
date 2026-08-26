@@ -998,18 +998,17 @@ swap itself. Both ways of getting it wrong lose data, in opposite directions:
   the restored original. That gap is the final deletion replay's run time, which on a production-shaped table is minutes,
   not seconds.
 
-If the printed value was lost, recover it from the driver's own capture query rather than reconstructing it — same
-statement that produced the value, so it is exact to within that query's duration:
+`cutover_start` is therefore a **required artifact of the forward run**, not something to be
+derived later: `exchange_and_wrap.sh` prints it as `RECORD cutover_start=…` precisely so it is
+captured then. Record it with the run.
 
-```sql
-SELECT event_time_microseconds FROM clusterAllReplicas('{cluster}', system.query_log)
-WHERE log_comment = 'traces_local_v2_cutover:exchange_and_wrap'
-  AND query ILIKE '%now64(6)%' AND type = 'QueryFinish'
-ORDER BY event_time_microseconds DESC LIMIT 1;
-```
-
-Read it through `clusterAllReplicas` because the driver's session ran on one replica, and confirm the row is unique for
-the run you mean — more than one means more than one cutover, and the newest is not necessarily yours.
+**If it was lost, stop — do not reconstruct it.** No other source is equivalent, and the
+closest-looking one is wrong: the `EXCHANGE`'s own timestamp arrives after the capture by the
+whole length of the final deletion replay, so a rollback anchored to it silently resurrects
+every delete bridged in between. Nor is this a case for an ad-hoc query — the procedure runs
+statements only from the versioned `.sql` files the drivers read, and there is no versioned
+path that recovers this value. Escalate instead: rolling back on an estimated boundary
+destroys data in one direction or resurrects it in the other, and both are worse than pausing.
 
 Pick the stage by how far the cutover got:
 
