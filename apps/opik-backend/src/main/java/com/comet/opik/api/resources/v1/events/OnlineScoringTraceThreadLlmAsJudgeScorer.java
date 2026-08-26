@@ -60,9 +60,6 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceThreadToScoreLlmAsJudge> {
 
-    /** Sentinel for a span-size aggregate that could not be computed, distinct from a genuine 0 bytes. */
-    private static final long SPAN_SIZE_UNAVAILABLE = -1L;
-
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
@@ -228,19 +225,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // alone and takes the tools path (skeleton + per-trace ReadTool drill-down) without any bulk
         // fetch. Spans are fetched further down only on the inline path, where the thread is under the
         // threshold by construction.
-        // Sizing is advisory, not a prerequisite: letting an aggregate failure propagate would abort the
-        // zip below, and BaseRedisSubscriber would retry maxRetries times and then acknowledge the
-        // message — permanently dropping the evaluation. Degrade to the unenriched inline route instead,
-        // matching the best-effort treatment the attachment probe below already gets.
-        var spansSizeMono = spanService.getSpansSizeByTraceIds(traceIds)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName()))
-                .onErrorResume(error -> {
-                    log.warn("Span-size aggregate failed for thread '{}'; scoring inline without span"
-                            + " enrichment", threadId, error);
-                    return Mono.just(SPAN_SIZE_UNAVAILABLE);
-                });
+        // Sizing is advisory, not a prerequisite — see spansSizeOrUnavailable. Degrading keeps the
+        // evaluation alive on the unenriched inline route, matching the best-effort treatment the
+        // attachment probe below already gets.
+        var spansSizeMono = spansSizeOrUnavailable(spanService, traceIds, message.workspaceId(),
+                message.userName(), threadId);
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per thread evaluation, with an
         // llm span per LLM round and tool spans for the agentic loop. NOOP when the toggle is off.
         // Resolved reactively because the project-name lookup is blocking.

@@ -607,8 +607,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             + " (OpenAI / Anthropic / Gemini / OpenRouter / Vertex / Bedrock).",
                     message.trace().id(), modelName);
         } else if (!experimentIdPath && !overSizeThreshold && referencesTrace && useTools) {
-            log.debug("Trace '{}' rule references {{trace}}; switching to agentic-tools mode",
-                    message.trace().id());
+            log.debug("Agentic tools routing: rule references {{trace}}; switching to agentic-tools mode."
+                    + " traceId='{}'", message.trace().id());
         }
 
         recordRoutingDecision(message, useTools, experimentIdPath, overSizeThreshold, referencesTrace);
