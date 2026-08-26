@@ -8,10 +8,7 @@ import {
   TextPart,
 } from "@/types/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import {
-  RESERVED_SPAN_EVALUATOR_VARIABLES,
-  RESERVED_TRACE_EVALUATOR_VARIABLES,
-} from "@/constants/llm";
+import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { generateRandomString } from "@/lib/utils";
 
 export const generateDefaultLLMPromptMessage = (
@@ -306,23 +303,6 @@ export const parseChatTemplateToLLMMessages = (
     return [];
   }
 };
-
-/**
- * The reserved-variable set a Python-metric editor must pass for {@code scope}.
- *
- * <p>Span scope gets the empty {@link RESERVED_SPAN_EVALUATOR_VARIABLES}: a span has no
- * sub-spans, and {@code PythonCodeDetailsSpanFormSchema} accepts only
- * {@code input}/{@code output}/{@code metadata} paths — so auto-filling the trace
- * {@code spans} sentinel would fail validation on a row the sentinel filter hides from
- * the mapping list, leaving the dialog unsubmittable with nothing visible to correct.
- * Thread scope has no argument mapping at all, so the value is unused there.
- */
-export const reservedPythonMetricVariablesForScope = (
-  scope: EVALUATORS_RULE_SCOPE,
-): Readonly<Record<string, string>> =>
-  scope === EVALUATORS_RULE_SCOPE.span
-    ? RESERVED_SPAN_EVALUATOR_VARIABLES
-    : RESERVED_TRACE_EVALUATOR_VARIABLES;
 
 /**
  * Resolve the value for one template variable in an LLM-as-judge / Python-metric

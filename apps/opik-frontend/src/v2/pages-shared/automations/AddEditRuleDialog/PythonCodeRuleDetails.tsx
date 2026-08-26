@@ -12,10 +12,8 @@ import { Label } from "@/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import {
-  reservedPythonMetricVariablesForScope,
-  resolveTraceEvaluatorVariableDefault,
-} from "@/lib/llm";
+import { resolveTraceEvaluatorVariableDefault } from "@/lib/llm";
+import { reservedPythonMetricVariablesForScope } from "./helpers";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {

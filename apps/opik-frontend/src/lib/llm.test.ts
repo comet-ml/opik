@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  reservedPythonMetricVariablesForScope,
-  resolveTraceEvaluatorVariableDefault,
-} from "./llm";
+import { resolveTraceEvaluatorVariableDefault } from "./llm";
 import {
   RESERVED_SPAN_EVALUATOR_VARIABLES,
   RESERVED_SPAN_LLM_JUDGE_VARIABLES,
   RESERVED_TRACE_EVALUATOR_VARIABLES,
   RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
-import { PythonCodeDetailsSpanFormSchema } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
 /**
@@ -102,7 +98,8 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
 
   it("does not auto-fill spans on span scope, where the form schema rejects the sentinel", () => {
     // A span-scoped `def score(input, spans)` must leave `spans` unmapped. Auto-filling the
-    // trace sentinel would fail PythonCodeDetailsSpanFormSchema (asserted below) while
+    // trace sentinel would fail PythonCodeDetailsSpanFormSchema (asserted in
+    // AddEditRuleDialog/helpers.test.ts) while
     // LLMPromptMessagesVariables hid the offending row, leaving the dialog unsubmittable
     // with nothing to correct.
     expect(
@@ -132,48 +129,5 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
         RESERVED_TRACE_LLM_JUDGE_VARIABLES,
       ),
     ).toBe("");
-  });
-});
-
-describe("reservedPythonMetricVariablesForScope", () => {
-  it("reserves spans on trace scope, where the scorer injects it", () => {
-    expect(
-      reservedPythonMetricVariablesForScope(EVALUATORS_RULE_SCOPE.trace),
-    ).toEqual(RESERVED_TRACE_EVALUATOR_VARIABLES);
-  });
-
-  it("reserves nothing on span scope, so no sentinel is auto-filled or hidden", () => {
-    expect(
-      reservedPythonMetricVariablesForScope(EVALUATORS_RULE_SCOPE.span),
-    ).toEqual(RESERVED_SPAN_EVALUATOR_VARIABLES);
-  });
-});
-
-/**
- * The other half of the span-scope pairing above: the sentinel the resolver must not
- * auto-fill is one this schema genuinely rejects, so a regression in either file alone
- * still fails a test here.
- */
-describe("PythonCodeDetailsSpanFormSchema", () => {
-  const metric = "def score(input, spans): return []";
-
-  it("rejects the bare spans sentinel that trace scope allows", () => {
-    expect(
-      PythonCodeDetailsSpanFormSchema.safeParse({
-        metric,
-        arguments: { input: "input", spans: "spans" },
-      }).success,
-    ).toBe(false);
-  });
-
-  it("accepts the arguments the span resolver actually produces", () => {
-    // `spans` left blank by the resolver is still required to be pointed at a real path
-    // before submit; the user maps it explicitly, as with any non-reserved parameter.
-    expect(
-      PythonCodeDetailsSpanFormSchema.safeParse({
-        metric,
-        arguments: { input: "input", spans: "metadata.spans" },
-      }).success,
-    ).toBe(true);
   });
 });
