@@ -1,4 +1,4 @@
-export { test, expect } from './bystander.fixture';
+export { test, expect } from './dashboard-cleanup.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -94,4 +94,15 @@ export type {
   TokenUsageSpansFixtures,
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  ProjectMetricDaySeed,
+  ProjectMetricSpansRef,
+  ProjectMetricSpansFixtures,
+} from './project-metric-spans.fixture';
+export type {
+  AttachedFileSeed,
+  TraceAttachmentsRef,
+  TraceAttachmentsFixtures,
+} from './trace-attachments.fixture';
+export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
 export type { ProjectRef } from '../core/backend';

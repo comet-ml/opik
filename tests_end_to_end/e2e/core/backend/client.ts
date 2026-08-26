@@ -299,10 +299,93 @@ type SdkDatasetItemFilters = NonNullable<
 export type WorkspaceMetricType = 'SPAN_TOKEN_USAGE';
 export type MetricInterval = 'HOURLY' | 'DAILY' | 'WEEKLY';
 
+/**
+ * Every `MetricType` a project-scoped Time series widget can ask for, in the
+ * order the backend enum declares them.
+ *
+ * Exhaustive on purpose. The seven span-time metrics render SQL that binds the
+ * project as a set (`IN :project_ids`); the other thirteen bind the scalar
+ * `:project_id`, and R2DBC raises for a bind the rendered SQL does not declare
+ * — so which side of that partition a metric falls on is only observable by
+ * asking for all of them. Kept as a const array rather than a bare union so a
+ * spec can iterate it and assert it drove the whole enum.
+ */
+export const PROJECT_METRIC_TYPES = [
+  'FEEDBACK_SCORES',
+  'TRACE_COUNT',
+  'TOKEN_USAGE',
+  'DURATION',
+  'COST',
+  'GUARDRAILS_FAILED_COUNT',
+  'THREAD_COUNT',
+  'THREAD_DURATION',
+  'THREAD_FEEDBACK_SCORES',
+  'SPAN_FEEDBACK_SCORES',
+  'SPAN_COUNT',
+  'SPAN_DURATION',
+  'SPAN_TOKEN_USAGE',
+  'TRACE_AVERAGE_DURATION',
+  'TRACE_ERROR_RATE',
+  'SPAN_AVERAGE_DURATION',
+  'SPAN_COST',
+  'SPAN_ERROR_RATE',
+  'THREAD_AVERAGE_DURATION',
+  'THREAD_COST',
+] as const;
+
+export type ProjectMetricType = (typeof PROJECT_METRIC_TYPES)[number];
+
+/** The `breakdown` block a widget sends when the user picks a "Group by". */
+export interface MetricBreakdown {
+  /** `model`, `provider`, `type`, `name`, `tags`, … — the backend's BreakdownField. */
+  field: string;
+  /**
+   * The series the breakdown aggregates. A usage key (`total_tokens`) for token
+   * metrics, a percentile (`p50`) for duration metrics, a feedback-score name
+   * for score metrics. Required by those three families — validation answers
+   * 422 for a blank one.
+   */
+  subMetric?: string;
+  metadataKey?: string;
+}
+
 /** One `{name, data:[{time,value}]}` series of a workspace-metrics answer. */
 export interface MetricSeries {
   name: string;
   points: Array<{ time: string; value: number | null }>;
+}
+
+/** One attachment as `GET /v1/private/attachment/list` answers it. */
+export interface AttachmentRef {
+  fileName: string;
+  /**
+   * Never optional here even though the API type allows it: this is the field
+   * the tika detection spec asserts on, and a `?? ''` fallback would turn a
+   * missing answer into a passing comparison against the wrong expectation.
+   */
+  mimeType: string;
+  fileSize: number;
+  link: string | null;
+}
+
+/**
+ * The `results` block of a metrics answer, flattened to `{name, points}`.
+ *
+ * Shared by the workspace and per-project reads: both endpoints answer in the
+ * same `{results: [{name, data: [{time, value}]}]}` shape, and a caller that
+ * compares one to the other must not be comparing two different mappings of it.
+ */
+function toMetricSeries(json: unknown): MetricSeries[] {
+  const results =
+    (json as { results?: Array<{ name?: string; data?: Array<{ time?: string; value?: number | null }> }> } | null)
+      ?.results ?? [];
+  return results.map((r) => ({
+    name: String(r.name ?? ''),
+    points: (r.data ?? []).map((p) => ({
+      time: String(p.time ?? ''),
+      value: p.value ?? null,
+    })),
+  }));
 }
 
 export function makeBackendClient(apiKey: string | null = null) {
@@ -375,6 +458,23 @@ export function makeBackendClient(apiKey: string | null = null) {
     }
     return { status: res.status, message, json, location: res.headers.get('location') };
   };
+
+  /** Authorization + workspace headers, for calls that bypass `rawFetch`. */
+  const workspaceHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Comet-Workspace': env.workspace };
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+    return headers;
+  };
+
+  /**
+   * The `path` every attachment endpoint wants: the API base URL, base64url.
+   *
+   * base64url, not base64 — the backend decodes with `Base64.getUrlDecoder()`,
+   * which rejects the `+` and `/` a standard encoder emits, and a raw URL is
+   * refused outright with `400 Invalid base URL format`.
+   */
+  const attachmentBasePath = (): string => Buffer.from(env.apiBaseUrl, 'utf-8').toString('base64url');
 
   /**
    * The generated REST type marks `samplingRate` optional. Defaulting a missing
@@ -724,17 +824,226 @@ export function makeBackendClient(apiKey: string | null = null) {
           },
         },
       );
-      const results =
-        (json as { results?: Array<{ name?: string; data?: Array<{ time?: string; value?: number | null }> }> } | null)
-          ?.results ?? [];
-      const series = results.map((r) => ({
-        name: String(r.name ?? ''),
-        points: (r.data ?? []).map((p) => ({
-          time: String(p.time ?? ''),
-          value: p.value ?? null,
-        })),
-      }));
-      return { status, message, series };
+      return { status, message, series: toMetricSeries(json) };
+    },
+
+    /**
+     * `POST /v1/private/projects/{id}/metrics` — the aggregation a Time series
+     * widget plots when it is scoped to one project rather than to the whole
+     * workspace. A different endpoint from `workspaceSpanMetric` above, and the
+     * only one that renders the per-metric-type project predicate OPIK-7725
+     * gated, so the two are not interchangeable.
+     *
+     * Raw fetch for the same two reasons as the workspace read: the pinned SDK
+     * has no binding for it, and the status is part of the contract under test
+     * — a mis-gated bind surfaces as 500, not as a wrong number.
+     */
+    async projectMetric(args: {
+      projectId: string;
+      metricType: ProjectMetricType;
+      interval: MetricInterval;
+      intervalStart: Date;
+      intervalEnd: Date;
+      breakdown?: MetricBreakdown;
+    }): Promise<RawApiResult & { series: MetricSeries[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/projects/${args.projectId}/metrics`,
+        {
+          body: {
+            metric_type: args.metricType,
+            interval: args.interval,
+            interval_start: args.intervalStart.toISOString(),
+            interval_end: args.intervalEnd.toISOString(),
+            ...(args.breakdown
+              ? {
+                  breakdown: {
+                    field: args.breakdown.field,
+                    ...(args.breakdown.subMetric === undefined
+                      ? {}
+                      : { sub_metric: args.breakdown.subMetric }),
+                    ...(args.breakdown.metadataKey === undefined
+                      ? {}
+                      : { metadata_key: args.breakdown.metadataKey }),
+                  },
+                }
+              : {}),
+          },
+        },
+      );
+      return { status, message, series: toMetricSeries(json) };
+    },
+
+    /**
+     * `DELETE /v1/private/dashboards/{id}`.
+     *
+     * Dashboards are not swept by `global-teardown` (it knows about
+     * experiments, datasets and projects only) and they do not hang off a
+     * project, so a spec that builds one has to remove it itself.
+     */
+    async deleteDashboard(id: string): Promise<void> {
+      const headers = workspaceHeaders();
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/dashboards/${id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!res.ok && res.status !== 404) {
+        throw new Error(
+          `DELETE /v1/private/dashboards/${id} -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+    },
+
+    /**
+     * Uploads one attachment against a trace or span through the real
+     * presigned multipart flow: `upload-start` → PUT the bytes → `upload-complete`.
+     *
+     * `mimeType` is optional *and meant to be omitted*: with no caller-supplied
+     * type the backend falls through to `tika.detect(fileName)`, which is the
+     * only reachable surface of the tika dependency and the thing the
+     * attachments spec asserts on.
+     *
+     * Deployment-neutral. On S3 `upload-start` hands back a genuine presigned
+     * URL, which must be PUT to with no `Authorization` header — adding one
+     * breaks the signature. On MinIO (the OSS compose stack) it hands back a URL
+     * on this same API instead, which *does* need the workspace headers. Hence
+     * the origin check rather than a hard-coded choice of one or the other.
+     */
+    async uploadAttachment(args: {
+      projectName: string;
+      entityType: 'trace' | 'span';
+      entityId: string;
+      fileName: string;
+      /** A Buffer, not a bare Uint8Array: `fetch` will not take a shared-buffer view. */
+      content: Buffer<ArrayBuffer>;
+      mimeType?: string;
+    }): Promise<void> {
+      const start = await rawFetch('POST', '/v1/private/attachment/upload-start', {
+        body: {
+          file_name: args.fileName,
+          num_of_file_parts: 1,
+          project_name: args.projectName,
+          entity_type: args.entityType,
+          entity_id: args.entityId,
+          path: attachmentBasePath(),
+          ...(args.mimeType === undefined ? {} : { mime_type: args.mimeType }),
+        },
+      });
+      if (start.status !== 200) {
+        throw new Error(
+          `POST /v1/private/attachment/upload-start (${args.fileName}) -> ${start.status}: ${start.message}`,
+        );
+      }
+      const { upload_id: uploadId, pre_sign_urls: preSignUrls } = start.json as {
+        upload_id?: string;
+        pre_sign_urls?: string[];
+      };
+      const url = preSignUrls?.[0];
+      if (!uploadId || !url) {
+        throw new Error(
+          `upload-start (${args.fileName}) returned no upload_id/pre_sign_urls: ${JSON.stringify(start.json)}`,
+        );
+      }
+
+      const put = await fetch(url, {
+        method: 'PUT',
+        headers: url.startsWith(env.apiBaseUrl) ? workspaceHeaders() : {},
+        body: args.content,
+      });
+      if (!put.ok) {
+        throw new Error(
+          `PUT attachment part (${args.fileName}) -> ${put.status}: ${(await put.text()).slice(0, 300)}`,
+        );
+      }
+      // MinIO's stand-in upload answers 204 with no ETag; S3 always sends one.
+      const eTag = put.headers.get('etag') ?? 'BEMinIO';
+
+      const complete = await rawFetch('POST', '/v1/private/attachment/upload-complete', {
+        body: {
+          file_name: args.fileName,
+          project_name: args.projectName,
+          entity_type: args.entityType,
+          entity_id: args.entityId,
+          file_size: args.content.byteLength,
+          upload_id: uploadId,
+          uploaded_file_parts: [{ e_tag: eTag, part_number: 1 }],
+        },
+      });
+      if (complete.status !== 204 && complete.status !== 200) {
+        throw new Error(
+          `POST /v1/private/attachment/upload-complete (${args.fileName}) -> ${complete.status}: ${complete.message}`,
+        );
+      }
+    },
+
+    /**
+     * `GET /v1/private/attachment/list` for one entity.
+     *
+     * `path` must be the base64url of the API base URL; a raw URL answers
+     * `400 Invalid base URL format`.
+     */
+    async listAttachments(args: {
+      projectId: string;
+      entityType: 'trace' | 'span';
+      entityId: string;
+    }): Promise<AttachmentRef[]> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        entity_type: args.entityType,
+        entity_id: args.entityId,
+        path: attachmentBasePath(),
+        size: '100',
+        page: '1',
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/attachment/list',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/attachment/list -> ${status}: ${message}`);
+      }
+      const content =
+        (json as { content?: Array<Record<string, unknown>> } | null)?.content ?? [];
+      return content.map((a) => {
+        const mimeType = a.mime_type;
+        if (typeof mimeType !== 'string' || mimeType === '') {
+          throw new Error(
+            `attachment '${String(a.file_name)}' came back with no mime_type: ${JSON.stringify(a)}`,
+          );
+        }
+        return {
+          fileName: String(a.file_name ?? ''),
+          mimeType,
+          fileSize: Number(a.file_size ?? 0),
+          link: typeof a.link === 'string' ? a.link : null,
+        };
+      });
+    },
+
+    /**
+     * `POST /v1/private/attachment/delete`. Deleting the owning trace cascades
+     * to its attachments, but a fixture that seeds attachments onto a trace it
+     * does not own has to clean up its own objects.
+     */
+    async deleteAttachments(args: {
+      projectId: string;
+      entityType: 'trace' | 'span';
+      entityId: string;
+      fileNames: string[];
+    }): Promise<void> {
+      if (args.fileNames.length === 0) return;
+      const { status, message } = await rawFetch('POST', '/v1/private/attachment/delete', {
+        body: {
+          file_names: args.fileNames,
+          entity_type: args.entityType,
+          entity_id: args.entityId,
+          container_id: args.projectId,
+        },
+      });
+      if (status !== 204 && status !== 200 && status !== 404) {
+        throw new Error(`POST /v1/private/attachment/delete -> ${status}: ${message}`);
+      }
     },
 
     /**
