@@ -1846,13 +1846,14 @@ redaction:
   # Default: false
   # Description: Master switch. Also gates the workspace settings that expose this in the UI.
   enabled: ${OPIK_REDACTION_ENABLED:-false}
-  # Default: [] with enabled=false. An empty set with enabled=true fails startup rather than masking nothing
-  # while appearing to be on.
+  # Default: [] - which is valid only while enabled=false. An empty set with enabled=true fails startup
+  # ("redaction.rules must not be empty when redaction.enabled=true") rather than masking nothing while
+  # appearing to be on, so switching the feature on means setting this at the same time, e.g.
+  # OPIK_REDACTION_RULES='[{"regex":"(?<![\w.+-])[\w.+-]+@[\w-]+\.[\w.]+","replace":"[EMAIL]"}]'
   # NOT A STABLE CONTRACT YET: this key names the mechanism (regex rules), so replacing the mechanism means
   # replacing the key. Left as-is deliberately - the feature is in beta and off by default, so the shape can
   # change in a later PR rather than being generalised now for a successor that does not exist yet. Do not build
   # tooling or deployment templates against `rules` on the assumption that it is fixed.
-  # Default: [] (no rules, so nothing is redacted even when enabled)
   # Description: JSON array of {"regex", "replace"} applied in order to every string in a response, each rule
   # seeing the previous rule's output. "replace" is literal text: unlike the SDK anonymizer, backreferences are
   # not expanded, so a partial-mask replacement such as "\1***@\2" is emitted verbatim rather than substituted.
