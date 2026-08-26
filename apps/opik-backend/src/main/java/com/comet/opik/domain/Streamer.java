@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.redaction.RedactionRules;
 import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.inject.ProvisionException;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -65,7 +66,13 @@ public class Streamer {
             return context != null && context.isRedactResponse()
                     ? redactionService.rules()
                     : RedactionRules.empty();
-        } catch (RuntimeException outsideRequestScope) {
+        } catch (ProvisionException outsideRequestScope) {
+            // ProvisionException, not RuntimeException: catching everything turned a ProvisionException, a
+            // provider bug or a fault in isRedactResponse() into the unknown-caller policy, so a defect came back
+            // as a successful redacted stream instead of failing. And not OutOfScopeException either - Guice
+            // wraps that at the provider boundary, which is why AnalyticsService.resolveIdentity catches
+            // ProvisionException for this same "no request scope" case.
+            //
             // See RedactionService.redactWhenCallerUnknown for why a stream can answer this and the writer
             // interceptor cannot.
             return redactionService.redactWhenCallerUnknown() ? redactionService.rules() : RedactionRules.empty();
