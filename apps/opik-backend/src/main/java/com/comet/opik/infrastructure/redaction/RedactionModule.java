@@ -66,6 +66,22 @@ public class RedactionModule extends SimpleModule {
 
     private static final String NAME_PROPERTY = "name";
 
+    /**
+     * The single definition of what survives redaction, shared with {@link JsonNodeRedactor}.
+     * <p>
+     * A streamed response is rewritten by hand rather than through the serializer, so without this the two paths
+     * hold two copies of one policy and drift: the streamed items skipped these exemptions entirely, returning
+     * rewritten {@code thread_id}, {@code id} and {@code model} values from the search endpoints the SDK uses
+     * while the paged endpoints returned them intact.
+     *
+     * @param beanClass    the DTO being written, which decides whether {@code name} addresses the entity
+     * @param propertyName as serialized
+     */
+    static boolean isExemptProperty(Class<?> beanClass, String propertyName) {
+        return EXEMPT_PROPERTIES.contains(propertyName)
+                || (NAME_PROPERTY.equals(propertyName) && NAME_ADDRESSED_ENTITIES.contains(beanClass));
+    }
+
     public RedactionModule() {
         addSerializer(String.class, new RedactingStringSerializer());
         addSerializer(JsonNode.class, new RedactingJsonNodeSerializer());
@@ -101,9 +117,7 @@ public class RedactionModule extends SimpleModule {
         }
 
         private boolean isExempt(BeanDescription beanDesc, String propertyName) {
-            return EXEMPT_PROPERTIES.contains(propertyName)
-                    || (NAME_PROPERTY.equals(propertyName)
-                            && NAME_ADDRESSED_ENTITIES.contains(beanDesc.getBeanClass()));
+            return isExemptProperty(beanDesc.getBeanClass(), propertyName);
         }
     }
 

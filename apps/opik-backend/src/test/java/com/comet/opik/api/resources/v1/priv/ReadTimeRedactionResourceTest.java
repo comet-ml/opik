@@ -63,6 +63,12 @@ class ReadTimeRedactionResourceTest {
     private static final String STORED_INPUT = """
             {"prompt":"Refund for %s, callback %s"}""".formatted(EMAIL, PHONE);
 
+    /**
+     * Deliberately a value the PHONE rule matches. Nothing but the structural exemption keeps it intact, so if
+     * the exemption is missing on a path the assertion fails rather than passing by luck.
+     */
+    private static final String RULE_MATCHING_THREAD_ID = PHONE;
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
@@ -182,5 +188,49 @@ class ReadTimeRedactionResourceTest {
 
         assertThat(streamed).isNotEmpty();
         assertThat(streamed.toString()).doesNotContain(EMAIL).doesNotContain(PHONE).contains("[EMAIL]");
+    }
+
+    @Test
+    @DisplayName("streamed items keep the structural exemptions the paged path applies")
+    void streamedItemsKeepTheStructuralExemptions() {
+        // The streamed path is rewritten by hand rather than through the serializer, so it needs the same
+        // exemptions or the two representations of one trace disagree. thread_id here matches a configured rule:
+        // without the exemption it comes back rewritten from search while the UI shows it intact, and
+        // get_trace_by_id on a rewritten id returns nothing.
+        var projectName = "redaction-exempt-" + UUID.randomUUID();
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .threadId(RULE_MATCHING_THREAD_ID)
+                .input(JsonUtils.getJsonNodeFromString(STORED_INPUT))
+                .output(null)
+                .metadata(null)
+                .feedbackScores(null)
+                .comments(null)
+                .guardrailsValidations(null)
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, ADMIN_API_KEY, WORKSPACE_NAME);
+
+        var streamed = traceResourceClient.getStreamAndAssertContent(MEMBER_API_KEY, WORKSPACE_NAME,
+                TraceSearchStreamRequest.builder().projectName(projectName).build());
+
+        assertThat(streamed).hasSize(1);
+        assertThat(streamed.getFirst().threadId()).isEqualTo(RULE_MATCHING_THREAD_ID);
+        assertThat(streamed.getFirst().input().toString()).doesNotContain(EMAIL).contains("[EMAIL]");
+    }
+
+    @Test
+    @DisplayName("streamed and paged reads of one trace agree")
+    void streamedAndPagedReadsAgree() {
+        var projectName = "redaction-parity-" + UUID.randomUUID();
+        var traceId = createTraceWithPii(projectName);
+
+        var paged = traceResourceClient.getById(traceId, WORKSPACE_NAME, MEMBER_API_KEY);
+        var streamed = traceResourceClient.getStreamAndAssertContent(MEMBER_API_KEY, WORKSPACE_NAME,
+                TraceSearchStreamRequest.builder().projectName(projectName).build());
+
+        assertThat(streamed).hasSize(1);
+        assertThat(streamed.getFirst().threadId()).isEqualTo(paged.threadId());
+        assertThat(streamed.getFirst().input()).isEqualTo(paged.input());
     }
 }

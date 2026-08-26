@@ -21,20 +21,28 @@ import java.util.Map;
 @UtilityClass
 public class JsonNodeRedactor {
 
-    public JsonNode redact(JsonNode node, @NonNull RedactionRules rules) {
+    public JsonNode redact(JsonNode node, @NonNull RedactionRules rules, @NonNull Class<?> itemType) {
         if (node == null || rules.isEmpty()) {
             return node;
         }
 
-        return rewrite(node, rules);
+        return rewrite(node, rules, itemType);
     }
 
-    private JsonNode rewrite(JsonNode node, RedactionRules rules) {
+    /**
+     * @param itemType the streamed DTO, or {@code null} once below its own properties. Exemptions apply only at
+     *                 the top level, mirroring the {@code BeanSerializerModifier}, which reaches declared
+     *                 properties and nothing else - a caller-chosen map key nested in a payload is not structure.
+     */
+    private JsonNode rewrite(JsonNode node, RedactionRules rules, Class<?> itemType) {
         if (node.isObject()) {
             ObjectNode object = (ObjectNode) node;
             // Field names are collected first: replacing a value while iterating the live view would fail.
             for (String name : object.propertyStream().map(Map.Entry::getKey).toList()) {
-                object.set(name, rewrite(object.get(name), rules));
+                if (itemType != null && RedactionModule.isExemptProperty(itemType, name)) {
+                    continue;
+                }
+                object.set(name, rewrite(object.get(name), rules, null));
             }
             return object;
         }
@@ -42,7 +50,7 @@ public class JsonNodeRedactor {
         if (node.isArray()) {
             ArrayNode array = (ArrayNode) node;
             for (int i = 0; i < array.size(); i++) {
-                array.set(i, rewrite(array.get(i), rules));
+                array.set(i, rewrite(array.get(i), rules, itemType));
             }
             return array;
         }

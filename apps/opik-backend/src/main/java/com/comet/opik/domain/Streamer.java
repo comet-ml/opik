@@ -73,7 +73,7 @@ public class Streamer {
 
     private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
         try {
-            outputStream.write(JsonNodeRedactor.redact(JsonUtils.readTree(item), rules));
+            outputStream.write(JsonNodeRedactor.redact(JsonUtils.readTree(item), rules, item.getClass()));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
