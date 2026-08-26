@@ -79,13 +79,19 @@ jobs:
     name: "📢 Slack Notification"
     runs-on: ubuntu-latest
     needs: publish
-    if: always() && needs.publish.result == 'failure'
+    # Gated on main, and the notifier is checked out from main rather than the
+    # dispatched ref: this step holds a webhook secret, so it must never run
+    # code from a ref the dispatcher chose. publish fails by construction off
+    # main (the OIDC role trusts refs/heads/main only), which would otherwise
+    # hand any writer a reliable path to this step.
+    if: always() && needs.publish.result == 'failure' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: main
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false
           persist-credentials: false
