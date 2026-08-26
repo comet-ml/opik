@@ -247,6 +247,7 @@ areas:
       - trace-explore/trace-explore-smoke.spec.ts
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-delete-id-eras.spec.ts
       - trace-explore/trace-filters.spec.ts
 
     # ---- functional dimension ----
