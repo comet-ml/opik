@@ -168,6 +168,18 @@ class MatchBudgetTest {
     }
 
     @Test
+    @DisplayName("a rule set does not change when the list it was built from does")
+    void aRuleSetDoesNotChangeWhenTheListItWasBuiltFromDoes() {
+        var mutable = new java.util.ArrayList<>(List.of(RedactionRule.of("secret", "[GONE]")));
+        var compiled = new RedactionRules(mutable);
+
+        mutable.clear();
+
+        assertThat(compiled.isEmpty()).isFalse();
+        assertThat(compiled.apply("a secret value")).isEqualTo("a [GONE] value");
+    }
+
+    @Test
     @DisplayName("a replacement is emitted literally, not with its own escaping visible")
     void aReplacementIsEmittedLiterally() {
         // Matcher.quoteReplacement escapes $ and \ for appendReplacement to undo. Appending the quoted form

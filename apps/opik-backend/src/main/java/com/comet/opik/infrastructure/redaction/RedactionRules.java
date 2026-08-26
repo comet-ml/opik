@@ -12,6 +12,13 @@ import java.util.List;
 @Slf4j
 public record RedactionRules(@NonNull List<RedactionRule> rules) {
 
+    public RedactionRules(@NonNull List<RedactionRule> rules) {
+        // Copied, not held. This is the policy in force for the life of the process - RedactionService compiles
+        // it once at startup and every response reads it - so it must not be something a caller can still
+        // change afterwards.
+        this.rules = List.copyOf(rules);
+    }
+
     /**
      * Written in place of a value whose rules could not be evaluated within budget. Not configurable: it is a
      * failure signal, and an operator tuning it would be tuning how a failure looks rather than fixing it.
