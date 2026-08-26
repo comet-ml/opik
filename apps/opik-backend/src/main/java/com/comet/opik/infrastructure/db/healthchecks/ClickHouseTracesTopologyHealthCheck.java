@@ -65,6 +65,30 @@ public class ClickHouseTracesTopologyHealthCheck extends AbstractClickHouseHealt
      * stubs this exact query text, so the two cannot drift apart unnoticed. {@code currentDatabase()} resolves to the
      * database the v2 client was built with ({@code Client.Builder#setDefaultDatabase}), so the probe follows
      * {@code databaseAnalytics.databaseName} without naming it in SQL at all.
+     *
+     * <p><b>The scope is the node that answers, deliberately.</b> {@code system.tables} is node-local and this probe
+     * does not fan out with {@code clusterAllReplicas}, unlike the cutover scripts' settle and finalize gates. The
+     * backend reaches ClickHouse through the load-balanced CHI service ({@code ANALYTICS_DB_HOST}), so the probe reads
+     * the same population its own {@code DELETE}s are routed to. Three reasons not to widen it:
+     * <ul>
+     *     <li>{@code clusterAllReplicas} needs {@code REMOTE} and {@code CLUSTER} grants, which the application user
+     *     is not guaranteed to hold — the runbook's privileges table grants them explicitly to the cutover's dedicated
+     *     least-privilege user, not to the app. A critical check that is deliberately <em>not</em> toggle-gated must
+     *     never fail on an install as shipped, and a missing grant would fail it on every install at once.</li>
+     *     <li>A single unreachable replica makes the fan-out throw, which would pull <em>every</em> backend pod out of
+     *     rotation over a condition that does not break trace deletes at all — strictly worse availability than the
+     *     mismatch being guarded.</li>
+     *     <li>On shared-catalog deployments (ClickHouse Cloud / {@code SharedMergeTree}) every replica reads one
+     *     catalog, so node-local already <em>is</em> cluster-wide there.</li>
+     * </ul>
+     *
+     * <p>The accepted limit that follows: a divergence confined to some replicas — an {@code ON CLUSTER} DDL still
+     * propagating, or one that failed on a host — is seen only by the probes that happen to land there, so it degrades
+     * into sporadic unhealthy reports instead of taking the fleet dark. That is the right trade for the transient
+     * cross-node skew the wrap is expected to produce inside its maintenance window, and the cluster-wide question
+     * ("has this DDL reached every replica?") is already answered where it belongs: the fail-loud, one-shot,
+     * operator-run {@code clusterAllReplicas} gates in {@code exchange_and_wrap.sh} and {@code finalize.sh}. The
+     * self-host troubleshooting page carries that query for an operator chasing an intermittent failure here.
      */
     private static final String TOPOLOGY_QUERY = """
             SELECT name, engine FROM system.tables \

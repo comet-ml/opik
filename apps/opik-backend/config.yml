@@ -250,6 +250,12 @@ health:
     # ignores `type` (IsAliveResource filters on isCritical alone) - so a mismatch reports the server as down to SDKs,
     # exactly as the `clickhouse`, `db`, `redis` and `mysql` ready checks above already do. That is intended here: the
     # install is misconfigured and needs an operator, and buffering beats accepting traffic it cannot fully serve.
+    # Scope is the node that answers: `system.tables` is node-local and the probe does not fan out with
+    # clusterAllReplicas, which needs REMOTE + CLUSTER grants the app user isn't guaranteed to hold and would take
+    # every pod out of rotation whenever a single replica is unreachable. So a divergence confined to some replicas
+    # (an ON CLUSTER DDL still propagating, or one that failed on a host) degrades into sporadic unhealthy reports
+    # rather than a fleet-wide outage; the cluster-wide "did this DDL reach every replica" gate lives in the cutover's
+    # exchange_and_wrap.sh / finalize.sh, and the self-host troubleshooting page carries the query for operators.
     - name: clickhouse-traces-topology
       critical: true
       type: ready

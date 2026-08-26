@@ -115,6 +115,20 @@ SELECT name, engine FROM system.tables
 WHERE database = 'opik' AND name IN ('traces', 'traces_local');
 ```
 
+<Callout intent="info">
+  `system.tables` is node-local, and so is the health check: both answer for the **one replica that served the query**. The backend reaches ClickHouse through a load-balanced service, so if the failure is intermittent — some probes healthy, some not, pods flapping rather than all staying unready — the replicas disagree with each other and the flag is not what is wrong. Confirm with the cluster-wide form below, and fix the lagging replica rather than the flag.
+</Callout>
+
+```sql
+-- Same lookup across every replica: the engine must be identical on all of them.
+SELECT hostName() AS host, name, engine
+FROM clusterAllReplicas('{cluster}', system.tables)
+WHERE database = '<database_name>' AND name IN ('traces', 'traces_local')
+ORDER BY host, name;
+```
+
+Substitute `{cluster}` (your cluster macro, from `SELECT * FROM system.macros`) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper. If the engine differs across hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
+
 Then set the flag to match:
 
 - `traces` is a `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` → set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled: false` (Helm) or `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=false` (Docker Compose or plain environment), then restart the backend.

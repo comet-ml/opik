@@ -249,6 +249,15 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > differs, and with it what closes the window: on the toggle-first path the restart comes first and the **wrap DDL**
 > closes the window, on the wrap-first path the wrap comes first and the **restart completing** closes it.
 >
+> **The check reads one replica per probe.** It queries the node-local `system.tables` on whichever ClickHouse node the
+> load-balanced service hands it, so across the cross-node `ON CLUSTER` skew described below the mismatch is seen only
+> by the probes that land on a not-yet-wrapped host: pods flap instead of the fleet going dark in lockstep. That is
+> expected inside the window and is why the probe is not the propagation gate — to confirm the wrap actually reached
+> every replica, use the cluster-wide `clusterAllReplicas('{cluster}', system.tables)` form that `finalize.sh`
+> classifies with (also in the self-host troubleshooting page). Fan-out is deliberately out of the probe: it needs
+> `REMOTE` + `CLUSTER` grants the app user is not guaranteed to hold, and one unreachable replica would take the whole
+> fleet out of rotation.
+>
 > Prefer **toggle first**, have the `--wrap-only` command ready to run the moment every backend instance is up, and
 > keep the window to seconds. Nothing in either direction corrupts data — that is what makes a short window
 > acceptable — but announce it on a shared environment, and do not leave the toggle `true` without the wrap (or vice
