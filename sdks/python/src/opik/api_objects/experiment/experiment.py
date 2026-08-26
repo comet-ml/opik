@@ -336,8 +336,7 @@ class Experiment:
             )
             experiment_scores.append(experiment_score)
 
-        if experiment_scores:
-            self._rest_client.experiments.update_experiment(
-                id=self.id,
-                experiment_scores=experiment_scores,
-            )
+        self._rest_client.experiments.update_experiment(
+            id=self.id,
+            experiment_scores=experiment_scores,
+        )

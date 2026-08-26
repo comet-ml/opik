@@ -20,6 +20,7 @@ from opik.evaluation.engine import engine
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
 from opik.evaluation.evaluator import _build_prompt_evaluation_task
+from opik.evaluation.scorers import classification
 
 from ...testlib import ANY_BUT_NONE, ANY_STRING, ANY_LIST, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
@@ -2750,6 +2751,61 @@ def test_evaluate__with_experiment_scores(fake_backend):
     assert len(call_args[1]["experiment_scores"]) == 1
     assert call_args[1]["experiment_scores"][0].name == "equals_metric (max)"
     assert call_args[1]["experiment_scores"][0].value == 1.0
+
+
+def test_evaluate__classification_missing_label_clears_experiment_scores(fake_backend):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "classify this"},
+            ),
+        ]
+    )
+
+    def classify_task(item: Dict[str, Any]):
+        return {"predicted_label": "positive"}
+
+    mock_rest_client = mock.Mock()
+    mock_experiments_api = mock.Mock()
+    mock_update_experiment = mock.Mock()
+    mock_experiments_api.update_experiment = mock_update_experiment
+    mock_rest_client.experiments = mock_experiments_api
+    real_experiment = experiment.Experiment(
+        id="experiment-id",
+        name="classification-experiment",
+        dataset_name="the-dataset-name",
+        rest_client=mock_rest_client,
+        streamer=mock.Mock(),
+        experiments_client=mock.Mock(),
+    )
+    mock_create_experiment = mock.Mock(return_value=real_experiment)
+    mock_get_experiment_url_by_id = mock.Mock(return_value="any_url")
+    scorer = classification.f1_score(
+        output_key="predicted_label",
+        reference_key="label",
+        average="macro",
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        result = evaluation.evaluate(
+            dataset=mock_dataset,
+            task=classify_task,
+            experiment_name="classification-experiment",
+            scoring_metrics=[],
+            task_threads=1,
+            experiment_scoring_functions=[scorer],
+        )
+
+    assert len(result.experiment_scores) == 1
+    assert result.experiment_scores[0].scoring_failed is True
+    mock_update_experiment.assert_called_once_with(
+        id="experiment-id",
+        experiment_scores=[],
+    )
 
 
 def test_evaluate__with_experiment_scores_empty_results(fake_backend):

@@ -1,8 +1,7 @@
 """Experiment-level classification scorers: precision, recall and F1.
 
-These are deliberately not ``BaseMetric`` subclasses. Precision/recall/F1 are
-undefined for a single sample - they only exist over a whole dataset - so they
-plug into ``evaluate(experiment_scoring_functions=...)`` instead.
+These scorers consume the full result set supplied by
+``evaluate(experiment_scoring_functions=...)``.
 """
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
@@ -124,6 +123,11 @@ def _first_unusable(pairs: List[Tuple[Any, Any]]) -> Optional[Tuple[Any, str]]:
                 return label, "raises when compared"
             if differs:
                 return label, "does not equal itself"
+        for left, right in ((pair[0], pair[1]), (pair[1], pair[0])):
+            try:
+                bool(left == right)
+            except Exception:
+                return left, "cannot be compared with the other label"
     return None
 
 

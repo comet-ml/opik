@@ -421,6 +421,47 @@ class TestMergeWithPreviouslyCompleted:
         assert logged_kwargs["score_results"][0].value == 0.5
         assert mock_evaluate_task.call_args.kwargs["log_experiment_scores"] is False
 
+    def test_failed_aggregate_clears_previous_backend_value(self):
+        context = _make_context(
+            items_to_stream=[dataset_item.DatasetItem(id="pending")],
+            completed_runs_by_item_id={"pending": 0},
+        )
+        new_result = _evaluation_result_from(
+            [_new_test_result("pending", "trace-pending", score=1.0)],
+            context.experiment,
+        )
+
+        def failed_score(_):
+            return score_result.ScoreResult(
+                name="classification_f1",
+                value=0.0,
+                scoring_failed=True,
+            )
+
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
+        ):
+            result = evaluator.evaluate_resume(
+                "exp-1",
+                task=lambda _: {"output": "x"},
+                experiment_scoring_functions=[failed_score],
+            )
+
+        assert result.experiment_scores[0].scoring_failed is True
+        context.experiment.log_experiment_scores.assert_called_once_with(
+            score_results=result.experiment_scores
+        )
+
 
 class TestErrorToleranceIsInherited:
     """A resumed run must continue with the tolerance the original run chose."""

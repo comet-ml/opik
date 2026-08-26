@@ -1640,7 +1640,7 @@ def evaluate_resume(
         experiment_scoring_functions=experiment_scoring_functions,
         test_results=merged.test_results,
     )
-    if merged_scores:
+    if experiment_scoring_functions:
         context.experiment.log_experiment_scores(score_results=merged_scores)
     merged.experiment_scores = merged_scores
 

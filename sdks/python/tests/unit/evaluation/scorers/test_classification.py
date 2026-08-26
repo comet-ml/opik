@@ -256,6 +256,33 @@ def test_label_comparison_raises__scoring_failed(position):
     assert "<NA>" in score.reason
 
 
+class _CrossAmbiguousLabel:
+    def __hash__(self):
+        return 1
+
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        raise TypeError("cross-label comparison is ambiguous")
+
+    def __repr__(self):
+        return f"<{self.name}>"
+
+
+def test_cross_label_comparison_raises__scoring_failed():
+    truth = _CrossAmbiguousLabel("truth")
+    prediction = _CrossAmbiguousLabel("prediction")
+
+    score = _score(classification.f1_score, [(truth, prediction)], average="macro")
+
+    assert score.scoring_failed is True
+    assert score.value == 0.0
+    assert "cannot be compared" in score.reason
+
+
 def test_metadata__reports_average_labels_and_counts():
     score = _score(classification.recall, THREE_CLASS, average="weighted")
 
