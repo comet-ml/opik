@@ -218,26 +218,23 @@ public class OnlineScoringSampler {
 
         // fetch automation rules per project
         tracesByProject.forEach((projectId, projectTraces) -> {
-            // SDK and experiment traces are scorable by evaluators whose trigger scope matches.
-            // We deliberately do not read selected_rule_ids from SDK or experiment traces.
-            // Other non-SDK traces (playground, optimization) are only scored when
-            // they carry selected_rule_ids metadata (explicit user selection from the playground).
+            // Only experiment traces carry an explicit rule selection, made by the user in the playground.
+            // We deliberately do not read selected_rule_ids from production traffic.
             var scorableTraces = new ArrayList<Trace>();
             var selectedRuleIdsByTrace = new HashMap<UUID, Set<UUID>>();
             for (var trace : projectTraces) {
-                if (Source.isLoggingSource(trace.source()) || trace.source() == Source.EXPERIMENT) {
+                if (trace.source() == Source.EXPERIMENT) {
                     scorableTraces.add(trace);
-                } else {
                     var ruleIds = extractSelectedRuleIds(trace);
                     if (!ruleIds.isEmpty()) {
-                        scorableTraces.add(trace);
                         selectedRuleIdsByTrace.put(trace.id(), ruleIds);
                     }
+                } else if (Source.isLoggingSource(trace.source()) || trace.source() == Source.PLAYGROUND) {
+                    scorableTraces.add(trace);
                 }
             }
             if (scorableTraces.isEmpty()) {
-                log.info(
-                        "No scorable traces: source is not SDK and no selected_rule_ids, projectId '{}', workspaceId '{}'",
+                log.info("No scorable traces: no experiment or production trace, projectId '{}', workspaceId '{}'",
                         projectId, workspaceId);
                 return;
             }
@@ -251,12 +248,9 @@ public class OnlineScoringSampler {
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
                 // Samples traces for this rule.
-                // If any trace carries explicit rule selections, filter evaluators to that set.
-                // If no selection found, use all evaluators (default behavior for backward compatibility).
                 var samples = scorableTraces.stream()
-                        .filter(trace -> matchesTriggerScope(evaluator, trace))
-                        .filter(trace -> isEvaluatorSelectedForTrace(evaluator, trace, selectedRuleIdsByTrace))
-                        .filter(trace -> shouldSampleTrace(evaluator, workspaceId, workspaceName, trace));
+                        .filter(trace -> shouldScoreTrace(evaluator, workspaceId, workspaceName, trace,
+                                selectedRuleIdsByTrace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
                         var messages = samples
@@ -333,42 +327,46 @@ public class OnlineScoringSampler {
                 .toList();
     }
 
+    private boolean shouldScoreTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId,
+            String workspaceName, Trace trace, Map<UUID, Set<UUID>> selectedRuleIdsByTrace) {
+        // The filters and the sampling rate both describe how much of a production stream to score,
+        // and an experiment run is not a stream, so neither applies to experiment traces. A rule the
+        // user picked in the playground bypasses the remaining checks too: the pick already answers
+        // the question they exist to answer.
+        if (trace.source() == Source.EXPERIMENT) {
+            return isPickedForTrace(evaluator, trace, selectedRuleIdsByTrace)
+                    || (matchesTriggerScope(evaluator, trace)
+                            && isEnabled(evaluator, workspaceId, workspaceName, trace));
+        }
+        return matchesTriggerScope(evaluator, trace)
+                && shouldSampleTrace(evaluator, workspaceId, workspaceName, trace);
+    }
+
+    private boolean isPickedForTrace(AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
+            Map<UUID, Set<UUID>> selectedRuleIdsByTrace) {
+        return selectedRuleIdsByTrace.getOrDefault(trace.id(), Set.of()).contains(evaluator.getId());
+    }
+
     private boolean matchesTriggerScope(AutomationRuleEvaluator<?, ?> evaluator, Trace trace) {
         EvalTriggerScope scope = evaluator.getTriggerScope() != null
                 ? evaluator.getTriggerScope()
                 : EvalTriggerScope.PRODUCTION;
-        if (Source.isLoggingSource(trace.source())) {
-            return scope == EvalTriggerScope.PRODUCTION || scope == EvalTriggerScope.BOTH;
-        }
         if (trace.source() == Source.EXPERIMENT) {
             return scope == EvalTriggerScope.EXPERIMENT || scope == EvalTriggerScope.BOTH;
         }
-        return true;
+        return scope == EvalTriggerScope.PRODUCTION || scope == EvalTriggerScope.BOTH;
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId,
             String workspaceName, Trace trace) {
-        // Check if rule is enabled first
-        if (!evaluator.isEnabled()) {
-            return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_DISABLED,
-                    "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
-                    trace.id(), evaluator.getName());
+        if (!isEnabled(evaluator, workspaceId, workspaceName, trace)) {
+            return false;
         }
 
-        // Check if trace matches all filters
         if (!filterEvaluationService.matchesAllFilters(evaluator.getFilters(), trace)) {
             return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_FILTER,
                     "The traceId '{}' was skipped for rule: '{}' as it does not match the configured filters",
                     trace.id(), evaluator.getName());
-        }
-
-        // The sampling rate thins a production stream, so it applies to SDK traces only.
-        if (!Source.isLoggingSource(trace.source())) {
-            logForUser(workspaceId, evaluator, trace,
-                    "The traceId '{}' is not subject to the sampling rate '{}' for rule: '{}',"
-                            + " as the rate applies to production traces only",
-                    trace.id(), evaluator.getSamplingRate(), evaluator.getName());
-            return true;
         }
 
         if (secureRandom.nextFloat() >= evaluator.getSamplingRate()) {
@@ -379,6 +377,16 @@ public class OnlineScoringSampler {
 
         // The DECISION_SAMPLED metric is recorded at enqueue time (see sampleAndScore), so it
         // reflects messages actually published to Redis rather than the sampling roll alone.
+        return true;
+    }
+
+    private boolean isEnabled(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, String workspaceName,
+            Trace trace) {
+        if (!evaluator.isEnabled()) {
+            return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_DISABLED,
+                    "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
+                    trace.id(), evaluator.getName());
+        }
         return true;
     }
 
@@ -430,26 +438,6 @@ public class OnlineScoringSampler {
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.RULE_ID, evaluator.getId().toString(),
                 UserLog.TRACE_ID, trace.id().toString()));
-    }
-
-    /**
-     * Decides whether the given evaluator applies to the given trace based on per-trace rule selection.
-     * <ul>
-     *   <li>SDK traces (and legacy null-source traces) are absent from {@code selectedRuleIdsByTrace}
-     *       and always run against every evaluator.</li>
-     *   <li>Non-SDK traces (e.g., Playground) that carry {@code selected_rule_ids} metadata are
-     *       present in the map and only run against evaluators whose ID is in their own selection.</li>
-     * </ul>
-     *
-     * @param evaluator              the evaluator being considered
-     * @param trace                  the trace being sampled
-     * @param selectedRuleIdsByTrace trace-id to selected rule IDs, populated only for non-SDK traces
-     * @return true if the evaluator applies to the trace
-     */
-    private boolean isEvaluatorSelectedForTrace(AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
-            Map<UUID, Set<UUID>> selectedRuleIdsByTrace) {
-        var selectedRuleIds = selectedRuleIdsByTrace.get(trace.id());
-        return selectedRuleIds == null || selectedRuleIds.contains(evaluator.getId());
     }
 
     /**
