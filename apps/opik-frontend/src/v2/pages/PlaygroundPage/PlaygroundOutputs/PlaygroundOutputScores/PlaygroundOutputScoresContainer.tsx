@@ -44,7 +44,7 @@ const PlaygroundOutputScoresContainer: React.FC<
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
-  const { data: rulesData } = useRulesList(
+  const { data: rulesData, isSuccess: rulesLoaded } = useRulesList(
     {
       workspaceName,
       projectId: activeProjectId ?? undefined,
@@ -85,6 +85,11 @@ const PlaygroundOutputScoresContainer: React.FC<
     [rules, selectedRuleIdsSet],
   );
 
+  // With no rule to score this trace there is nothing to poll for. Until the rules arrive we
+  // cannot tell, so the query stays enabled while the list is still loading.
+  const rulesPending = !!activeProjectId && !rulesLoaded;
+  const hasScoringRules = rulesPending || scoringRules.length > 0;
+
   const expectedMetricNames = useMemo(
     () => scoreNamesOf(selectedRules),
     [selectedRules],
@@ -101,7 +106,7 @@ const PlaygroundOutputScoresContainer: React.FC<
   const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
-      enabled: !!traceId,
+      enabled: !!traceId && hasScoringRules,
       refetchInterval: (query) => {
         const elapsed =
           Date.now() - (pollingStartTimeRef.current || Date.now());
@@ -116,10 +121,9 @@ const PlaygroundOutputScoresContainer: React.FC<
             return false;
           }
         }
-        // Note: We don't stop polling just because scores exist when awaitedNames
-        // is empty. This prevents a race condition where pre-existing scores or
-        // scores from Python rules (whose names can't be extracted statically)
-        // would stop polling before all rules finish loading or executing.
+        // The awaited set can still be empty while rules are scoring — a Python rule's score
+        // names cannot be extracted statically — so an empty set is not a reason to stop. The
+        // case where nothing scores the trace at all is handled by the `enabled` gate above.
 
         return REFETCH_INTERVAL;
       },
