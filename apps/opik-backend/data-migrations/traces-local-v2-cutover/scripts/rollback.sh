@@ -302,6 +302,8 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     echo
     echo "NEXT, in this order:"
     echo "  1. Set databaseAnalyticsDataModel.tracesDistributedWrapEnabled=false and roll-restart every backend instance."
+    echo "     (Config push or rolling restart, whichever this deployment uses — the mechanism is outside these"
+    echo "     DB-facing scripts by design; see the runbook, \"The only manual actions are not SQL\".)"
     echo "     Do it in THIS order (DDL first, flag second), which is the inverse of the forward wrap and keeps the failure"
     echo "     on the same side: until the restart completes, trace DELETES target the now-absent 'traces_local' and fail"
     echo "     with Code 60 UNKNOWN_TABLE. Reverting the flag first instead would point them at a 'traces' that is still"
@@ -430,6 +432,8 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo
     echo "NEXT, on the restored original (see README 'Rolling back the traceColumnsNonNullable flip'):"
     echo "  1. Set databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance."
+    echo "     (Config push or rolling restart, whichever this deployment uses — the mechanism is outside these"
+    echo "     DB-facing scripts by design; see the runbook, \"The only manual actions are not SQL\".)"
     echo "     Until that lands, absent end_time/ttft read back as the epoch/NaN sentinel instead of NULL."
     echo "  2. Repair the epoch/NaN sentinels written into the still-Nullable original while the flag was true. The"
     echo "     original stores an absent value as NULL, so those rows now read as 'ended at 1970' / 'ttft 0-ish', and"

@@ -887,6 +887,10 @@ class TracesLocalV2CutoverTest {
         var postCutover = mintIds(3);
         seedTraces(postCutover, workspaceId, projectId);
 
+        // Fingerprint the shadow while it is still live. Row counts alone would accept a parked copy holding the right ids
+        // with mangled or missing field values, which is not a reusable shadow — and reuse is the whole claim here.
+        var parkedCopy = fingerprint("traces", Shape.NEW, workspaceId);
+
         rollbackExchangeBack(cutoverStart);
         // ...and the rollback parked that same copy rather than discarding it. This is the assertion the whole procedure
         // rests on: if the parked backup were empty (or recycled), reuse would be a re-backfill wearing a rename.
@@ -904,6 +908,10 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces_local_v2", idStrings(survivors), workspaceId))
                 .as("the reused shadow still holds everything the first backfill copied — this is the point of reusing it")
                 .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces_local_v2", Shape.NEW, workspaceId))
+                .as("and holds it unchanged: the rollback parked the copy field-for-field, so the rename yields a shadow "
+                        + "the delta can resume onto rather than one that has to be rebuilt")
+                .isEqualTo(parkedCopy);
 
         // Resume the normal forward flow from the ORIGINAL anchor, as the runbook prescribes.
         deltaInsert(backfillStart);
@@ -958,6 +966,7 @@ class TracesLocalV2CutoverTest {
         var projectId = ID_GENERATOR.generateId();
         var survivors = mintIds(SURVIVORS_PER_WEEK);
         seedTraces(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
 
         for (int week = 0; week < SEED_WEEKS; week++) {
             backfillWeek(week);
@@ -971,6 +980,10 @@ class TracesLocalV2CutoverTest {
                 .as("finalized estate: the parked original is gone, so stage B/C have nothing to restore")
                 .isFalse();
 
+        // Read through the wrapper before the first reversal, then re-read at every transition below. Each rename is
+        // metadata-only, so "the data survives" is a claim about content and not just about row counts holding steady.
+        var beforeRoundTrip = fingerprint("traces", Shape.NEW, workspaceId);
+
         unwrap();
 
         assertThat(isDistributed("traces"))
@@ -979,6 +992,9 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(survivors), workspaceId))
                 .as("the successor's rows are all still live after un-wrapping a finalized estate")
                 .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("un-wrapping a finalized estate moved no data")
+                .isEqualTo(beforeRoundTrip);
 
         // Re-apply, then reverse again: the wrap is a switch, not a one-way door.
         wrapInDistributed();
@@ -988,6 +1004,9 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(survivors), workspaceId))
                 .as("re-wrapped rows still read through the wrapper")
                 .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("and read identically through it")
+                .isEqualTo(beforeRoundTrip);
 
         unwrap();
         assertThat(isDistributed("traces"))
@@ -996,6 +1015,9 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(survivors), workspaceId))
                 .as("data survives a full wrap/un-wrap round-trip")
                 .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("field-for-field, across wrap -> un-wrap -> wrap -> un-wrap")
+                .isEqualTo(beforeRoundTrip);
 
         // Hand the original back so the reset can rebuild the canonical baseline. The reset also recovers this name on
         // its own, so an assertion failure above cannot cascade into later tests.

@@ -864,9 +864,11 @@ server's major version, either way:
 (`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3 — see
 ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it); (2) flipping
 `databaseAnalyticsDataModel.traceColumnsNonNullable` to `true` in lockstep with the EXCHANGE (and back on rollback) —
-see "The final cutover window"; and (3) the go/no-go judgement between steps. All three are *backend config* / judgement changes (env + rolling
-restart, or a config push) that these DB-facing scripts cannot and should not make. They are deliberately operator-owned;
-none involves typing SQL.
+see "The final cutover window"; (3) flipping `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` around the wrap and
+the un-wrap — see "Un-wrap"; and (4) the go/no-go judgement between steps. All four are *backend config* / judgement
+changes (env + rolling restart, or a config push) that these DB-facing scripts cannot and should not make: the mechanism
+is deployment-specific, so the drivers name the flag and the ordering and leave the rollout to the operator. They are
+deliberately operator-owned; none involves typing SQL.
 
 ## Naming and the parked backup
 
