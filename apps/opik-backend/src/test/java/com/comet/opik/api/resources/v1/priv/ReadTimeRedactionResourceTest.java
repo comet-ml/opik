@@ -28,6 +28,7 @@ import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -58,6 +59,8 @@ import java.util.UUID;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -71,6 +74,9 @@ class ReadTimeRedactionResourceTest {
 
     private static final String ADMIN_API_KEY = UUID.randomUUID().toString();
     private static final String MEMBER_API_KEY = UUID.randomUUID().toString();
+
+    private static final String ADMIN_SESSION_TOKEN = UUID.randomUUID().toString();
+    private static final String MEMBER_SESSION_TOKEN = UUID.randomUUID().toString();
 
     private static final String EMAIL = "john.doe@example.com";
     private static final String PHONE = "555-123-4567";
@@ -124,6 +130,7 @@ class ReadTimeRedactionResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
+    private ClientSupport client;
     private String baseURI;
     private TraceResourceClient traceResourceClient;
     private LocalRunnersResourceClient runnersClient;
@@ -132,6 +139,7 @@ class ReadTimeRedactionResourceTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
+        this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
@@ -145,6 +153,13 @@ class ReadTimeRedactionResourceTest {
                 WORKSPACE_ID, USER, List.of(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
         AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), MEMBER_API_KEY, WORKSPACE_NAME,
                 WORKSPACE_ID, USER, List.of());
+
+        // The same two callers over a session cookie, which authenticates through a different endpoint.
+        AuthTestUtils.mockSessionCookieTargetWorkspaceWithPermissions(wireMock.server(), ADMIN_SESSION_TOKEN,
+                WORKSPACE_NAME, WORKSPACE_ID, USER,
+                List.of(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
+        AuthTestUtils.mockSessionCookieTargetWorkspaceWithPermissions(wireMock.server(), MEMBER_SESSION_TOKEN,
+                WORKSPACE_NAME, WORKSPACE_ID, USER, List.of());
     }
 
     @AfterAll
@@ -377,5 +392,51 @@ class ReadTimeRedactionResourceTest {
         assertThat(streamed).hasSize(1);
         assertThat(streamed.getFirst().threadId()).isEqualTo(paged.threadId());
         assertThat(streamed.getFirst().input()).isEqualTo(paged.input());
+    }
+
+    /**
+     * The same two decisions over a session cookie rather than an api key.
+     * <p>
+     * Browser and OAuth callers authenticate through {@code /opik/auth-session}, a different branch of
+     * {@code RemoteAuthService} that resolves its own credentials before the context is populated. It reaches the
+     * same {@code ValidatedAuthCredentials.from(authResponse)}, so nothing here is expected to differ — which is
+     * exactly why it was untested: a branch that drops permissions on this path only, or inverts the decision,
+     * would have left every api-key test green.
+     */
+    private Trace getTraceWithSessionCookie(UUID traceId, String sessionToken) {
+        try (var response = client.target("%s/v1/private/traces/%s".formatted(baseURI, traceId))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .cookie(SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            return response.readEntity(Trace.class);
+        }
+    }
+
+    @Test
+    @DisplayName("a session caller without the permission is redacted, as an api key caller is")
+    void aSessionCallerWithoutThePermissionIsRedacted() {
+        var traceId = createTraceWithPii("redaction-session-member-" + UUID.randomUUID());
+
+        var trace = getTraceWithSessionCookie(traceId, MEMBER_SESSION_TOKEN);
+
+        assertThat(trace.input().toString())
+                .doesNotContain(EMAIL)
+                .doesNotContain(PHONE)
+                .contains("[EMAIL]")
+                .contains("[PHONE]");
+    }
+
+    @Test
+    @DisplayName("a session caller holding the permission reads stored content, as an api key caller does")
+    void aSessionCallerHoldingThePermissionReadsStoredContent() {
+        var traceId = createTraceWithPii("redaction-session-admin-" + UUID.randomUUID());
+
+        var trace = getTraceWithSessionCookie(traceId, ADMIN_SESSION_TOKEN);
+
+        assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE);
     }
 }

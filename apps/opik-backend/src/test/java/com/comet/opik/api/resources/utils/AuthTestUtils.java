@@ -99,6 +99,29 @@ public class AuthTestUtils {
                         .willReturn(forbidden()));
     }
 
+    /**
+     * The session-cookie counterpart of {@link #mockTargetWorkspaceWithPermissions}. Browser and OAuth callers
+     * authenticate through {@code /opik/auth-session}, which returns the same permission set, so anything that
+     * reads permissions has to be exercised on this path too and not only with an api key.
+     */
+    public static void mockSessionCookieTargetWorkspaceWithPermissions(WireMockServer server, String sessionToken,
+            String workspaceName, String workspaceId, String user, List<String> grantedPermissions) {
+        var response = new LinkedHashMap<String, Object>();
+        response.put("user", user);
+        response.put("workspaceId", workspaceId);
+        response.put("workspaceName", workspaceName);
+        response.put("quotas", null);
+        response.put("permissions", grantedPermissions.stream()
+                .map(name -> Map.of("permissionName", name, "permissionValue", "true"))
+                .toList());
+
+        server.stubFor(
+                post(urlPathEqualTo("/opik/auth-session"))
+                        .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .willReturn(okJson(JsonUtils.writeValueAsString(response))));
+    }
+
     public static void mockSessionCookieTargetWorkspace(WireMockServer server, String sessionToken,
             String workspaceName, String workspaceId, String user) {
         mockSessionCookieTargetWorkspace(server, sessionToken, workspaceName, workspaceId, user, null);
