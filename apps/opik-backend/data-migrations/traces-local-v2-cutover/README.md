@@ -1020,7 +1020,7 @@ repair to do. `--unwrap-only` reverses just the sharding half.
 | Post-cutover writes stay live | No | No | **Yes** |
 | Runs the guard-less reverse replay | Yes | Yes | **No — not needed** |
 | Sentinel + `duration` repair afterwards | Yes | Yes | **No** |
-| Flags to revert | 2 + repair | 3 + repair | **1** |
+| Flags to revert | 1 + repair | 2 + repair | **1** |
 | Needs `traces_pre_cutover_backup` | Yes | Yes | **No** |
 | Available after `finalize.sh` | No | No | **Yes** |
 | Re-backfill needed to go forward again | Only if the parked copy is not reused (see "Retrying the cutover") | Same | **No — never left the cutover** |
@@ -1050,9 +1050,9 @@ where `traces_local` does not exist *yet*. It is sub-second and fails loudly, bu
 async-insert buffer alone does not cover it: quiesce traffic or take a maintenance window. That is what
 `--confirm-maintenance` asserts.
 
-`traceColumnsNonNullable` stays `true` and `tracesWeeklyPartitionPruningEnabled` stays as it was: the live table is still
-the partitioned, sentinel-schema successor, which is precisely what both flags assert. Only stage B/C revert them,
-because only they restore the unpartitioned original.
+`traceColumnsNonNullable` stays `true`: the live table is still the partitioned, sentinel-schema successor, which is
+precisely what that flag asserts. Only stage B/C revert it, because only they restore the unpartitioned original.
+Partition pruning needs no attention in either direction — it is unconditional and has no flag.
 
 **Monitoring reverses with it.** The `opik.clickhouse.partition.*` parts gauges relabel back from `table="traces_local"`
 to `table="traces"`, so restore anything adjusted at wrap time. And if the wrap-time option to point
@@ -1074,11 +1074,12 @@ Use stage B/C while the parked original still exists.
 > shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
 
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
-statements. Note what that means even when both succeed: between them the restored original is live with the
-post-cutover deletes **not yet re-applied**, so traces a user deleted after the cutover are briefly readable again. The
-interval is the replay's wall time — seconds for a rollback taken hours after the cutover, since it only covers deletes
-bridged since `cutover_start` — but it is a real exposure, and one more reason to run the promote with reads quiesced as
-the note above says. A failure *between* the two needs a restart path:
+statements. Note what that means even when both succeed: from the moment the promote lands until the replay finishes,
+the restored original is live with the post-cutover deletes **not yet re-applied**, so traces a user deleted after the
+cutover are readable again. The window is the whole gap — the driver returning from one file and starting the next, plus
+the replay's own run time — not just the replay. It is short for a rollback taken hours after the cutover, since only
+deletes bridged since `cutover_start` are in scope, but it is a real exposure: keep reads quiesced from the promote
+through the replay, not merely across the rename. A failure *between* the two needs a restart path:
 
 - **Reverse-replay interrupted (stage B or C).** The promote already restored the original, so `traces` is back in the
   canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
@@ -1140,12 +1141,33 @@ Treat a stage B/C rollback as complete only when all of these hold:
 
 - [ ] **Fidelity** — the bounded compare on the post-rollback pair passes, using the `--to-week` offset `rollback.sh`
       printed (see "Verifying after a rollback", including which mismatches inside the bound are benign and how to tell).
+      If it printed no offset — every row sits in the cutover window's own week, so there is no earlier week to compare —
+      this box is **not applicable**: `verify.sh` has nothing to bound to, and an unbounded run would report the
+      cutover week's expected divergence as a failure. Rely on the next box instead, which does not depend on a window.
 - [ ] **No delete resurrected** — no id bridged since `cutover_start` is live on the restored `traces`. This is the
-      replay's whole job, and the one thing a successful-looking promote can silently leave undone; if the replay was
-      interrupted, re-run it with `--reverse-replay-only` (above) rather than re-running the stage.
-- [ ] **Flags reverted and the restart landed on every instance** — `traceColumnsNonNullable`,
-      `tracesWeeklyPartitionPruningEnabled`, and `tracesDistributedWrapEnabled` if the wrap had been applied. Verify
-      positively, not by absence of errors: absent `end_time`/`ttft` must read back as `null`.
+      replay's whole job and the one thing a successful-looking promote can silently leave undone, so check it directly
+      rather than inferring it from the compare above: the replay reports only that its statement ran, and a bridged
+      delete of a row created *inside* the cutover window falls outside any bounded compare. Same full key and the same
+      filters the replay itself uses, read across replicas so a mask that has not converged on one of them shows up:
+
+      ```sql
+      SELECT count() AS resurrected
+      FROM clusterAllReplicas('{cluster}', <database>.traces)
+      WHERE (workspace_id, project_id, id) IN (
+          SELECT workspace_id, toFixedString(project_id, 36), toFixedString(deleted_id, 36)
+          FROM <database>.deletion_events_local
+          WHERE source_table = 'traces'
+            AND event_time >= toDateTime64('<cutover_start>', 6)
+            AND project_id != '' AND length(project_id) = 36 AND length(deleted_id) = 36
+      )
+      ```
+
+      Anything but `0` means those ids are live again. Re-run `--reverse-replay-only` (above) rather than re-running the
+      stage, then re-check — the replay is idempotent.
+- [ ] **Flags reverted and the restart landed on every instance** — `traceColumnsNonNullable`, plus
+      `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
+      unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
+      as `null`.
 - [ ] **Sentinel repair applied** — `sentinel_end_time` and `sentinel_ttft` at `0`. Not `duration < 0`, which has a
       non-zero floor from rows whose `end_time` genuinely precedes `start_time`.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
@@ -1183,9 +1205,8 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    you to set `traceColumnsNonNullable` back to `false`, so it *is* false now; the retry puts the sentinel-schema
    successor back under `traces`, which needs it `true` and needs every backend instance restarted to pick it up (it
    comes from a startup snapshot). Skipping this is silent, not loud: absent `end_time` reads back as `1970-01-01` while
-   writes keep succeeding. Raise the async-insert buffer for the window too. `tracesWeeklyPartitionPruningEnabled` is
-   separate — safe to lag, unsafe to lead — so leave it `false` and turn it on after the `EXCHANGE` is confirmed, per
-   "The `tracesWeeklyPartitionPruningEnabled` flip".
+   writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: partition
+   pruning is unconditional, so the retry's `EXCHANGE` needs no pruning step in either direction.
 5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
    every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
