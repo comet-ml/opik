@@ -39,7 +39,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.CDN_PUBLISH_ROLE_ARN }}
-          role-session-name: Create Github Stars History Chart
+          role-session-name: star-history
           aws-region: us-east-1
 
       - name: Fetch current series
