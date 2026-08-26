@@ -20,6 +20,7 @@ Module._load = function (request) {
 
 const { attributeUsageToTurns } = require('../out/cursor/usage.js');
 const { executeQuery } = require('../out/cursor/sqlite.js');
+const { toSpanUsage } = require('../out/opik.js');
 
 const DB = path.join(
   os.homedir(),
@@ -113,10 +114,15 @@ async function rpc(method, token, body) {
     sum.output += usage.outputTokens;
     sum.cacheRead += usage.cacheReadTokens;
     sum.cents += usage.chargedCents;
+    const emitted = toSpanUsage(usage);
     console.log(
       `  turn ${i + 1} [${at}] reqs=${usage.requestCount} in=${usage.inputTokens} ` +
         `out=${usage.outputTokens} cacheR=${usage.cacheReadTokens} ` +
         `cents=${usage.chargedCents.toFixed(4)} model=${usage.models.join(',')}`
+    );
+    console.log(
+      `        -> opik prompt_tokens=${emitted.prompt_tokens} ` +
+        `completion_tokens=${emitted.completion_tokens} total_tokens=${emitted.total_tokens}`
     );
   });
 
@@ -143,12 +149,32 @@ async function rpc(method, token, body) {
   });
   const duplicates = signatures.length - new Set(signatures).size;
 
+  // Assert the exact mapping that applyTurnUsage sends, not a copy of it. Cursor
+  // reports inputTokens excluding cache, so prompt_tokens must include the cache
+  // tokens or the reported totals undercount by several times.
+  let mappingOk = true;
+  turnStarts.forEach((_s, i) => {
+    const u = attributed.get(i);
+    if (!u) return;
+    const emitted = toSpanUsage(u);
+    const expectedPrompt = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
+    if (
+      emitted.prompt_tokens !== expectedPrompt ||
+      emitted.total_tokens !== expectedPrompt + u.outputTokens ||
+      emitted.cache_read_input_tokens !== u.cacheReadTokens
+    ) {
+      mappingOk = false;
+      console.log(`  turn ${i + 1}: MAPPING MISMATCH ${JSON.stringify(emitted)}`);
+    }
+  });
+
   console.log(`\ncoverage:   ${covered}/${turnStarts.length} turns`);
   console.log(`duplicates: ${duplicates} turns share an identical usage payload`);
+  console.log(`mapping:    ${mappingOk ? 'prompt_tokens includes cache tokens' : 'MISMATCH'}`);
   console.log(`attributed: in=${sum.input} out=${sum.output} cacheR=${sum.cacheRead} cents=${sum.cents.toFixed(4)}`);
   console.log(`api total:  in=${total.input} out=${total.output} cacheR=${total.cacheRead} cents=${total.cents.toFixed(4)}`);
   console.log(`reconcile:  ${reconciled ? 'PASS' : 'FAIL'}`);
-  process.exit(reconciled && duplicates === 0 ? 0 : 1);
+  process.exit(reconciled && duplicates === 0 && mappingOk ? 0 : 1);
 })().catch((error) => {
   console.error(error.message);
   process.exit(1);
