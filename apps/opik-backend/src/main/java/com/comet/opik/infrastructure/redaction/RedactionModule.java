@@ -108,7 +108,12 @@ public class RedactionModule extends SimpleModule {
                         && type.getContentType() != null
                         && type.getContentType().hasRawClass(String.class);
 
-                if (text || textCollection) {
+                // hasSerializer guard: assignSerializer throws IllegalStateException when one is already set,
+                // and the exempt names (id, name, model, provider, commit) recur across many DTOs. Adding
+                // @JsonSerialize to any field with one of those names would otherwise 500 that endpoint, with
+                // nothing connecting the failure to redaction. An explicit per-field serializer should win here
+                // anyway - Webhook.secretToken's masking serializer is the example that must not be overridden.
+                if ((text || textCollection) && !property.hasSerializer()) {
                     property.assignSerializer(VerbatimSerializer.INSTANCE);
                 }
             }
