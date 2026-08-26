@@ -108,11 +108,11 @@ A default self-hosted or open-source install has the setting `false` and a `Repl
 
 Read the health check message — it names both the setting and the engine it actually found. Then make the two agree.
 
-Check what the table really is:
+Check what the table really is. Substitute `<database_name>` with your `ANALYTICS_DB_DATABASE_NAME` — `opik` is only the default, and querying the wrong database returns no rows, which looks like the tables are missing:
 
 ```sql
 SELECT name, engine FROM system.tables
-WHERE database = 'opik' AND name IN ('traces', 'traces_local');
+WHERE database = '<database_name>' AND name IN ('traces', 'traces_local');
 ```
 
 <Callout intent="info">
@@ -130,7 +130,7 @@ WHERE database = '<database_name>' AND name IN ('traces', 'traces_local')
 ORDER BY name, host;
 ```
 
-Substitute `{cluster}` (your cluster macro, from `SELECT * FROM system.macros`) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper. If a **single table's** engine differs between hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
+Substitute `{cluster}` here as well — your cluster macro, from `SELECT * FROM system.macros`; on a single-node install drop the `clusterAllReplicas(...)` wrapper instead. If a **single table's** engine differs between hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
 
 Then set the flag to match:
 
