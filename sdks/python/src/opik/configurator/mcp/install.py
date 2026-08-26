@@ -428,9 +428,22 @@ def _prefetch_opik_mcp() -> None:
             "Could not pre-fetch opik-mcp (exited %s: %s). Your AI client will "
             "download it on first use instead.",
             result.returncode,
-            (result.stderr or result.stdout or "no output").strip().splitlines()[-1:]
-            or "no output",
+            _last_line(result.stderr or result.stdout),
         )
+
+
+#: Tool output goes into a log line, so it is trimmed to something readable.
+_MAX_DETAIL_CHARS: Final[int] = 200
+
+
+def _last_line(output: str) -> str:
+    """The most useful line of a tool's output, bounded.
+
+    Slicing with ``[-1:]`` here handed `LOGGER.warning` a one-element *list*, so
+    the warning rendered as ``['network error']``.
+    """
+    lines = (output or "").strip().splitlines()
+    return lines[-1][:_MAX_DETAIL_CHARS] if lines else "no output"
 
 
 def _uv_install_hint() -> str:

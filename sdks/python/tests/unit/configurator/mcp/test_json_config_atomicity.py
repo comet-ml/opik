@@ -100,3 +100,86 @@ class TestPermissions:
         _merge(config)
 
         assert stat.S_IMODE(config.stat().st_mode) == 0o644
+
+
+class TestSymlinkedConfig:
+    """A symlinked config is followed, not replaced.
+
+    Dotfile managers (chezmoi, stow, yadm) symlink editor configs into a tracked
+    repo. `os.replace` on the link swaps it for a regular file, so the tracked
+    file never receives the change and the link is gone — a regression the plain
+    `write_text` this replaced did not have, because it wrote through the link.
+    """
+
+    def test_symlink_is_preserved(self, tmp_path):
+        target = tmp_path / "tracked.json"
+        target.write_text('{"keepMe": 1}')
+        link = tmp_path / "mcp.json"
+        link.symlink_to(target)
+
+        _merge(link)
+
+        assert link.is_symlink()
+
+    def test_write_lands_in_the_target(self, tmp_path):
+        target = tmp_path / "tracked.json"
+        target.write_text('{"keepMe": 1}')
+        link = tmp_path / "mcp.json"
+        link.symlink_to(target)
+
+        _merge(link)
+
+        written = json.loads(target.read_text())
+        assert written["mcpServers"]["opik"]["command"] == "uvx"
+        assert written["keepMe"] == 1, "the tracked file kept its other content"
+
+    def test_broken_symlink__creates_the_target(self, tmp_path):
+        """A link into a repo that has not been checked out yet still works."""
+        link = tmp_path / "mcp.json"
+        link.symlink_to(tmp_path / "sub" / "target.json")
+
+        _merge(link)
+
+        assert link.is_symlink()
+        assert json.loads((tmp_path / "sub" / "target.json").read_text())["mcpServers"]
+
+    def test_no_staging_file_beside_the_target(self, tmp_path):
+        target = tmp_path / "tracked.json"
+        target.write_text("{}")
+        link = tmp_path / "mcp.json"
+        link.symlink_to(target)
+
+        _merge(link)
+
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "mcp.json",
+            "tracked.json",
+        ]
+
+
+class TestChmodIsPortable:
+    def test_mode_is_applied_by_path_not_descriptor(self, tmp_path, monkeypatch):
+        """`os.chmod` rejects a descriptor on Windows, where this also runs.
+
+        `os.chmod in os.supports_fd` is false there, so passing the `mkstemp`
+        descriptor raised instead of preserving the mode.
+        """
+        config = tmp_path / "mcp.json"
+        config.write_text("{}")
+        os.chmod(config, 0o644)
+        seen = []
+
+        real_chmod = os.chmod
+
+        def recording_chmod(path, mode, *args, **kwargs):
+            seen.append(path)
+            return real_chmod(path, mode, *args, **kwargs)
+
+        monkeypatch.setattr(json_config.os, "chmod", recording_chmod)
+
+        _merge(config)
+
+        assert seen, "the existing mode should have been reapplied"
+        assert not any(isinstance(p, int) for p in seen), (
+            f"chmod was called with a file descriptor: {seen}"
+        )

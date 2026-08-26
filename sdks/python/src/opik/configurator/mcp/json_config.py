@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import stat
 import tempfile
 from typing import Any, Dict
 
@@ -39,7 +40,6 @@ def merge_server_into_json_file(
     was_new = server_name not in servers
     servers[server_name] = server_block
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
     _write_atomically(config_path, json.dumps(existing_config, indent=2) + "\n")
 
     return was_new
@@ -62,23 +62,44 @@ def _write_atomically(config_path: pathlib.Path, contents: str) -> None:
     whatever the umask allows. A file we are *creating* keeps that 0600 — but one
     that already existed keeps the mode its owner chose, since tightening
     permissions on another tool's config is not ours to decide.
+
+    A symlinked config is followed and its *target* replaced. Dotfile managers
+    (chezmoi, stow, yadm) routinely symlink editor configs into a tracked repo,
+    and ``os.replace`` on the link itself would swap it for a regular file: the
+    tracked file would never receive the change, and the link would be gone. A
+    plain ``write_text`` wrote through the link, so following it keeps that
+    behaviour rather than quietly breaking someone's dotfiles.
     """
-    previous_mode = config_path.stat().st_mode if config_path.exists() else None
+    destination = (
+        pathlib.Path(os.path.realpath(config_path))
+        if config_path.is_symlink()
+        else config_path
+    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    previous_mode = (
+        stat.S_IMODE(destination.stat().st_mode) if destination.exists() else None
+    )
 
     descriptor, staging_name = tempfile.mkstemp(
-        dir=str(config_path.parent), prefix=f".{config_path.name}.", suffix=".tmp"
+        dir=str(destination.parent), prefix=f".{destination.name}.", suffix=".tmp"
     )
     staging = pathlib.Path(staging_name)
     try:
-        if previous_mode is not None:
-            os.chmod(descriptor, previous_mode)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(contents)
             handle.flush()
             # Without this the rename can land before the bytes do, which turns a
             # crash into a valid-looking but empty config.
             os.fsync(handle.fileno())
-        os.replace(staging, config_path)
+        if previous_mode is not None:
+            # By path rather than the descriptor: `os.chmod` only accepts a
+            # descriptor where `os.chmod in os.supports_fd`, which is false on
+            # Windows — there it raises, and this runs on Windows too. Applied
+            # after the write so the key is never in a file wider than 0600 for
+            # longer than the final mode allows anyway.
+            os.chmod(staging, previous_mode)
+        os.replace(staging, destination)
     except BaseException:
         staging.unlink(missing_ok=True)
         raise
