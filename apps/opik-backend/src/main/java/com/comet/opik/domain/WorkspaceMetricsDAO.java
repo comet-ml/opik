@@ -47,6 +47,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.SpanMetricsQueries.SPAN_FILTERED_PREFIX;
+import static com.comet.opik.domain.SpanMetricsQueries.TOKEN_USAGE_NAMES;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -68,6 +70,8 @@ public interface WorkspaceMetricsDAO {
     Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request);
 
     Mono<List<WorkspaceMetricResponse.Result>> getSpanTokenUsage(WorkspaceSpanMetricRequest request);
+
+    Mono<List<String>> getWorkspaceTokenUsageNames(Set<UUID> projectIds);
 }
 
 @Slf4j
@@ -241,9 +245,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // projects: WorkspaceMetricsService resolves the "all projects" request into every project id up front, so the
     // predicate is always a bounded `project_id IN :project_ids` list that prunes on the spans primary key
     // (workspace_id, project_id, ...) — never an unconstrained workspace-wide scan.
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
-            .spanFilteredPrefix("project_id IN :project_ids");
-
     // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
     // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
     // a groupArray(tuple(bucket, value)). No breakdown => one series per usage key; with a provider/model breakdown =>
@@ -368,6 +369,29 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 "workspaceSpanTokenUsage")
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
+    }
+
+    @Override
+    public Mono<List<String>> getWorkspaceTokenUsageNames(@NonNull Set<UUID> projectIds) {
+        // The service resolves "all projects" into the explicit project set before calling the DAO, so the query is
+        // always bounded by project_id IN (...) and prunes on the spans primary key rather than scanning the workspace.
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds),
+                "projectIds must be resolved before querying workspace token usage names");
+        return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var stTemplate = getSTWithLogComment(TOKEN_USAGE_NAMES,
+                    WORKSPACE_METRIC_QUERY_NAME_PREFIX + "tokenUsageNames", workspaceId, userName, projectIds.size());
+
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_ids", projectIds.toArray(new UUID[0]));
+
+            InstrumentAsyncUtils.Segment segment = startSegment("workspaceTokenUsageNames", "Clickhouse", "get");
+
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("name", String.class)))
+                    .collectList()
+                    .doFinally(signalType -> endSegment(segment));
+        }));
     }
 
     private Mono<? extends Result> getSpanMetric(WorkspaceSpanMetricRequest request, Connection connection,

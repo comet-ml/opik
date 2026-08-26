@@ -126,6 +126,160 @@ Single-replica installs and upgrades of already-migrated multi-replica clusters 
 If a fresh multi-replica attempt was torn down, the dropped tables can leave orphaned `/clickhouse/tables/...` ZooKeeper paths that cause `REPLICA_ALREADY_EXISTS` on a retry. Since a fresh install has no data to preserve, recovery only needs those orphaned paths cleared before re-running — the full replica-restore rebuild in [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss) is for recovering existing data and isn't needed here.
 </Callout>
 
+### Lost Liquibase Changelog with an Intact Schema
+
+#### Problem Description
+
+The `opik` tables are all present and the application data is intact, but the Liquibase changelog table (`default.DATABASECHANGELOG`) is empty or missing rows. A newly started `opik-backend` replica then treats every migration as pending and replays it against tables that already exist, failing with errors such as:
+
+```
+Code: 15. DB::Exception: Cannot add column `created_by`: column with this name already exists. (DUPLICATE_COLUMN)
+```
+
+**Symptoms:**
+
+- Existing deployment with real data; the schema looks complete
+- New replicas or rolling updates fail with `Init:CrashLoopBackOff` while already-running replicas keep serving
+- Migration errors say an object **already exists**, rather than that one is missing
+- `SELECT count() FROM default.DATABASECHANGELOG` returns 0, or far fewer rows than there are migration files
+
+#### Cause
+
+This usually follows a recovery that restored the data but not the bookkeeping — for example a volume delete/recreate where the `opik.*` tables were restored from backup while the `default` database holding the changelog was not.
+
+Liquibase decides what to run purely from the changelog table. With no rows, it concludes nothing has ever been applied and starts from the first changeset. Replaying migrations against a schema that already has them is not safe: early changesets add columns that are already present, and later ones convert tables to `ReplicatedMergeTree` and move partitions between them. Migrations cannot be edited to make a replay safe — once released, a changeset is immutable, because changing it alters its checksum and every already-migrated deployment would then refuse to start.
+
+The fix is therefore to repair the ledger, not to re-run the migrations.
+
+#### Resolution
+
+Re-baseline the changelog: record the pending changesets as applied **without executing them**. Opik ships a script for this in the backend image.
+
+<Callout intent="warning">
+Only do this when the schema genuinely matches the changelog. Re-baselining asserts "everything up to here is already applied" — if a migration truly has not run, it is marked as done and never will, leaving the schema permanently behind a ledger that claims otherwise.
+
+"Matches the changelog" means more than the tables existing. Before continuing, confirm all of the following:
+
+- The image version you are running against is the one the schema was migrated to. Re-baselining with a **newer** jar marks that version's extra migrations as applied without running them.
+- Every changeset in the pending list corresponds to an object that already exists — spot-check the most recent few, not just the first.
+- For ClickHouse (`dbAnalytics`, the default) on a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale. `system.replicas` only reflects the node you are connected to, so query it cluster-wide:
+
+  ```sql
+  -- Any replica that cannot accept writes is not settled.
+  SELECT hostName() AS host, database, table, is_readonly, absolute_delay
+  FROM clusterAllReplicas('{cluster}', system.replicas)
+  WHERE database = '<database_name>' AND is_readonly;
+
+  -- A stuck queue entry means replication is not merely behind, it is failing.
+  SELECT hostName() AS host, database, table, type, num_tries, last_exception
+  FROM clusterAllReplicas('{cluster}', system.replication_queue)
+  WHERE database = '<database_name>' AND num_tries > 10;
+  ```
+
+  Substitute `{cluster}` (your cluster macro) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper and query `system.replicas` directly. **Both queries should return no rows.** A nonzero `absolute_delay` on its own is normal replication lag and is not a reason to stop — what matters is that no replica is read-only and no queue entry is failing repeatedly.
+
+- For MySQL (`--database db`) there is no replication view to check — confirm instead that the tables and columns named by the pending changesets already exist, and that the deployment has not been upgraded past the schema you are recovering.
+
+If any of these is uncertain, stop and restore the changelog from a backup of the same version instead. `--yes` skips the prompt, not these checks — only use it in a runbook that has already performed them.
+
+For ClickHouse the script enforces the coarse version of this itself: it counts the tables in the analytics database and refuses when the schema is plainly not built (an empty or nearly empty database against a full pending list), including under `--yes`. That catches the worst case — re-baselining a database that has no schema at all — but it cannot judge the finer conditions above, such as a stale replica or a newer jar. Treat it as a backstop, not a substitute for the checklist.
+</Callout>
+
+<Steps>
+  <Step>
+    Get a shell in an `opik-backend` container, in its working directory (`/opt/opik`).
+
+    If a replica is still running (the usual case — existing pods keep serving while only *new* ones fail), exec into it. If **every** replica is in `CrashLoopBackOff`, there is nothing to exec into; start a one-shot container from the same image instead, so the jar matches the deployed schema version.
+
+    On Kubernetes:
+
+    ```bash
+    NS=<your namespace>
+
+    # Take the image from the failing deployment rather than using a floating tag —
+    # the recovery must run against the version the schema was migrated to.
+    IMAGE=$(kubectl get deploy opik-backend -n "$NS" \
+      -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+    # --image is required by kubectl even though the override also sets it, so both
+    # read from $IMAGE to keep them from drifting apart.
+    kubectl run opik-rebaseline --rm -it --restart=Never -n "$NS" \
+      --image="$IMAGE" \
+      --overrides="$(cat <<JSON
+    {"spec":{"containers":[{"name":"opik-rebaseline","image":"$IMAGE","command":["bash"],"stdin":true,"tty":true,
+      "envFrom":[{"secretRef":{"name":"<your opik-backend secret>"}},{"configMapRef":{"name":"<your opik-backend configmap>"}}]}]}}
+    JSON
+    )"
+    ```
+
+    On Docker Compose:
+
+    ```bash
+    docker compose run --rm --entrypoint bash opik-backend
+    ```
+
+    On Compose the service already pins its image, so no extra step is needed there.
+
+    <Callout intent="warning">
+      `envFrom` carries environment variables but not files. If your deployment terminates TLS to
+      MySQL or ClickHouse — anything setting `MYSQL_TRUSTSTORE_URL` / `MYSQL_CLIENTSTORE_URL`, or
+      relying on the chart's `ca-cert-injection` init container — the one-shot pod will start
+      without those certificates and fail to connect before it reaches the re-baseline. Copy the
+      relevant `volumes`, `volumeMounts` and init container from the live spec
+      (`kubectl get deploy opik-backend -n "$NS" -o yaml`) into the overrides as well. Exec'ing
+      into a surviving replica avoids this entirely, so prefer it whenever one is available.
+    </Callout>
+  </Step>
+  <Step>
+    Review what would change, without writing anything:
+
+    ```bash
+    ./rebaseline_db_changelog.sh --dry-run
+    ```
+
+    This prints the pending changesets. Confirm they correspond to schema objects that already exist in the database.
+  </Step>
+  <Step>
+    Re-baseline the analytics changelog:
+
+    ```bash
+    ./rebaseline_db_changelog.sh
+    ```
+
+    The script shows the pending list again, asks for confirmation, records the changesets as applied, and re-runs the status check so you can see the ledger is now clean. Only changelog rows are written — no DDL runs and no data is touched.
+  </Step>
+  <Step>
+    Restart the failing replicas. They now skip the recorded changesets instead of replaying them.
+  </Step>
+</Steps>
+
+Pass `--yes` to skip the confirmation prompt in an automated runbook; the schema check still runs and still aborts.
+
+`--database db` re-baselines the MySQL (state) changelog instead of the ClickHouse (analytics) one. There is no MySQL client in the backend image, so the schema check cannot run there and the script refuses unless you add `--force-unverified`, which asserts you have confirmed the schema yourself. The same flag overrides every one of the ClickHouse checks: a probe that could not reach the server, and a probe that reports an implausibly low table count against a schema you have confirmed is at head. Reach for it only after working through the checklist above — it turns a refusal back into the silent-bricking path.
+
+The same applies to `--config`. The re-baseline connects through the config file you pass, while the schema check reads the `ANALYTICS_DB_MIGRATIONS_*` environment variables — these describe the same database only for the packaged `config.yml`, which resolves from exactly those variables. With any other config the check could verify a different database than the one being written, so the script refuses unless you add `--force-unverified`.
+
+None of these refusals apply to `--dry-run`, which reports without writing and so needs no verification: it prints the pending changesets and exits, on either database, and never contacts ClickHouse for a table count. That is what makes the inspection step above workable on MySQL, where the schema cannot be verified at all.
+
+If you prefer to run the underlying commands directly, these are the Dropwizard migration commands the script drives:
+
+```bash
+java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics status --verbose config.yml
+java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics fast-forward --all config.yml
+```
+
+<Callout intent="warning">
+  The second command is an **unguarded write**. Run on its own it performs the re-baseline with none of the script's safeguards: no schema check (so it will happily mark every migration applied against an empty database), no confirmation prompt, no re-check that the pending set did not move while you were reading it, and no verification afterwards that the ledger is actually clean and the schema untouched. Prefer the script; reach for these only when you cannot run it, and work through the checklist above first.
+</Callout>
+
+<Callout intent="info">
+`fast-forward --all` is Liquibase's `changelogSync` — it marks every pending changeset as applied without running it. Restoring the changelog from a backup of a **same-version** deployment also works, but the re-baseline avoids needing one, and avoids the risk of importing a ledger from a different schema version.
+</Callout>
+
+#### Prevention
+
+Include the `default` database in ClickHouse backups, not just `opik`. The changelog table is small but a restore without it leaves the deployment unable to start new replicas.
+
 ### ClickHouse Zookeeper Metadata Loss
 
 #### Problem Description
@@ -257,6 +411,167 @@ kubectl exec -it cometml-production-opik-zookeeper-0 -- zkCli.sh -server localho
 ls /clickhouse/tables/0/<database_name>/<table_name>
 ```
 
+### ClickHouse `TOO_MANY_PARTS` Errors and Stuck Merges
+
+#### Problem Description
+
+Under sustained high-volume ingestion, span/trace batch inserts may start failing with HTTP 500s while ClickHouse rejects new parts:
+
+```
+Code: 252. DB::Exception: Too many parts (N) in table 'opik.spans'.
+Merges are processing significantly slower than inserts:
+While executing WaitForAsyncInsert. (TOO_MANY_PARTS)
+```
+
+Clients calling `POST /api/v1/private/spans/batch` (or `/traces/batch`) receive 500s. The active part count for the table has exceeded ClickHouse's `parts_to_throw_insert` threshold (default `3000`) and is not draining.
+
+**Symptoms:**
+
+- 500s on the span/trace batch endpoints; `TOO_MANY_PARTS` (`Code: 252`) in the opik-backend logs
+- A high and still-growing active-part count for `spans` and/or `traces`
+- If it persists, the opik-backend ClickHouse connection pool can exhaust (`ConnectionRequestTimeoutException`), amplifying the impact
+
+<Callout intent="info">
+  This async-insert behavior applies to **all** ClickHouse-backed writes — individual create/update calls as well as the batch endpoints, and other entities (feedback scores, dataset items, experiments, …) — because the setting lives on the connection. Spans and traces, especially the **batch** endpoints, generate by far the most volume, so they hit the threshold first; the tuning below applies globally.
+</Callout>
+
+<Callout intent="warning">
+  This error has **two very different root causes** that need different fixes. Always run the diagnosis below before taking action — the recovery for one will not help the other.
+</Callout>
+
+<Callout intent="info">
+  A production Opik runs ClickHouse as a replicated cluster, so the commands below use the cluster-wide form and two placeholders: `{cluster}` (the cluster macro) and `<database_name>` (the analytics schema — default `opik`, set via `ANALYTICS_DB_DATABASE_NAME`). Substitute your own before running — find them with `SELECT * FROM system.macros` and `SHOW DATABASES`. On a single-node install, drop the `clusterAllReplicas(...)` wrapper (query the `system.*` table directly) and the `ON CLUSTER '{cluster}'` clause.
+</Callout>
+
+#### Diagnose first
+
+```sql
+-- Active parts per node and table: is the count high and growing?
+SELECT hostName() AS host, table, count() AS active_parts
+FROM clusterAllReplicas('{cluster}', system.parts)
+WHERE active AND database = '<database_name>'
+GROUP BY host, table ORDER BY active_parts DESC;
+
+-- Is a merge stuck? Look for a queue entry with a rising num_tries and a repeating exception.
+SELECT hostName() AS host, database, table, type, num_tries, new_part_name, last_exception
+FROM clusterAllReplicas('{cluster}', system.replication_queue)
+WHERE database = '<database_name>'
+ORDER BY num_tries DESC;
+
+-- How many merges are actually running per node vs. the pool size?
+SELECT hostName() AS host, count() AS running_merges
+FROM clusterAllReplicas('{cluster}', system.merges)
+GROUP BY host;
+
+-- Replica health (rules out the ZooKeeper-metadata-loss scenario below).
+SELECT hostName() AS host, table, is_readonly, replica_is_active, zookeeper_exception
+FROM clusterAllReplicas('{cluster}', system.replicas);
+```
+
+- **Cause A — fragmentation (merges can't keep up).** Merges complete normally and quickly, `running_merges` is healthy, but parts are created faster than they merge. `system.replication_queue` shows no entry stuck with a high `num_tries`. This is driven by async-insert flush frequency under high concurrency.
+- **Cause B — a stuck merge blocking the queue.** `running_merges` is near zero (despite a large `background_pool_size`) and one `replication_queue` entry has a high, climbing `num_tries` with a repeating `last_exception` — commonly `Code: 76 ... CANNOT_OPEN_FILE` on corrupt/missing source-part files. That one poison entry jams the scheduler so nothing else merges and parts cannot drain, regardless of CPU or disk.
+
+<Callout intent="info">
+  If `system.replicas` shows `Code: 999 / KEEPER_EXCEPTION / No node`, you have a different problem — see [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss). `SYSTEM RESTORE REPLICA` is for that scenario and will **not** clear a stuck merge.
+</Callout>
+
+#### Cause A resolution — tune async insert
+
+Opik applies its async-insert settings on the **ClickHouse connection** (via `custom_http_params` in `ANALYTICS_DB_QUERY_PARAMETERS`), so they apply to every insert. The shipped defaults favor freshness over batching:
+
+```
+async_insert=1
+wait_for_async_insert=1
+async_insert_busy_timeout_min_ms=100
+async_insert_busy_timeout_max_ms=250
+async_insert_use_adaptive_busy_timeout=1
+```
+
+With `async_insert=1`, each server-side flush becomes a new part. A short busy-timeout window (100–250 ms) means frequent flushes, and under high concurrency this creates many small parts that merges must keep up with.
+
+<Callout intent="warning">
+  Because Opik pins the busy-timeout settings on the connection, tuning `async_insert_busy_timeout_*` in a ClickHouse **server profile or user settings has no effect** — the connection value wins. Change them through Opik configuration instead (below).
+</Callout>
+
+To reduce fragmentation for high-volume deployments, widen the flush window (fewer, larger parts) via these opik-backend environment variables:
+
+```bash
+ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=2000   # ceiling of the adaptive flush window (ms); e.g. 1000–3000
+ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS=1000   # floor of the adaptive flush window (ms); keep below max
+ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE=52428800     # buffered bytes that force a flush; larger = fewer parts
+```
+
+<Callout intent="info">
+  Each of these env vars applies when set — it overrides the value in your `ANALYTICS_DB_QUERY_PARAMETERS` chain, or is added if the chain omits it — and leaves your value untouched when unset. When unset, the busy-timeout knobs fall back to the shipped chain defaults (100 / 250 ms) and `async_insert_max_data_size` to your ClickHouse server / user-profile value (Opik doesn't pin it). To change any other connection setting, override the whole `ANALYTICS_DB_QUERY_PARAMETERS` string, keeping every existing key and adjusting only what you need.
+</Callout>
+
+Widening the flush window trades a little ingestion latency and buffer memory — rows become queryable up to `max_ms` later — for far fewer parts, a good trade for high-volume observability data. Under sustained high load, flushes are size-triggered anyway, so most of the added latency falls on quieter periods. After changing these, restart the opik-backend and watch the active part count and `system.asynchronous_inserts`, dialing `max_ms` between 1000–3000 ms to taste. New inserts will fragment less; an existing backlog still needs to merge down (it will, once the insert rate no longer outpaces merges).
+
+<Callout intent="warning">
+  Because ingestion is synchronous (`wait_for_async_insert=1`), a higher `max_ms` also raises the worst-case response time of the batch and create/update endpoints. Make sure your client request timeouts comfortably exceed `max_ms`: the official Opik SDKs already use a generous read timeout, so typical values are safe, but custom or direct HTTP clients should be checked and increased if needed so callers don't time out before a successful insert returns.
+</Callout>
+
+#### Cause B resolution — unblock the stuck merge
+
+Work from least to most invasive: the threshold bump (step 1) and diagnosis (steps 2–3) are non-destructive; `DETACH` (step 4) is recoverable but data-affecting; the ZooKeeper edit (step 6) is the last resort. Run the commands against the table your diagnosis flagged — replace `<table>` with `spans` or `traces`.
+
+<Steps>
+  <Step>
+    **Restore ingestion immediately (reversible, no data loss).** Temporarily raise the throw threshold so inserts succeed while you fix the root cause:
+
+    ```sql
+    ALTER TABLE <database_name>.<table> ON CLUSTER '{cluster}' MODIFY SETTING parts_to_throw_insert = 20000, parts_to_delay_insert = 20000;
+    ```
+
+    On a Distributed deployment, target the underlying per-shard ReplacingMergeTree table, not the Distributed proxy. This is a safe, reversible stopgap — no data is deleted — so revert to the defaults once the backlog has drained.
+  </Step>
+  <Step>
+    **Confirm replicas are healthy** (`is_readonly = 0`, `replica_is_active = 1`, `zookeeper_exception = ''`). If you see Keeper `No node` errors, switch to [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss).
+  </Step>
+  <Step>
+    **Identify the failing merge and its corrupt source parts** from the `system.replication_queue.last_exception` values (the `CANNOT_OPEN_FILE` messages name the offending part directories).
+  </Step>
+  <Step>
+    **Try to recover the corrupt source parts.** If a part is still intact on another replica, `DETACH` the corrupt local copy (never `DROP`) — ClickHouse then re-fetches the good copy from a healthy replica, which lets the blocked merge complete. Detached parts are preserved under the table's `detached/` directory.
+
+    ```sql
+    ALTER TABLE <database_name>.<table> DETACH PART 'all_1_100_5';
+    -- repeat for each corrupt part named in the exception
+    ```
+
+    <Callout intent="warning">
+      Data-affecting, expert operation — do it with ClickHouse expertise on hand. On a `ReplicatedMergeTree` the queued merge entry references its source parts by name, so `DETACH` does **not** by itself remove that entry: it only helps when the part is intact elsewhere and can be re-fetched. If the part is corrupt on **all** replicas there is nothing to re-fetch — the entry keeps retrying and you must proceed to step 6 to clear it (and removing the part also drops its rows, a small bounded window for observability data). Always `DETACH` (recoverable), never `DROP`.
+    </Callout>
+  </Step>
+  <Step>
+    **Re-check the queue.** If the stuck entry is gone and merges resume, the backlog will drain on its own. A `SYSTEM RESTART REPLICA <database_name>.<table>` can help a node re-read its queue.
+  </Step>
+  <Step>
+    **Last resort — remove the stuck queue entry from ZooKeeper.** When re-fetch/`DETACH` can't clear it (steps 4–5), removing the poison entry directly is the reliable fix — but it is dangerous, so do it only after 4–5 and ideally with ClickHouse expertise on hand. Delete the specific stuck `queue-XXXXXXXXXX` node under **every** replica path, then restart the replicas:
+
+    ```
+    /clickhouse/tables/<shard>/<database_name>/<table>/replicas/<replica>/queue/queue-XXXXXXXXXX
+    ```
+
+    <Callout intent="warning">
+      Editing ZooKeeper directly is dangerous and can corrupt replication if the wrong node is removed. Delete only the exact stuck entry, on all replicas, and prefer the `DETACH PART` path above whenever possible.
+    </Callout>
+  </Step>
+  <Step>
+    **Verify recovery and revert.** Watch the active-part count fall, then restore `parts_to_throw_insert` / `parts_to_delay_insert` to their defaults.
+  </Step>
+</Steps>
+
+<Callout intent="info">
+  **What does _not_ clear a stuck merge:** `SYSTEM RESTART REPLICA` on its own (it only resets `num_tries` and re-attempts the same entry), `SYSTEM STOP/START MERGES` (the entry survives the pause), and `KILL MUTATION` (a merge is not a mutation). Use the `DETACH PART` path instead.
+</Callout>
+
+#### Prevention
+
+- **High-volume ingestion:** raise `async_insert_busy_timeout_max_ms` (Cause A above) before scaling ingestion up, and monitor part counts.
+- **ClickHouse major-version upgrades:** a replica can transiently go read-only during a rolling upgrade of replicated tables, which may leave part files inconsistent and schedule a merge that later fails. Quiesce or throttle ingestion during the upgrade, and confirm all replicas are healthy (`system.replicas`) and `system.replication_queue` is clean **before** ramping ingestion back up.
+- **Monitoring:** alert on the cluster-wide active part count per table and on `system.replication_queue` entries with a rising `num_tries`, so a stuck merge is caught before it becomes `TOO_MANY_PARTS`.
+
 ## Diagnostic Commands
 
 ### Connecting to ClickHouse
@@ -309,6 +624,10 @@ To avoid Zookeeper metadata loss issues:
 4. **Persistent Storage**: Use persistent volumes for Zookeeper to prevent data loss during pod restarts.
 
 5. **Replica Validation**: Regularly check replica status with the diagnostic queries above.
+
+6. **Check the Changelog Before Upgrades**: Review the [self-host changelog](/self-host/changelog) for breaking and critical changes before you upgrade your deployment.
+
+7. **Back Up the Liquibase Ledger**: Include ClickHouse's `default` database in backups alongside `opik`. It holds Liquibase's `DATABASECHANGELOG` table — the migration ledger, unrelated to the [self-host changelog](/self-host/changelog) page above; restoring data without it leaves the deployment unable to start new replicas. See [Lost Liquibase Changelog with an Intact Schema](#lost-liquibase-changelog-with-an-intact-schema).
 
 ## Getting Help
 

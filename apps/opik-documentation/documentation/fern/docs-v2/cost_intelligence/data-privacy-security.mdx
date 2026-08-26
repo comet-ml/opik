@@ -1,0 +1,291 @@
+---
+headline: Data, privacy and security
+og:description: Exactly what Cost Intelligence collects and what it never
+  collects, the opt-in content capture control, where data goes, and how it is
+  protected in transit and on disk.
+og:site_name: Opik Documentation
+og:title: Data, privacy and security - Opik
+title: Data, privacy and security
+---
+
+Cost Intelligence sits in the path of your developers' coding agent traffic, so it is reasonable to want a precise answer to "what leaves the machine". This page is that answer, field by field.
+
+The short version: **only counts, costs, and structural metadata are reported.** Prompt and response content is not collected unless someone explicitly turns it on, and an organization can prevent that from ever happening.
+
+## What is collected
+
+Each section below lists the fields and includes an expandable example of the real payload, shown with content capture **off** (the default). Values are illustrative.
+
+### Per session
+
+| Field | What it is |
+| --- | --- |
+| Session ID | Identifier for one coding session |
+| Working directory | Path the session ran in |
+| Project name | Resolved project label |
+| User identity | Email, username, display name, org |
+| Billing attribution | Plan, seat tier, billing mode |
+| Git repository | Remote URL, branch, commit SHA |
+| Commit statistics | File and line counts per turn. **No diffs, no filenames** |
+
+<Accordion title="View example session payload">
+
+```json
+{
+  "schema_version": 3,
+  "harness": "claude_code",
+  "session_id": "9f2c1e84-3b7a-4d21-9c05-71e4a8b6d033",
+  "cwd": "/Users/dev/src/payments-api",
+  "transcript_path": "/Users/dev/.claude/projects/payments-api/9f2c1e84.jsonl",
+  "project": { "name": "payments-api", "source": "git_remote" },
+  "identity": {
+    "email": "dev@example.com",
+    "username": "dev",
+    "display_name": "Dev Example",
+    "org_name": "Example Inc",
+    "plan": "max",
+    "seat_tier": "priority",
+    "billing_mode": "subscription"
+  },
+  "repository": {
+    "remote": "git@github.com:example/payments-api.git",
+    "branch": "feature/idempotency-keys",
+    "head_sha": "4c1b9a7e2f8d3a15b6c07e94d2af8b31c5e7d902",
+    "dirty": true,
+    "commits_in_trace": 1,
+    "files_added": 2,
+    "files_deleted": 0,
+    "lines_added": 148,
+    "lines_deleted": 23
+  },
+  "capture_content": false
+}
+```
+
+Note the commit delta carries **counts only**. No filenames and no diff content.
+
+</Accordion>
+
+### Per call
+
+| Field | What it is |
+| --- | --- |
+| Model | Model that served the call |
+| Request ID | Provider's own request identifier |
+| Token counts | Input, output, cache-creation, cache-read, per-tier cache split. Read **verbatim from the provider's usage payload**, never estimated |
+| Service tier | Standard, batch, or priority |
+| Model configuration | Effort level, thinking mode, token limits, context management |
+| Errors | Status code and retry count. **No error bodies** |
+| Call structure | Trigger, turn and trace identifiers, parent links |
+
+<Accordion title="View example call payload">
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-opus-5",
+  "request_id": "req_011CSb4RtqK8vN3wXyZ7Lm2P",
+  "trigger": "user_turn",
+  "turn_key": "b91f7c3d5a2e08461fd7c9b8e05a3d2f",
+  "trace_id": "0193f4c2-8a1e-7b3d-9f05-2c6e8a4b1d77",
+  "usage": {
+    "input_tokens": 412,
+    "cache_creation_input_tokens": 2048,
+    "cache_read_input_tokens": 31744,
+    "output_tokens": 1893,
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 2048,
+      "ephemeral_1h_input_tokens": 0
+    }
+  },
+  "config": {
+    "effort": "high",
+    "thinking_type": "adaptive",
+    "max_tokens": 32000
+  },
+  "total_chars": 138204
+}
+```
+
+Token counts are read straight from the provider's own `usage` block, so they reconcile with your invoice.
+
+</Accordion>
+
+### Per content block
+
+One row per classifiable region of the request or response. This is what makes cost attribution possible.
+
+The content hash is what stands in for the content itself. Two blocks with the same hash carry the same bytes, so Cost Intelligence can tell that the same system prompt, skill, or memory file appears across calls and across users — or that two copies of it have drifted apart — without ever seeing a character of the text.
+
+| Field | What it is |
+| --- | --- |
+| Position | Where in the request structure the block sits (a wire coordinate, not a file path) |
+| Cost bucket | Which of the ~20 categories it belongs to |
+| Size | Characters or bytes |
+| Content hash | One-way hash of the block's content |
+| Media type | For binary blocks (images, PDFs) |
+| Tool / resource name | Tool, MCP server, skill or agent **name**. **Not arguments or results** |
+| Cache status | Whether the block was a cache read, write, or fresh |
+| Body | **Only present when content capture is explicitly enabled** |
+
+<Accordion title="View example content blocks">
+
+```json
+[
+  {
+    "path": "system[0]",
+    "side": "input",
+    "kind": "text",
+    "category": "system_prompt",
+    "sha256": "3f8a1c9e77b204d6",
+    "chars": 8432,
+    "cache_control": "1h",
+    "cache_status": "read"
+  },
+  {
+    "path": "tools[3]",
+    "side": "input",
+    "kind": "tool_schema",
+    "category": "mcp_tools_active",
+    "tool_server": "github",
+    "tool_name": "create_issue",
+    "sha256": "b1d47e0a92c5f386",
+    "chars": 612,
+    "cache_status": "read"
+  },
+  {
+    "path": "messages[6].content[0]",
+    "side": "input",
+    "kind": "text",
+    "category": "memory_files",
+    "resource": "CLAUDE.md",
+    "sha256": "77c2e5b8104af9d3",
+    "chars": 1904,
+    "cache_status": "read"
+  },
+  {
+    "path": "messages[11].content[0]",
+    "side": "input",
+    "kind": "text",
+    "category": "user_input",
+    "sha256": "e904b71c3d8f26a5",
+    "chars": 214,
+    "cache_status": "fresh"
+  },
+  {
+    "path": "response.content[0]",
+    "side": "output",
+    "kind": "thinking",
+    "category": "thinking",
+    "sha256": "5a3f8c11e7b90d42",
+    "chars": 4120
+  },
+  {
+    "path": "response.content[2]",
+    "side": "output",
+    "kind": "tool_use",
+    "category": "builtin_tool_call",
+    "tool_name": "Edit",
+    "tool_use_id": "toolu_01A9bC3dEf5GhJ7k",
+    "sha256": "c60b2d9741ea8f35",
+    "chars": 806
+  }
+]
+```
+
+Every block carries a category, a size and a hash. **None carries a `body` field**, because content capture is off. That one field is the only place prompt or response text would ever appear.
+
+</Accordion>
+
+<Note>
+  The block list is what turns a single token total into a cost breakdown. The
+  `user_input` block above is 214 characters against 8,432 for the system prompt
+  and 1,904 for memory files, which is the ratio most teams are surprised by.
+</Note>
+
+### Never collected
+
+| | |
+| --- | --- |
+| Prompt and response text | Unless content capture is explicitly enabled |
+| Thinking text | Unless content capture is explicitly enabled |
+| Tool arguments and results | Names only |
+| Source file contents, diffs, filenames | Counts only |
+| Coding agent transcript contents | Path only. The file is never read |
+| API keys and credentials | Redacted at capture, before anything is written |
+| Request and response headers | Not shipped |
+
+## The content capture control
+
+One setting governs whether any prompt or response text leaves the device.
+
+| | |
+| --- | --- |
+| **Default** | Off. No configuration needed to get the private posture |
+| **Where it is set** | `CIPX_CAPTURE_CONTENT`, delivered via managed settings or MDM |
+| **Org veto** | Setting it to `false` explicitly is a hard veto. No individual user can override it |
+| **Auditable** | Every session records the decision, so you can query which sessions (if any) reported content |
+
+<Warning>
+  If your organization does not pin the value, an individual developer can opt
+  themselves in. Silence is not a veto. For an IP-sensitive fleet, set
+  `CIPX_CAPTURE_CONTENT` to `false` explicitly rather than leaving it unset.
+</Warning>
+
+## What policy sync writes on the device
+
+Applying [cost policies](/cost-intelligence/roll-out-cost-policies) writes only the managed policy keys in `~/.claude/settings.json` and `~/.codex/config.toml`; the rest of each file is the developer's own. A settings file that cannot be parsed is left untouched, and failures surface in local logs and error telemetry only.
+
+## Where the data goes
+
+| Destination | Purpose | Control |
+| --- | --- | --- |
+| Your model provider or gateway | The original API call, forwarded byte for byte unchanged | Inherent |
+| Your Opik workspace | The payloads described above | Self-host Opik to keep this inside your own infrastructure |
+| Error telemetry | Crash and error reports with stack traces. No request or response bodies | Set `CIPX_SENTRY` to `off` to disable |
+| Plugin distribution | Plugin auto-update | Disable marketplace auto-update |
+
+## Security
+
+**In transit.** The coding agent talks to the proxy over the loopback interface only, so that traffic never touches a network. The proxy originates its own TLS connection to the model provider with full certificate validation, and ships to Opik over HTTPS. The proxy, admin and viewer listeners refuse to bind anything other than `127.0.0.1` and fail to start rather than binding a public address.
+
+**Credentials.** Authorization headers are masked at capture, before anything is written to disk. The original headers are forwarded upstream untouched, so the proxy is transparent to authentication and never rewrites a caller's credentials.
+
+**On disk.** The local spool lives at `~/.opik-cipx/` with directory mode `0700` and files `0600`. It is a buffer, not an archive, and it is bounded by a total disk cap and a retention window, whichever binds first.
+
+<Warning>
+  The content capture setting governs what is **reported to Opik**. It does not
+  govern the local buffer: full request and response bytes are written to the
+  local spool regardless, because the pipeline re-derives cost attribution from
+  them. That data never leaves the machine, is not world-readable, and ages out
+  on the caps above, but if your baseline requires a shorter window, lower
+  `raw_retention_days` and `disk_cap_bytes` in the deployed configuration.
+</Warning>
+
+**TLS interception.** The recommended plugin rollouts ([managed settings](/cost-intelligence/install/managed-settings) and [MDM](/cost-intelligence/install/mdm)) do **not** terminate, decrypt or inspect TLS, and install no certificate. The optional [macOS app](/cost-intelligence/install/macos-app) does terminate TLS locally, using a per-device certificate authority whose private key is hardware-backed and non-extractable, constrained to the model provider hostnames.
+
+## Compliance and security review
+
+For a formal review we can provide the full Cost Intelligence data security and privacy document, covering the complete field inventory, on-disk retention characteristics, the full outbound destination list, subprocessors, and current compliance attestations.
+
+Email [sales@comet.com](mailto:sales@comet.com) and we will route it to the right team.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="fa-regular fa-download"
+    href="/cost-intelligence/install/overview"
+  >
+    Roll out to your fleet via MDM, managed settings, or the macOS app.
+  </Card>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Turn the collected data into a lower bill.
+  </Card>
+</CardGroup>

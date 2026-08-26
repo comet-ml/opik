@@ -12,6 +12,8 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetri
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -85,6 +87,14 @@ class ManualEvaluationResourceTest {
     private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(10);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(10);
+
+    // The judge is told the rule's schema names, so a mocked reply has to use them: the parser only
+    // accepts declared names (OPIK-7354). PODAM would otherwise generate random ones.
+    private static final List<LlmAsJudgeOutputSchema> RELEVANCE_SCHEMA = List.of(LlmAsJudgeOutputSchema.builder()
+            .name("Relevance")
+            .type(LlmAsJudgeOutputSchemaType.INTEGER)
+            .description("Relevance of the summary")
+            .build());
 
     private static final String VALID_AI_MSG_TXT = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"}}";
 
@@ -594,7 +604,9 @@ class ManualEvaluationResourceTest {
             var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             // Create span-level LLM as Judge rule
-            var rule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+            var rulePojo = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var rule = rulePojo.toBuilder()
+                    .code(rulePojo.getCode().toBuilder().schema(RELEVANCE_SCHEMA).build())
                     .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
@@ -653,7 +665,9 @@ class ManualEvaluationResourceTest {
             var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             // Create span-level LLM as Judge rule
-            var spanLevelRule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+            var spanLevelRulePojo = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var spanLevelRule = spanLevelRulePojo.toBuilder()
+                    .code(spanLevelRulePojo.getCode().toBuilder().schema(RELEVANCE_SCHEMA).build())
                     .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)

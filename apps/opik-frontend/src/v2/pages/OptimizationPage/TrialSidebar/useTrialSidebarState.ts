@@ -15,7 +15,9 @@ export type TrialSidebarTarget = "prompt" | "diff";
 
 export type OpenTrialTarget = {
   experimentIds: string[];
-  trialNumber: number;
+  /** `null` for the baseline — it is not a trial and carries no number, so
+   *  opening it keeps the URL free of a `trialNumber` param (OPIK-7589). */
+  trialNumber: number | null;
 };
 
 const PARAM_CONFIG = {
@@ -91,7 +93,7 @@ export const useTrialSidebarState = () => {
         {
           ...PER_TRIAL_PARAMS,
           trials: target.experimentIds,
-          trialNumber: target.trialNumber,
+          trialNumber: target.trialNumber ?? undefined,
           trialTab: targetTab,
         },
         "replaceIn",

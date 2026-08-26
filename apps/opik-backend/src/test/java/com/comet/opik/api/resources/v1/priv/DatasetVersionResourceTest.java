@@ -51,11 +51,14 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceEnrichmentOptions;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -77,12 +80,19 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -103,6 +113,7 @@ class DatasetVersionResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -144,9 +155,10 @@ class DatasetVersionResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
+    private ExperimentAggregatesService experimentAggregatesService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.mySqlTemplate = mySqlTemplate;
 
@@ -158,6 +170,7 @@ class DatasetVersionResourceTest {
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
         spanResourceClient = new SpanResourceClient(client, baseURI);
+        experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
     }
 
     @AfterAll
@@ -1792,6 +1805,124 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Insert Classification Counts")
+    class InsertClassificationCounts {
+
+        @Test
+        @DisplayName("Success: Re-inserting existing items counts them as modified, not added")
+        void insertItems__whenItemsAlreadyExistInVersion__thenCountedAsModifiedNotAdded() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(5))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(5, 5, 0);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Re-insert 3 of the existing items (updates) alongside 2 brand-new ones
+            var mixedItems = new ArrayList<DatasetItem>();
+            v1Items.stream().limit(3)
+                    .map(item -> DatasetItem.builder()
+                            .id(item.id())
+                            .datasetItemId(item.datasetItemId())
+                            .source(item.source())
+                            .data(Map.of("updated", JsonUtils.getJsonNodeFromString("true")))
+                            .build())
+                    .forEach(mixedItems::add);
+            mixedItems.addAll(generateDatasetItems(2));
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(mixedItems)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id());
+            assertThat(latestVersion)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(7, 7, 3);
+        }
+
+        @Test
+        @DisplayName("Success: Duplicate stable id within one batch increments added by one")
+        void insertItems__whenBatchContainsDuplicateStableId__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(2))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(2);
+
+            // Same stable id appearing twice in one batch must count as a single new item.
+            // The stable id must be supplied via `id`: `datasetItemId` is READ_ONLY on the write view
+            // and is derived from `id` server-side.
+            var duplicatedId = ID_GENERATOR.generateId();
+            var duplicateBatch = List.of(
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                            .build());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(duplicateBatch)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id());
+            assertThat(latestVersion)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(3, 3, 0);
+        }
+
+        @Test
+        @DisplayName("Success: Multi-batch insert into existing version accumulates counts correctly")
+        void insertItems__whenMultipleBatchesIntoExistingVersion__thenCountsAccumulate() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(10))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+
+            for (int i = 0; i < 3; i++) {
+                datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                        .datasetId(datasetId)
+                        .items(generateDatasetItems(10))
+                        .build(), TEST_WORKSPACE, API_KEY);
+            }
+
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(1);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id());
+            assertThat(latestVersion)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(40, 40, 0);
+        }
+    }
+
+    @Nested
     @DisplayName("Get Items Response Structure:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetItemsResponseStructure {
@@ -2821,8 +2952,6 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ExperimentDatasetVersionLinking {
 
-        private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
-
         private Experiment getExperiment(UUID id) {
             return experimentResourceClient.getExperiment(id, API_KEY, TEST_WORKSPACE);
         }
@@ -3063,7 +3192,7 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(datasetName);
             createDatasetItems(datasetId, 1);
 
-            var nonExistentVersionId = idGenerator.generateId();
+            var nonExistentVersionId = ID_GENERATOR.generateId();
 
             // when - create experiment with non-existent version ID
             var experiment = experimentResourceClient.createPartialExperiment()
@@ -3384,6 +3513,107 @@ class DatasetVersionResourceTest {
                             datasetItems.get(2).id(),
                             datasetItems.get(1).id(),
                             datasetItems.get(0).id());
+        }
+
+        static Stream<Arguments> sortByJsonKeyThroughPushTopLimit() {
+            // namespace, JSON key (with special characters), direction, expected item-index order
+            return Stream.of(
+                    Arguments.of("output", "score's", Direction.ASC, List.of(0, 1, 2)),
+                    Arguments.of("output", "score's", Direction.DESC, List.of(2, 1, 0)),
+                    Arguments.of("input", "in\"put", Direction.ASC, List.of(0, 1, 2)),
+                    Arguments.of("input", "in\"put", Direction.DESC, List.of(2, 1, 0)),
+                    Arguments.of("metadata", "me\\ta", Direction.ASC, List.of(0, 1, 2)),
+                    Arguments.of("metadata", "me\\ta", Direction.DESC, List.of(2, 1, 0)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("should sort versioned experiment items by a JSON key (output/input/metadata) through the push-top-limit path")
+        void sortByJsonKeyThroughPushTopLimit(String namespace, String jsonKey, Direction direction,
+                List<Integer> expectedIndexOrder) {
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            int count = 3;
+            createDatasetItems(datasetId, count);
+
+            var version = getLatestVersion(datasetId);
+            var datasetItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var projectName = UUID.randomUUID().toString();
+
+            // One trial per dataset item; each trace carries a distinct value under the requested key (which
+            // contains special characters) in the requested namespace. Sorting by <namespace>.<key> routes
+            // through the push-top-limit path, whose JSON expression binds the key as a parameter
+            // (JSONExtractRaw(argMax(...), :param)).
+            var traceIds = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        var value = JsonUtils.valueToTree(Map.of(jsonKey, (i + 1) * 10));
+                        var builder = factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName);
+                        switch (namespace) {
+                            case "output" -> builder.output(value);
+                            case "input" -> builder.input(value);
+                            case "metadata" -> builder.metadata(value);
+                            default -> throw new IllegalStateException("Unexpected namespace: " + namespace);
+                        }
+                        var trace = builder.build();
+                        traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                        return trace.id();
+                    })
+                    .toList();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version.id())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            IntStream.range(0, count).forEach(i -> {
+                var item = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experimentId)
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traceIds.get(i))
+                        .build();
+                experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE);
+            });
+
+            // Materialize experiment_item_aggregates so the query takes the push-top-limit branch
+            // (applyPushTopLimit requires hasAggregated && !hasRaw); otherwise it falls back to the raw
+            // path with an ordinary OFFSET and the push-top-limit CTE would go untested.
+            experimentAggregatesService.populateAggregations(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                    .block();
+
+            // Baseline fetch (no sorting) captures the full objects as returned; the assertion only tests order.
+            var baseline = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, null, API_KEY, TEST_WORKSPACE).content();
+            assertThat(baseline).hasSize(count);
+
+            Map<UUID, DatasetItem> baselineById = baseline.stream()
+                    .collect(Collectors.toMap(DatasetItem::id, item -> item));
+            List<DatasetItem> expected = expectedIndexOrder.stream()
+                    .map(i -> baselineById.get(datasetItems.get(i).id()))
+                    .toList();
+
+            var sorting = List.of(SortingField.builder().field(namespace + "." + jsonKey).direction(direction).build());
+            var sorted = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, sorting, API_KEY, TEST_WORKSPACE);
+
+            // Compare the whole DatasetItem objects, in order - not just their ids.
+            assertThat(sorted.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expected);
+
+            // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
+            // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
+            var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(pageTwo.total()).isEqualTo(count);
+            assertThat(pageTwo.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactly(expected.get(count - 1));
         }
 
         @Test
@@ -5308,6 +5538,235 @@ class DatasetVersionResourceTest {
 
             assertThat(findVersionIdByHash(datasetId, version.versionHash(), UUID.randomUUID().toString()))
                     .isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Concurrent Uploads (OPIK-7264):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ConcurrentUploads {
+
+        private List<DatasetItem> buildManualItems(int count, String tag) {
+            return IntStream.range(0, count)
+                    .mapToObj(i -> DatasetItem.builder()
+                            .id(null)
+                            .source(DatasetItemSource.MANUAL)
+                            .traceId(null)
+                            .spanId(null)
+                            .data(Map.of(
+                                    "input", JsonUtils.getJsonNodeFromString("\"" + tag + "-input-" + i + "\""),
+                                    "output", JsonUtils.getJsonNodeFromString("\"" + tag + "-output-" + i + "\"")))
+                            .build())
+                    .toList();
+        }
+
+        private DatasetItemBatch buildBatch(UUID datasetId, UUID batchGroupId, int count, String tag) {
+            return DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(buildManualItems(count, tag))
+                    .batchGroupId(batchGroupId)
+                    .build();
+        }
+
+        // Reads back every 'input' value in the latest version so tests can assert on row identity,
+        // not just the aggregate count (a loss-plus-duplication regression keeps the count intact).
+        private Set<String> latestInputValues(UUID datasetId, int pageSize) {
+            return datasetResourceClient.getDatasetItems(datasetId, 1, pageSize, null, API_KEY, TEST_WORKSPACE)
+                    .content().stream()
+                    .map(item -> item.data().get("input").asText())
+                    .collect(Collectors.toSet());
+        }
+
+        // Blocks until every worker thread has reached the barrier, then releases them together, so the
+        // HTTP calls genuinely overlap instead of drifting apart when the CI node is loaded.
+        private void awaitBarrier(CyclicBarrier barrier) {
+            try {
+                barrier.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            } catch (BrokenBarrierException | java.util.concurrent.TimeoutException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        private List<Integer> runParallel(List<DatasetItemBatch> batches) {
+            ExecutorService executor = Executors.newFixedThreadPool(batches.size());
+            CyclicBarrier barrier = new CyclicBarrier(batches.size());
+            try {
+                List<CompletableFuture<Integer>> futures = batches.stream()
+                        .map(batch -> CompletableFuture.supplyAsync(() -> {
+                            awaitBarrier(barrier);
+                            try (var response = datasetResourceClient.callCreateDatasetItems(batch, TEST_WORKSPACE,
+                                    API_KEY)) {
+                                return response.getStatus();
+                            }
+                        }, executor))
+                        .toList();
+
+                return futures.stream().map(CompletableFuture::join).toList();
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        private long latestItemCount(UUID datasetId) {
+            return datasetResourceClient.getDatasetItems(datasetId, 1, 1, null, API_KEY, TEST_WORKSPACE).total();
+        }
+
+        @Test
+        @DisplayName("Bug B: parallel uploads with distinct batch_group_ids don't lose rows")
+        void parallelDistinctBatchGroups__thenNoRowsLost() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            // Seed an initial version so writers branch off a shared base.
+            createDatasetItems(datasetId, 1);
+
+            int writers = 8;
+            int perWriter = 5;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> buildBatch(datasetId, UUID.randomUUID(), perWriter, "w" + i))
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+
+            assertThat(statuses).allMatch(status -> status == 204);
+            // Each writer branched off the same base (1 item) and added its own items; serialized
+            // application means the latest reflects the seed + every writer's rows.
+            assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
+
+            // Assert on row identity, not just the count: a bug that drops one writer's rows while
+            // duplicating another's would keep the total but lose a distinct tag. Every writer's inputs
+            // (w0-input-0..w7-input-4) must survive in the latest version.
+            Set<String> expectedInputs = IntStream.range(0, writers)
+                    .boxed()
+                    .flatMap(w -> IntStream.range(0, perWriter).mapToObj(i -> "w" + w + "-input-" + i))
+                    .collect(Collectors.toSet());
+            assertThat(latestInputValues(datasetId, 1 + writers * perWriter)).containsAll(expectedInputs);
+        }
+
+        @Test
+        @DisplayName("Bug A: parallel uploads sharing a batch_group_id don't 500 or duplicate the version")
+        void parallelSharedBatchGroup__thenNoErrorAndSingleVersion() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            UUID sharedBatchGroupId = UUID.randomUUID();
+            int writers = 8;
+            int perWriter = 5;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> buildBatch(datasetId, sharedBatchGroupId, perWriter, "s" + i))
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+
+            assertThat(statuses).allMatch(status -> status == 204);
+
+            // All writers share one batch_group_id -> they must collapse into exactly ONE new version
+            // (not one per writer), and the subsequent findLatestByBatchGroupId lookup must not throw.
+            // The seed created 1 version; the shared group adds exactly 1 more.
+            List<DatasetVersion> versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(versions).hasSize(2);
+
+            // Exercise the deterministic ORDER BY id DESC LIMIT 1 in findLatestByBatchGroupId: the shared
+            // group must resolve to a single 'latest' version holding every writer's rows. Asserting the
+            // resolved latest version's itemsTotal (not just the dataset row count) fails if the lookup
+            // ever returns a stale/losing branch instead of the newest one for the batch group.
+            List<DatasetVersion> latest = versions.stream().filter(DatasetVersion::isLatest).toList();
+            assertThat(latest).hasSize(1);
+            assertThat(latest.getFirst().itemsTotal()).isEqualTo(1 + writers * perWriter);
+            assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
+
+            // Row identity: every writer's distinct inputs must survive the collapse.
+            Set<String> expectedInputs = IntStream.range(0, writers)
+                    .boxed()
+                    .flatMap(w -> IntStream.range(0, perWriter).mapToObj(i -> "s" + w + "-input-" + i))
+                    .collect(Collectors.toSet());
+            assertThat(latestInputValues(datasetId, 1 + writers * perWriter)).containsAll(expectedInputs);
+        }
+
+        @Test
+        @DisplayName("Parallel uploads to different datasets stay independent (lock is per-dataset)")
+        void parallelDifferentDatasets__thenAllSucceed() {
+            int datasets = 4;
+            int perDataset = 5;
+            List<UUID> datasetIds = IntStream.range(0, datasets)
+                    .mapToObj(i -> {
+                        var id = createDataset(UUID.randomUUID().toString());
+                        createDatasetItems(id, 1);
+                        return id;
+                    })
+                    .toList();
+
+            List<DatasetItemBatch> batches = datasetIds.stream()
+                    .map(id -> buildBatch(id, UUID.randomUUID(), perDataset, "d"))
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+
+            assertThat(statuses).allMatch(status -> status == 204);
+            datasetIds.forEach(id -> assertThat(latestItemCount(id)).isEqualTo(1L + perDataset));
+        }
+
+        @Test
+        @DisplayName("applyDeltaChanges: concurrent override=false writers don't clobber each other (OPIK-7264)")
+        void parallelApplyDeltaChanges__thenNoClobber() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            UUID baseVersionId = getLatestVersion(datasetId).id();
+
+            // All writers branch off the same current latest with override=false. Now that
+            // applyDeltaChanges runs under the per-dataset lock, they serialize: exactly one wins and
+            // moves 'latest'; the rest see a stale base and get a 409 instead of silently clobbering the
+            // winner (the pre-lock behavior). The CAS-specific ERROR_LATEST_MOVED path is a lock-lease
+            // backstop that can't be reached deterministically through the HTTP API and is covered by a
+            // service-level test in OPIK-7383.
+            int writers = 6;
+            List<DatasetItemChanges> changes = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemChanges.builder()
+                            .baseVersion(baseVersionId)
+                            .addedItems(buildManualItems(3, "a" + i))
+                            .changeDescription("concurrent apply " + i)
+                            .build())
+                    .toList();
+
+            ExecutorService executor = Executors.newFixedThreadPool(writers);
+            CyclicBarrier barrier = new CyclicBarrier(writers);
+            List<Integer> statuses;
+            try {
+                statuses = changes.stream()
+                        .map(c -> CompletableFuture.supplyAsync(() -> {
+                            awaitBarrier(barrier);
+                            try (var response = datasetResourceClient.callApplyDatasetItemChanges(
+                                    datasetId, c, false, API_KEY, TEST_WORKSPACE)) {
+                                return response.getStatus();
+                            }
+                        }, executor))
+                        .toList()
+                        .stream().map(CompletableFuture::join).toList();
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // Exactly one writer wins (2xx); every other loses on the stale-base check with a 409.
+            // No 5xx, and no silent success that would indicate a clobber.
+            assertThat(statuses).filteredOn(status -> status == 200 || status == 201).hasSize(1);
+            assertThat(statuses).filteredOn(status -> status == HttpStatus.SC_CONFLICT).hasSize(writers - 1);
+            assertThat(statuses).noneMatch(status -> status >= 500);
+
+            // The winner created exactly one new version on top of the seed; its 3 rows landed in latest.
+            assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total()).isEqualTo(2L);
+            assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
         }
     }
 }

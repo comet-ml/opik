@@ -192,9 +192,9 @@ class SpanServiceImplTest {
         // comment/feedback-score/attachment deletes. deleteByIds and deletionEventDAO are stubbed per-test.
         private void mockSpanDeleteFlow(Set<UUID> traceIds, Set<UUID> spanIds, UUID projectId) {
             when(spanDAO.getSpanIdsForTraces(traceIds, projectId)).thenReturn(Mono.just(spanIds));
-            when(commentService.deleteByEntityIds(any(), eq(spanIds))).thenReturn(Mono.just(0L));
+            when(commentService.deleteByEntityIds(any(), eq(spanIds), eq(projectId))).thenReturn(Mono.just(0L));
             when(feedbackScoreService.deleteBySpanIds(spanIds, projectId)).thenReturn(Mono.empty());
-            when(attachmentService.deleteByEntityIds(any(), eq(spanIds))).thenReturn(Mono.just(0L));
+            when(attachmentService.deleteByEntityIds(any(), eq(spanIds), eq(projectId))).thenReturn(Mono.just(0L));
         }
     }
 }

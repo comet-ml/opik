@@ -2,9 +2,7 @@ name: TypeScript SDK E2E Tests
 run-name: "TypeScript SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
-  packages: write
+  packages: read
 on:
   workflow_dispatch:
   pull_request:
@@ -26,6 +24,7 @@ concurrency:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -42,7 +41,7 @@ jobs:
     outputs:
       node_versions: ${{ steps.pick.outputs.versions }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/actions/select-e2e-matrix
           sparse-checkout-cone-mode: false
@@ -54,6 +53,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   build-opik:
+    # The reusable build workflow pushes images to GHCR; pass down the
+    # packages: write grant here rather than at the workflow level (a called
+    # workflow's permissions can only be maintained or reduced from the
+    # caller's, never elevated).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build_e2e_docker.yaml
 
   run-e2e:
@@ -73,10 +79,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -92,7 +98,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Set up Node.js ${{matrix.node_version}}
-        uses: actions/setup-node@v4.2.0
+        uses: actions/setup-node@v7
         with:
           node-version: ${{matrix.node_version}}
 

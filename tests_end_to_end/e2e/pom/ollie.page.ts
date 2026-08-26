@@ -14,9 +14,19 @@ export class OlliePage {
   async goto(): Promise<void> {
     return test.step('open the Ollie page', async () => {
       const env = loadEnvConfig();
-      await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/ollie`,
-      );
+      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/ollie`;
+      const onTarget = new RegExp(`/projects/${this.projectId}/ollie(?:$|[/?#])`);
+
+      await this.page.goto(url);
+      // A redirect away from this project's /ollie route (e.g. the project
+      // isn't provisioned yet) otherwise fails silently here and only
+      // surfaces later as an opaque iframe/readiness timeout. Re-navigate
+      // once in case the first load raced a redirect, then fail loudly if
+      // it still isn't on the target project's Ollie page.
+      if (!onTarget.test(this.page.url())) {
+        await this.page.goto(url);
+      }
+      await expect(this.page).toHaveURL(onTarget);
     });
   }
 
@@ -259,18 +269,23 @@ export class OlliePage {
   }
 
   /** Reset to a fresh conversation (clears history back to the greeting). */
-  async startNewChat(): Promise<void> {
+  async startNewChat(timeoutMs = 60_000): Promise<void> {
     return test.step('start a new Ollie chat', async () => {
       await this.frame().getByRole('button', { name: 'New chat' }).click();
-      await expect(this.greeting()).toBeVisible();
+      await expect(this.greeting()).toBeVisible({ timeout: timeoutMs });
     });
   }
 
   greeting(): Locator {
-    // "Hi there!" opens both greetings — the empty-project onboarding state
-    // ("I'm Ollie, your AI coding assistant…") and the chat state on a project
-    // that already has traces ("How can I help you today?").
-    return this.frame().getByText('Hi there!');
+    // Three greeting variants are in play: the two "Hi there!" states (the
+    // empty-project onboarding copy and the has-traces chat copy) and the
+    // post-"New chat" panel, which renders only the action strapline
+    // ("Investigate traces, analyze performance, or run actions.") with no
+    // "Hi there!" anywhere. Match any of them — keying on "Hi there!" alone
+    // failed ~1 run in 3 against production after a New chat.
+    return this.frame()
+      .getByText(/Hi there!|Investigate traces, analyze performance/)
+      .first();
   }
 
   inputTextbox(): Locator {

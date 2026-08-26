@@ -21,6 +21,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -146,7 +147,14 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().thinkingType()).isEqualTo("adaptive");
                 assertThat(row.get().maxTokens()).isEqualTo(64000L);
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
+                // speed: selects the rate table, so it must survive ingestion
+                assertThat(row.get().speed()).isEqualTo("fast");
             });
+
+            // Carried on every block row too.
+            var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
+            assertThat(blocks).isNotEmpty();
+            assertThat(blocks).allSatisfy(block -> assertThat(block.speed()).isEqualTo("fast"));
 
             // The non-cipx span shared the same create event, so once the cipx row is present the
             // listener has already decided this one: it must not have produced a row.
@@ -186,6 +194,11 @@ class CostIntelligenceIngestionTest {
                 assertThat(memory.isDefinition()).isEqualTo(1);
                 assertThat(memory.alloc()).isCloseTo(5.0, within(1e-9)); // 120 * 20 / 480
                 assertThat(memory.contentSha256()).isEqualTo("a1b2c3"); // block sha256 persisted verbatim
+                // Claude Code's `autoMemoryEnabled: false` removes only the auto-memory slice,
+                // not the CLAUDE.md / rules files sharing this lane. Neither that setting nor
+                // the savings lever pricing it lives here — see ai-cost-backend's auto_memory
+                // policy; this repo's job is just to persist the distinction.
+                assertThat(memory.subcategory()).isEqualTo("auto_memory");
 
                 var skills = rows.get(1);
                 assertThat(skills.blockIdx()).isEqualTo(2);
@@ -265,6 +278,17 @@ class CostIntelligenceIngestionTest {
                             assertThat(row.contentSha256()).isEqualTo("a1b2c3");
                         });
 
+                // subcategory is persisted per row in order: only the memory block carried one in
+                // the fixture, so every other row -- residuals included -- must read "".
+                // Guards against a dropped or misordered subcategory across the batch, and pins
+                // that '' stays the "unknown" sentinel rather than leaking a real value.
+                assertThat(rows).filteredOn(row -> !row.subcategory().isEmpty())
+                        .singleElement()
+                        .satisfies(row -> {
+                            assertThat(row.category()).isEqualTo("memory");
+                            assertThat(row.subcategory()).isEqualTo("auto_memory");
+                        });
+
                 // model and start_time ride on every block row.
                 assertThat(rows).allSatisfy(row -> {
                     assertThat(row.model()).isEqualTo("claude-sonnet-4-6");
@@ -321,6 +345,45 @@ class CostIntelligenceIngestionTest {
                 assertThat(envInfo.bdLane()).isEqualTo("static_overhead");
                 assertThat(envInfo.label()).isEqualTo("env_info");
                 assertThat(envInfo.isDefinition()).isEqualTo(1);
+            });
+        }
+
+        @Test
+        @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
+        void slashCommandAndIdentityContextLanes() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(slashCommandCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                // raw idx 1 (identity_context/identity_context) is dropped at ingestion;
+                // the two remaining blocks must not fall to 'unattributed' (OPIK-8065).
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(2);
+
+                var slashCommand = rows.getFirst();
+                assertThat(slashCommand.blockIdx()).isEqualTo(0);
+                assertThat(slashCommand.category()).isEqualTo("slash_command");
+                assertThat(slashCommand.lane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.bdLane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.label()).isEqualTo("commit-helper");
+                assertThat(slashCommand.isDefinition()).isEqualTo(0);
+
+                // identity_context whose parent is another category: framing carved out of
+                // that parent — kept, and folded under static_overhead like the other riders.
+                // blockIdx 2, not 1: the dropped row still consumes its raw index.
+                var identityContext = rows.getLast();
+                assertThat(identityContext.blockIdx()).isEqualTo(2);
+                assertThat(identityContext.category()).isEqualTo("identity_context");
+                assertThat(identityContext.lane()).isEqualTo("static_overhead");
+                assertThat(identityContext.bdLane()).isEqualTo("static_overhead");
+                assertThat(identityContext.label()).isEqualTo("identity_context");
+                assertThat(identityContext.isDefinition()).isEqualTo(0);
             });
         }
 
@@ -393,6 +456,10 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().billingMode()).isEqualTo("subscription");
                 assertThat(row.get().plan()).isEqualTo("max");
                 assertThat(row.get().planUsageStatus()).isEqualTo("within");
+                // seat-pricing fields parsed from cipx.session.identity (org seat class + cadence)
+                assertThat(row.get().organizationType()).isEqualTo("team");
+                assertThat(row.get().seatTier()).isEqualTo("priority");
+                assertThat(row.get().billingType()).isEqualTo("stripe_subscription_contracted");
                 // git info + per-turn committed delta parsed from cipx.session.repository (OPIK-7345)
                 assertThat(row.get().branch()).isEqualTo("main");
                 assertThat(row.get().headShaStart()).isEqualTo("aaaa1111");
@@ -512,11 +579,12 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
-                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","sha256":"a1b2c3"},
+                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
                               {"category":"identity_context","side":"input","cache_status":"none","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":360,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text"},
                               {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"},
@@ -576,7 +644,8 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
@@ -584,6 +653,31 @@ class CostIntelligenceIngestionTest {
                               {"category":"system_tools_deferred","side":"input","cache_status":"read","parent_category":"context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"system_prompt","side":"input","cache_status":"read","parent_category":"context","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"env_info","side":"input","cache_status":"read","parent_category":"context","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
+    private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"slash_command","side":"input","cache_status":"read","parent_category":"user_prompts","chars":150,"tool_name":"","tool_server":"","tool_use_id":"","resource":"commit-helper","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"user_prompts","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
                             ]
                           }
                         }
@@ -618,7 +712,10 @@ class CostIntelligenceIngestionTest {
                         "display_name": "%s",
                         "billing_mode": "subscription",
                         "plan": "max",
-                        "plan_usage_status": "within"
+                        "plan_usage_status": "within",
+                        "organization_type": "team",
+                        "seat_tier": "priority",
+                        "billing_type": "stripe_subscription_contracted"
                       }
                     }
                   }
@@ -633,7 +730,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management
+                    effort, thinking_type, max_tokens, context_management, speed
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -655,7 +752,8 @@ class CostIntelligenceIngestionTest {
                             row.get("effort", String.class),
                             row.get("thinking_type", String.class),
                             row.get("max_tokens", Long.class),
-                            row.get("context_management", String.class)))));
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class)))));
         }).blockOptional();
     }
 
@@ -667,8 +765,9 @@ class CostIntelligenceIngestionTest {
                     toInt32(is_definition) AS is_definition,
                     alloc,
                     model,
+                    speed,
                     side, cache_status, parent_category, chars,
-                    tool_name, tool_server, tool_use_id, resource, kind,
+                    tool_name, tool_server, tool_use_id, resource, kind, subcategory,
                     content_sha256,
                     toUnixTimestamp64Milli(start_time) AS start_ms
                 FROM cipx_spend_blocks FINAL
@@ -691,6 +790,7 @@ class CostIntelligenceIngestionTest {
                             row.get("is_definition", Integer.class),
                             row.get("alloc", Double.class),
                             row.get("model", String.class),
+                            row.get("speed", String.class),
                             row.get("side", String.class),
                             row.get("cache_status", String.class),
                             row.get("parent_category", String.class),
@@ -700,6 +800,7 @@ class CostIntelligenceIngestionTest {
                             row.get("tool_use_id", String.class),
                             row.get("resource", String.class),
                             row.get("kind", String.class),
+                            row.get("subcategory", String.class),
                             row.get("content_sha256", String.class),
                             row.get("start_ms", Long.class))))
                     .collectList();
@@ -712,7 +813,7 @@ class CostIntelligenceIngestionTest {
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
-                    billing_mode, plan, plan_usage_status,
+                    billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted
                 FROM cipx_trace_identities FINAL
@@ -723,28 +824,32 @@ class CostIntelligenceIngestionTest {
                     .bind("workspace_id", workspaceId)
                     .bind("trace_id", traceId.toString());
             return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map((row, meta) -> new CipxIdentityRow(
-                            row.get("project_id", String.class),
-                            row.get("start_ms", Long.class),
-                            row.get("user_uuid", String.class),
-                            row.get("user_email", String.class),
-                            row.get("user_display_name", String.class),
-                            row.get("repository", String.class),
-                            row.get("session_id", String.class),
-                            row.get("harness", String.class),
-                            row.get("schema_version", Integer.class),
-                            row.get("billing_mode", String.class),
-                            row.get("plan", String.class),
-                            row.get("plan_usage_status", String.class),
-                            row.get("branch", String.class),
-                            row.get("head_sha_start", String.class),
-                            row.get("head_sha_end", String.class),
-                            row.get("dirty", Boolean.class),
-                            row.get("commits_in_trace", Integer.class),
-                            row.get("files_added", Integer.class),
-                            row.get("files_deleted", Integer.class),
-                            row.get("lines_added", Integer.class),
-                            row.get("lines_deleted", Integer.class)))));
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> CipxIdentityRow.builder()
+                            .projectId(row.get("project_id", String.class))
+                            .startMs(row.get("start_ms", Long.class))
+                            .userUuid(row.get("user_uuid", String.class))
+                            .userEmail(row.get("user_email", String.class))
+                            .userDisplayName(row.get("user_display_name", String.class))
+                            .repository(row.get("repository", String.class))
+                            .sessionId(row.get("session_id", String.class))
+                            .harness(row.get("harness", String.class))
+                            .schemaVersion(row.get("schema_version", Integer.class))
+                            .billingMode(row.get("billing_mode", String.class))
+                            .plan(row.get("plan", String.class))
+                            .planUsageStatus(row.get("plan_usage_status", String.class))
+                            .organizationType(row.get("organization_type", String.class))
+                            .seatTier(row.get("seat_tier", String.class))
+                            .billingType(row.get("billing_type", String.class))
+                            .branch(row.get("branch", String.class))
+                            .headShaStart(row.get("head_sha_start", String.class))
+                            .headShaEnd(row.get("head_sha_end", String.class))
+                            .dirty(row.get("dirty", Boolean.class))
+                            .commitsInTrace(row.get("commits_in_trace", Integer.class))
+                            .filesAdded(row.get("files_added", Integer.class))
+                            .filesDeleted(row.get("files_deleted", Integer.class))
+                            .linesAdded(row.get("lines_added", Integer.class))
+                            .linesDeleted(row.get("lines_deleted", Integer.class))
+                            .build())));
         }).blockOptional();
     }
 
@@ -773,18 +878,21 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
-            String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
+            String bdLane, String label, Integer isDefinition, Double alloc, String model, String speed,
+            String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
-            String toolUseId, String resource, String kind, String contentSha256, Long startMs) {
+            String toolUseId, String resource, String kind, String subcategory, String contentSha256, Long startMs) {
     }
 
+    @Builder
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
             String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
-            String billingMode, String plan, String planUsageStatus,
+            String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
+            String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
             Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted) {
     }

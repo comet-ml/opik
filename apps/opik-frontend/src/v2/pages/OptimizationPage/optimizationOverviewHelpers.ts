@@ -66,121 +66,159 @@ export const getCompletedRunDurationSeconds = ({
   );
 };
 
+/** Why a COMPLETED run has nothing usable to show (OPIK-7029, OPIK-7458). */
+export const EMPTY_RUN_CAUSE = {
+  NONE: "none",
+  NO_CANDIDATES: "no-candidates",
+  SCORING_FAILED: "scoring-failed",
+} as const;
+
+export type EmptyRunCause =
+  (typeof EMPTY_RUN_CAUSE)[keyof typeof EMPTY_RUN_CAUSE];
+
 /**
- * Heuristic detector for a "silent COMPLETED" run — the OPIK-7029 gap where a
- * run finishes normally but every evaluation failed to score, so it looks like
- * a plain empty run (dashes, "No data to show") with no error or warning.
+ * Classifies a COMPLETED run that shows nothing usable, so the copy can name the
+ * real cause. ERROR is RunErrorPanel's job, and in-progress runs legitimately
+ * have unscored candidates. The baseline (stepIndex 0) never counts as optimizer
+ * output, since a scored baseline is expected on every run.
  *
- * The rule: the run is terminal-COMPLETED **and** no candidate that actually
- * ran an optimization step produced a usable score. The baseline (stepIndex 0)
- * is deliberately excluded from the "did anything score?" check — a scored
- * baseline is expected on every run and does not mean the optimizer produced
- * anything, so a run whose only score is the baseline is still degenerate.
- * A run with zero non-baseline candidates counts as empty too (the optimizer
- * generated nothing to evaluate).
- *
- * This is a client-only heuristic; it can't tell a genuine all-zero run from an
- * all-failed one (Wave 2 threads exact scoring-health counts from the backend).
- * It only fires on COMPLETED — ERROR runs are already handled by RunErrorPanel,
- * and in-progress runs legitimately have unscored candidates.
+ * `candidates` is the page-1 load capped at MAX_EXPERIMENTS_LOADED and sorted by
+ * created_at, so the baseline is always present. `scoring_health` cannot replace
+ * it: those counts are per dataset item, so they cannot separate "generated
+ * nothing" from "candidates failed to score" — the distinction this draws.
  */
-export const computeEmptyRunWarning = (
+export const computeEmptyRunCause = (
   candidates: AggregatedCandidate[],
   status?: OPTIMIZATION_STATUS,
-): boolean => {
-  if (status !== OPTIMIZATION_STATUS.COMPLETED) return false;
+): EmptyRunCause => {
+  if (status !== OPTIMIZATION_STATUS.COMPLETED) return EMPTY_RUN_CAUSE.NONE;
 
   const nonBaselineCandidates = candidates.filter((c) => c.stepIndex !== 0);
-  // No trials at all, or none of the trials scored → no usable optimization result.
-  return nonBaselineCandidates.every((c) => c.score == null);
+
+  if (nonBaselineCandidates.length === 0) {
+    const baselineScored = candidates.some(
+      (c) => c.stepIndex === 0 && c.score != null,
+    );
+    return baselineScored
+      ? EMPTY_RUN_CAUSE.NO_CANDIDATES
+      : EMPTY_RUN_CAUSE.SCORING_FAILED;
+  }
+
+  return nonBaselineCandidates.every((c) => c.score == null)
+    ? EMPTY_RUN_CAUSE.SCORING_FAILED
+    : EMPTY_RUN_CAUSE.NONE;
+};
+
+export const getEmptyRunTitle = (cause: EmptyRunCause): string =>
+  cause === EMPTY_RUN_CAUSE.NO_CANDIDATES
+    ? "No candidates generated"
+    : "No usable scores";
+
+/** No call to action on purpose: nothing is broken, so there is nothing to retry. */
+const NO_CANDIDATES_MESSAGE =
+  "The optimizer produced no prompt variants to score, so the baseline prompt was kept. " +
+  "This is common when the original prompt already scores well.";
+
+/**
+ * Single-sourced lead sentence for a scoring failure (OPIK-7159 Wave 2), so the
+ * panel body and the KPI caption cannot drift apart. `lead` carries no trailing
+ * punctuation: callers append their own tail.
+ */
+type ScoringFailureSummary =
+  | { kind: "suppressed" | "unknown"; lead?: never }
+  | { kind: "all-failed" | "partial"; lead: string };
+
+const summarizeScoringFailure = (
+  scoringHealth?: OptimizationScoringHealth,
+): ScoringFailureSummary => {
+  if (!scoringHealth || scoringHealth.total_count <= 0)
+    return { kind: "unknown" };
+
+  const { failed_count, total_count } = scoringHealth;
+
+  if (failed_count === 0) return { kind: "suppressed" };
+
+  if (failed_count >= total_count) {
+    // The noun agrees with total_count, so one item reads "The item …" not
+    // "All 1 item …".
+    return {
+      kind: "all-failed",
+      lead:
+        total_count === 1
+          ? "The item failed to score"
+          : `All ${total_count} items failed to score`,
+    };
+  }
+
+  // total_count >= 2 always holds here, so the noun is always plural.
+  return {
+    kind: "partial",
+    lead: `${failed_count} of ${total_count} items failed to score`,
+  };
 };
 
 /**
- * Produces the user-facing body message for the empty-run warning panel and the
- * KPI score-card caption. Two code paths:
- *
- *  1. **Exact count** (Wave 2, OPIK-7159): when `scoring_health` is present
- *     and `total_count > 0`, the backend persisted the real numbers. The copy
- *     uses `failed_count` / `total_count` directly and distinguishes:
- *       - all failed  → "All N items failed to score …"
- *       - partial     → "N of M items failed to score …"
- *       - singular    → "1 item" not "1 items"
- *
- *  2. **Heuristic fallback** (Wave 1, no backend data): returns the static
- *     message that was already shown before Wave 2 — exact backward compat.
- *
- * Returns `null` when the health data says nothing failed (failed_count === 0),
- * which lets the caller skip rendering the warning entirely.
+ * Body copy for the empty-run panel. Returns null when there is nothing to say:
+ * cause NONE, or health data reporting no failures.
  */
-export const getEmptyRunWarningMessage = (
+export const getEmptyRunMessage = (
+  cause: EmptyRunCause,
   scoringHealth?: OptimizationScoringHealth,
 ): string | null => {
-  // --- Exact-count path (backend-provided, OPIK-7159 Wave 2) ---
-  if (scoringHealth && scoringHealth.total_count > 0) {
-    const { failed_count, total_count } = scoringHealth;
+  if (cause === EMPTY_RUN_CAUSE.NONE) return null;
 
-    if (failed_count === 0) {
-      // Backend says nothing failed — suppress the warning.
+  if (cause === EMPTY_RUN_CAUSE.NO_CANDIDATES) return NO_CANDIDATES_MESSAGE;
+
+  const failure = summarizeScoringFailure(scoringHealth);
+
+  switch (failure.kind) {
+    case "suppressed":
       return null;
-    }
-
-    if (failed_count >= total_count) {
-      // Every item failed — use the stronger framing. The noun agrees with
-      // total_count, so a one-item dataset reads "The item …" not "All 1 item …".
-      const lead =
-        total_count === 1
-          ? "The item failed to score."
-          : `All ${total_count} items failed to score.`;
+    case "all-failed":
       return (
-        `${lead} ` +
+        `${failure.lead}. ` +
         "The metric may have errored on every evaluation. " +
         "Open the logs, check the metric and model, then run it again."
       );
-    }
-
-    // Partial failure — softer framing. A partial failure always has
-    // total_count >= 2 (failed_count is >= 1 and strictly less than total),
-    // so the noun is always plural ("1 of 5 items", never "1 of 5 item").
-    return (
-      `${failed_count} of ${total_count} items failed to score. ` +
-      "Some evaluations did not produce a usable result. " +
-      "Open the logs to see which items failed, then run it again."
-    );
+    case "partial":
+      return (
+        `${failure.lead}. ` +
+        "Some evaluations did not produce a usable result. " +
+        "Open the logs to see which items failed, then run it again."
+      );
+    case "unknown":
+      // Heuristic fallback (Wave 1, no backend data).
+      return "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
   }
-
-  // --- Heuristic fallback (Wave 1, no backend data) ---
-  return "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
 };
 
 /**
- * Shortened version of {@link getEmptyRunWarningMessage} for the KPI score-card
- * caption, where space is tight. Returns `null` for the same conditions
- * (nothing failed, or scoring_health absent but `isEmptyRun` is false).
- *
- * When `isEmptyRun` is false and `scoring_health` is absent, returns null —
- * callers gate on `isEmptyRun` already, so this helper is only called when a
- * warning is appropriate.
+ * Shortened {@link getEmptyRunMessage} for the KPI score card, where space is
+ * tight. Same null conditions. The NO_CANDIDATES caption stays neutral because
+ * the score on the card is the baseline's real score, not a failure.
  */
 export const getEmptyRunKPICaption = (
-  isEmptyRun: boolean,
+  cause: EmptyRunCause,
   scoringHealth?: OptimizationScoringHealth,
 ): string | null => {
-  if (!isEmptyRun) return null;
+  if (cause === EMPTY_RUN_CAUSE.NONE) return null;
 
-  if (scoringHealth && scoringHealth.total_count > 0) {
-    const { failed_count, total_count } = scoringHealth;
-    if (failed_count === 0) return null;
-
-    if (failed_count >= total_count) {
-      return total_count === 1
-        ? "The item failed to score — check the logs."
-        : `All ${total_count} items failed to score — check the logs.`;
-    }
-    return `${failed_count} of ${total_count} items failed to score — check the logs.`;
+  if (cause === EMPTY_RUN_CAUSE.NO_CANDIDATES) {
+    return "No candidates generated. Baseline prompt kept.";
   }
 
-  // Heuristic fallback (Wave 1).
-  return "No usable scores — check the logs.";
+  const failure = summarizeScoringFailure(scoringHealth);
+
+  switch (failure.kind) {
+    case "suppressed":
+      return null;
+    case "all-failed":
+    case "partial":
+      return `${failure.lead} — check the logs.`;
+    case "unknown":
+      // Heuristic fallback (Wave 1).
+      return "No usable scores — check the logs.";
+  }
 };
 
 /**
@@ -193,3 +231,30 @@ export const getOptimizationRefetchInterval = (
   status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status)
     ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
     : false;
+
+/**
+ * The candidate an open trial sidebar is showing, resolved from its URL params.
+ *
+ * Experiment ids win over `trialNumber`. Ids are stable identities and the
+ * `trials` param is what opens the sidebar at all, so they are always present
+ * and always right; a trial number is neither. This view stopped counting the
+ * baseline as Trial #1 (OPIK-7589), so a link minted before that change carries
+ * a number one higher than it means — trusting `trialNumber` first would make
+ * `trials=[baselineId]&trialNumber=1` open the first candidate while the URL
+ * names the baseline. Preferring ids resolves those links correctly rather than
+ * off-by-one, and changes nothing for current links, where the two agree.
+ *
+ * `trialNumber` remains the fallback, for a candidate whose experiments are not
+ * in the loaded page of results.
+ */
+export const findActiveTrialCandidate = (
+  candidates: AggregatedCandidate[],
+  experimentIds: string[],
+  trialNumber: number | null | undefined,
+): AggregatedCandidate | undefined =>
+  candidates.find((c) =>
+    c.experimentIds.some((id) => experimentIds.includes(id)),
+  ) ??
+  (trialNumber != null
+    ? candidates.find((c) => c.trialNumber === trialNumber)
+    : undefined);

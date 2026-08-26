@@ -33,7 +33,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -376,23 +375,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                             + "stopped investigating and wrapped up with the scores gathered so far.",
                                     costGuard.limitUsd(), trace.id(), costGuard.spentUsd());
                         }
-                        // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
-                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+                        // Re-keyed before logging so the rule's logs name the score the user configured, not
+                        // the internal assertion_N key. Empty mapping (regular online scoring) is a no-op.
+                        var parsed = OnlineScoringEngine
+                                .toFeedbackScores(chatResponse, message.llmAsJudgeCode().schema())
+                                .withUserFacingNames(message.scoreNameMapping());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
+                        OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId", trace.id());
                         return parsed.scores().stream()
-                                .map(item -> {
-                                    String scoreName = item.name();
-                                    if (message.scoreNameMapping().containsKey(scoreName)) {
-                                        scoreName = message.scoreNameMapping().get(scoreName);
-                                    }
-                                    return (FeedbackScoreBatchItem) item.toBuilder()
-                                            .name(scoreName)
-                                            .categoryName(message.categoryName())
-                                            .id(trace.id())
-                                            .projectId(trace.projectId())
-                                            .projectName(trace.projectName())
-                                            .build();
-                                })
+                                .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                                        .categoryName(message.categoryName())
+                                        .id(trace.id())
+                                        .projectId(trace.projectId())
+                                        .projectName(trace.projectName())
+                                        .build())
                                 .toList();
                     }
                 });
@@ -486,8 +482,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 // for the empirical asymmetry. Follow-up rounds in handleToolCalls switch to
                 // AUTO so the model can decide when it has enough info to stop investigating;
                 // a uniform REQUIRED would loop forever because the wrap-up turn would also
-                // be forced to call a tool.
-                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+                // be forced to call a tool. Providers that reject a forced choice outright get
+                // AUTO here too — see firstRoundToolChoice.
+                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
+                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
             }
 
             // summarizeRequest is cheap (no per-message toString streaming since the chars-count

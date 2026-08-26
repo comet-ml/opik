@@ -14,6 +14,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation import evaluation_result, evaluator, test_case, test_result
 from opik.evaluation.metrics import score_result
 from opik.evaluation.resume import context as resume_context
+from opik.evaluation.types import ErrorTolerance
 
 
 def _make_dataset(items):
@@ -35,6 +36,7 @@ def _make_context(
     nb_samples=None,
     candidate_dataset_item_ids=None,
     experiment_project_name=None,
+    error_tolerance=ErrorTolerance.METRIC_ERRORS,
 ):
     experiment = mock.Mock()
     experiment.project_name = experiment_project_name
@@ -46,6 +48,7 @@ def _make_context(
         dataset_filter_string=dataset_filter_string,
         nb_samples=nb_samples,
         candidate_dataset_item_ids=candidate_dataset_item_ids,
+        error_tolerance=error_tolerance,
     )
 
 
@@ -415,3 +418,48 @@ class TestMergeWithPreviouslyCompleted:
         assert logged_kwargs["score_results"][0].name == "mean_equals"
         assert logged_kwargs["score_results"][0].value == 0.5
         assert mock_evaluate_task.call_args.kwargs["log_experiment_scores"] is False
+
+
+class TestErrorToleranceIsInherited:
+    """A resumed run must continue with the tolerance the original run chose."""
+
+    def _resume_and_capture_evaluate_task_kwargs(self, context):
+        new_result = _evaluation_result_from([], context.experiment)
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(
+                evaluator, "_evaluate_task", return_value=new_result
+            ) as mock_evaluate_task,
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
+        ):
+            evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
+
+        return mock_evaluate_task.call_args.kwargs
+
+    def test_tolerant_original_run__resume_stays_tolerant(self):
+        context = _make_context(
+            items_to_stream=[dataset_item.DatasetItem(id="pending")],
+            error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
+        )
+
+        kwargs = self._resume_and_capture_evaluate_task_kwargs(context)
+
+        assert kwargs["error_tolerance"] is ErrorTolerance.ALL_SCORING_ERRORS
+
+    def test_strict_original_run__resume_stays_strict(self):
+        context = _make_context(
+            items_to_stream=[dataset_item.DatasetItem(id="pending")],
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
+        )
+
+        kwargs = self._resume_and_capture_evaluate_task_kwargs(context)
+
+        assert kwargs["error_tolerance"] is ErrorTolerance.METRIC_ERRORS

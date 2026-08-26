@@ -13,7 +13,7 @@ export class LogsPage extends BasePage {
   }
 
   async waitForTracesReady(expectedCellText: string): Promise<void> {
-    await this.page.getByRole('radio', { name: 'Traces' }).waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.getByRole('radio', { name: 'Traces' }).waitFor({ state: 'visible', timeout: 30000 });
     await Promise.race([
       this.page.locator('tbody tr td').filter({ hasText: expectedCellText }).first().waitFor({ state: 'visible', timeout: 20000 }),
       this.page.getByRole('heading', { name: /no traces yet/i }).waitFor({ state: 'visible', timeout: 20000 }),
@@ -32,13 +32,25 @@ export class LogsPage extends BasePage {
     ]);
   }
 
+  async switchToSpans(): Promise<void> {
+    await this.page.getByRole('radio', { name: 'Spans' }).click();
+    await this.page.waitForLoadState('load');
+  }
+
+  async waitForSpansReady(expectedCellText: string): Promise<void> {
+    await Promise.race([
+      this.page.locator('tbody tr td').filter({ hasText: expectedCellText }).first().waitFor({ state: 'visible', timeout: 20000 }),
+      this.page.getByRole('heading', { name: /no spans yet/i }).waitFor({ state: 'visible', timeout: 20000 }),
+    ]);
+  }
+
   async openTrace(rowText: string): Promise<void> {
     await this.page.locator('tbody tr').filter({ hasText: rowText }).first().click();
     await this.page.waitForURL(url => url.searchParams.get('trace') !== null, { timeout: 20000 });
   }
 
   async waitForEmptyTraces(): Promise<void> {
-    await this.page.getByRole('radio', { name: 'Traces' }).waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.getByRole('radio', { name: 'Traces' }).waitFor({ state: 'visible', timeout: 30000 });
     await this.page.getByRole('heading', { name: /no traces yet/i }).waitFor({ state: 'visible', timeout: 20000 });
   }
 

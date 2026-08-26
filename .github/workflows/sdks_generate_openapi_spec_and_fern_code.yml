@@ -18,12 +18,12 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'corretto'
@@ -33,12 +33,12 @@ jobs:
         run: npm install -g fern-api@4.71.5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Install Opik Optimizer SDK (for Fern docs)
         run: |
@@ -73,20 +73,22 @@ jobs:
 
       - name: Commit files
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${{ github.actor }})"
+          git config --local user.name "GitHub Actions (${ACTOR})"
           git add sdks/python/src/opik/rest_api/
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml
           git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
-          git add apps/opik-documentation/documentation/fern/docs/agent_optimization/opik_optimizer/reference.mdx
+          git add apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/advanced/api_reference.mdx
           git commit -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
           branch: ${{ env.BRANCH_NAME }}

@@ -123,6 +123,27 @@ public interface ExperimentAggregatesDAO {
     Mono<ProjectStats> getExperimentItemsStatsFromAggregates(UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
+    /**
+     * Counts aggregated and non-aggregated experiments so callers can drop query branches that cannot contribute
+     * rows.
+     * <p>
+     * When {@link AggregationBranchCountsCriteria#projectId()} is set, the non-aggregated count is restricted to
+     * experiments reachable from that project. Reachability follows the project of the experiment itself and the
+     * projects of the traces its items reference.
+     * <p>
+     * The restriction applies to the non-aggregated count only, and must not be hoisted into the outer filter. The
+     * two branches decide project membership differently: the raw branch from traces and {@code project_id}, the
+     * aggregated branch from {@code experiment_aggregates.project_id}. Aggregated experiments exist whose stored
+     * project is no longer reachable from their traces, because those traces were deleted after aggregation.
+     * Filtering every row by the raw branch's notion of reachability would drop such experiments from the
+     * aggregated count, and with it the aggregated branch that returns them.
+     * <p>
+     * The trace lookup is deliberately restricted to trace ids that appear in {@code experiment_items}. A project
+     * can hold tens of millions of traces while a workspace holds under a million experiment items, so driving the
+     * lookup from the project alone builds an enormous set: measured against a seven-million-trace project it read
+     * 7.19M rows using 1.4 GiB, versus 197K rows and 12 MiB with the restriction, for an identical result. Without
+     * it this count can cost more than the branch it is meant to eliminate.
+     */
     Mono<AggregatedExperimentCounts> getAggregationBranchCounts(AggregationBranchCountsCriteria criteria);
 
     Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds);
@@ -338,7 +359,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN (SELECT trace_id FROM experiment_items)
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             ), spans_agg AS (
                 SELECT
@@ -746,8 +767,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN :trace_ids
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, id
             )
             GROUP BY trace_id
             SETTINGS log_comment = '<log_comment>'
@@ -1434,13 +1455,42 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     private static final String SELECT_EXPERIMENT_AGGREGATION_COUNTS = """
             SELECT
-                count() AS total,
                 countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
+                countIf(NOT has_aggregated AND in_project_scope) AS not_aggregated
             FROM (
                 SELECT
                     e.id,
-                    notEmpty(agg.id) AS has_aggregated
+                    notEmpty(agg.id) AS has_aggregated,
+                    <if(project_id)>
+                    (e.project_id = :project_id
+                        OR e.id IN (
+                            SELECT experiment_id
+                            FROM experiment_items
+                            WHERE workspace_id = :workspace_id
+                              AND trace_id IN (
+                                  SELECT id
+                                  FROM traces
+                                  WHERE workspace_id = :workspace_id
+                                    AND project_id = :project_id
+                                    AND id IN (
+                                        SELECT trace_id
+                                        FROM experiment_items
+                                        WHERE workspace_id = :workspace_id
+                                          AND experiment_id NOT IN (
+                                              SELECT id
+                                              FROM experiment_aggregates
+                                              WHERE workspace_id = :workspace_id
+                                              <if(experiment_ids)> AND id IN :experiment_ids <endif>
+                                              <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                                              <if(id)> AND id = :id <endif>
+                                              <if(ids_list)> AND id IN :ids_list <endif>
+                                          )
+                                    )
+                              )
+                        )) AS in_project_scope
+                    <else>
+                    true AS in_project_scope
+                    <endif>
                 FROM experiments e FINAL
                 LEFT JOIN (
                     SELECT DISTINCT
@@ -2803,6 +2853,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Optional.ofNullable(criteria.idsList())
                     .filter(CollectionUtils::isNotEmpty)
                     .ifPresent(idsList -> template.add("ids_list", idsList));
+            Optional.ofNullable(criteria.projectId())
+                    .ifPresent(projectId -> template.add("project_id", projectId));
 
             var statement = connection.createStatement(template.render());
 
@@ -2817,12 +2869,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Optional.ofNullable(criteria.idsList())
                     .filter(CollectionUtils::isNotEmpty)
                     .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
+            Optional.ofNullable(criteria.projectId())
+                    .ifPresent(projectId -> statement.bind("project_id", projectId));
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result
-                            .map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
+                            .map((row, metadata) -> AggregatedExperimentCounts.builder()
+                                    .aggregated(row.get("aggregated", Long.class))
+                                    .notAggregated(row.get("not_aggregated", Long.class))
+                                    .build()))
                     .next()
                     .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
         }));

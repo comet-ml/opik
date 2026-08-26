@@ -5,7 +5,7 @@ function skipIfOllieDisabled(envConfig: { features: { ollie: boolean } }): void 
   test.skip(!envConfig.features.ollie, 'Ollie is cloud/client-only (OLLIE_ENABLED off)');
 }
 
-test.describe('Ollie — smoke', { tag: ['@t1-smoke', '@ollie'] }, () => {
+test.describe('Ollie — smoke', { tag: ['@t1-smoke', '@area:ollie', '@cap:ollie.surface-mounts'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('Ollie surface mounts and reaches a ready state', async ({ project, page }) => {
@@ -23,7 +23,7 @@ test.describe('Ollie — smoke', { tag: ['@t1-smoke', '@ollie'] }, () => {
   });
 });
 
-test.describe('Ollie — completion', { tag: ['@t2-cuj', '@ollie'] }, () => {
+test.describe('Ollie — completion', { tag: ['@t2-cuj', '@area:ollie', '@cap:ollie.basic-completion'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('Ollie returns a completion for a basic prompt', async ({ project, page }) => {

@@ -16,7 +16,7 @@ const PROMPT_VARIANTS = [
 
 test.describe(
   'Prompt versioning → Playground → Trace verification',
-  { tag: ['@t2-cuj', '@prompts', '@playground'] },
+  { tag: ['@t2-cuj', '@area:playground', '@cap:playground.load-prompt-version', '@cap:playground.verify-trace-from-run'] },
   () => {
     test.use({ viewport: { width: 1600, height: 900 } });
 

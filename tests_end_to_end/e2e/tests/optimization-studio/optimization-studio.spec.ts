@@ -16,7 +16,15 @@ const SENTIMENT_ITEMS = [
   { text: 'Boring and poorly acted, I walked out.', label: 'negative' },
 ];
 
-const PROMPT = 'Classify the sentiment of this movie review as exactly "positive" or "negative": {{text}}';
+/**
+ * The form seeds a system + user message and requires content in both. Split the
+ * prompt the way the product intends: the instruction goes in the system message
+ * (the role the optimizer rewrites) and the dataset variable stays in the user
+ * message, so the optimizer can never rewrite away `{{text}}`.
+ */
+const SYSTEM_PROMPT =
+  'Classify the sentiment of the movie review as exactly "positive" or "negative". Reply with the single word only.';
+const PROMPT = '{{text}}';
 
 type SdkClient = Parameters<Parameters<typeof test>[2]>[0]['sdkClient'];
 
@@ -29,14 +37,23 @@ function seedSentimentDataset(sdkClient: SdkClient, projectName: string, name: s
   });
 }
 
-test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '@optimization-studio'] }, () => {
-  test('the new-run form renders its sections and enables Optimize only once valid', async ({
+test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
+  test('the new-run form renders its sections and enables Optimize only once valid', { tag: ['@cap:optimization-studio.new-run-form-validation'] }, async ({
     project,
     sdkClient,
     backendClient,
     testNamespace,
     page,
   }) => {
+    // Pin the model the same way the run tests do, rather than relying on the
+    // form's default: the default is whatever the deployment offers (the free
+    // gpt-5-nano on Comet), and on a deployment with no provider key it is
+    // empty, which keeps Optimize disabled and fails the assertion below.
+    const modelDisplayName = await test.step(
+      'Ensure an LLM provider is available',
+      async () => ensureModelAvailable(page),
+    );
+
     // A form-only test still needs a project-associated dataset for the picker.
     const dataset = await test.step('Seed a dataset for the picker', async () =>
       seedSentimentDataset(sdkClient, project.name, `${testNamespace}-form-ds`));
@@ -48,8 +65,10 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
       await studio.assertFormRenders();
     });
 
-    await test.step('Optimize enables once dataset + prompt + reference key are set', async () => {
+    await test.step('Optimize enables once model + dataset + prompt + reference key are set', async () => {
+      await studio.selectModel(modelDisplayName);
       await studio.selectDataset(dataset.name);
+      await studio.setSystemPrompt(SYSTEM_PROMPT);
       await studio.setUserPrompt(PROMPT);
       await studio.setReferenceKey('label');
       await expect(page.getByRole('button', { name: 'Optimize prompt' })).toBeEnabled();
@@ -60,7 +79,7 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
     });
   });
 
-  test('launches a GEPA + Equals run from the studio UI and it completes end-to-end', async ({
+  test('launches a GEPA + Equals run from the studio UI and it completes end-to-end', { tag: ['@cap:optimization-studio.launch-gepa-run', '@cap:optimization-studio.run-completes-healthy', '@cap:optimization-studio.studio-logs-download'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -86,6 +105,7 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
       await studio.assertFormRenders();
       return studio.configureAndStart({
         datasetName,
+        systemPrompt: SYSTEM_PROMPT,
         prompt: PROMPT,
         modelDisplayName,
         referenceKey: 'label',
@@ -164,8 +184,8 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
   });
 });
 
-test.describe('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas', '@optimization-studio'] }, () => {
-  test('launches a Hierarchical Reflective + Equals run and it completes end-to-end', async ({
+test.describe('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
+  test('launches a Hierarchical Reflective + Equals run and it completes end-to-end', { tag: ['@cap:optimization-studio.launch-hier-reflective', '@cap:optimization-studio.run-completes-healthy'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -189,6 +209,7 @@ test.describe('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas'
       await studio.gotoNew();
       return studio.configureAndStart({
         datasetName,
+        systemPrompt: SYSTEM_PROMPT,
         prompt: PROMPT,
         modelDisplayName,
         referenceKey: 'label',

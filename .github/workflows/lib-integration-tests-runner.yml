@@ -61,6 +61,7 @@ env:
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 
 jobs:
   has_needed_secrets:
@@ -258,16 +259,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false
 
       - name: Determine trigger type
         id: trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: |
-          if [ "${{ github.event_name }}" == "schedule" ]; then
-            TYPE=$([[ "${{ github.event.schedule }}" == "0 0 * * 0" ]] && echo "Weekly Schedule" || echo "Daily Schedule")
+          if [ "${EVENT_NAME}" == "schedule" ]; then
+            TYPE=$([[ "${EVENT_SCHEDULE}" == "0 0 * * 0" ]] && echo "Weekly Schedule" || echo "Daily Schedule")
           else
             TYPE="Manual Dispatch"
           fi

@@ -10,6 +10,7 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..errors.bad_request_error import BadRequestError
 from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
@@ -36,6 +37,7 @@ class RawReportsClient:
         content: typing.Optional[str] = OMIT,
         session_id: typing.Optional[str] = OMIT,
         recommended_actions: typing.Optional[JsonNode] = OMIT,
+        failure_reason: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -55,6 +57,9 @@ class RawReportsClient:
 
         recommended_actions : typing.Optional[JsonNode]
 
+        failure_reason : typing.Optional[str]
+            Why the report failed. Only 'out_of_credits' is acted on; any other value is recorded but renders as a generic failure.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -70,6 +75,7 @@ class RawReportsClient:
                 "status": status,
                 "session_id": session_id,
                 "recommended_actions": recommended_actions,
+                "failure_reason": failure_reason,
             },
             headers={
                 "content-type": "application/json",
@@ -80,6 +86,17 @@ class RawReportsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -330,6 +347,7 @@ class AsyncRawReportsClient:
         content: typing.Optional[str] = OMIT,
         session_id: typing.Optional[str] = OMIT,
         recommended_actions: typing.Optional[JsonNode] = OMIT,
+        failure_reason: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -349,6 +367,9 @@ class AsyncRawReportsClient:
 
         recommended_actions : typing.Optional[JsonNode]
 
+        failure_reason : typing.Optional[str]
+            Why the report failed. Only 'out_of_credits' is acted on; any other value is recorded but renders as a generic failure.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -364,6 +385,7 @@ class AsyncRawReportsClient:
                 "status": status,
                 "session_id": session_id,
                 "recommended_actions": recommended_actions,
+                "failure_reason": failure_reason,
             },
             headers={
                 "content-type": "application/json",
@@ -374,6 +396,17 @@ class AsyncRawReportsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),

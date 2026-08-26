@@ -1,0 +1,107 @@
+---
+headline: Cost Intelligence
+og:description: See where your coding-agent spend actually goes, with exact
+  token totals attributed to system prompts, tools, MCP servers, skills, memory
+  and user input, then reduce it with org and per-user policies.
+og:site_name: Opik Documentation
+og:title: Cost Intelligence - Opik
+title: Cost Intelligence
+---
+
+Your provider bill tells you **how many** tokens you spent. It doesn't tell you **what you spent them on**.
+
+That gap matters more with coding agents than with any other LLM workload. A single Claude Code request carries a multi-thousand-token system prompt, tool schemas for every enabled MCP server, memory files, skill listings, subagent definitions, and the accumulated transcript, all before a single character the developer typed. A flat token count can't tell you that 70% of an expensive session was framework overhead, or that one MCP server nobody uses is on every request.
+
+Cost Intelligence closes that gap. It captures every coding-agent API call on the wire, attributes the bytes to cost buckets, and gives you the per-user, per-session, per-repository view you need to actually act, plus the policy controls to act with.
+
+<Note>
+  Cost Intelligence is an enterprise feature and requires workspace admin
+  access. Talk to your Comet account team if you don't see it in your
+  workspace.
+</Note>
+
+## How it works
+
+Each developer machine runs its own local `opik-cipx` daemon. The coding agent talks to it over the loopback interface, and the daemon forwards every call to the provider unchanged — there is no shared collector, and none of your traffic routes through Comet. What ships to your Opik workspace is a separate, asynchronous stream of metadata-only spans: token counts, costs, and structure, [never content](/cost-intelligence/data-privacy-security). The diagram shows Claude Code on the plugin path, the most common setup; see [Installation](/cost-intelligence/install/overview) for the other agents and rollout paths.
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/architecture.svg" alt="Cost Intelligence architecture: a local opik-cipx daemon on each developer machine forwards Claude Code traffic unchanged to Anthropic and ships metadata-only spans to Opik" />
+</Frame>
+
+## What you get
+
+<CardGroup cols={2}>
+  <Card title="Exact spend, not estimates" icon="fa-regular fa-badge-check">
+    Token totals come straight from the provider's own `usage` payload, never
+    estimated, never re-tokenized.
+  </Card>
+  <Card title="Token-level attribution" icon="fa-regular fa-chart-pie">
+    Every call is split across ~20 cost buckets: system prompt, tools, MCP
+    servers, memory, skills, agents, thinking, tool I/O, user input.
+  </Card>
+  <Card title="Per-user visibility" icon="fa-regular fa-users">
+    A leaderboard of who is spending what, with session-level drilldown and
+    per-repository context.
+  </Card>
+  <Card title="Actionable savings" icon="fa-regular fa-piggy-bank">
+    Priced recommendations that typically cut spend by **15% to 30%** without
+    reducing output quality, applied as policy in one click.
+  </Card>
+</CardGroup>
+
+## Where your tokens actually go
+
+Every Claude Code call is broken down into the things that drove it: the system prompt, tool schemas, MCP servers, memory files, skills, subagents, and somewhere in there, what your developer actually typed.
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/home_page.png" alt="Claude Code token spend broken down by cost bucket" />
+</Frame>
+
+For most teams the surprise is the ratio. The prompt your developer wrote is a small fraction of what you paid for; the rest is framework overhead, much of it configuration nobody chose and nobody uses.
+
+That is the whole point. Once you can see the drivers, you can remove the ones carrying no value. In practice that means **15% to 30% lower spend, with no change to what your developers can do**, because what gets cut is unused MCP servers, dead skills, and runaway tool output rather than the work itself.
+
+<CardGroup cols={3}>
+  <Card title="Accurate by construction" icon="fa-regular fa-badge-check">
+    Token counts come from the provider's own usage data, so what you see
+    reconciles with your bill.
+  </Card>
+  <Card title="Invisible to developers" icon="fa-regular fa-bolt">
+    No added latency, no workflow change, and if anything fails the agent
+    simply keeps working.
+  </Card>
+  <Card title="Private by default" icon="fa-regular fa-lock">
+    Only counts and metadata leave the machine.
+    [Never prompt or response content.](/cost-intelligence/data-privacy-security)
+  </Card>
+</CardGroup>
+
+## Supported agents
+
+| Agent | Status |
+| --- | --- |
+| **Claude Code** | Supported |
+| **Codex** | Supported |
+| **Cursor** | Supported |
+
+Deployments that front the provider with their own gateway (a corporate LLM gateway, LiteLLM, an AWS Bedrock access gateway) are supported by pointing the proxy's upstream at that gateway. See [Installation](/cost-intelligence/install/overview).
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    The playbook: what to measure, where the waste hides, and which policies
+    actually move the number.
+  </Card>
+  <Card
+    title="Installation"
+    icon="fa-regular fa-download"
+    href="/cost-intelligence/install/overview"
+  >
+    Roll out to your fleet via managed settings, MDM, or the macOS app.
+  </Card>
+</CardGroup>

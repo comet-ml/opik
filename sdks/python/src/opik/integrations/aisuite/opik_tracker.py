@@ -3,6 +3,7 @@ from typing import Optional
 import aisuite
 
 from . import aisuite_decorator
+from ... import analytics
 
 
 def track_aisuite(
@@ -23,6 +24,7 @@ def track_aisuite(
     Returns:
         The modified AISuite client with Opik tracking enabled.
     """
+    analytics.track_event("integration", "aisuite")
 
     if hasattr(aisuite_client, "opik_tracked"):
         return aisuite_client

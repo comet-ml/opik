@@ -19,6 +19,30 @@ on:
 
 jobs:
   trigger-release:
+    # A called reusable workflow can only narrow its caller's token, never widen
+    # it. Every permission required by any job in release.yaml — or in the
+    # workflows it calls in turn — must therefore also be granted here, so this
+    # map is their union, not just what release.yaml itself declares:
+    #
+    #   contents: write  — tags, gh-pages helm chart push, version-bump commits,
+    #                      the GitHub release
+    #   packages: write  — every Docker build/merge job logs in to ghcr.io with
+    #                      secrets.GITHUB_TOKEN (build_and_push_docker.yaml)
+    #   id-token: write  — npm trusted publishing (OIDC). Unlike the other two
+    #                      this is NEVER part of the repo default, so before this
+    #                      block existed the `id-token: write` declared in
+    #                      release.yaml / typescript_sdk_publish.yml was silently
+    #                      capped to `none`: no OIDC token was minted, and since
+    #                      the setup-node _authToken stub is deleted before
+    #                      publishing there was no fallback credential either, so
+    #                      all 7 packages failed with ENEEDAUTH. See DND-1565.
+    #
+    # Jobs that declare their own narrower `permissions:` still get only what
+    # they ask for — this is a ceiling, not a grant.
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
     uses: ./.github/workflows/release.yaml  # Call the actual release workflow
     secrets: inherit
     with:
@@ -43,40 +67,56 @@ jobs:
           
       - name: Notify Release-n-Deploy-Agent
         if: ${{ inputs.resumeUrl != '' }}
+        env:
+          INPUTS_JSON: ${{ toJSON(inputs) }}
+          RESUME_URL: ${{ inputs.resumeUrl }}
+          RELEASE_VERSION: ${{ needs.trigger-release.outputs.version }}
+          RELEASE_STATUS: ${{ steps.status.outputs.status }}
+          RELEASE_CONCLUSION: ${{ steps.status.outputs.conclusion }}
+          RUN_ID: ${{ github.run_id }}
+          TRACKING_ID: ${{ inputs.trackingId }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_RUN_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+          WORKFLOW_RUN_UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
         run: |
-          echo "All inputs: ${{ toJSON(inputs) }}"
-          echo "resumeUrl input: '${{ inputs.resumeUrl }}'"
-          
-          # Get actual release outputs
-          VERSION="${{ needs.trigger-release.outputs.version }}"
-          STATUS="${{ steps.status.outputs.status }}"
-          CONCLUSION="${{ steps.status.outputs.conclusion }}"
-          
-          echo "📦 Release completed with version: $VERSION"
-          echo "Status: $STATUS, Conclusion: $CONCLUSION"
-          
+          echo "All inputs: ${INPUTS_JSON}"
+          echo "resumeUrl input: '${RESUME_URL}'"
+
+          echo "📦 Release completed with version: ${RELEASE_VERSION}"
+          echo "Status: ${RELEASE_STATUS}, Conclusion: ${RELEASE_CONCLUSION}"
+
+          # Build the JSON payload with jq so every value is passed as data
+          # (never interpolated into shell or JSON syntax).
+          PAYLOAD=$(jq -n \
+            --arg run_id "${RUN_ID}" \
+            --arg release_tag "${RELEASE_VERSION}" \
+            --arg tracking_id "${TRACKING_ID}" \
+            --arg wr_id "${WORKFLOW_RUN_ID}" \
+            --arg wr_name "${WORKFLOW_RUN_NAME}" \
+            --arg status "${RELEASE_STATUS}" \
+            --arg conclusion "${RELEASE_CONCLUSION}" \
+            --arg started_at "${WORKFLOW_RUN_STARTED_AT}" \
+            --arg updated_at "${WORKFLOW_RUN_UPDATED_AT}" \
+            --arg html_url "${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
+            --arg full_name "${REPOSITORY}" \
+            --arg login "${ACTOR}" \
+            '{
+              release: { id: $run_id, releaseTag: $release_tag },
+              trackingId: $tracking_id,
+              workflow_run: {
+                id: $wr_id, name: $wr_name, status: $status,
+                conclusion: $conclusion, run_started_at: $started_at,
+                updated_at: $updated_at, html_url: $html_url
+              },
+              repository: { full_name: $full_name },
+              sender: { login: $login }
+            }')
+
           curl -X POST \
             -H "Content-Type: application/json" \
-            -d '{
-              "release": {
-                "id": "${{ github.run_id }}",
-                "releaseTag": "'$VERSION'"
-              },
-              "trackingId": "${{ inputs.trackingId }}",
-              "workflow_run": {
-                "id": "${{ github.event.workflow_run.id  }}",
-                "name": "${{ github.event.workflow_run.name }}",
-                "status": "'$STATUS'",
-                "conclusion": "'$CONCLUSION'",
-                "run_started_at": "${{ github.event.workflow_run.run_started_at }}",
-                "updated_at": "${{ github.event.workflow_run.updated_at }}",
-                "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-              },
-              "repository": {
-                "full_name": "${{ github.repository }}"
-              },
-              "sender": {
-                "login": "${{ github.actor }}"
-              }
-            }' \
-            ${{ inputs.resumeUrl }}
+            -d "$PAYLOAD" \
+            "${RESUME_URL}"

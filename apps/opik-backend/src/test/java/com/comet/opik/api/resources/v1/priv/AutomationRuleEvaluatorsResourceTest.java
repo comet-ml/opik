@@ -764,6 +764,360 @@ class AutomationRuleEvaluatorsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Duplicate name handling")
+    class DuplicateNameHandling {
+
+        // ---------------------------------------------------------------------------------------------
+        // Primitives. Every helper below delegates to these two, so there is a single place that creates a
+        // rule and a single place that reads one back.
+        // ---------------------------------------------------------------------------------------------
+
+        private UUID createRule(AutomationRuleEvaluator<?, ?> evaluator) {
+            return evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+        }
+
+        private String getName(UUID id, UUID projectId) {
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        /** An LLM-as-judge rule with the given name and project scope, otherwise randomly populated. */
+        private AutomationRuleEvaluatorLlmAsJudge llmRule(String name, Set<UUID> projectIds) {
+            return factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(projectIds)
+                    .build();
+        }
+
+        private UUID createLlmRule(String name, Set<UUID> projectIds) {
+            return createRule(llmRule(name, projectIds));
+        }
+
+        private UUID createLlmRule(String name, UUID projectId) {
+            return createLlmRule(name, Set.of(projectId));
+        }
+
+        /** Creates an LLM-as-judge rule and returns the name it was actually stored under. */
+        private String createRuleAndGetName(String name, Set<UUID> projectIds, UUID readProjectId) {
+            return getName(createLlmRule(name, projectIds), readProjectId);
+        }
+
+        private String createRuleAndGetName(String name, UUID projectId) {
+            return createRuleAndGetName(name, Set.of(projectId), projectId);
+        }
+
+        private AutomationRuleEvaluatorUpdateLlmAsJudge llmRuleUpdate(String name, Set<UUID> projectIds) {
+            return factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(projectIds)
+                    .build();
+        }
+
+        private void updateRule(UUID id, String newName, Set<UUID> projectIds) {
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME,
+                    llmRuleUpdate(newName, projectIds), API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
+        private void renameRule(UUID id, String newName, UUID projectId) {
+            updateRule(id, newName, Set.of(projectId));
+        }
+
+        private UUID createProject() {
+            return projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+        }
+
+        @Test
+        @DisplayName("when a rule name already exists in the same project, then auto-append a numeric suffix")
+        void whenNameCollidesInSameProject__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var name = "Hallucination " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-1");
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-2");
+        }
+
+        @Test
+        @DisplayName("when the same rule name is used in different projects, then no suffix is appended")
+        void whenNameCollidesInDifferentProject__thenNoSuffix() {
+            var projectId1 = createProject();
+            var projectId2 = createProject();
+            var name = "Relevance " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId1)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId2)).isEqualTo(name);
+        }
+
+        @Test
+        @DisplayName("when a multi-project rule shares a project with an existing same-named rule, then suffix")
+        void whenNameCollidesViaSharedProject__thenSuffixIsAppended() {
+            var p1 = createProject();
+            var p2 = createProject();
+            var p3 = createProject();
+            var name = "Coherence " + UUID.randomUUID();
+
+            // Rule on {p1, p2}
+            assertThat(createRuleAndGetName(name, Set.of(p1, p2), p1)).isEqualTo(name);
+            // Rule on {p2, p3} collides through the shared project p2
+            assertThat(createRuleAndGetName(name, Set.of(p2, p3), p3)).isEqualTo(name + "-1");
+            // Rule on {p3} only: the base name is still free on p3 (only "name-1" lives there), so no suffix
+            assertThat(createRuleAndGetName(name, Set.of(p3), p3)).isEqualTo(name);
+        }
+
+        @Test
+        @DisplayName("collision is detected across different evaluator types in the same project")
+        void whenNameCollidesAcrossTypes__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var name = "Toxicity " + UUID.randomUUID();
+
+            createLlmRule(name, projectId);
+
+            // A different evaluator type with the same name still collides: the scope is the project, not
+            // the type, so this one goes through createRule directly rather than the LLM-judge helper.
+            var spanJudge = factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            assertThat(getName(createRule(spanJudge), projectId)).isEqualTo(name + "-1");
+        }
+
+        @Test
+        @DisplayName("when a rule is renamed to a name that already exists in the project, then suffix (self excluded)")
+        void whenRenamedToExistingName__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var nameA = "Bias " + UUID.randomUUID();
+            var nameB = "Drift " + UUID.randomUUID();
+
+            createLlmRule(nameA, projectId);
+            var idB = createLlmRule(nameB, projectId);
+
+            // Rename B to A's name: collides with A -> suffixed
+            renameRule(idB, nameA, projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+
+            // Rename B to its own current name: self is excluded, so no spurious suffix
+            renameRule(idB, nameA + "-1", projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+        }
+
+        @Test
+        @DisplayName("a non-name edit does not rename the rule even if the name now collides in the scope")
+        void whenNonNameEditIntroducesCollision__thenNameIsUnchanged() {
+            var p1 = createProject();
+            var p2 = createProject();
+            var name = "Grounding " + UUID.randomUUID();
+
+            createLlmRule(name, p1); // rule A: name in p1
+            var idB = createLlmRule(name, p2); // rule B: same name but in p2 -> stays un-suffixed
+            assertThat(getName(idB, p2)).isEqualTo(name);
+
+            // Non-name edit: attach B to p1 as well (name unchanged). B now shares p1 with A, but because the
+            // name did not change it must NOT be renamed to name-1.
+            updateRule(idB, name, Set.of(p1, p2));
+            assertThat(getName(idB, p1)).isEqualTo(name);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"metric_score", "cost 50%", "path\\to\\rule", "urgent!", "100!%_real"})
+        @DisplayName("collision is detected for names containing LIKE metacharacters (prefix is escaped)")
+        void whenNameHasLikeMetacharacters__thenSuffixIsAppended(String name) {
+            var projectId = createProject();
+            var uniqueName = name + " " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(uniqueName, projectId)).isEqualTo(uniqueName);
+            assertThat(createRuleAndGetName(uniqueName, projectId)).isEqualTo(uniqueName + "-1");
+        }
+
+        @Test
+        @DisplayName("updating a non-existent rule returns 404 (name lookup tolerates the missing row)")
+        void whenUpdatingNonExistentRule__thenNotFound() {
+            var projectId = createProject();
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name("Ghost " + UUID.randomUUID())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(UUID.randomUUID(), WORKSPACE_NAME, update,
+                    API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("create evaluator: when the name exceeds the column length, then reject at the API boundary")
+        void createEvaluator__whenNameExceedsColumnLength__thenReturnUnprocessableEntity() {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name("a".repeat(151))
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.createEvaluator(
+                    evaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+                assertThat(errorMessage.errors())
+                        .anyMatch(error -> error.contains("cannot exceed 150 characters"));
+            }
+        }
+
+        @Test
+        @DisplayName("update evaluator: when the name exceeds the column length, then reject at the API boundary")
+        void updateEvaluator__whenNameExceedsColumnLength__thenReturnUnprocessableEntity() {
+            var projectId = createProject();
+            var id = createLlmRule("Rename me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name("a".repeat(151))
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("cannot exceed 150 characters"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {-0.1f, 1.1f})
+        @DisplayName("create evaluator: when the sampling rate is outside [0,1], then reject at the API boundary")
+        void createEvaluator__whenSamplingRateOutOfRange__thenReturnUnprocessableEntity(float samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.createEvaluator(
+                    evaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("samplingRate"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {0f, 1f})
+        @DisplayName("create evaluator: the inclusive sampling rate bounds are accepted")
+        void createEvaluator__whenSamplingRateOnBounds__thenSucceed(float samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            assertThat(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY)).isNotNull();
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {-0.1f, 1.1f})
+        @DisplayName("update evaluator: when the sampling rate is outside [0,1], then reject at the API boundary")
+        void updateEvaluator__whenSamplingRateOutOfRange__thenReturnUnprocessableEntity(float samplingRate) {
+            var projectId = createProject();
+            var id = createLlmRule("Resample me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("samplingRate"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {0f, 1f})
+        @DisplayName("update evaluator: the inclusive sampling rate bounds are accepted")
+        void updateEvaluator__whenSamplingRateOnBounds__thenSucceed(float samplingRate) {
+            var projectId = createProject();
+            var id = createLlmRule("Resample me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("a rule literally named '%' does not swallow unrelated names in the same project")
+        void whenAWildcardNamedRuleExists__thenUnrelatedNamesAreNotSuffixed() {
+            var projectId = createProject();
+
+            // An unescaped LIKE prefix would make this name match every other name in the project.
+            assertThat(createRuleAndGetName("%", projectId)).isEqualTo("%");
+
+            // So an unrelated name must still be free: it only collides if '%' was treated as a wildcard.
+            var unrelated = "Groundedness " + UUID.randomUUID();
+            assertThat(createRuleAndGetName(unrelated, projectId)).isEqualTo(unrelated);
+        }
+
+        @Test
+        @DisplayName("re-running a create with a max-length name keeps producing distinct suffixed names")
+        void whenMaxLengthNameIsCreatedRepeatedly__thenSuffixesStayUnique() {
+            var projectId = createProject();
+            var name = "a".repeat(150);
+
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name);
+            // Suffixing a max-length name truncates the base to fit the 150-char column.
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo("a".repeat(148) + "-1");
+            // The stored "-1" no longer shares the full 150-char prefix with the requested name, so the
+            // collision lookup must search on a shortened prefix or it regenerates the same "-1" name.
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo("a".repeat(148) + "-2");
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"' OR 1=1 --", "\"; DROP TABLE automation_rules; --", "100%_off\\x"})
+        @DisplayName("names that look like SQL payloads are stored and matched literally")
+        void whenNameLooksLikeSqlPayload__thenTreatedAsLiteralText(String payload) {
+            var projectId = createProject();
+            var name = payload + " " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-1");
+        }
+
+        @Test
+        @DisplayName("renaming to a name containing LIKE metacharacters still detects the collision")
+        void whenRenamedToMetacharacterName__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var takenName = "cost 50% " + UUID.randomUUID();
+
+            createLlmRule(takenName, projectId);
+            var idB = createLlmRule("Other " + UUID.randomUUID(), projectId);
+
+            // The rename path shares resolveUniqueName with create, but this locks the escaping end-to-end
+            // for update too: an unescaped '%' would either over-match or miss the collision entirely.
+            renameRule(idB, takenName, projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(takenName + "-1");
+        }
+
+        @Test
+        @DisplayName("accented and unaccented variants collide end-to-end (column collation drives the fetch)")
+        void whenNameCollidesAccentInsensitively__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var marker = UUID.randomUUID();
+
+            // The unit test covers the in-Java canonical-key fold; this locks the other half of the claim:
+            // the LIKE prefix fetch runs under the column's utf8mb4_unicode_ci collation, so the unaccented
+            // request must find the accented stored name as a candidate in the first place.
+            assertThat(createRuleAndGetName("Café " + marker, projectId)).isEqualTo("Café " + marker);
+            assertThat(createRuleAndGetName("Cafe " + marker, projectId)).isEqualTo("Cafe " + marker + "-1");
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindEvaluator {
 
         Stream<Class<? extends AutomationRuleEvaluator<?, ?>>> find() {

@@ -33,6 +33,156 @@ tests:
           path: data.MY_CUSTOM_FLAG
           value: enabled
 
+  # Hyperscale / analytics data-model flags (OPIK-6880). Every one mirrors the default in
+  # apps/opik-backend/config.yml, so the whole set must render inert on a default install.
+  - it: renders every project flag at its documented default
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED
+          value: "false"
+      - equal:
+          path: data.UUID_VALIDATION_ENABLED
+          value: "false"
+      - equal:
+          path: data.UUID_VALIDATION_AUDIT_ONLY
+          value: "false"
+      - equal:
+          path: data.UUID_VALIDATION_WINDOW
+          value: "24h"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE
+          value: "1000"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED
+          value: "false"
+      - equal:
+          path: data.PARTITION_METRICS_ENABLED
+          value: "false"
+      - equal:
+          path: data.PARTITION_METRICS_INTERVAL
+          value: "5m"
+      - equal:
+          path: data.PARTITION_METRICS_LWD_TABLES
+          value: "traces,spans"
+
+  - it: turns the cluster readiness probe on with the sharding switch
+    set:
+      clickhouse.sharding.enabled: true
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+          value: "true"
+
+  - it: renders the UUID validation window as a Dropwizard duration
+    set:
+      databaseAnalytics.uuidV7ValidationWindow: 36h
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.UUID_VALIDATION_WINDOW
+          value: "36h"
+
+  - it: carries the cutover and partition-metrics flags once flipped
+    set:
+      databaseAnalytics.coldStorageDiskHealthCheckEnabled: true
+      databaseAnalytics.uuidV7ValidationEnabled: true
+      databaseAnalytics.uuidV7ValidationAuditOnly: true
+      databaseAnalyticsDataModel.traceColumnsNonNullable: true
+      databaseAnalyticsDataModel.deletionEventsInsertBatchSize: 500
+      partitionMetrics.enabled: true
+      partitionMetrics.interval: 30s
+      partitionMetrics.lwdTables: traces
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED
+          value: "true"
+      - equal:
+          path: data.UUID_VALIDATION_ENABLED
+          value: "true"
+      - equal:
+          path: data.UUID_VALIDATION_AUDIT_ONLY
+          value: "true"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE
+          value: "true"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE
+          value: "false"
+      - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE
+          value: "500"
+      - equal:
+          path: data.PARTITION_METRICS_ENABLED
+          value: "true"
+      - equal:
+          path: data.PARTITION_METRICS_INTERVAL
+          value: "30s"
+      - equal:
+          path: data.PARTITION_METRICS_LWD_TABLES
+          value: "traces"
+
+  - it: an explicit component env key wins over the derived value
+    set:
+      clickhouse.sharding.enabled: true
+      partitionMetrics.enabled: true
+      component.backend.env.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: "false"
+      component.backend.env.UUID_VALIDATION_WINDOW: 48h
+      component.backend.env.PARTITION_METRICS_ENABLED: "false"
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+          value: "false"
+      - equal:
+          path: data.UUID_VALIDATION_WINDOW
+          value: "48h"
+      - equal:
+          path: data.PARTITION_METRICS_ENABLED
+          value: "false"
+
+  - it: the derived keys are backend-only
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - notExists:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+      - notExists:
+          path: data.UUID_VALIDATION_WINDOW
+      - notExists:
+          path: data.PARTITION_METRICS_ENABLED
+
   - it: backend configmap is not rendered when backendConfigMap is disabled
     set:
       component.backend.backendConfigMap.enabled: false

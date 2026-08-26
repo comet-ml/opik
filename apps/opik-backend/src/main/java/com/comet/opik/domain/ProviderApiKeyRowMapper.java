@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
@@ -36,6 +37,7 @@ public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
                 .providerName(providerName)
                 .headers(mapMapper.map(rs, "headers", ctx))
                 .configuration(mapMapper.map(rs, "configuration", ctx))
+                .authConfig(EncryptedAuthConfig.fromCiphertext(rs.getString("auth_config")))
                 .baseUrl(rs.getString("base_url"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .createdBy(rs.getString("created_by"))
@@ -43,4 +45,5 @@ public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
                 .lastUpdatedBy(rs.getString("last_updated_by"))
                 .build();
     }
+
 }

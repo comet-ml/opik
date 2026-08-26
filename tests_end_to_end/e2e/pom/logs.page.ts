@@ -131,6 +131,52 @@ export class LogsPage {
     return this.page.locator('tr[data-row-id]');
   }
 
+  /**
+   * A trace row, keyed by trace id. `data-row-id` is set from the row model by
+   * the shared DataTable, so it is a first-class hook rather than a structural
+   * fallback — the same one datasets/dataset-items/compare-experiments key on.
+   * There is no text-based alternative: the id is a filter field, not a rendered
+   * column, so it appears nowhere in the row's visible cells.
+   */
+  traceRow(traceId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${traceId}"]`);
+  }
+
+  /** Tick the selection checkbox on a trace's row. */
+  async selectTrace(traceId: string): Promise<void> {
+    return test.step(`Select trace ${traceId}`, async () => {
+      await this.traceRow(traceId).getByRole('checkbox', { name: 'Select row' }).click();
+    });
+  }
+
+  /**
+   * The bulk-delete (trash) button in the traces actions panel. It renders as an
+   * icon-only button with no accessible name — the "Delete" label lives in a
+   * hover tooltip portal — so the testid is the only stable handle.
+   */
+  get bulkDeleteButton(): Locator {
+    return this.page.getByTestId('traces-bulk-delete-button');
+  }
+
+  /** The "Delete traces" confirmation dialog. */
+  get deleteTracesDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Delete traces' });
+  }
+
+  /**
+   * Bulk-delete the currently selected traces: open the confirm dialog and
+   * accept it. Callers select rows first via selectTrace().
+   */
+  async bulkDeleteSelected(): Promise<void> {
+    return test.step('Bulk-delete selected traces', async () => {
+      await this.bulkDeleteButton.click();
+      const dialog = this.deleteTracesDialog;
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByRole('button', { name: 'Delete traces' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */
   explainCell(traceId: string, kind: ExplainKind): Locator {
     return this.page.locator(`[data-cell-id="${traceId}_${EXPLAIN_COLUMN[kind]}"]`);
@@ -202,6 +248,172 @@ export class LogsPage {
   async continueConversation(): Promise<void> {
     return test.step('continue the Ollie explain conversation in the sidebar', async () => {
       await this.continueConversationButton().click();
+    });
+  }
+
+  // --- Filter chips ---
+
+  /**
+   * A filter chip's trigger button, keyed by chip id (see TRACE_CHIP_ORDER in
+   * TracesSpansTab.tsx). Keyed by testid rather than accessible name because an
+   * applied chip rewrites its own label — "Tags" becomes "Tags: contains prod" —
+   * so a name-based locator would stop matching the moment the filter lands.
+   *
+   * Chip ids are snake_case domain keys; the rendered testid is kebab-case (see
+   * chipTestId in the FE), so callers pass the id and this maps it.
+   */
+  filterChip(chipId: string): Locator {
+    return this.page.getByTestId(`filter-chip-${chipId.replace(/_/g, '-')}`);
+  }
+
+  /**
+   * The open chip's popover. Keyed by testid, not by `role=dialog`: the Logs
+   * page mounts other dialogs (the delete-traces confirmation among them), and
+   * a bare role lookup would match those too — so the filter helpers would
+   * Escape-dismiss an unrelated confirmation.
+   *
+   * Only one chip popover is mounted at a time, so this resolves the open one —
+   * but it still says nothing about *which* chip owns it, so callers acting on
+   * a specific chip gate on that chip's aria-expanded (see openFilterChip).
+   */
+  get filterChipPopover(): Locator {
+    return this.page.getByTestId('filter-chip-popover');
+  }
+
+  /** The "Clear all (N)" button, rendered only while at least one filter is applied. */
+  get clearAllFiltersButton(): Locator {
+    return this.page.getByTestId('filter-chips-clear-all');
+  }
+
+  /**
+   * Open a chip's popover, leaving *this* chip the open one.
+   *
+   * Readiness is gated on the requested chip's own aria-expanded, not on "some
+   * dialog is visible": only one chip popover is mounted at a time, so a
+   * generic dialog check would report success while a different chip owned it
+   * and the caller would then fill that chip's row instead. When another chip
+   * is open it is dismissed first — Radix ignores a click on a second trigger
+   * while one popover holds the pointer.
+   *
+   * The click is retried because Radix keeps a pointer-blocking layer mounted
+   * for a beat after a popover closes, which swallows the first click.
+   */
+  async openFilterChip(chipId: string): Promise<void> {
+    return test.step(`Open the "${chipId}" filter chip`, async () => {
+      const chip = this.filterChip(chipId);
+      await chip.waitFor({ state: 'visible' });
+      const isOpen = async () =>
+        (await chip.getAttribute('aria-expanded').catch(() => null)) === 'true';
+
+      await expect
+        .poll(
+          async () => {
+            if (await isOpen()) return true;
+            if (await this.filterChipPopover.isVisible().catch(() => false)) {
+              await this.closeFilterChip();
+            }
+            await chip.click().catch(() => {});
+            return isOpen();
+          },
+          { intervals: [100, 250, 500, 1000] },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * Close the open chip popover and wait for it to detach, so the next click
+   * isn't swallowed by the closing animation.
+   *
+   * Escape is pressed twice by design: the autocomplete cells handle the first
+   * one themselves (it resets the draft and blurs the input) without letting it
+   * reach the popover, so a single press leaves the popover open. The second
+   * press — now that focus has left the input — dismisses the popover itself.
+   */
+  async closeFilterChip(): Promise<void> {
+    return test.step('Close the open filter chip popover', async () => {
+      const popover = this.filterChipPopover;
+      await expect
+        .poll(
+          async () => {
+            if (!(await popover.isVisible().catch(() => true))) return false;
+            await this.page.keyboard.press('Escape');
+            return popover.isVisible().catch(() => false);
+          },
+          { intervals: [100, 250, 500, 1000] },
+        )
+        .toBe(false);
+    });
+  }
+
+  /**
+   * One row of the open chip's query builder. A chip can hold several rows
+   * ("Add tag" appends one) and every row reuses the same cell testids, so the
+   * row scope is what keeps `fill()` unambiguous under Playwright strict mode.
+   * Defaults to the first row, which is the one a freshly-opened chip renders.
+   */
+  filterChipRow(index = 0): Locator {
+    return this.filterChipPopover.getByRole('listitem').nth(index);
+  }
+
+  /**
+   * Apply a single-value filter (tags, name, error type, ...): open the chip,
+   * type the value, then close so the debounced change commits.
+   */
+  async applyFilter(chipId: string, value: string, rowIndex = 0): Promise<void> {
+    return test.step(`Filter by ${chipId} = "${value}"`, async () => {
+      await this.openFilterChip(chipId);
+      await this.filterChipRow(rowIndex).getByTestId('filter-chip-value-input').fill(value);
+      await this.closeFilterChip();
+    });
+  }
+
+  /**
+   * Apply a keyed filter (feedback scores, metadata): these render a key cell
+   * plus a value cell, and the key must be set before the value counts as applied.
+   */
+  async applyKeyedFilter(
+    chipId: string,
+    key: string,
+    value: string,
+    rowIndex = 0,
+  ): Promise<void> {
+    return test.step(`Filter by ${chipId} "${key}" = "${value}"`, async () => {
+      await this.openFilterChip(chipId);
+      const row = this.filterChipRow(rowIndex);
+      await row.getByTestId('filter-chip-key-input').fill(key);
+      await row.getByTestId('filter-chip-value-input').fill(value);
+      await this.closeFilterChip();
+    });
+  }
+
+  /** Toggle a boolean chip (e.g. "With errors"), which applies on a single click. */
+  async toggleBooleanFilter(chipId: string): Promise<void> {
+    return test.step(`Toggle the "${chipId}" filter`, async () => {
+      await this.filterChip(chipId).click();
+    });
+  }
+
+  /**
+   * Pin a chip that isn't shown by default by picking it from the "All filters"
+   * manager. Selecting an item pins the chip and opens its popover, so callers
+   * that follow with applyKeyedFilter() get a popover that's already open —
+   * openFilterChip() tolerates that.
+   */
+  async pinFilterChip(menuItemLabel: string): Promise<void> {
+    return test.step(`Pin the "${menuItemLabel}" filter chip`, async () => {
+      await this.page.getByTestId('filter-chip-manager-trigger').click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      await menu.getByText(menuItemLabel, { exact: true }).click();
+    });
+  }
+
+  /** Clear every applied filter via the "Clear all (N)" button. */
+  async clearAllFilters(): Promise<void> {
+    return test.step('Clear all filters', async () => {
+      await this.clearAllFiltersButton.click();
+      await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
     });
   }
 

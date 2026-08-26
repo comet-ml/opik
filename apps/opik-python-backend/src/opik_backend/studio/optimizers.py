@@ -1,6 +1,7 @@
 """Optimizer factory for Optimization Studio."""
 
 import logging
+import math
 from typing import Dict, Type, Any
 
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
@@ -11,6 +12,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_re
     HierarchicalReflectiveOptimizer,
 )
 
+from .config import OPTIMIZER_PERFECT_SCORE, OPTIMIZER_TASK_TEMPERATURE
 from .exceptions import InvalidOptimizerError
 from opik_backend.utils.env_utils import get_env_int
 
@@ -22,12 +24,54 @@ DEFAULT_MAX_TOKENS = 8192
 LLM_MAX_TOKENS = get_env_int("OPTSTUDIO_LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS)
 
 
-def ensure_default_model_params(model_params: Dict[str, Any] | None) -> Dict[str, Any]:
+def ensure_default_model_params(
+    model_params: Dict[str, Any] | None, *, deterministic: bool = False
+) -> Dict[str, Any]:
     """Return model params with a reasonable max_tokens default so structured
-    outputs (and baseline/per-trial task completions) don't truncate."""
+    outputs (and baseline/per-trial task completions) don't truncate.
+
+    Pass ``deterministic=True`` for the task model, whose completions are scored:
+    it pins the temperature so repeated evaluations of one prompt agree (see
+    OPTIMIZER_TASK_TEMPERATURE). An explicit temperature from the run config still
+    wins, but a ``null`` one does not — the studio config can carry explicit nulls,
+    and ``setdefault`` would forward that ``None`` to litellm. Models that fix
+    their own temperature (the gpt-5 family) must ignore the pin rather than fail
+    the run; that is already guaranteed process-wide by ``litellm.drop_params =
+    True`` in ``opik_optimizer/base_optimizer.py``, which the runner imports, so
+    this does not set ``drop_params`` per call.
+    Leave ``deterministic`` False for the optimizer/reflection model, which needs
+    sampling diversity to propose varied candidates.
+    """
     params = dict(model_params or {})
-    params.setdefault("max_tokens", LLM_MAX_TOKENS)
+    if params.get("max_tokens") is None:
+        params["max_tokens"] = LLM_MAX_TOKENS
+    if deterministic and params.get("temperature") is None:
+        params["temperature"] = OPTIMIZER_TASK_TEMPERATURE
     return params
+
+
+def _resolve_perfect_score(value: Any, optimizer_type: str) -> float:
+    """Validate the run's ``perfect_score`` override, falling back to the default.
+
+    The value comes from the studio config, so it can be absent, explicitly
+    ``null``, or junk. It ends up in ``baseline_score >= perfect_score`` deep in a
+    run, where ``None`` or a NaN raises/mis-compares long after the config that
+    caused it — so reject it here, where the error can still name the field.
+    ``0`` is a legal value (it disables threshold stopping), so this must not
+    treat it as falsy.
+    """
+    if value is None:
+        return OPTIMIZER_PERFECT_SCORE
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidOptimizerError(
+            optimizer_type,
+            f"perfect_score must be a finite number, got {type(value).__name__}",
+        )
+    if not math.isfinite(value):
+        raise InvalidOptimizerError(
+            optimizer_type, f"perfect_score must be a finite number, got {value}"
+        )
+    return float(value)
 
 
 class OptimizerFactory:
@@ -76,6 +120,15 @@ class OptimizerFactory:
         # Ensure model_params has a reasonable max_tokens to prevent truncation
         # of structured outputs (JSON responses for improved prompts, analysis, etc.)
         model_params = ensure_default_model_params(model_params)
+
+        # Studio runs treat "perfect" as full marks (OPIK-7511) — the SDK's
+        # 0.95 default ends strong-baseline runs with zero candidates. Every
+        # optimizer accepts perfect_score in its constructor; an explicit value
+        # in the run's optimizer_params still wins.
+        optimizer_params = dict(optimizer_params)
+        optimizer_params["perfect_score"] = _resolve_perfect_score(
+            optimizer_params.get("perfect_score", None), optimizer_type
+        )
 
         logger.debug(
             f"Initializing {optimizer_type} optimizer with params: {optimizer_params}"

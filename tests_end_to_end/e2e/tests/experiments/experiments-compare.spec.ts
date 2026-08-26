@@ -1,8 +1,8 @@
 import { test, expect } from '@e2e/fixtures';
 import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
 
-test.describe('Experiments comparison — CUJ', { tag: ['@t2-cuj', '@experiments'] }, () => {
-  test('two SDK-seeded experiments compare side by side with divergent per-item scores and outputs', async ({
+test.describe('Experiments comparison — CUJ', { tag: ['@t2-cuj', '@area:experiments'] }, () => {
+  test('two SDK-seeded experiments compare side by side with divergent per-item scores and outputs', { tag: ['@cap:experiments.compare-side-by-side'] }, async ({
     comparison,
     project,
     page,
@@ -61,7 +61,7 @@ test.describe('Experiments comparison — CUJ', { tag: ['@t2-cuj', '@experiments
     });
   });
 
-  test('the grid can be sorted by score and searched by item', async ({ comparison, project, page }) => {
+  test('the grid can be sorted by score and searched by item', { tag: ['@cap:experiments.compare-sort-search'] }, async ({ comparison, project, page }) => {
     const [expA, expB] = comparison.experiments;
     const compare = new CompareExperimentsPage(page, project.id, comparison.datasetId, [
       expA.experimentId,
@@ -95,7 +95,7 @@ test.describe('Experiments comparison — CUJ', { tag: ['@t2-cuj', '@experiments
     });
   });
 
-  test('feedback scores tab shows each experiment aggregate, and they differ', async ({
+  test('feedback scores tab shows each experiment aggregate, and they differ', { tag: ['@cap:experiments.compare-feedback-tab'] }, async ({
     comparison,
     project,
     page,
@@ -123,7 +123,7 @@ test.describe('Experiments comparison — CUJ', { tag: ['@t2-cuj', '@experiments
     });
   });
 
-  test('the row detail panel shows both experiments side by side for one item', async ({
+  test('the row detail panel shows both experiments side by side for one item', { tag: ['@cap:experiments.compare-row-detail'] }, async ({
     comparison,
     project,
     page,

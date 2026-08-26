@@ -53,7 +53,10 @@ public class FilterQueryBuilder {
 
     public static final String JSONPATH_ROOT = "$";
 
-    private static final String JSON_EXTRACT_RAW_TEMPLATE = "JSONExtractRaw(%s, '%s')";
+    // The JSON key is passed as a bound query parameter (:sorting_param_xxx) rather than interpolated,
+    // consistent with the data.* sort path and robust to keys containing special characters.
+    // See buildDatasetItemFieldMapping.
+    private static final String JSON_EXTRACT_RAW_TEMPLATE = "JSONExtractRaw(%s, :%s)";
     public static final String OUTPUT_FIELD_PREFIX = "output.";
     public static final String INPUT_FIELD_PREFIX = "input.";
     public static final String METADATA_FIELD_PREFIX = "metadata.";
@@ -1363,11 +1366,25 @@ public class FilterQueryBuilder {
         return "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
     }
 
+    /**
+     * Resolves the key bound as {@code :filterKey} for a filter.
+     * <p>
+     * The analytics DB path is delegated to {@link JsonPathUtils#toAnalyticsDbJsonPath(String)} so that
+     * a key holding characters unquoted dot notation cannot express resolves normally instead of
+     * aborting the query. The state DB path is unchanged.
+     */
     private static String getKey(Filter filter) {
 
-        if (filter.key().startsWith(JSONPATH_ROOT)
-                || (filter.field().getType() != FieldType.DICTIONARY
-                        && filter.field().getType() != FieldType.DICTIONARY_STATE_DB)) {
+        if (filter.field().getType() != FieldType.DICTIONARY
+                && filter.field().getType() != FieldType.DICTIONARY_STATE_DB) {
+            return filter.key();
+        }
+
+        if (filter.field().getType() == FieldType.DICTIONARY) {
+            return JsonPathUtils.toAnalyticsDbJsonPath(filter.key());
+        }
+
+        if (filter.key().startsWith(JSONPATH_ROOT)) {
             return filter.key();
         }
 
@@ -1375,18 +1392,14 @@ public class FilterQueryBuilder {
             return "%s%s".formatted(JSONPATH_ROOT, filter.key());
         }
 
-        if (filter.field().getType() == FieldType.DICTIONARY_STATE_DB) {
-            return getSQLJsonPath(filter.key());
-        }
-
-        return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
+        return getSQLJsonPath(filter.key());
     }
 
     /**
      * Builds field mapping for DatasetItem JSON fields (output, input, metadata).
      * These fields are stored as JSON strings in ClickHouse, so we need to use JSONExtractRaw
-     * instead of bracket notation. We use literal keys instead of bind parameters
-     * to avoid the dynamic field tuple wrapping.
+     * instead of bracket notation. The JSON key is bound as a query parameter rather than
+     * interpolated, consistent with the data.* sort path.
      * <p>
      * This is used for sorting DatasetItem fields.
      *
@@ -1399,20 +1412,23 @@ public class FilterQueryBuilder {
         for (SortingField field : sortingFields) {
             String fieldName = field.field();
 
-            // Check if this is a JSON field (output, input, or metadata)
-            // Use literal keys instead of bind parameters to avoid dynamic field handling
+            // Check if this is a JSON field (output, input, or metadata).
+            // The JSON key is bound as a query parameter (field.bindKey() -> :sorting_param_xxx) rather
+            // than interpolated into the SQL. The key VALUE (field.dynamicKey()) is bound later in
+            // SortingQueryBuilder.bindDynamicKeys(), consistent with the data.* path, so keys containing
+            // special characters are handled correctly.
+            // Note: dynamicKey() is everything after the first dot, i.e. a single top-level JSON key
+            // ("output.a.b" looks up the key "a.b"); nested traversal is not performed. This matches the
+            // previous behavior.
             if (fieldName.startsWith(OUTPUT_FIELD_PREFIX)) {
-                String key = fieldName.substring(OUTPUT_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
-                        JSON_EXTRACT_RAW_TEMPLATE.formatted("output", key));
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("output", field.bindKey()));
             } else if (fieldName.startsWith(INPUT_FIELD_PREFIX)) {
-                String key = fieldName.substring(INPUT_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
-                        JSON_EXTRACT_RAW_TEMPLATE.formatted("input", key));
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("input", field.bindKey()));
             } else if (fieldName.startsWith(METADATA_FIELD_PREFIX)) {
-                String key = fieldName.substring(METADATA_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
-                        JSON_EXTRACT_RAW_TEMPLATE.formatted("metadata", key));
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("metadata", field.bindKey()));
             }
             // For other fields (including feedback_scores, data, etc.), use default dbField()
         }
