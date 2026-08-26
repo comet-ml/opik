@@ -1,6 +1,5 @@
 -- runbook traces-local-v2-cutover — ROLLBACK reverse-replay POSTCONDITION (driven by ../rollback.sh, after the replay)
--- The gate test TracesLocalV2CutoverTest executes THIS file rather than a copy of it, so there is nothing to keep in
--- step (unlike 000004_rollback_reverse_replay.sql, which the test reimplements inline).
+-- The gate test TracesLocalV2CutoverTest reimplements this statement inline; keep the two in step (see its Javadoc).
 --
 -- Counts ids the bridge recorded as deleted since cutover_start that are LIVE again on the restored `traces`. Must be 0;
 -- anything else means the reverse replay did not take, and rows a user deleted after the cutover are being served again.

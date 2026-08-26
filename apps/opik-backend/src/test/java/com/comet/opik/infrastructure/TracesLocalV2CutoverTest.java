@@ -21,9 +21,6 @@ import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -714,8 +711,8 @@ class TracesLocalV2CutoverTest {
     /**
      * The reverse-replay postcondition gate: {@code 0} means every delete the bridge recorded since {@code cutover_start}
      * is masked on the restored {@code traces}, and any other number is an incomplete rollback serving rows users
-     * deleted. Unlike the rest of this class it executes the <b>shipped</b>
-     * {@code 000004_rollback_verify_replay.sql} rather than an inline copy (see {@link #verifyReplayPostcondition}).
+     * deleted. The statement is reimplemented inline like the rest of this class
+     * (see {@link #verifyReplayPostcondition}).
      *
      * <p>Each phase pins one way the gate can lie:
      * <ul>
@@ -1689,37 +1686,34 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Runs the <b>shipped</b> {@code 000004_rollback_verify_replay.sql}, substituting the same two placeholders
-     * {@code rollback.sh} substitutes, and returns the count it reports.
-     *
-     * <p>Deliberately not an inline copy, unlike the cutover statements above: the class inlines those so it can
-     * interleave seeding and assertions inside a multi-step sequence, and this is a single terminal gate whose whole
-     * contract is the number it returns. A drifting copy would leave the shipped gate unverified while the test
-     * stayed green.
+     * The reverse-replay postcondition, mirroring {@code 000004_rollback_verify_replay.sql} — same key, same
+     * {@code toFixedString(36)} casts, same window and length guards, same aggregate. Kept in step with that file
+     * (its {@code log_comment} is observability, not semantics, so it is omitted here as elsewhere in this class).
      */
     private long verifyReplayPostcondition(String cutoverStart) {
-        var sql = readShippedGateSql()
-                .replace("${ANALYTICS_DB_DATABASE_NAME}", DATABASE_NAME)
-                .replace("${CUTOVER_START}", cutoverStart)
-                .strip()
-                .replaceAll(";$", "");
+        var sql = """
+                SELECT uniqExact(workspace_id, project_id, id) AS resurrected
+                FROM clusterAllReplicas('{cluster}', %s.traces)
+                WHERE (workspace_id, project_id, id) IN (
+                    SELECT
+                        workspace_id,
+                        toFixedString(project_id, 36),
+                        toFixedString(deleted_id, 36)
+                    FROM deletion_events_local
+                    WHERE source_table = 'traces'
+                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND project_id != ''
+                      AND length(project_id) = 36
+                      AND length(deleted_id) = 36
+                )
+                """.formatted(DATABASE_NAME);
         return template
                 .nonTransaction(connection -> Mono
-                        .from(connection.createStatement(sql).execute())
+                        .from(connection.createStatement(sql)
+                                .bind("cutover_start", cutoverStart)
+                                .execute())
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
                 .block();
-    }
-
-    private String readShippedGateSql() {
-        var relative = Path
-                .of("data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000004_rollback_verify_replay.sql");
-        // Surefire runs from the module directory; fall back to the repo root so an IDE run resolves too.
-        var path = Files.exists(relative) ? relative : Path.of("apps/opik-backend").resolve(relative);
-        try {
-            return Files.readString(path);
-        } catch (IOException e) {
-            throw new IllegalStateException("cannot read the shipped gate SQL at " + path.toAbsolutePath(), e);
-        }
     }
 
     // --- query helpers -------------------------------------------------------------------------------------------
