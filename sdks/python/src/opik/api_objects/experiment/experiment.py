@@ -325,9 +325,9 @@ class Experiment:
         *,
         preserve_unrelated: bool = False,
     ) -> List["score_result.ScoreResult"]:
-        """Log scores, optionally retaining persisted scores not being recomputed.
+        """Log scores and return effective scores, replacing recomputed names.
 
-        ``preserve_unrelated`` reads current scores, replaces recomputed names, and defaults to false.
+        ``preserve_unrelated`` retains persisted names not recomputed (default false); failed supplied scores return but are not persisted.
         """
         experiment_scores: List[rest_api_types.ExperimentScore] = []
         effective_scores: List["score_result.ScoreResult"] = []

@@ -961,11 +961,14 @@ def evaluate_experiment(
     _try_notifying_about_experiment_completion(experiment)
 
     # Log experiment scores to backend
+    effective_experiment_scores = computed_experiment_scores
     if computed_experiment_scores:
-        experiment.log_experiment_scores(
+        persisted_scores = experiment.log_experiment_scores(
             score_results=computed_experiment_scores,
             preserve_unrelated=True,
         )
+        if isinstance(persisted_scores, list):
+            effective_experiment_scores = persisted_scores
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset_.id,
@@ -974,7 +977,7 @@ def evaluate_experiment(
         test_results=test_results,
         experiment_url=experiment_url,
         trial_count=1,
-        experiment_scores=computed_experiment_scores,
+        experiment_scores=effective_experiment_scores,
     )
 
     if verbose >= 2:

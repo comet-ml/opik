@@ -384,6 +384,11 @@ class TestMergeWithPreviouslyCompleted:
             )
             return score_result.ScoreResult(name="mean_equals", value=mean)
 
+        context.experiment.log_experiment_scores.return_value = [
+            score_result.ScoreResult(name="existing", value=0.25),
+            score_result.ScoreResult(name="mean_equals", value=0.5),
+        ]
+
         with (
             mock.patch.object(
                 evaluator.resume_module,
@@ -410,10 +415,11 @@ class TestMergeWithPreviouslyCompleted:
             "done",
             "partial",
         }
-        # Aggregate value reflects the merged set (mean of 1.0 and 0.0).
-        assert len(result.experiment_scores) == 1
-        assert result.experiment_scores[0].name == "mean_equals"
-        assert result.experiment_scores[0].value == 0.5
+        # Returned aggregates include the merged value and preserved score.
+        assert [(score.name, score.value) for score in result.experiment_scores] == [
+            ("existing", 0.25),
+            ("mean_equals", 0.5),
+        ]
         # Merged aggregates were logged to the backend on the experiment.
         context.experiment.log_experiment_scores.assert_called_once()
         logged_kwargs = context.experiment.log_experiment_scores.call_args.kwargs

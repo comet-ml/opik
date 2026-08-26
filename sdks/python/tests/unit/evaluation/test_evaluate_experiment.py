@@ -126,6 +126,61 @@ def test_evaluate_experiment__happyflow(fake_backend):
     assert result.test_results == mock_test_results
 
 
+def test_evaluate_experiment_returns_preserved_scores(fake_backend):
+    mock_experiment = _make_mock_experiment()
+    mock_dataset = _make_mock_dataset()
+    test_cases = [_make_test_case()]
+    mock_test_results = [mock.Mock(score_results=[])]
+    computed_score = score_result.ScoreResult(name="accuracy", value=0.9)
+    effective_scores = [
+        score_result.ScoreResult(name="existing", value=0.4),
+        computed_score,
+    ]
+    mock_experiment.log_experiment_scores.return_value = effective_scores
+
+    def compute_score(_):
+        return computed_score
+
+    with mock.patch.object(
+        rest_operations,
+        "get_experiment_with_unique_name",
+        return_value=mock_experiment,
+    ):
+        with mock.patch.object(
+            opik_client.Opik, "get_dataset", return_value=mock_dataset
+        ):
+            with mock.patch.object(
+                rest_operations, "get_experiment_test_cases", return_value=test_cases
+            ):
+                with mock.patch.object(
+                    rest_operations,
+                    "get_trace_project_name",
+                    return_value="test-project",
+                ):
+                    with mock.patch.object(
+                        url_helpers,
+                        "get_experiment_url_by_id",
+                        return_value="http://example.com/exp",
+                    ):
+                        with mock.patch.object(
+                            engine.EvaluationEngine,
+                            "score_test_cases",
+                            return_value=mock_test_results,
+                        ):
+                            result = evaluation.evaluate_experiment(
+                                experiment_name="exp-name",
+                                scoring_metrics=[],
+                                experiment_scoring_functions=[compute_score],
+                                verbose=0,
+                            )
+
+    assert result.experiment_scores == effective_scores
+    mock_experiment.log_experiment_scores.assert_called_once_with(
+        score_results=[computed_score],
+        preserve_unrelated=True,
+    )
+
+
 def test_evaluate_experiment__with_experiment_id__uses_get_by_id(fake_backend):
     mock_experiment = _make_mock_experiment(id="explicit-exp-id")
     mock_dataset = _make_mock_dataset()

@@ -26,7 +26,7 @@ def test_log_experiment_scores_preserves_unrelated_scores() -> None:
         )
     )
 
-    experiment.log_experiment_scores(
+    effective_scores = experiment.log_experiment_scores(
         score_results=[
             score_result.ScoreResult(name="accuracy", value=0.9),
             score_result.ScoreResult(name="stale", value=0.0, scoring_failed=True),
@@ -40,4 +40,11 @@ def test_log_experiment_scores_preserves_unrelated_scores() -> None:
     assert [(score.name, score.value) for score in scores] == [
         ("unrelated", 0.4),
         ("accuracy", 0.9),
+    ]
+    assert [
+        (score.name, score.value, score.scoring_failed) for score in effective_scores
+    ] == [
+        ("unrelated", 0.4, False),
+        ("accuracy", 0.9, False),
+        ("stale", 0.0, True),
     ]
