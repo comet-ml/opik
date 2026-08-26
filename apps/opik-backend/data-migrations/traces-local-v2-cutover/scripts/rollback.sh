@@ -66,6 +66,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_DIR="$SCRIPT_DIR/db-app-analytics"
 
 DATABASE=""
+REPLAY_CHECK_FAILED=0    # set by verify_replay_postcondition; decides the exit code without cutting the guidance short
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 STAGE=""
@@ -252,7 +253,7 @@ assert_topology() {
 # Run one rollback .sql file wholesale, substituting the placeholders. Each file is exactly one stage's statements.
 # Same sourcing contract as run_file (versioned .sql, same two placeholders) but captures the value so the driver can
 # assert on it rather than leaving a number on the operator's screen to interpret.
-assert_replay_took() {
+verify_replay_postcondition() {
     local file="$SQL_DIR/000004_rollback_verify_replay.sql" sql resurrected
     [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
     sql="$(cat "$file")"
@@ -263,8 +264,9 @@ assert_replay_took() {
         echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'traces'."
         return 0
     fi
-    # Not fatal: the promote already succeeded and the estate is the restored original either way. Failing the process
-    # here would suggest the rollback must be redone, when the fix is to re-run the idempotent replay.
+    # Does not abort: the promote already succeeded, the estate is the restored original either way, and the operator
+    # still needs the flag-revert and repair guidance printed below. The failure is carried to the exit code instead, so
+    # the run cannot report success while ids a user deleted are being served.
     echo "WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live again on" >&2
     echo "         'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
     echo "         Re-run the replay (idempotent), then this check repeats:" >&2
@@ -385,8 +387,8 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
     run_file 000004_rollback_reverse_replay.sql
     echo "Reverse-replay-only done: bridged deletes since cutover_start re-applied to the live 'traces'."
-    assert_replay_took || true
-    exit 0
+    verify_replay_postcondition || REPLAY_CHECK_FAILED=1
+    exit "$REPLAY_CHECK_FAILED"
 fi
 
 assert_topology
@@ -409,14 +411,14 @@ case "$STAGE" in
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
         run_file 000004_rollback_stage_b_exchange_back.sql
         run_file 000004_rollback_reverse_replay.sql
-        assert_replay_took || true
+        verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
         ;;
     C)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
         run_file 000004_rollback_stage_c_promote_original.sql
         run_file 000004_rollback_reverse_replay.sql
-        assert_replay_took || true
+        verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
         ;;
 esac
@@ -483,4 +485,12 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "empty traces_local_v2. That is the irreversible step — it destroys the only copy of the post-cutover writes"
     echo "this rollback discarded, and with it the cheap retry. Do not run it until the flag reverts, the sentinel"
     echo "repair and the checks above are done (runbook: 'When the rollback is done')."
+fi
+
+# Stages B/C print their guidance in full above, then surface the postcondition in the exit code: a rollback that left
+# user-deleted rows live is not a success, and a caller or wrapper reading only $? must not be told otherwise.
+if [[ "$REPLAY_CHECK_FAILED" != "0" ]]; then
+    echo >&2
+    echo "ROLLBACK INCOMPLETE: the reverse-replay postcondition failed (see the WARNING above). Exiting non-zero." >&2
+    exit 1
 fi

@@ -18,8 +18,13 @@
 -- clusterAllReplicas: the mask is per-replica state. The replay runs with lightweight_deletes_sync = 2, so it has
 -- converged on every replica before the driver returns — reading every replica is what turns that into an observation
 -- rather than an assumption, and it is where a replica that fell behind would show up.
+--
+-- uniqExact, not count(): reading every replica returns the same row once per replica, so count() would report a single
+-- resurrected id as N on an N-replica shard. Counting distinct keys keeps the number meaning "ids live again" on any
+-- topology, while still detecting a row that is masked on one replica and live on another (it counts once, which is
+-- correct — one id needs attention). Same aggregate the backfill's reconciliation uses.
 
-SELECT count() AS resurrected
+SELECT uniqExact(workspace_id, project_id, id) AS resurrected
 FROM clusterAllReplicas('{cluster}', ${ANALYTICS_DB_DATABASE_NAME}.traces)
 WHERE (workspace_id, project_id, id) IN (
     SELECT

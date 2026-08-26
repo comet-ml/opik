@@ -1147,8 +1147,11 @@ Treat a stage B/C rollback as complete only when all of these hold:
       this box is **not applicable**: `verify.sh` has nothing to bound to, and an unbounded run would report the
       cutover week's expected divergence as a failure. Rely on the next box instead, which does not depend on a window.
 - [ ] **No deleted row resurrected** — `rollback.sh` printed `Reverse-replay postcondition OK`. It runs
-      `000004_rollback_verify_replay.sql` after every replay (stages B/C and `--reverse-replay-only`), counting ids the
-      bridge recorded as deleted since `cutover_start` that are live again on the restored `traces`, across all replicas.
+      `000004_rollback_verify_replay.sql` after every replay (stages B/C and `--reverse-replay-only`), counting the
+      distinct ids the bridge recorded as deleted since `cutover_start` that are live again on the restored `traces`,
+      across all replicas. A failure is a `WARNING` rather than an abort — the promote has already succeeded and the
+      guidance below still has to print — but it **exits non-zero**, so a wrapper reading only the status code is never
+      told a rollback that left deleted rows live was a success.
       A separate assertion rather than an inference from the compare above: the replay reports that its statement ran,
       not that the result holds, and a bridged delete of a row created *inside* the cutover window falls outside every
       window the bounded compare looks at. On a `WARNING` the driver prints the `--reverse-replay-only` command to re-run
