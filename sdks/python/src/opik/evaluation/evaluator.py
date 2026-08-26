@@ -993,13 +993,13 @@ def evaluate_experiment(
     # Log experiment scores to backend
     effective_experiment_scores = computed_experiment_scores
     if computed_experiment_scores:
-        has_fabricated_names = any(
-            bool(score.metadata and score.metadata.get("_fabricated"))
+        has_fabricated_scores = any(
+            bool(isinstance(score.metadata, dict) and score.metadata.get("_fabricated"))
             for score in computed_experiment_scores
         )
         persisted_scores = experiment.log_experiment_scores(
             score_results=computed_experiment_scores,
-            preserve_unrelated=not has_fabricated_names,
+            preserve_unrelated=not has_fabricated_scores,
         )
         if isinstance(persisted_scores, list):
             effective_experiment_scores = persisted_scores
@@ -1685,13 +1685,13 @@ def evaluate_resume(
         )
     )
     if merged_scores:
-        has_fabricated_names = any(
-            bool(score.metadata and score.metadata.get("_fabricated"))
+        has_fabricated_scores = any(
+            bool(isinstance(score.metadata, dict) and score.metadata.get("_fabricated"))
             for score in merged_scores
         )
         persisted_scores = context.experiment.log_experiment_scores(
             score_results=merged_scores,
-            preserve_unrelated=not has_fabricated_names,
+            preserve_unrelated=not has_fabricated_scores,
         )
         merged.experiment_scores = (
             persisted_scores if isinstance(persisted_scores, list) else merged_scores

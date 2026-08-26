@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, TYPE_CHECKING
 from collections import defaultdict
+from collections.abc import Mapping
 import logging
 import math
 
@@ -12,6 +13,16 @@ if TYPE_CHECKING:
     from .types import ExperimentScoreFunction
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _sanitize_error_reason(exception: Exception, context: str) -> str:
+    """Format an exception message capping length and retaining exception type."""
+    exc_type = type(exception).__name__
+    raw_msg = str(exception).strip()
+    if raw_msg:
+        clean_msg = raw_msg[:200]
+        return f"{context} failed with {exc_type}: {clean_msg}"
+    return f"{context} failed with {exc_type}."
 
 
 def normalize_experiment_score(
@@ -31,8 +42,29 @@ def normalize_experiment_score(
             metadata={"_fabricated": True},
         )
 
+    base_metadata: Optional[Dict[str, object]] = (
+        dict(score.metadata) if isinstance(score.metadata, Mapping) else None
+    )
+
     name = score.name
-    if not isinstance(name, str) or not name.strip():
+    is_valid_name = isinstance(name, str) and bool(name.strip())
+    effective_name = name if is_valid_name else default_name
+
+    if not isinstance(score.scoring_failed, bool):
+        meta = {**(base_metadata or {}), "_fabricated": not is_valid_name}
+        return score_result.ScoreResult(
+            name=effective_name,
+            value=0.0,
+            reason=(
+                "ScoreResult.scoring_failed must be a bool, got "
+                f"{type(score.scoring_failed).__name__}."
+            ),
+            scoring_failed=True,
+            category_name=score.category_name,
+            metadata=meta,
+        )
+
+    if not is_valid_name:
         return score_result.ScoreResult(
             name=default_name,
             value=0.0,
@@ -42,7 +74,7 @@ def normalize_experiment_score(
             ),
             scoring_failed=True,
             category_name=score.category_name,
-            metadata={**(score.metadata or {}), "_fabricated": True},
+            metadata={**(base_metadata or {}), "_fabricated": True},
         )
 
     if score.scoring_failed:
@@ -54,7 +86,15 @@ def normalize_experiment_score(
             else 0.0
         )
         if value != score.value:
-            return dataclasses.replace(score, value=value)
+            return dataclasses.replace(
+                score,
+                value=value,
+                metadata=base_metadata
+                if base_metadata != score.metadata
+                else score.metadata,
+            )
+        if base_metadata != score.metadata:
+            return dataclasses.replace(score, metadata=base_metadata)
         return score
 
     value = score.value
@@ -64,14 +104,16 @@ def normalize_experiment_score(
         or not math.isfinite(value)
     ):
         return score_result.ScoreResult(
-            name=name,
+            name=effective_name,
             value=0.0,
             reason=f"Expected finite numeric score value, got {value!r}.",
             scoring_failed=True,
             category_name=score.category_name,
-            metadata=score.metadata,
+            metadata=base_metadata,
         )
 
+    if base_metadata != score.metadata:
+        return dataclasses.replace(score, metadata=base_metadata)
     return score
 
 
@@ -94,10 +136,30 @@ def compute_experiment_scores(
         try:
             scores = score_function(test_results)
             if isinstance(scores, list):
-                all_scores.extend(
-                    normalize_experiment_score(score, default_name=default_name)
-                    for score in scores
-                )
+                for score in scores:
+                    try:
+                        all_scores.append(
+                            normalize_experiment_score(score, default_name=default_name)
+                        )
+                    except Exception as elem_err:
+                        LOGGER.warning(
+                            "Failed to normalize score result from %s: %s",
+                            default_name,
+                            elem_err,
+                            exc_info=True,
+                        )
+                        all_scores.append(
+                            score_result.ScoreResult(
+                                name=default_name,
+                                value=0.0,
+                                reason=_sanitize_error_reason(
+                                    elem_err,
+                                    f"Scoring function '{default_name}' item",
+                                ),
+                                scoring_failed=True,
+                                metadata={"_fabricated": True},
+                            )
+                        )
             else:
                 all_scores.append(
                     normalize_experiment_score(scores, default_name=default_name)
@@ -112,7 +174,10 @@ def compute_experiment_scores(
                 score_result.ScoreResult(
                     name=default_name,
                     value=0.0,
-                    reason=f"Experiment scoring function raised {type(e).__name__}: {e}",
+                    reason=_sanitize_error_reason(
+                        e,
+                        f"Experiment scoring function '{default_name}'",
+                    ),
                     scoring_failed=True,
                     metadata={"_fabricated": True},
                 )
