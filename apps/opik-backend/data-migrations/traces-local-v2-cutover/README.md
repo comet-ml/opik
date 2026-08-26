@@ -817,7 +817,7 @@ run by hand.** Each `.sql` file is the single source a driver reads:
 | 2 — delta + replay | `000002_delta_and_deletion_replay.sql` | `delta_replay.sh` |
 | 3 — EXCHANGE + wrap | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
 | QA — fidelity compare (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
-| rollback | `000004_rollback_stage_{a,b,c}_*.sql` + `000004_rollback_reverse_replay.sql` | `rollback.sh` |
+| rollback | `000004_rollback_stage_{a,b,c}_*.sql`, `000004_rollback_unwrap.sql`, `000004_rollback_reverse_replay.sql` + its postcondition `000004_rollback_verify_replay.sql` | `rollback.sh` |
 | finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
 
 Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOUSE_HOST`, `CLICKHOUSE_USER` and
@@ -1146,26 +1146,13 @@ Treat a stage B/C rollback as complete only when all of these hold:
       If it printed no offset — every row sits in the cutover window's own week, so there is no earlier week to compare —
       this box is **not applicable**: `verify.sh` has nothing to bound to, and an unbounded run would report the
       cutover week's expected divergence as a failure. Rely on the next box instead, which does not depend on a window.
-- [ ] **No delete resurrected** — no id bridged since `cutover_start` is live on the restored `traces`. This is the
-      replay's whole job and the one thing a successful-looking promote can silently leave undone, so check it directly
-      rather than inferring it from the compare above: the replay reports only that its statement ran, and a bridged
-      delete of a row created *inside* the cutover window falls outside any bounded compare. Same full key and the same
-      filters the replay itself uses, read across replicas so a mask that has not converged on one of them shows up:
-
-      ```sql
-      SELECT count() AS resurrected
-      FROM clusterAllReplicas('{cluster}', <database>.traces)
-      WHERE (workspace_id, project_id, id) IN (
-          SELECT workspace_id, toFixedString(project_id, 36), toFixedString(deleted_id, 36)
-          FROM <database>.deletion_events_local
-          WHERE source_table = 'traces'
-            AND event_time >= toDateTime64('<cutover_start>', 6)
-            AND project_id != '' AND length(project_id) = 36 AND length(deleted_id) = 36
-      )
-      ```
-
-      Anything but `0` means those ids are live again. Re-run `--reverse-replay-only` (above) rather than re-running the
-      stage, then re-check — the replay is idempotent.
+- [ ] **No deleted row resurrected** — `rollback.sh` printed `Reverse-replay postcondition OK`. It runs
+      `000004_rollback_verify_replay.sql` after every replay (stages B/C and `--reverse-replay-only`), counting ids the
+      bridge recorded as deleted since `cutover_start` that are live again on the restored `traces`, across all replicas.
+      A separate assertion rather than an inference from the compare above: the replay reports that its statement ran,
+      not that the result holds, and a bridged delete of a row created *inside* the cutover window falls outside every
+      window the bounded compare looks at. On a `WARNING` the driver prints the `--reverse-replay-only` command to re-run
+      — the replay is idempotent, and the check repeats after it.
 - [ ] **Flags reverted and the restart landed on every instance** — `traceColumnsNonNullable`, plus
       `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
       unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
@@ -1176,6 +1163,7 @@ Treat a stage B/C rollback as complete only when all of these hold:
       of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
 
 Until the last box is ticked, do not run `finalize.sh`: it is what forecloses both going back and retrying cheaply.
+`rollback.sh` prints that instruction last, after the steps it depends on, for the same reason.
 
 **Retrying the cutover after a stage B/C rollback — without re-backfilling.** A rollback leaves the successor's data
 parked as `traces_post_rollback_backup`, and the documented next step (`finalize.sh`) **truncates** it into an empty

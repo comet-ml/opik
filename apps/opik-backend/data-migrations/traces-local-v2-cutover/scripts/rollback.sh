@@ -250,6 +250,28 @@ assert_topology() {
 }
 
 # Run one rollback .sql file wholesale, substituting the placeholders. Each file is exactly one stage's statements.
+# Same sourcing contract as run_file (versioned .sql, same two placeholders) but captures the value so the driver can
+# assert on it rather than leaving a number on the operator's screen to interpret.
+assert_replay_took() {
+    local file="$SQL_DIR/000004_rollback_verify_replay.sql" sql resurrected
+    [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
+    sql="$(cat "$file")"
+    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
+    resurrected="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --query "$sql")"
+    if [[ "$resurrected" == "0" ]]; then
+        echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'traces'."
+        return 0
+    fi
+    # Not fatal: the promote already succeeded and the estate is the restored original either way. Failing the process
+    # here would suggest the rollback must be redone, when the fix is to re-run the idempotent replay.
+    echo "WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live again on" >&2
+    echo "         'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
+    echo "         Re-run the replay (idempotent), then this check repeats:" >&2
+    echo "           ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --reverse-replay-only --cutover-start '$CUTOVER_START' --confirm-retention-paused" >&2
+    return 1
+}
+
 run_file() {
     local file="$SQL_DIR/$1" sql
     [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
@@ -363,6 +385,7 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
     run_file 000004_rollback_reverse_replay.sql
     echo "Reverse-replay-only done: bridged deletes since cutover_start re-applied to the live 'traces'."
+    assert_replay_took || true
     exit 0
 fi
 
@@ -386,12 +409,14 @@ case "$STAGE" in
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
         run_file 000004_rollback_stage_b_exchange_back.sql
         run_file 000004_rollback_reverse_replay.sql
+        assert_replay_took || true
         echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
         ;;
     C)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
         run_file 000004_rollback_stage_c_promote_original.sql
         run_file 000004_rollback_reverse_replay.sql
+        assert_replay_took || true
         echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
         ;;
 esac
@@ -427,8 +452,6 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "the successor in its original week). Triage with --drill-down, then look each differing id up in the successor"
     echo "WITHOUT a week filter: last_updated_at >= cutover_start means benign. Absent from the successor entirely is the"
     echo "real signal — that one is a copy gap."
-    echo "Then run finalize.sh once healthy — it recycles the backup into an empty traces_local_v2 (restoring the"
-    echo "pre-cutover shadow), the one irreversible step."
     echo
     echo "NEXT, on the restored original (see README 'Rolling back the traceColumnsNonNullable flip'):"
     if [[ "$STAGE" == "C" ]]; then
@@ -455,4 +478,9 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "     NOTE: these two statements need ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces'. A user scoped to"
     echo "     the rollback grant set has only ALTER UPDATE(_row_exists) — all the reverse replay needs — and will get"
     echo "     ACCESS_DENIED here, so run the repair as a more privileged user or add those two column grants."
+    echo
+    echo "LAST, and only once every step above has landed: finalize.sh recycles traces_post_rollback_backup into an"
+    echo "empty traces_local_v2. That is the irreversible step — it destroys the only copy of the post-cutover writes"
+    echo "this rollback discarded, and with it the cheap retry. Do not run it until the flag reverts, the sentinel"
+    echo "repair and the checks above are done (runbook: 'When the rollback is done')."
 fi
