@@ -61,6 +61,27 @@ def public_star_count():
         return json.load(r)["stargazers_count"]
 
 
+def load_series(path):
+    """Parse a series file, failing with a clear message rather than deep in render()."""
+    try:
+        data = json.loads(path.read_text())
+        series = data["series"]
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        raise SystemExit(f"error: {path} is not a valid series file ({e}).")
+    if not isinstance(series, list) or not series:
+        raise SystemExit(f"error: {path} contains no series points.")
+    for i, pt in enumerate(series):
+        try:
+            dt.date.fromisoformat(pt["date"])
+            n = pt["count"]
+        except (TypeError, KeyError, ValueError) as e:
+            raise SystemExit(f"error: {path} point {i} is malformed ({e}).")
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            raise SystemExit(
+                f"error: {path} point {i} has a non-integer star count ({n!r}).")
+    return data
+
+
 def human(n):
     return f"{n/1000:g}k" if n >= 1000 else f"{n:g}"
 
@@ -157,7 +178,7 @@ def main():
                 "If this really is the first run, pass --bootstrap.")
         path = HERE / "star_history_seed.json"
         print(f"bootstrapping from {path.name} (--bootstrap)")
-    data = json.loads(path.read_text())
+    data = load_series(path)
 
     if not a.no_fetch:
         today = dt.date.today().isoformat()

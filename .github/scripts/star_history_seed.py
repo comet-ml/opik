@@ -1,22 +1,50 @@
 #!/usr/bin/env python3
-"""One-off: build data.json from a full stargazer pull.
+"""One-off: build the initial star-history series from a full stargazer pull.
 
-Already run for comet-ml/opik on 2026-08-26 (21,616 stargazers). Kept so the
-seed is reproducible; it is the only step that ever needed a PAT.
+Already run for comet-ml/opik on 2026-08-26 (21,616 stargazers, 1,164 daily
+points). Kept so the seed is reproducible. This is the only step that ever
+needed a token -- the weekly job runs off the public star count.
+
+Reading stargazer *history* requires a fine-grained PAT on this repository
+with Contents: Read and write, which is how GitHub checks collaborator status
+on that endpoint since 2026-06-30. Revoke it once the seed is built.
+
+From anywhere in the repository:
 
     gh api -H "Accept: application/vnd.github.star+json" \
       "repos/comet-ml/opik/stargazers?per_page=100" --paginate \
-      --jq '.[].starred_at' > assets/starred_at.txt
-    python3 seed_star_history.py
+      --jq '.[].starred_at' > /tmp/starred_at.txt
+
+    python3 .github/scripts/star_history_seed.py /tmp/starred_at.txt
+
+Writes star_history_seed.json next to this script, overwriting it.
+
+See DND-1580.
 """
-import json, collections, datetime as dt
+import argparse, collections, datetime as dt, json, pathlib
 
 REPO = "comet-ml/opik"
+OUT = pathlib.Path(__file__).parent / "star_history_seed.json"
+
+ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+ap.add_argument("starred_at",
+                help="file of ISO-8601 starred_at timestamps, one per line "
+                     "(see the gh command in this module's docstring)")
+args = ap.parse_args()
+
+src = pathlib.Path(args.starred_at)
+if not src.exists():
+    raise SystemExit(f"error: {src} not found -- generate it with the gh command "
+                     "in this script's docstring first.")
 
 daily = collections.Counter()
-for line in open("assets/starred_at.txt"):
-    if line.strip():
-        daily[line.strip()[:10]] += 1
+for line in src.read_text().splitlines():
+    line = line.strip()
+    if line:
+        daily[line[:10]] += 1
+
+if not daily:
+    raise SystemExit(f"error: {src} contained no timestamps.")
 
 series, total = [], 0
 day, end = dt.date.fromisoformat(min(daily)), dt.date.fromisoformat(max(daily))
@@ -25,6 +53,6 @@ while day <= end:
     series.append({"date": day.isoformat(), "count": total})
     day += dt.timedelta(days=1)
 
-json.dump({"repo": REPO, "series": series}, open("data.json", "w"))
-print(f"{len(series)} daily points, {series[0]['date']} -> {series[-1]['date']}, "
-      f"final={series[-1]['count']:,}")
+OUT.write_text(json.dumps({"repo": REPO, "series": series}))
+print(f"{OUT.name}: {len(series)} daily points, "
+      f"{series[0]['date']} -> {series[-1]['date']}, final={series[-1]['count']:,}")
