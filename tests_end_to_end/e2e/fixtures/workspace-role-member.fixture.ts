@@ -12,6 +12,7 @@ import {
   WORKSPACE_ROLE_ID,
   type WorkspaceRoleId,
 } from '../core/comet/client';
+import { registerPendingUser, clearPendingUser } from '../core/comet/pending-users-registry';
 
 /**
  * Provisions the 4 workspace-role holders (Manage/Write/Annotate/Read) used
@@ -90,6 +91,7 @@ async function provisionMember(
   role: WorkspaceRoleId,
 ): Promise<WorkspaceRoleMember> {
   const credentials = await signUpCometUser(ROLE_PREFIX[role]);
+  await registerPendingUser(credentials.username);
   try {
     await addUserToWorkspace(adminContext.request, workspaceId, credentials.username);
     await assignWorkspaceRole(adminContext.request, credentials.username, workspaceId, role);
@@ -104,9 +106,9 @@ async function provisionMember(
       throw err;
     }
   } catch (err) {
-    await deleteCometUser(credentials.username).catch((cleanupErr) =>
-      console.warn(`[provisionMember] rollback: failed to delete "${credentials.username}":`, cleanupErr),
-    );
+    await deleteCometUser(credentials.username)
+      .then(() => clearPendingUser(credentials.username))
+      .catch((cleanupErr) => console.warn(`[provisionMember] rollback: failed to delete "${credentials.username}":`, cleanupErr));
     throw err;
   }
 }
@@ -176,9 +178,9 @@ export const test = base.extend<{ trackLeaveFailures: void }, WorkspaceRoleFixtu
         const fulfilled = results.filter((r): r is PromiseFulfilledResult<WorkspaceRoleMember> => r.status === 'fulfilled');
         for (const r of fulfilled) {
           await r.value.context.close().catch(() => undefined);
-          await deleteCometUser(r.value.username).catch((cleanupErr) =>
-            console.warn(`[workspaceRoleMembers] rollback: failed to delete "${r.value.username}":`, cleanupErr),
-          );
+          await deleteCometUser(r.value.username)
+            .then(() => clearPendingUser(r.value.username))
+            .catch((cleanupErr) => console.warn(`[workspaceRoleMembers] rollback: failed to delete "${r.value.username}":`, cleanupErr));
         }
         await adminContext.close().catch(() => undefined);
         throw new Error(
@@ -218,6 +220,7 @@ export const test = base.extend<{ trackLeaveFailures: void }, WorkspaceRoleFixtu
       // happy and surfaces exactly which user failed to delete if one does.
       for (const member of members) {
         await deleteCometUser(member.username);
+        await clearPendingUser(member.username);
       }
     },
     { scope: 'worker' },
