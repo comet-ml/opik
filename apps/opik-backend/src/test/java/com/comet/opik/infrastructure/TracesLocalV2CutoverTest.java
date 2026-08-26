@@ -849,8 +849,8 @@ class TracesLocalV2CutoverTest {
      * physical claim: {@code traces_post_rollback_backup} IS the object Liquibase created as {@code traces_local_v2} (a
      * ReplicatedMergeTree's replica path is fixed at CREATE and survives renames), so renaming it back yields a usable
      * shadow and the retry needs only a delta, not a second full backfill. That claim is what this pins — the procedure
-     * is deliberately manual, but at production scale an operator will follow it under pressure, so the mechanism it
-     * depends on should not be taken on trust.
+     * is deliberately manual, but an operator will follow it under pressure, so the mechanism it depends on should not be
+     * taken on trust.
      *
      * <p>It also pins the two consequences the runbook has to warn about, because both look like faults if unexpected:
      * the reused shadow is a <b>superset</b> of the restored original by exactly the post-cutover writes the rollback

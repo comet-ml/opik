@@ -1133,9 +1133,9 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    absent-values to the same fingerprint, so it passes either way. It cannot catch a missed flag flip — only a positive
    probe can, which is why (4) is a step and not a caveat here. Run that probe **after** the retry's `EXCHANGE`, on every
    instance: write an in-progress trace and assert `end_time` and `ttft` read back `null` rather than the epoch/`NaN`
-   sentinel. Before the
-   swap the restored original is still Nullable and answers `null` regardless, so a pre-EXCHANGE read-back would pass
-   with a stale-`false` instance and leave exactly the silent wrong-reads state the flag exists to prevent.
+   sentinel. Before the swap the restored original is still Nullable and answers `null` regardless, so a pre-EXCHANGE
+   read-back would pass with a stale-`false` instance and leave exactly the silent wrong-reads state the flag exists to
+   prevent.
 
    ```bash
    # N = the offset rollback.sh printed; old=traces, new=traces_local_v2 (the defaults)
@@ -1327,16 +1327,16 @@ mismatched window).
 - the replay wall time is measured and logged (not asserted — it is environment-sensitive; the buffer-window sizing is
   done in the cutover rehearsal, not in CI).
 
-**What it does not cover.** The suite drives SQL directly, so nothing in the `scripts/` drivers is exercised by it — the
-drivers need a `clickhouse-client` binary that the backend test job does not install, and the repo has no bash harness.
-That has always excluded their argument validation and topology guards, which the cutover rehearsal covers instead. Note
-what it now also excludes, because these decide a verdict rather than reject an argument, and a wrong verdict from a
-fidelity gate is the failure mode this whole procedure is built to avoid:
+**What it does not cover.** The suite drives SQL directly, so nothing in the `scripts/` drivers is exercised by it — they
+need a `clickhouse-client` binary the backend test job does not install, and the repo has no bash harness. The cutover
+rehearsal covers them instead: their argument validation, their topology guards, and three `verify.sh` behaviours worth
+separating from the rest, because they decide a *verdict* rather than reject an argument — and a wrong verdict from a
+fidelity gate is the failure this whole procedure exists to avoid:
 
-- `verify.sh` refusing to report `PASSED` when the bounds selected **no** window (an empty range compares nothing, so a
-  pass would be vacuous);
-- its `--to-week last-sealed` resolution — the current-calendar-week bound, capped at the last populated week;
-- its refusal when that resolution lands before `--from-week`, which is the all-data-in-the-current-week case.
+- refusing to report `PASSED` when the bounds selected **no** window (an empty range compares nothing, so a pass would be
+  vacuous);
+- the `--to-week last-sealed` resolution — the current-calendar-week bound, capped at the last populated week;
+- its refusal when that resolution lands before `--from-week`, the all-data-in-the-current-week case.
 
 Each rests on manual verification. Exercise them in the rehearsal alongside the driver guards, and treat a change to any
 of the three as needing the same.
