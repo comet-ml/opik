@@ -50,6 +50,13 @@ export interface RawApiResult {
   status: number;
   /** The backend's `message` field, or the raw body when it isn't JSON. */
   message: string;
+  /**
+   * The `Location` header, when the endpoint answers 201 with one. Creation
+   * endpoints in this API return no body, so this is the only place the new
+   * entity's id appears. Optional because the callers that only assert a
+   * status code build this shape themselves and have no header to report.
+   */
+  location?: string | null;
 }
 
 /** One row of the dataset's Version history tab. */
@@ -128,6 +135,42 @@ export interface AutomationRuleRef {
    */
   samplingRate: number;
 }
+
+/**
+ * A rule read back through the raw REST view rather than the pinned SDK.
+ *
+ * The SDK bundled with this suite (opik 2.0.40) has no `triggerScope` on any
+ * evaluator shape, so `listAutomationRulesForProject` structurally cannot
+ * report it. A rule whose whole point is which trace sources it fires on has
+ * to be read where the field exists.
+ */
+export interface AutomationRuleDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  samplingRate: number;
+  /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
+  triggerScope: string;
+}
+
+/** One line of a rule's user-facing log stream. */
+export interface AutomationRuleLogRef {
+  level: string;
+  message: string;
+}
+
+/**
+ * A trace `input`/`output`/`metadata` payload as the REST API accepts it.
+ *
+ * The endpoint stores a bare `JsonNode`, so a scalar, an array and an object
+ * are all legal — and the online-scoring variable extraction behaves
+ * differently for each, which is the point of
+ * `online-evaluation-non-object-sections.spec.ts`. The pinned SDK's
+ * `JsonListStringWrite` narrows this to object / array-of-objects / string, so
+ * the number and scalar-array cases have to be widened here and cast at the
+ * call, the same way `rawFetch` exists for calls the pinned SDK can't express.
+ */
+export type TraceJsonSection = Record<string, unknown> | unknown[] | string | number;
 
 export interface AnnotationQueueReviewerRef {
   username: string;
@@ -330,7 +373,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json };
+    return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
   /**
@@ -444,6 +487,31 @@ export function makeBackendClient(apiKey: string | null = null) {
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * The id `DELETE`/`GET /v1/private/prompts/{id}` expect. The Python SDK's
+     * create_prompt returns the prompt VERSION id instead, which 404s against
+     * both — so resolve by name rather than trusting the id it handed back.
+     */
+    async findPromptIdByName(name: string, projectId?: string): Promise<string | null> {
+      // `name` is a partial-match search, so re-check it exactly.
+      const page = await opik.api.prompts.getPrompts({
+        name,
+        size: 50,
+        ...(projectId ? { projectId } : {}),
+      });
+      const match = (page.content ?? []).find((p) => p.name === name);
+      return match?.id ? String(match.id) : null;
+    },
+
+    async promptExistsByName(name: string, projectId?: string): Promise<boolean> {
+      const page = await opik.api.prompts.getPrompts({
+        name,
+        size: 50,
+        ...(projectId ? { projectId } : {}),
+      });
+      return (page.content ?? []).some((p) => p.name === name);
     },
 
     async deletePrompt(id: string): Promise<void> {
@@ -725,6 +793,21 @@ export function makeBackendClient(apiKey: string | null = null) {
       }));
     },
 
+    /**
+     * By id, unlike findExperimentByName — `findExperiments({ name })` is not
+     * scoped to a project, so a same-named experiment elsewhere would answer
+     * for this one.
+     */
+    async experimentExists(id: string): Promise<boolean> {
+      try {
+        await opik.api.experiments.getExperimentById(id);
+        return true;
+      } catch (err) {
+        if (isNotFoundError(err)) return false;
+        throw err;
+      }
+    },
+
     async findExperimentByName(name: string): Promise<ExperimentRefDetail | null> {
       const page = await opik.api.experiments.findExperiments({ name, size: 50 });
       const content = page.content ?? [];
@@ -810,6 +893,32 @@ export function makeBackendClient(apiKey: string | null = null) {
 
     getTrace: localGetTrace,
 
+    /**
+     * A trace's `input` and `output` exactly as stored, with no shape claimed.
+     *
+     * `TraceDetail.input` is typed as a record because every caller that reads
+     * it asserts on which KEYS the SDK wrote. A spec whose whole subject is a
+     * section that is deliberately NOT an object cannot use that type to prove
+     * its own seed landed — and a seed that silently became `{"output": "x"}`
+     * would make the test pass while exercising nothing.
+     *
+     * Returns null while the trace is not yet readable — the REST write answers
+     * 201 before the row is queryable, so an immediate read-back after seeding
+     * legitimately 404s. Callers poll rather than treating that as a failure,
+     * the same way `getTrace` does.
+     */
+    async getTraceSections(
+      traceId: string,
+    ): Promise<{ input: unknown; output: unknown } | null> {
+      try {
+        const trace = await opik.api.traces.getTraceById(traceId);
+        return { input: trace.input ?? null, output: trace.output ?? null };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
     async deleteTraces(ids: string[]): Promise<void> {
       await opik.api.traces.deleteTraces({ ids });
     },
@@ -841,6 +950,118 @@ export function makeBackendClient(apiKey: string | null = null) {
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
         enabled: r.enabled ?? true,
         samplingRate: requireSamplingRate(r.samplingRate, r.name),
+      }));
+    },
+
+    /**
+     * Create an online-evaluation rule and return its id.
+     *
+     * Goes through `rawFetch` rather than the pinned SDK for two reasons the
+     * specs depend on:
+     *   - `triggerScope` does not exist on any SDK evaluator shape (see
+     *     `AutomationRuleDetail`), and a rule that must fire on experiment /
+     *     playground traces cannot be built without it.
+     *   - creation answers 201 with an empty body, so the id only exists in the
+     *     `Location` header, which the SDK's `void` return discards.
+     *
+     * The id is parsed from `Location` rather than recovered by listing the
+     * project's rules by name: a name lookup would silently pick up a rule left
+     * behind by an earlier run under the same namespace.
+     */
+    async createAutomationRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Python source for the metric class. */
+      metric: string;
+      /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
+      arguments: Record<string, string>;
+      triggerScope?: 'production' | 'experiment' | 'both';
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'user_defined_metric_python',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            code: { metric: args.metric, arguments: args.arguments },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createAutomationRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createAutomationRule: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
+    /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
+    async getAutomationRule(ruleId: string): Promise<AutomationRuleDetail> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getAutomationRule: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+        sampling_rate?: number;
+        trigger_scope?: string;
+      };
+      // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
+      // scope would present as the server's default, which is exactly the value
+      // these specs are trying to prove was NOT silently applied.
+      if (typeof rule.sampling_rate !== 'number' || Number.isNaN(rule.sampling_rate)) {
+        throw new Error(`getAutomationRule: ${ruleId} returned no sampling_rate`);
+      }
+      if (typeof rule.trigger_scope !== 'string') {
+        throw new Error(`getAutomationRule: ${ruleId} returned no trigger_scope`);
+      }
+      return {
+        id: String(rule.id ?? ruleId),
+        name: String(rule.name ?? ''),
+        enabled: rule.enabled ?? true,
+        samplingRate: rule.sampling_rate,
+        triggerScope: rule.trigger_scope,
+      };
+    },
+
+    /**
+     * A rule's user-facing log stream — the lines `/automation-logs` renders.
+     *
+     * This is the only place the engine says why it did or did not score a
+     * trace: a skipped trace produces a log line and no feedback score, so an
+     * absence assertion has nothing else to anchor on.
+     */
+    async getAutomationRuleLogs(
+      ruleId: string,
+      opts: { size?: number } = {},
+    ): Promise<AutomationRuleLogRef[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size: opts.size ?? 1000,
+      });
+      return (page.content ?? []).map((item) => ({
+        level: String(item.level ?? ''),
+        message: String(item.message ?? ''),
       }));
     },
 
@@ -978,27 +1199,50 @@ export function makeBackendClient(apiKey: string | null = null) {
      *
      * The id is caller-supplied because `createTrace` returns 204 with no body,
      * and these tests assert on exact trace ids.
+     *
+     * Written through `rawFetch` rather than the pinned SDK because the SDK
+     * validates the request body against `JsonListStringWrite`, which admits an
+     * object, an array OF OBJECTS, or a string — while the endpoint itself
+     * stores a bare `JsonNode` and happily accepts a number or an array of
+     * scalars. Those are exactly the shapes
+     * `online-evaluation-non-object-sections.spec.ts` exists to seed, and the
+     * SDK rejects them client-side before the request is made.
      */
     async createTraceWithSource(args: {
       id: string;
       projectName: string;
       name: string;
       source: 'sdk' | 'experiment' | 'playground' | 'optimization';
-      input?: Record<string, unknown>;
-      output?: Record<string, unknown>;
+      input?: TraceJsonSection;
+      output?: TraceJsonSection;
       metadata?: Record<string, unknown>;
       startTime?: Date;
+      /**
+       * Set this to make the trace eligible for online scoring.
+       * `OnlineScoringSampler.onTracesCreated` drops every trace with a null
+       * `end_time` as a partial write, so a trace seeded without one is never
+       * scored — and a scoring spec built on it would assert nothing.
+       */
+      endTime?: Date;
     }): Promise<string> {
-      await opik.api.traces.createTrace({
-        id: args.id,
-        projectName: args.projectName,
-        name: args.name,
-        source: args.source,
-        startTime: args.startTime ?? new Date(),
-        ...(args.input ? { input: args.input } : {}),
-        ...(args.output ? { output: args.output } : {}),
-        ...(args.metadata ? { metadata: args.metadata } : {}),
+      const { status, message } = await rawFetch('POST', '/v1/private/traces', {
+        body: {
+          id: args.id,
+          project_name: args.projectName,
+          name: args.name,
+          source: args.source,
+          start_time: (args.startTime ?? new Date()).toISOString(),
+          ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+          ...(args.input === undefined ? {} : { input: args.input }),
+          ...(args.output === undefined ? {} : { output: args.output }),
+          ...(args.metadata ? { metadata: args.metadata } : {}),
+        },
       });
+      if (status !== 201) {
+        throw new Error(
+          `createTraceWithSource: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
       return args.id;
     },
 

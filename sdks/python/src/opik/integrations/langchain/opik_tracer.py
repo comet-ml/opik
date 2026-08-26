@@ -33,6 +33,7 @@ from . import (
 )
 
 from ...api_objects import helpers
+from ... import analytics
 
 if TYPE_CHECKING:
     from langchain_core.runnables.graph import Graph
@@ -142,6 +143,7 @@ class OpikTracer(BaseTracer):
                   auto-detected provider for that run.
             **kwargs: Additional arguments passed to the parent class constructor.
         """
+        analytics.track_event("integration", "langchain")
         validator = parameters_validator.create_validator(
             method_name="__init__", class_name=self.__class__.__name__
         )
