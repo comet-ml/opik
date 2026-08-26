@@ -1,8 +1,6 @@
 package com.comet.opik.infrastructure.redaction;
 
-import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.ext.WriterInterceptor;
@@ -25,11 +23,10 @@ import java.io.IOException;
 public class RedactionWriterInterceptor implements WriterInterceptor {
 
     private final @NonNull RedactionService redactionService;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     public void aroundWriteTo(WriterInterceptorContext context) throws IOException, WebApplicationException {
-        if (!redactionService.isEnabled() || !shouldRedact()) {
+        if (!redactionService.isEnabled() || !shouldRedact(context)) {
             context.proceed();
             return;
         }
@@ -42,21 +39,19 @@ public class RedactionWriterInterceptor implements WriterInterceptor {
         }
     }
 
-    private boolean shouldRedact() {
-        try {
-            return requestContext.get().isRedactResponse();
-        } catch (RuntimeException outsideRequestScope) {
-            // Deliberately not redacting, and deliberately not symmetric with Streamer.
-            //
-            // RequestContext is @RequestScoped and thread-bound, so this throws on any thread that is not the
-            // request thread - including the reactor thread that resumes a @Suspended AsyncResponse, as
-            // LocalRunnersResource.nextJob does. Redacting here would rewrite those payloads for every caller,
-            // permitted ones included, because the permission is never consulted on that path.
-            //
-            // Streamer can fail closed because it resolves the decision on the request thread and carries it.
-            // An interceptor cannot: by the time it runs the decision is either on the context or unavailable.
-            // Fixing this properly means carrying the resolved decision to the write, not guessing at it here.
-            return false;
-        }
+    /**
+     * Reads the decision {@link RedactionRequestFilter} resolved for this request, rather than resolving one
+     * here.
+     * <p>
+     * The property is on the request, not on a thread, which is the whole point: a {@code @Suspended
+     * AsyncResponse} is written from the thread that resumes it — a reactor thread, for the local-runner
+     * long-polls — and the {@code @RequestScoped} context is not resolvable there. Reading the context instead
+     * threw on exactly those responses, so they were written as stored however the permission had come out.
+     * <p>
+     * Absent means no decision was resolved for this response: the feature is off, or the path is outside
+     * {@code COVERED_PATHS}, and neither is a response to redact.
+     */
+    private boolean shouldRedact(WriterInterceptorContext context) {
+        return Boolean.TRUE.equals(context.getProperty(RedactionRequestFilter.REDACT_RESPONSE_PROPERTY));
     }
 }

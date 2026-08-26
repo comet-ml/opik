@@ -51,25 +51,23 @@ public class RedactionService {
     }
 
     /**
-     * Whether this caller's responses must be redacted. Holding the original-data permission exempts them;
-     * everyone else is redacted, so an empty or unresolved permission set means redacted.
-     */
-    /**
      * What a stream does when there is no caller to decide against.
      * <p>
      * Only {@code Streamer} asks, and only it can: it resolves the decision on the request thread and carries it,
      * so reaching this means the stream genuinely has no caller, and redacting is right - a path that cannot
      * establish who is reading cannot establish that the reader is permitted.
      * <p>
-     * {@code RedactionWriterInterceptor} deliberately does not share this. It cannot tell "no caller" from
-     * "running on a thread where the request scope is not visible", and the second is ordinary: a
-     * {@code @Suspended AsyncResponse} resumed from a reactor thread lands there, so redacting would rewrite
-     * those payloads for permitted callers too.
+     * {@code RedactionWriterInterceptor} has no equivalent, because it never has to guess: the decision is
+     * recorded on the request itself, so it is readable from whichever thread writes the response.
      */
     public boolean redactWhenCallerUnknown() {
         return isEnabled();
     }
 
+    /**
+     * Whether this caller's responses must be redacted. Holding the original-data permission exempts them;
+     * everyone else is redacted, so an empty or unresolved permission set means redacted.
+     */
     public boolean shouldRedactFor(Set<String> permissions) {
         return isEnabled()
                 && (permissions == null

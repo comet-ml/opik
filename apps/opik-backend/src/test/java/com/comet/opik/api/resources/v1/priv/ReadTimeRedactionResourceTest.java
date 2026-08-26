@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -11,7 +13,14 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
+import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
+import com.comet.opik.api.runner.LocalRunner;
+import com.comet.opik.api.runner.LocalRunnerJob;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -34,7 +43,16 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -68,6 +86,8 @@ class ReadTimeRedactionResourceTest {
      * the exemption is missing on a path the assertion fails rather than passing by luck.
      */
     private static final String RULE_MATCHING_THREAD_ID = PHONE;
+
+    private static final String RUNNER_AGENT = "redaction-agent";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -106,11 +126,17 @@ class ReadTimeRedactionResourceTest {
 
     private String baseURI;
     private TraceResourceClient traceResourceClient;
+    private LocalRunnersResourceClient runnersClient;
+    private PairingResourceClient pairingClient;
+    private ProjectResourceClient projectClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
+        this.pairingClient = new PairingResourceClient(client, baseURI);
+        this.projectClient = new ProjectResourceClient(client, baseURI, factory);
 
         ClientSupportUtils.config(client);
 
@@ -217,6 +243,113 @@ class ReadTimeRedactionResourceTest {
         assertThat(streamed).hasSize(1);
         assertThat(streamed.getFirst().threadId()).isEqualTo(RULE_MATCHING_THREAD_ID);
         assertThat(streamed.getFirst().input().toString()).doesNotContain(EMAIL).contains("[EMAIL]");
+    }
+
+    /**
+     * A local runner job is the async case: {@code nextJob} suspends and its response is written from the
+     * reactor thread that resumes it, where the request-scoped context does not exist. The decision therefore
+     * has to travel on the request rather than on the thread, and these two tests are what says it does — the
+     * unpermitted caller is masked, and the permitted one is not, which is the half that a fail-closed
+     * interceptor got wrong.
+     */
+    private UUID connectRunner(String apiKey) {
+        UUID projectId = projectClient.createProject("redaction-runner-" + UUID.randomUUID(), apiKey,
+                WORKSPACE_NAME);
+
+        byte[] activationKey = new byte[32];
+        new SecureRandom().nextBytes(activationKey);
+
+        var session = pairingClient.createSession(CreateSessionRequest.builder()
+                .projectId(projectId)
+                .activationKey(Base64.getEncoder().encodeToString(activationKey))
+                .ttlSeconds(300)
+                .type(RunnerType.ENDPOINT)
+                .build(), apiKey, WORKSPACE_NAME);
+
+        String runnerName = "redaction-runner";
+        UUID runnerId = pairingClient.activate(session.sessionId(), ActivateRequest.builder()
+                .runnerName(runnerName)
+                .hmac(hmac(session.sessionId(), activationKey, runnerName))
+                .build(), apiKey, WORKSPACE_NAME);
+
+        runnersClient.registerAgents(runnerId, Map.of(RUNNER_AGENT, LocalRunner.Agent.builder()
+                .name(RUNNER_AGENT).build()), apiKey, WORKSPACE_NAME);
+        runnersClient.heartbeat(runnerId, apiKey, WORKSPACE_NAME);
+
+        return runnerId;
+    }
+
+    private static String hmac(UUID sessionId, byte[] activationKey, String runnerName) {
+        try {
+            var sessionIdBytes = ByteBuffer.allocate(16)
+                    .putLong(sessionId.getMostSignificantBits())
+                    .putLong(sessionId.getLeastSignificantBits())
+                    .array();
+            byte[] runnerNameHash = MessageDigest.getInstance("SHA-256")
+                    .digest(runnerName.getBytes(StandardCharsets.UTF_8));
+            byte[] message = new byte[sessionIdBytes.length + runnerNameHash.length];
+            System.arraycopy(sessionIdBytes, 0, message, 0, sessionIdBytes.length);
+            System.arraycopy(runnerNameHash, 0, message, sessionIdBytes.length, runnerNameHash.length);
+
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(activationKey, "HmacSHA256"));
+            return Base64.getEncoder().encodeToString(mac.doFinal(message));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private UUID createJobWithPii(UUID runnerId, String apiKey) {
+        LocalRunner runner = runnersClient.getRunner(runnerId, apiKey, WORKSPACE_NAME);
+
+        return runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                .agentName(RUNNER_AGENT)
+                .projectId(runner.projectId())
+                .inputs(JsonUtils.getJsonNodeFromString(STORED_INPUT))
+                .build(), apiKey, WORKSPACE_NAME);
+    }
+
+    @Test
+    @DisplayName("a long-polled job is redacted, though its response is written off the request thread")
+    void aLongPolledJobIsRedacted() {
+        UUID runnerId = connectRunner(ADMIN_API_KEY);
+        UUID jobId = createJobWithPii(runnerId, ADMIN_API_KEY);
+
+        LocalRunnerJob polled;
+        try (var response = runnersClient.callNextJob(runnerId, MEMBER_API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            polled = response.readEntity(LocalRunnerJob.class);
+        }
+
+        assertThat(polled.id()).isEqualTo(jobId);
+        assertThat(polled.inputs().toString())
+                .doesNotContain(EMAIL)
+                .doesNotContain(PHONE)
+                .contains("[EMAIL]")
+                .contains("[PHONE]");
+
+        // The same job read through the synchronous endpoint, which the interceptor has always covered: the two
+        // representations of one job have to agree, and before the decision travelled with the request they did
+        // not.
+        var fetched = runnersClient.getJob(jobId, MEMBER_API_KEY, WORKSPACE_NAME);
+
+        assertThat(fetched.inputs()).isEqualTo(polled.inputs());
+    }
+
+    @Test
+    @DisplayName("a long-polled job reaches a permitted caller as stored")
+    void aLongPolledJobReachesAPermittedCallerAsStored() {
+        // Failing closed on the async path instead of carrying the decision rewrote this response too, for a
+        // caller who is allowed to see it and whose permission was never consulted.
+        UUID runnerId = connectRunner(ADMIN_API_KEY);
+        createJobWithPii(runnerId, ADMIN_API_KEY);
+
+        try (var response = runnersClient.callNextJob(runnerId, ADMIN_API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.readEntity(LocalRunnerJob.class).inputs().toString())
+                    .contains(EMAIL)
+                    .contains(PHONE);
+        }
     }
 
     @Test
