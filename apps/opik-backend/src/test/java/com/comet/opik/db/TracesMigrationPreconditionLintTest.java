@@ -164,7 +164,7 @@ class TracesMigrationPreconditionLintTest {
 
         /**
          * The finding a file-level search cannot make: the guard is present in the file, but on a different changeset
-         * than the one doing the mutating, so the mutation itself runs unconditionally on both topologies.
+         * than the one performing the mutation, so the mutation itself runs unconditionally on both topologies.
          */
         @Test
         @DisplayName("rejects a mutation guarded only by a different changeset")
