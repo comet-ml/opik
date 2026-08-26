@@ -30,19 +30,19 @@ public class JsonNodeRedactor {
     }
 
     /**
-     * @param itemType the streamed DTO, or {@code null} once below its own properties.
-     *                 <p>
-     *                 Exemptions apply at the item's own level only, which does <em>not</em> match the
-     *                 serializer: {@code BeanSerializerModifier.changeProperties} runs for every bean in the
-     *                 graph, so a nested exempt property is exempt when paged and rewritten when streamed -
-     *                 {@code Experiment.promptVersions[].commit} is the concrete case.
-     *                 <p>
-     *                 Applying the names at every depth would close that but open a worse hole: this walk cannot
-     *                 tell a declared property from a caller-chosen map key, so a metadata entry named
-     *                 {@code id} or {@code model} would become exempt and leak. That is the hazard
-     *                 {@link RedactionModule}'s own comment cites for using the modifier in the first place.
-     *                 Neither approximation is exact without per-level type information; under-exempting is the
-     *                 one that cannot leak, so it is the one taken.
+     * Rewrites one streamed item, exempting the structural properties at the item's own level.
+     * <p>
+     * That does <em>not</em> match the serializer. {@code BeanSerializerModifier.changeProperties} runs for every
+     * bean in the graph, so a nested exempt property is exempt when paged and rewritten when streamed —
+     * {@code Experiment.promptVersions[].commit} is the concrete case.
+     * <p>
+     * Applying the names at every depth would close that but open a worse hole: this walk cannot tell a declared
+     * property from a caller-chosen map key, so a metadata entry named {@code id} or {@code model} would become
+     * exempt and leak. That is the hazard {@link RedactionModule}'s own comment cites for using the modifier in
+     * the first place. Neither approximation is exact without per-level type information; under-exempting is the
+     * one that cannot leak, so it is the one taken.
+     *
+     * @param itemType the streamed DTO, or {@code null} once below its own properties
      */
     private JsonNode rewrite(JsonNode node, RedactionRules rules, Class<?> itemType) {
         if (node.isObject()) {
