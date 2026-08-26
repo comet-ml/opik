@@ -19,6 +19,13 @@ forward in data.json.
 
     python3 .github/scripts/star_history.py [--out DIR] [--data data.json]
 
+The series on the CDN is the source of truth. If it cannot be read, this
+exits non-zero rather than falling back to the committed seed -- rendering
+from the seed and republishing would overwrite every point accumulated
+since it was taken. Seeding is opt-in via --bootstrap and is meant to be
+run once, by hand.
+
+Setup and operator notes: .github/scripts/STAR_HISTORY.md
 See DND-1580.
 """
 import argparse, datetime as dt, json, pathlib, urllib.request
@@ -63,6 +70,13 @@ def render(series, theme):
     xs = [dt.date.fromisoformat(p["date"]).toordinal() for p in series]
     ys = [p["count"] for p in series]
     x0, x1, ymax = min(xs), max(xs), max(ys)
+    if x1 == x0:
+        raise SystemExit(
+            f"error: series spans a single date ({series[0]['date']}); nothing to plot. "
+            "This usually means the series was reset -- check the published data.json "
+            "before re-running.")
+    if ymax <= 0:
+        raise SystemExit("error: series has no stars recorded; refusing to render.")
     px = lambda x: (x - x0) / (x1 - x0) * PW
     py = lambda y: BASE - (y / ymax) * BASE
 
@@ -128,12 +142,21 @@ def main():
     ap.add_argument("--out", default=".")
     ap.add_argument("--no-fetch", action="store_true",
                     help="re-render from existing data without calling GitHub")
+    ap.add_argument("--bootstrap", action="store_true",
+                    help="seed from the committed snapshot when no series exists yet. "
+                         "First run only -- overwrites whatever is published.")
     a = ap.parse_args()
 
     path = pathlib.Path(a.data)
     if not path.exists():
+        if not a.bootstrap:
+            raise SystemExit(
+                f"error: {a.data} not found.\n"
+                "The published series is the source of truth; refusing to rebuild from "
+                "the seed, which would discard every point recorded since it was taken.\n"
+                "If this really is the first run, pass --bootstrap.")
         path = HERE / "star_history_seed.json"
-        print(f"no {a.data}; bootstrapping from {path.name}")
+        print(f"bootstrapping from {path.name} (--bootstrap)")
     data = json.loads(path.read_text())
 
     if not a.no_fetch:

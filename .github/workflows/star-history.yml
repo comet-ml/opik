@@ -4,6 +4,12 @@
 # AWS key: credentials come from OIDC role assumption. Writes nothing back to
 # the repository -- the data and the rendered SVGs live on the CDN.
 #
+# The published data.json is the source of truth. If it cannot be read the job
+# fails rather than rebuilding from the committed seed, because publishing a
+# reseeded series would silently overwrite every point gathered since the seed
+# was taken. Seeding is a deliberate one-off: dispatch with bootstrap = true.
+#
+# Setup and operator notes: .github/scripts/STAR_HISTORY.md
 # See DND-1580.
 name: star-history
 
@@ -11,6 +17,11 @@ on:
   schedule:
     - cron: "0 3 * * 1" # Mondays, 03:00 UTC
   workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: "First run only: seed the series from the committed snapshot. Overwrites whatever is published."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -36,15 +49,23 @@ jobs:
           role-session-name: star-history
           aws-region: us-east-1
 
-      # Absent on the very first run; the script then bootstraps from
-      # star_history_seed.json.
+      # No `|| true` here on purpose: any read failure must stop the job before
+      # the publish step can overwrite the series with a reseeded one.
       - name: Fetch current series
-        run: aws s3 cp "$S3_PREFIX/data.json" data.json || echo "no series yet"
+        if: ${{ inputs.bootstrap != true }}
+        run: aws s3 cp "$S3_PREFIX/data.json" data.json
 
       - name: Render
-        run: python3 .github/scripts/star_history.py --data data.json --out out
+        env:
+          BOOTSTRAP: ${{ inputs.bootstrap }}
+        run: |
+          args=(--data data.json --out out)
+          if [ "$BOOTSTRAP" = "true" ]; then args+=(--bootstrap); fi
+          python3 .github/scripts/star_history.py "${args[@]}"
 
       - name: Publish
+        env:
+          DISTRIBUTION_ID: ${{ vars.CDN_DISTRIBUTION_ID }}
         run: |
           aws s3 cp out/data.json "$S3_PREFIX/data.json" \
             --content-type application/json --cache-control max-age=300
@@ -53,5 +74,22 @@ jobs:
               --content-type image/svg+xml --cache-control max-age=300
           done
           aws cloudfront create-invalidation \
-            --distribution-id "${{ vars.CDN_DISTRIBUTION_ID }}" \
-            --paths "$CDN_PATHS"
+            --distribution-id "$DISTRIBUTION_ID" --paths "$CDN_PATHS"
+
+  notify-slack:
+    name: "📢 Slack Notification"
+    runs-on: ubuntu-latest
+    needs: publish
+    if: always() && needs.publish.result == 'failure'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Send Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+        run: .github/scripts/notify-slack-test-failure.sh "Star History Chart Publish"
