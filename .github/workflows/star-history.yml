@@ -1,0 +1,57 @@
+# Regenerates the README star-history chart and publishes it to cdn.comet.com.
+#
+# Needs no GitHub token: the total star count is public. Needs no long-lived
+# AWS key: credentials come from OIDC role assumption. Writes nothing back to
+# the repository -- the data and the rendered SVGs live on the CDN.
+#
+# See DND-1580.
+name: star-history
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays, 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC only
+
+concurrency:
+  group: star-history
+  cancel-in-progress: false
+
+env:
+  S3_PREFIX: s3://cdn.comet.ml/opik/star-history
+  CDN_PATHS: /opik/star-history/*
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.CDN_PUBLISH_ROLE_ARN }}
+          role-session-name: star-history
+          aws-region: us-east-1
+
+      # Absent on the very first run; the script then bootstraps from
+      # star_history_seed.json.
+      - name: Fetch current series
+        run: aws s3 cp "$S3_PREFIX/data.json" data.json || echo "no series yet"
+
+      - name: Render
+        run: python3 .github/scripts/star_history.py --data data.json --out out
+
+      - name: Publish
+        run: |
+          aws s3 cp out/data.json "$S3_PREFIX/data.json" \
+            --content-type application/json --cache-control max-age=300
+          for theme in light dark; do
+            aws s3 cp "out/star-history-$theme.svg" "$S3_PREFIX/star-history-$theme.svg" \
+              --content-type image/svg+xml --cache-control max-age=300
+          done
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CDN_DISTRIBUTION_ID }}" \
+            --paths "$CDN_PATHS"
