@@ -3801,22 +3801,31 @@ class DatasetVersionResourceTest {
             // (ClickHouse async inserts report 0 before commit). A stable id repeated inside that
             // first batch is therefore counted twice, while ClickHouse collapses it to one row.
             var duplicatedId = TestIdGeneratorFactory.create().generateId();
+            var distinctId = TestIdGeneratorFactory.create().generateId();
+
+            // The repeated id wins with its LAST submitted content: ClickHouse keeps one row per
+            // dataset_item_id and reads take the newest, so "second" survives and "first" does not.
+            var winningDuplicate = DatasetItem.builder()
+                    .id(duplicatedId)
+                    .datasetItemId(duplicatedId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                    .build();
+            var distinctItem = DatasetItem.builder()
+                    .id(distinctId)
+                    .datasetItemId(distinctId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"third\"")))
+                    .build();
+
             var items = List.of(
                     DatasetItem.builder()
                             .id(duplicatedId)
                             .source(DatasetItemSource.SDK)
                             .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
                             .build(),
-                    DatasetItem.builder()
-                            .id(duplicatedId)
-                            .source(DatasetItemSource.SDK)
-                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
-                            .build(),
-                    DatasetItem.builder()
-                            .id(TestIdGeneratorFactory.create().generateId())
-                            .source(DatasetItemSource.SDK)
-                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"third\"")))
-                            .build());
+                    winningDuplicate,
+                    distinctItem);
 
             datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
                     .datasetId(datasetId)
@@ -3826,10 +3835,14 @@ class DatasetVersionResourceTest {
 
             var version = getLatestVersion(datasetId);
 
-            // Two distinct ids went in, so the version holds two rows.
+            // Assert on the rows themselves, not just how many: a bug that kept the wrong revision
+            // of the duplicate, or dropped the distinct item and kept both duplicates, would leave
+            // the count at 2 and slip through a size-only check.
             var stored = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
-            assertThat(stored).hasSize(2);
+            assertThat(stored)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyInAnyOrder(winningDuplicate, distinctItem);
 
             // items_total must agree with what is actually stored.
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
@@ -3845,6 +3858,14 @@ class DatasetVersionResourceTest {
             // one version. The first batch creates it, later batches append. A stable id present in
             // both must contribute exactly one item to the total.
             var sharedId = TestIdGeneratorFactory.create().generateId();
+            var otherId = TestIdGeneratorFactory.create().generateId();
+
+            var otherItem = DatasetItem.builder()
+                    .id(otherId)
+                    .datasetItemId(otherId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"other\"")))
+                    .build();
 
             datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
                     .datasetId(datasetId)
@@ -3855,28 +3876,31 @@ class DatasetVersionResourceTest {
                                     .source(DatasetItemSource.SDK)
                                     .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
                                     .build(),
-                            DatasetItem.builder()
-                                    .id(TestIdGeneratorFactory.create().generateId())
-                                    .source(DatasetItemSource.SDK)
-                                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"other\"")))
-                                    .build()))
+                            otherItem))
                     .build(), TEST_WORKSPACE, API_KEY);
+
+            // The second batch re-sends the shared id with new content, so it is an update:
+            // one row, holding the later revision.
+            var updatedShared = DatasetItem.builder()
+                    .id(sharedId)
+                    .datasetItemId(sharedId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"updated\"")))
+                    .build();
 
             datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .batchGroupId(batchGroupId)
-                    .items(List.of(DatasetItem.builder()
-                            .id(sharedId)
-                            .source(DatasetItemSource.SDK)
-                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"updated\"")))
-                            .build()))
+                    .items(List.of(updatedShared))
                     .build(), TEST_WORKSPACE, API_KEY);
 
             var version = getLatestVersion(datasetId);
             var stored = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
 
-            assertThat(stored).hasSize(2);
+            assertThat(stored)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyInAnyOrder(updatedShared, otherItem);
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
         }
 
