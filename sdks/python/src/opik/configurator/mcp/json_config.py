@@ -1,5 +1,7 @@
 import json
+import os
 import pathlib
+import tempfile
 from typing import Any, Dict
 
 
@@ -38,8 +40,45 @@ def merge_server_into_json_file(
     servers[server_name] = server_block
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(
-        json.dumps(existing_config, indent=2) + "\n", encoding="utf-8"
-    )
+    _write_atomically(config_path, json.dumps(existing_config, indent=2) + "\n")
 
     return was_new
+
+
+def _write_atomically(config_path: pathlib.Path, contents: str) -> None:
+    """Replace ``config_path`` in one step, or leave it exactly as it was.
+
+    These are files Opik does not own, and they hold far more than an MCP block:
+    ``~/.claude.json`` is the whole of Claude Code's user state. A plain
+    ``write_text`` truncates before it writes, so a full disk, a signal or a
+    killed process leaves the user's editor config unparseable — and the caller
+    catches ``OSError`` and prints a tidy message, by which point the damage is
+    done. Writing a sibling temp file and renaming it means the worst case is a
+    stray temp file next to an untouched config.
+
+    The temp file goes in the same directory because ``os.replace`` is only
+    atomic within a filesystem, and ``mkstemp`` creates it 0600: what we are
+    about to write includes an API key, so it should not exist even briefly at
+    whatever the umask allows. A file we are *creating* keeps that 0600 — but one
+    that already existed keeps the mode its owner chose, since tightening
+    permissions on another tool's config is not ours to decide.
+    """
+    previous_mode = config_path.stat().st_mode if config_path.exists() else None
+
+    descriptor, staging_name = tempfile.mkstemp(
+        dir=str(config_path.parent), prefix=f".{config_path.name}.", suffix=".tmp"
+    )
+    staging = pathlib.Path(staging_name)
+    try:
+        if previous_mode is not None:
+            os.chmod(descriptor, previous_mode)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(contents)
+            handle.flush()
+            # Without this the rename can land before the bytes do, which turns a
+            # crash into a valid-looking but empty config.
+            os.fsync(handle.fileno())
+        os.replace(staging, config_path)
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise

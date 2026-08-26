@@ -180,20 +180,29 @@ class TestWriteSkill:
 
 
 class TestDownload:
+    """The pack is fetched with a plain client, streamed, and size-capped.
+
+    `httpx.MockTransport` rather than a hand-rolled fake client: `download` now
+    streams the response, so a stub with a `get` method no longer stands in for
+    the real thing — and the transport exercises the streaming path itself.
+    """
+
+    @staticmethod
+    def _transport(monkeypatch, handler):
+        import httpx
+
+        real_client = httpx.Client
+
+        def client(**kwargs):
+            kwargs.pop("transport", None)
+            return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+        monkeypatch.setattr(pack.httpx, "Client", client)
+
     def test_download__non_200__raises_pack_error(self, monkeypatch):
-        class _Client:
-            def __enter__(self):
-                return self
+        import httpx
 
-            def __exit__(self, *exc):
-                return False
-
-            def get(self, url, **kwargs):
-                import httpx
-
-                return httpx.Response(404, request=httpx.Request("GET", url))
-
-        monkeypatch.setattr(pack.httpx_client, "get", lambda **kwargs: _Client())
+        self._transport(monkeypatch, lambda request: httpx.Response(404))
 
         with pytest.raises(pack.PackError, match="HTTP 404"):
             pack.download()
@@ -201,17 +210,10 @@ class TestDownload:
     def test_download__network_error__raises_pack_error(self, monkeypatch):
         import httpx
 
-        class _Client:
-            def __enter__(self):
-                return self
+        def boom(request):
+            raise httpx.ConnectError("no route to host")
 
-            def __exit__(self, *exc):
-                return False
-
-            def get(self, url, **kwargs):
-                raise httpx.ConnectError("no route to host")
-
-        monkeypatch.setattr(pack.httpx_client, "get", lambda **kwargs: _Client())
+        self._transport(monkeypatch, boom)
 
         with pytest.raises(pack.PackError, match="could not download"):
             pack.download()
@@ -220,20 +222,46 @@ class TestDownload:
         import httpx
 
         monkeypatch.setattr(pack, "MAX_ARCHIVE_BYTES", 8)
+        self._transport(
+            monkeypatch, lambda request: httpx.Response(200, content=b"x" * 100)
+        )
 
-        class _Client:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *exc):
-                return False
-
-            def get(self, url, **kwargs):
-                return httpx.Response(
-                    200, content=b"x" * 100, request=httpx.Request("GET", url)
-                )
-
-        monkeypatch.setattr(pack.httpx_client, "get", lambda **kwargs: _Client())
-
-        with pytest.raises(pack.PackError, match="unexpectedly large"):
+        with pytest.raises(pack.PackError, match="larger than"):
             pack.download()
+
+    def test_download__does_not_use_opiks_own_http_factory(self):
+        """Opik's factory applies hooks meant for calls to the Opik API.
+
+        Nothing leaks today, but a build registering a header-injecting hook would
+        start sending Opik headers to codeload.github.com. The module not importing
+        the factory at all is what keeps that door shut.
+        """
+        assert not hasattr(pack, "httpx_client")
+
+
+class TestWriteSkillPathGuard:
+    """`write_skill` deletes what it resolves, and the name comes from the archive.
+
+    An empty name resolves to the destination root itself, and `..` or an absolute
+    name escapes it — so a bad or hostile archive could aim the `rmtree` somewhere
+    it was never meant to reach.
+    """
+
+    @pytest.mark.parametrize("name", ["", ".", "..", "../escape", "/etc", "a/b"])
+    def test_names_that_are_not_a_direct_child__are_refused(self, tmp_path, name):
+        with pytest.raises(pack.PackError):
+            pack.write_skill(tmp_path, name, {"SKILL.md": b"x"})
+
+    def test_refusing__does_not_touch_the_destination(self, tmp_path):
+        sentinel = tmp_path / "keep-me"
+        sentinel.write_text("important")
+
+        with pytest.raises(pack.PackError):
+            pack.write_skill(tmp_path, "..", {"SKILL.md": b"x"})
+
+        assert sentinel.read_text() == "important"
+
+    def test_an_ordinary_name__still_works(self, tmp_path):
+        pack.write_skill(tmp_path, "opik", {"SKILL.md": b"body"})
+
+        assert (tmp_path / "opik" / "SKILL.md").read_bytes() == b"body"

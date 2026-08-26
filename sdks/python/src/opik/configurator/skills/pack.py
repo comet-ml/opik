@@ -22,7 +22,6 @@ from typing import Dict, Final, List
 
 import httpx
 
-import opik.httpx_client as httpx_client
 
 LOGGER = logging.getLogger(__name__)
 
@@ -83,32 +82,45 @@ def download(ref: str = DEFAULT_REF) -> SkillPack:
     """Fetch the pack at ``ref``. Raises :class:`PackError` with a usable message."""
     url = TARBALL_URL_TEMPLATE.format(repository=REPOSITORY, ref=ref)
     try:
-        with httpx_client.get(
-            workspace=None,
-            api_key=None,
-            check_tls_certificate=True,
-            compress_json_requests=False,
-        ) as client:
-            response = client.get(
-                url, timeout=DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=True
-            )
+        # A plain client, deliberately not Opik's `httpx_client` factory: that
+        # applies `hooks.httpx_client_hook` and honours `_OPIK_HTTP_PROXY`, which
+        # exist to decorate calls to the Opik API. Nothing leaks today — passing
+        # no api_key/workspace keeps the auth headers off — but a build that
+        # registers a header-injecting hook would start sending them to GitHub.
+        with httpx.Client(follow_redirects=True) as client:
+            with client.stream(
+                "GET", url, timeout=DOWNLOAD_TIMEOUT_SECONDS
+            ) as response:
+                if response.status_code != 200:
+                    raise PackError(
+                        f"could not download the Opik skill pack from {url} "
+                        f"(HTTP {response.status_code})"
+                    )
+                archive = _read_capped(response, url)
     except (httpx.HTTPError, OSError) as error:
         raise PackError(f"could not download the Opik skill pack from {url}: {error}")
 
-    if response.status_code != 200:
-        raise PackError(
-            f"could not download the Opik skill pack from {url} "
-            f"(HTTP {response.status_code})"
-        )
-
-    archive = response.content
-    if len(archive) > MAX_ARCHIVE_BYTES:
-        raise PackError(
-            f"the Opik skill pack archive is unexpectedly large "
-            f"({len(archive)} bytes); refusing to unpack it"
-        )
-
     return _read_archive(archive, ref=ref)
+
+
+def _read_capped(response: httpx.Response, url: str) -> bytes:
+    """Read the body, stopping as soon as it exceeds :data:`MAX_ARCHIVE_BYTES`.
+
+    Streamed with a running total rather than checking ``len(response.content)``:
+    touching ``.content`` materialises the whole body first, so the limit could
+    only ever report the memory it was supposed to prevent us from using.
+    """
+    chunks = []
+    total = 0
+    for chunk in response.iter_bytes():
+        total += len(chunk)
+        if total > MAX_ARCHIVE_BYTES:
+            raise PackError(
+                f"the Opik skill pack archive at {url} is larger than "
+                f"{MAX_ARCHIVE_BYTES} bytes; refusing to download it"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _read_archive(archive: bytes, ref: str) -> SkillPack:
@@ -179,6 +191,25 @@ def _is_safe_relative_path(value: str) -> bool:
     return all(part not in ("", ".", "..") for part in parts)
 
 
+def _child_of(root: pathlib.Path, name: str) -> pathlib.Path:
+    """Resolve ``root/name``, refusing anything that is not directly inside root.
+
+    This function's callers go on to `rmtree` what it returns, and ``name`` comes
+    from the downloaded archive's directory entries. An empty name resolves to
+    `root` itself, and `..` or an absolute name escapes it — so a bad or hostile
+    archive could aim the delete somewhere it was never meant to reach. Checked
+    here rather than at the delete, so there is one place to be sure of.
+    """
+    if not name or name in (".", "..") or name != pathlib.Path(name).name:
+        raise PackError(f"refusing to use {name!r} as a skill directory name")
+
+    child = root / name
+    if child.parent.resolve() != root.resolve():
+        raise PackError(f"refusing to write a skill outside {root}")
+
+    return child
+
+
 def write_skill(
     destination_root: pathlib.Path, name: str, files: Dict[str, bytes]
 ) -> None:
@@ -187,8 +218,8 @@ def write_skill(
     Written to a sibling staging directory and swapped in, so an interrupted
     download cannot leave a half-written skill that an assistant would then read.
     """
-    target = destination_root / name
-    staging = destination_root / f".{name}.opik-staging"
+    target = _child_of(destination_root, name)
+    staging = _child_of(destination_root, f".{name}.opik-staging")
 
     if staging.exists():
         shutil.rmtree(staging)

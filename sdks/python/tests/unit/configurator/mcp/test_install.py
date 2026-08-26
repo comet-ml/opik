@@ -331,7 +331,9 @@ def test_setup_mcp_server__prefetches_opik_mcp_before_install(
     install.setup_mcp_server(**_make_args())
 
     commands = [call.args[0] for call in prefetch_run.call_args_list]
-    assert any(cmd[1:] == ["tool", "install", "opik-mcp"] for cmd in commands)
+    # `uv tool run`, not `uv tool install`: the point is to warm the cache for the
+    # command the client will run, not to put a shim on the user's PATH.
+    assert any(cmd[1:] == ["tool", "run", "opik-mcp", "--help"] for cmd in commands)
     install_spy.assert_called_once()
 
 

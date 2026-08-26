@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Final, List, Optional
 
 from opik.configurator.mcp import json_config
 from opik.configurator.mcp import spec as mcp_spec
@@ -146,6 +146,57 @@ def _install_via_json_file(
     )
 
 
+#: How long to let a client's own CLI run before giving up on it. Generous: these
+#: shell out to Node tools that may cold-start, but bounded, because the whole
+#: point is that `opik configure` must not hang forever.
+CLIENT_CLI_TIMEOUT_SECONDS: Final[int] = 60
+
+
+class _CliUnavailable(Exception):
+    """A client's CLI could not be run to completion."""
+
+
+def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProcess":
+    """Run a client's own CLI, or raise :class:`_CliUnavailable`.
+
+    ``shutil.which`` finding the binary is not evidence it will exec — it only
+    checks the executable bit. ``claude`` and ``codex`` are Node shims, so the
+    common real-world break is node moving out from under them: an nvm version
+    deleted, node upgraded, a part-removed npm install. The shim still passes
+    ``which`` and then raises ``FileNotFoundError`` at exec, which without this
+    was an unhandled traceback out of `opik configure`.
+
+    The errno text is misleading in that case — the missing file is node, not the
+    shim it names — which is why the message here explains it rather than passing
+    the exception's own wording through.
+
+    ``stdin`` is closed and a timeout set for the other half of the problem: these
+    inherit the terminal otherwise, so a client CLI that decides to prompt (a
+    login, a migration confirmation) waits on input nobody is going to type.
+    """
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=CLIENT_CLI_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        raise _CliUnavailable(
+            f"`{label}` did not finish within {CLIENT_CLI_TIMEOUT_SECONDS}s and was "
+            "stopped. It may be waiting for input, or asking you to log in — try "
+            f"running `{label}` yourself to see."
+        )
+    except OSError as error:
+        raise _CliUnavailable(
+            f"`{label}` could not be started ({error.strerror or error}). The "
+            f"command exists at {command[0]} but failed to run, which usually means "
+            "the runtime behind it (node, for these tools) was moved or upgraded. "
+            "Reinstalling the tool normally fixes it."
+        )
+
+
 def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     claude_executable = shutil.which("claude")
 
@@ -167,12 +218,6 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
 
     # `claude mcp add` errors if the server already exists, so remove any
     # previous entry first to keep the step idempotent.
-    subprocess.run(
-        [claude_executable, "mcp", "remove", SERVER_NAME, "--scope", "user"],
-        capture_output=True,
-        text=True,
-    )
-
     command = [
         claude_executable,
         "mcp",
@@ -184,7 +229,16 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     # Captured, not streamed: we report the outcome ourselves, and its own
     # "Added HTTP MCP server … / File modified: …" lines landed unstyled in the
     # middle of the wizard. On failure the captured text goes into the detail.
-    result = subprocess.run(command, capture_output=True, text=True)
+    try:
+        _run_client_cli(
+            [claude_executable, "mcp", "remove", SERVER_NAME, "--scope", "user"],
+            label="claude mcp remove",
+        )
+        result = _run_client_cli(command, label="claude mcp add")
+    except _CliUnavailable as error:
+        return InstallResult(
+            target_display_name="Claude Code", succeeded=False, detail=str(error)
+        )
     if result.returncode == 0:
         return InstallResult(
             target_display_name="Claude Code",
@@ -244,7 +298,7 @@ def _codex_manual_instructions() -> str:
     return (
         f"the `codex` CLI was not found on your PATH, and {_codex_config_path()} is "
         "TOML, which this installer does not edit directly. Install the Codex CLI "
-        "and re-run `opik mcp configure --host codex`, or add an "
+        "and re-run `opik mcp configure --ai-client codex`, or add an "
         f"`[mcp_servers.{SERVER_NAME}]` table to that file by hand."
     )
 
@@ -265,15 +319,18 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
 
     # `codex mcp add` refuses when the server already exists, so drop any previous
     # entry first to keep re-runs idempotent — same shape as the Claude Code path.
-    subprocess.run(
-        [codex_executable, "mcp", "remove", SERVER_NAME],
-        capture_output=True,
-        text=True,
-    )
-
     command = [codex_executable, "mcp", "add"] + server_spec.to_codex_add_args()
 
-    result = subprocess.run(command, capture_output=True, text=True)
+    try:
+        _run_client_cli(
+            [codex_executable, "mcp", "remove", SERVER_NAME],
+            label="codex mcp remove",
+        )
+        result = _run_client_cli(command, label="codex mcp add")
+    except _CliUnavailable as error:
+        return InstallResult(
+            target_display_name="Codex", succeeded=False, detail=str(error)
+        )
     if result.returncode == 0:
         return InstallResult(
             target_display_name="Codex",
@@ -309,12 +366,13 @@ def _read_codex_block() -> Optional[Dict[str, Any]]:
         return None
 
     try:
-        result = subprocess.run(
+        result = _run_client_cli(
             [codex_executable, "mcp", "get", SERVER_NAME, "--json"],
-            capture_output=True,
-            text=True,
+            label="codex mcp get",
         )
-    except OSError:
+    except _CliUnavailable:
+        # Only used to enrich the result with "was it already registered"; a
+        # client whose CLI will not run is reported by the write path instead.
         return None
 
     if result.returncode != 0:
@@ -431,7 +489,7 @@ HOST_KEYS: List[str] = [target.key for target in HOST_TARGETS]
 
 
 def find_target(key: str) -> Optional[HostTarget]:
-    """Look a host up by its CLI key (the values accepted by ``--host``)."""
+    """Look a host up by its CLI key (the values accepted by ``--ai-client``)."""
     for target in HOST_TARGETS:
         if target.key == key:
             return target

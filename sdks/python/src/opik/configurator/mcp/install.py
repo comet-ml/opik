@@ -14,7 +14,7 @@ import logging
 import shutil
 import subprocess
 import sys
-from typing import List, Optional, Tuple
+from typing import Final, List, Optional, Tuple
 
 import opik.config as opik_config
 from opik.configurator import interactive_helpers
@@ -381,25 +381,54 @@ def _verify(
     )
 
 
-def _prefetch_opik_mcp() -> None:
-    """Download opik-mcp now so the AI client connects instantly on first launch.
+#: Long enough for a cold fetch of the package and an interpreter, short enough
+#: that a wedged download does not hold `opik configure` open indefinitely.
+PREFETCH_TIMEOUT_SECONDS: Final[int] = 120
 
-    Hosts run ``uvx opik-mcp``, which otherwise fetches the package and a
-    Python 3.13 interpreter lazily on first use — slow, and any failure surfaces
-    as an opaque host error. ``uv tool install`` warms uv's cache and validates
-    the whole chain up front. Best-effort: a failure here is not fatal, the host
-    will still fetch on demand.
+
+def _prefetch_opik_mcp() -> None:
+    """Warm uv's cache so the AI client connects instantly on first launch.
+
+    Clients run ``uvx opik-mcp``, which otherwise fetches the package and a
+    Python interpreter lazily on first use — slow, and any failure surfaces as an
+    opaque client error. So this runs the same thing the client will, which is
+    what makes it a cache warm.
+
+    Not ``uv tool install opik-mcp``, which was doing more than warming a cache:
+    it builds a persistent tool environment and puts an ``opik-mcp`` shim on the
+    user's PATH — an install into their environment that nothing announced, and
+    one that silently keeps an older copy if there already was one. ``uv tool
+    run`` populates the cache that the registered command actually reads.
+
+    Output is captured rather than streamed because the caller runs this inside a
+    rich status spinner: both write to the same terminal, and uv's progress bars
+    and the spinner's redraw overwrite each other. The spinner is the progress
+    signal; uv's own text is kept for the failure message.
+
+    Best-effort throughout — a failure here is not fatal, the client will fetch on
+    demand.
     """
     uv_executable = shutil.which("uv")
     if uv_executable is None:
         return
 
-    LOGGER.info("Pre-fetching the Opik MCP server (uv tool install opik-mcp)...")
-    # Stream uv's own output (download/build progress, and any error detail)
-    # straight to the terminal rather than capturing it — the install can take a
-    # while, and hiding its logs leaves the user staring at a frozen prompt.
     try:
-        result = subprocess.run([uv_executable, "tool", "install", "opik-mcp"])
+        result = subprocess.run(
+            [uv_executable, "tool", "run", "opik-mcp", "--help"],
+            capture_output=True,
+            text=True,
+            # Nothing should prompt here, and if it does the timeout must win
+            # rather than leaving the spinner spinning on unread input.
+            stdin=subprocess.DEVNULL,
+            timeout=PREFETCH_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        LOGGER.warning(
+            "Gave up pre-fetching opik-mcp after %ss. Your AI client will download "
+            "it on first use instead.",
+            PREFETCH_TIMEOUT_SECONDS,
+        )
+        return
     except OSError as error:
         LOGGER.warning(
             "Could not pre-fetch opik-mcp: %s. Your AI client will download it on "
@@ -410,10 +439,11 @@ def _prefetch_opik_mcp() -> None:
 
     if result.returncode != 0:
         LOGGER.warning(
-            "Could not pre-fetch opik-mcp (`uv tool install opik-mcp` exited %s, "
-            "see its output above). Your AI client will download it on first use "
-            "instead.",
+            "Could not pre-fetch opik-mcp (exited %s: %s). Your AI client will "
+            "download it on first use instead.",
             result.returncode,
+            (result.stderr or result.stdout or "no output").strip().splitlines()[-1:]
+            or "no output",
         )
 
 
