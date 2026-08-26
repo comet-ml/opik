@@ -83,7 +83,7 @@ def load_series(path):
 
 
 def human(n):
-    return f"{n/1000:g}k" if n >= 1000 else f"{n:g}"
+    return f"{n/1000:g}K" if n >= 1000 else f"{n:g}"
 
 
 def render(series, theme):
