@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andriid:000121_create_cipx_savings_facts
+--changeset andriid:000118_create_cipx_savings_facts
 --comment: Daily realized/avoided savings facts per user and recommendation, written by the cost API measurement job
 
 -- Daily savings facts, written by the cost API measurement job from cipx_spend_blocks and
