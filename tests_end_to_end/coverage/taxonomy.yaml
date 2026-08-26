@@ -416,6 +416,7 @@ areas:
     specs:
       - playground/playground-smoke.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-gemini-thinking-level.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -429,7 +430,7 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Gemini/Vertex thinking-level option list and per-model default only; the other controls (temperature, top-p, max tokens, throttling) are still unasserted" }
 
     visual:
       playground-default: { covered: false, state: default }
@@ -639,6 +640,7 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-llm-judge-thinking-level.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -650,7 +652,7 @@ areas:
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
-      edit-rule:               { covered: false }
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "edit dialog hydrates an LLM-judge rule's persisted model config, an unedited re-save round-trips it, and editing the Gemini thinking level persists the new value" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       # Deliberately still false. online-evaluation-python-metric-errors.spec.ts

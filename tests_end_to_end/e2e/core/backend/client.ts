@@ -22,6 +22,29 @@ export interface ProjectRef {
   name: string;
 }
 
+/**
+ * A provider Opik ships a first-class integration for. Distinct from the
+ * `custom-llm` entries `core/provider-keys.ts` seeds: those are identified by a
+ * caller-chosen `provider_name`, these by the provider slug alone.
+ */
+export type BuiltInProvider = 'gemini' | 'vertex-ai';
+
+export interface BuiltInProviderKeyRef {
+  id: string;
+  provider: BuiltInProvider;
+}
+
+/**
+ * Any provider key, built-in or custom, as the run sweep sees it. Named apart
+ * from `core/provider-keys.ts`'s `ProviderKeyRef`, which models the same rows
+ * for the custom-LLM specs through a different (pre-SDK) fetch path.
+ */
+export interface SweepableProviderKeyRef {
+  id: string;
+  provider: string;
+  name: string | null;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -151,6 +174,18 @@ export interface AutomationRuleDetail {
   samplingRate: number;
   /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
   triggerScope: string;
+}
+
+/**
+ * The `code.model` block of an LLM-as-judge rule, read back through the raw
+ * REST view. `customParameters` is the free-form slot the judge's provider
+ * options travel in (e.g. `{ thinking: { level: 'low' } }` for Gemini); it is
+ * `null` when the rule persisted none, which is a meaningful state rather than
+ * an empty default — see `getLlmJudgeRuleModel`.
+ */
+export interface LlmJudgeModelDetail {
+  name: string;
+  customParameters: Record<string, unknown> | null;
 }
 
 /** One line of a rule's user-facing log stream. */
@@ -427,6 +462,79 @@ export function makeBackendClient(apiKey: string | null = null) {
     async deleteProject(id: string): Promise<void> {
       try {
         await opik.api.projects.deleteProjectById(id);
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
+    },
+
+    /**
+     * The workspace's provider key for a built-in provider, or null.
+     *
+     * Built-in providers carry no `provider_name` (the field is reserved for
+     * custom-LLM and Bedrock entries), so `provider` is the whole identity and
+     * the backend allows exactly one row per provider per workspace.
+     */
+    async findBuiltInProviderKey(
+      provider: BuiltInProvider,
+    ): Promise<BuiltInProviderKeyRef | null> {
+      const page = await opik.api.llmProviderKey.findLlmProviderKeys();
+      const found = (page.content ?? []).find((k) => k.provider === provider);
+      if (!found) return null;
+      if (!found.id) {
+        throw new Error(
+          `findBuiltInProviderKey: the '${provider}' key came back without an id, ` +
+            'so it cannot be addressed for deletion.',
+        );
+      }
+      return { id: String(found.id), provider };
+    },
+
+    /**
+     * Store a provider key for a built-in provider.
+     *
+     * `name` is what makes the key sweepable: built-in providers take no
+     * `provider_name`, so the free-form `name` is the only field a run can
+     * stamp itself onto, and `global-teardown` matches on it.
+     *
+     * Returns false when the workspace already had one. Provider keys are
+     * WORKSPACE-GLOBAL and the backend answers 409 for a duplicate, which under
+     * parallel workers means another worker got there first — a routine
+     * outcome, not a failure. Any other error throws.
+     */
+    async storeBuiltInProviderKey(
+      provider: BuiltInProvider,
+      args: { apiKey: string; name: string },
+    ): Promise<boolean> {
+      try {
+        await opik.api.llmProviderKey.storeLlmProviderApiKey({
+          provider,
+          apiKey: args.apiKey,
+          name: args.name,
+        });
+        return true;
+      } catch (err) {
+        if (isConflictError(err)) return false;
+        throw err;
+      }
+    },
+
+    /**
+     * Provider keys whose `name` starts with the given prefix — the run-scoped
+     * keys `global-teardown` sweeps. Keys without a `name` (every provider
+     * configured outside the suite, and the `custom-llm` entries seeded by
+     * `core/provider-keys.ts`) can never match, so the sweep cannot reach them.
+     */
+    async listProviderKeysWithNamePrefix(prefix: string): Promise<SweepableProviderKeyRef[]> {
+      const page = await opik.api.llmProviderKey.findLlmProviderKeys();
+      return (page.content ?? [])
+        .filter((k) => k.id && k.name?.startsWith(prefix))
+        .map((k) => ({ id: String(k.id), provider: String(k.provider), name: k.name ?? null }));
+    },
+
+    async deleteProviderKey(id: string): Promise<void> {
+      try {
+        await opik.api.llmProviderKey.deleteLlmProviderApiKeysBatch({ ids: [id] });
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;
@@ -1046,6 +1154,47 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     /**
+     * The `code.model` block of an LLM-as-judge rule, as persisted.
+     *
+     * The pinned SDK types the evaluator's `code` as an opaque object, so the
+     * model's `custom_parameters` — where the Gemini thinking level lives — is
+     * not reachable through it. Read raw, and require every field the caller
+     * asserts on rather than defaulting it: an absent `custom_parameters` is
+     * exactly the regression the thinking-level spec exists to catch, so
+     * turning it into `{}` here would make that spec unable to fail.
+     */
+    async getLlmJudgeRuleModel(ruleId: string): Promise<LlmJudgeModelDetail> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeRuleModel: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        type?: string;
+        code?: { model?: { name?: string; custom_parameters?: unknown } };
+      };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeRuleModel: ${ruleId} is a '${rule.type}' rule, not llm_as_judge — ` +
+            'it has no code.model to read.',
+        );
+      }
+      const model = rule.code?.model;
+      if (!model || typeof model.name !== 'string') {
+        throw new Error(
+          `getLlmJudgeRuleModel: ${ruleId} returned no code.model.name — ` +
+            `got ${JSON.stringify(rule.code)}`,
+        );
+      }
+      return {
+        name: model.name,
+        customParameters: (model.custom_parameters ?? null) as Record<string, unknown> | null,
+      };
+    },
+
+    /**
      * A rule's user-facing log stream — the lines `/automation-logs` renders.
      *
      * This is the only place the engine says why it did or did not score a
@@ -1393,10 +1542,23 @@ export function makeBackendClient(apiKey: string | null = null) {
 }
 
 function isNotFoundError(err: unknown): boolean {
+  return hasStatusCode(err, 404);
+}
+
+/**
+ * Storing a provider key the workspace already has answers 409. That is a
+ * routine outcome for workspace-global state under parallel workers, not a
+ * failure — see `storeBuiltInProviderKey`.
+ */
+function isConflictError(err: unknown): boolean {
+  return hasStatusCode(err, 409);
+}
+
+function hasStatusCode(err: unknown, status: number): boolean {
   return (
     typeof err === 'object' &&
     err !== null &&
     'statusCode' in err &&
-    (err as { statusCode: number }).statusCode === 404
+    (err as { statusCode: number }).statusCode === status
   );
 }

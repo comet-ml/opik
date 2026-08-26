@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { ModelParametersPanel } from './model-parameters';
+import { selectModelFromProvider, type ProviderScopedModel } from './model-picker';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
@@ -246,6 +248,19 @@ export class PlaygroundPage {
     return test.step(`select model "${modelDisplayName}" for variant ${index}`, async () => {
       await this.setModelForVariant(index, modelDisplayName);
     });
+  }
+
+  /**
+   * Set a variant's model through a named provider's submenu, for models whose
+   * label is published by more than one provider (see `selectModelFromProvider`).
+   */
+  async selectModelForProvider(index: number, target: ProviderScopedModel): Promise<void> {
+    await selectModelFromProvider(this.page, this.modelPicker(index), target);
+  }
+
+  /** The Model parameters popover for a variant card. */
+  modelParameters(index: number): ModelParametersPanel {
+    return new ModelParametersPanel(this.page, this.variantCard(index));
   }
 
   /**
