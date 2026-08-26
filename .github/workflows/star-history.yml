@@ -6,6 +6,7 @@
 # re-renders both SVGs, and uploads. If it cannot be read the job fails rather
 # than reseeding, which would discard every point gathered so far.
 name: Create Github Stars History Chart
+run-name: Create Github Stars History Chart
 
 on:
   schedule:
