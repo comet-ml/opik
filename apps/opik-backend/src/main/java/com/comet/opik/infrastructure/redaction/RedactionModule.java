@@ -197,6 +197,9 @@ public class RedactionModule extends SimpleModule {
                 case BINARY -> generator.writeBinary(node.binaryValue());
                 // Deliberately not generator.writeTree(node): that would route back through this serializer.
                 case POJO -> provider.defaultSerializeValue(((POJONode) node).getPojo(), generator);
+                // MISSING is deliberately folded in here: MissingNode.serialize writes null, and the field
+                // name has already been emitted above, so handling it separately and writing nothing would
+                // produce {"field":} - invalid JSON.
                 default -> generator.writeNull();
             }
         }

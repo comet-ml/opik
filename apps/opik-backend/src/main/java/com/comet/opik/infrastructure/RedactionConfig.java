@@ -7,7 +7,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.validation.constraints.AssertTrue;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
@@ -39,8 +38,11 @@ public class RedactionConfig {
 
     @Data
     public static class Rule {
+        // No bean-validation annotation here: these are produced by JsonUtils.readValue inside compile(), never
+        // by Dropwizard's config binding, so any constraint on this class would silently never run. Validated in
+        // compile() instead.
         @JsonProperty
-        @NotBlank private String regex;
+        private String regex;
 
         /** Empty is meaningful: it removes the match instead of replacing it. */
         @JsonProperty
@@ -67,7 +69,19 @@ public class RedactionConfig {
             return RedactionRules.empty();
         }
 
-        return new RedactionRules(JsonUtils.readValue(rules, RULES_TYPE).stream()
+        var parsed = JsonUtils.readValue(rules, RULES_TYPE);
+
+        for (int index = 0; index < parsed.size(); index++) {
+            // A blank pattern is the dangerous case, not merely an invalid one: it matches at every position, so
+            // every string in every response would be replaced. A missing one would otherwise surface as a bare
+            // Lombok NPE from RedactionRule.of, naming neither the field nor which entry was wrong.
+            if (StringUtils.isBlank(parsed.get(index).getRegex())) {
+                throw new IllegalArgumentException(
+                        "redaction.rules[%d].regex must not be blank".formatted(index));
+            }
+        }
+
+        return new RedactionRules(parsed.stream()
                 .map(rule -> RedactionRule.of(rule.getRegex(), rule.getReplace()))
                 .toList());
     }

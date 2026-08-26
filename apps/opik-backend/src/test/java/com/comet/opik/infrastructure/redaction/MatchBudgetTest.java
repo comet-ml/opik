@@ -84,4 +84,33 @@ class MatchBudgetTest {
 
         assertThat(chained.apply("a secret value")).isEqualTo("a [GONE] value");
     }
+
+    @Test
+    @DisplayName("a large value with no match survives, because the budget scales with its length")
+    void aLargeValueWithNoMatchSurvives() {
+        // An absolute ceiling failed closed on size alone: a linear scan of a 5 MB value costs more accesses
+        // than a fixed 2M budget allows, so legitimate content containing no match at all was destroyed.
+        var stored = "the assistant answered the question without any identifiers present. ".repeat(75_000);
+
+        assertThat(stored.length()).isGreaterThan(5_000_000);
+        assertThat(rules(ANCHORED_EMAIL).apply(stored)).isSameAs(stored);
+    }
+
+    @Test
+    @DisplayName("a replacement is emitted literally, not with its own escaping visible")
+    void aReplacementIsEmittedLiterally() {
+        // Matcher.quoteReplacement escapes $ and \ for appendReplacement to undo. Appending the quoted form
+        // directly - as the budgeted loop does - would emit the escapes themselves.
+        var backreferenceShaped = new RedactionRules(List.of(RedactionRule.of("secret", "\\1***@\\2")));
+
+        assertThat(backreferenceShaped.apply("a secret value")).isEqualTo("a \\1***@\\2 value");
+    }
+
+    @Test
+    @DisplayName("a replacement containing a dollar sign is emitted as written")
+    void aReplacementContainingADollarSignIsEmittedAsWritten() {
+        var dollars = new RedactionRules(List.of(RedactionRule.of("amount", "$$$")));
+
+        assertThat(dollars.apply("the amount here")).isEqualTo("the $$$ here");
+    }
 }

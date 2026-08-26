@@ -46,9 +46,17 @@ public class RedactionWriterInterceptor implements WriterInterceptor {
         try {
             return requestContext.get().isRedactResponse();
         } catch (RuntimeException outsideRequestScope) {
-            // No caller to decide against. See RedactionService.redactWhenCallerUnknown for why this redacts
-            // rather than writing as stored, and why both paths now consult one definition of it.
-            return redactionService.redactWhenCallerUnknown();
+            // Deliberately not redacting, and deliberately not symmetric with Streamer.
+            //
+            // RequestContext is @RequestScoped and thread-bound, so this throws on any thread that is not the
+            // request thread - including the reactor thread that resumes a @Suspended AsyncResponse, as
+            // LocalRunnersResource.nextJob does. Redacting here would rewrite those payloads for every caller,
+            // permitted ones included, because the permission is never consulted on that path.
+            //
+            // Streamer can fail closed because it resolves the decision on the request thread and carries it.
+            // An interceptor cannot: by the time it runs the decision is either on the context or unavailable.
+            // Fixing this properly means carrying the resolved decision to the write, not guessing at it here.
+            return false;
         }
     }
 }

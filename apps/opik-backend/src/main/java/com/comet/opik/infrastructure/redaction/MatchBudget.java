@@ -26,10 +26,23 @@ record MatchBudget(long limit) {
     static final String EXCEEDED = null;
 
     /**
-     * Generous enough that no realistic value approaches it — a 100 KB value matched linearly costs a few
-     * hundred thousand accesses — and small enough that the quadratic case aborts in milliseconds.
+     * Per-character allowance. A linear scan costs about one access per character per rule, so this leaves two
+     * orders of magnitude of headroom for backtracking that stays proportional, while a quadratic pattern
+     * exceeds it almost immediately - at 32 KB the quadratic case wants ~500M accesses against an allowance of
+     * ~3M.
+     * <p>
+     * Scaled rather than absolute because an absolute ceiling fails closed on size alone:
+     * {@code jacksonConfig.maxStringLength} permits 100 MB, so a fixed 2M budget would destroy a perfectly
+     * anchored 5 MB value that contains no match at all, purely from the forward scan.
      */
-    static final MatchBudget DEFAULT = new MatchBudget(2_000_000L);
+    private static final long ALLOWANCE_PER_CHARACTER = 100L;
+
+    /** Floor, so a short value still gets room for legitimate backtracking. */
+    private static final long MINIMUM = 100_000L;
+
+    static MatchBudget forValue(@NonNull String value) {
+        return new MatchBudget(Math.max(MINIMUM, ALLOWANCE_PER_CHARACTER * value.length()));
+    }
 
     /** Thrown and caught inside a single {@code apply}; carries no stack trace, since nothing inspects it. */
     static final class Exceeded extends RuntimeException {

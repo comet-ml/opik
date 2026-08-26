@@ -32,13 +32,14 @@ public record RedactionRules(@NonNull List<RedactionRule> rules) {
         String result = text;
 
         for (RedactionRule rule : rules) {
-            String rewritten = rule.apply(result, MatchBudget.DEFAULT);
+            String rewritten = rule.apply(result, MatchBudget.forValue(result));
 
             if (rewritten == MatchBudget.EXCEEDED) {
                 // Fail closed. A rule that could not be evaluated is not evidence the value is safe to show, and
                 // the value is the caller's own content, so an attacker choosing it must not choose the outcome.
-                log.warn("Redaction budget exhausted on a value of '{}' characters; masking it whole",
-                        text.length());
+                // debug, not warn: this is per value, so a wide page would flood the log at warn.
+                log.debug("Redaction budget exhausted on a value of '{}' characters; masking it whole",
+                        result.length());
                 return UNEVALUATED;
             }
 

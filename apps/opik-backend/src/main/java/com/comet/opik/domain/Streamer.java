@@ -73,11 +73,14 @@ public class Streamer {
 
     private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
         try {
-            // deepCopy: JsonUtils.readTree is convertValue, which returns the same instance when handed a
-            // JsonNode, and the redactor rewrites in place. Today every caller passes a POJO so the tree is
-            // already fresh, but a future Flux<JsonNode> would have its source mutated underneath it, silently.
-            outputStream.write(JsonNodeRedactor.redact(JsonUtils.readTree(item).deepCopy(), rules,
-                    item.getClass()));
+            // deepCopy only when something will be rewritten: JsonUtils.readTree is convertValue, which returns
+            // the same instance when handed a JsonNode, and the redactor rewrites in place. Copying
+            // unconditionally would duplicate every tree on the streaming hot path of every deployment, since
+            // redaction is off by default.
+            var tree = JsonUtils.readTree(item);
+            outputStream.write(rules.isEmpty()
+                    ? tree
+                    : JsonNodeRedactor.redact(tree.deepCopy(), rules, item.getClass()));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }

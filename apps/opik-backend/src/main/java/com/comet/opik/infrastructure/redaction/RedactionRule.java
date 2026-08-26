@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.redaction;
 
 import lombok.NonNull;
 
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -16,10 +15,13 @@ import java.util.regex.Pattern;
  * quoted so a payload containing {@code $1} or a backslash is treated as literal text rather than a group
  * reference.
  */
-public record RedactionRule(@NonNull Pattern pattern, @NonNull String quotedReplacement) {
+public record RedactionRule(@NonNull Pattern pattern, @NonNull String replacement) {
 
     public static RedactionRule of(@NonNull String regex, @NonNull String replacement) {
-        return new RedactionRule(Pattern.compile(regex), Matcher.quoteReplacement(replacement));
+        // Stored raw, not quoted: the replacement is appended verbatim below rather than going through
+        // appendReplacement, which is what would have un-escaped it. Quoting here as well would emit the
+        // escapes themselves - a replacement of \1***@\2 would come out as \\1***@\\2.
+        return new RedactionRule(Pattern.compile(regex), replacement);
     }
 
     /**
@@ -36,7 +38,7 @@ public record RedactionRule(@NonNull Pattern pattern, @NonNull String quotedRepl
                 if (rewritten == null) {
                     rewritten = new StringBuilder(text.length());
                 }
-                rewritten.append(text, last, matcher.start()).append(quotedReplacement);
+                rewritten.append(text, last, matcher.start()).append(replacement);
                 last = matcher.end();
             }
 
