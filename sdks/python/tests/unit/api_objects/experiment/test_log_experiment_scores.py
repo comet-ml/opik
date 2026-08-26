@@ -6,7 +6,7 @@ from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.experiment_score_public import ExperimentScorePublic
 
 
-def test_log_experiment_scores_preserves_unrelated_scores() -> None:
+def test_log_experiment_scores__preserves_unrelated_scores() -> None:
     rest_client = Mock()
     experiment = experiment_module.Experiment(
         id="experiment-id",

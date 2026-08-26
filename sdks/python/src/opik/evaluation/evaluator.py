@@ -36,7 +36,7 @@ from . import (
 from . import resume as resume_module
 from .resume import integration as resume_integration
 from .resume import merge as resume_merge
-from .metrics import base_metric
+from .metrics import base_metric, score_result
 from .suite_evaluators.llm_judge import (
     metric as suite_evaluators_llm_judge_metric,
     strategy_selector as suite_evaluators_strategy,
@@ -59,6 +59,24 @@ LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
     "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
 )
+
+
+def _deduplicate_experiment_scores(
+    scores: List[score_result.ScoreResult],
+) -> List[score_result.ScoreResult]:
+    deduplicated: List[score_result.ScoreResult] = []
+    successful_positions: Dict[str, int] = {}
+    for score in scores:
+        if score.scoring_failed:
+            deduplicated.append(score)
+            continue
+        position = successful_positions.get(score.name)
+        if position is None:
+            successful_positions[score.name] = len(deduplicated)
+            deduplicated.append(score)
+        else:
+            deduplicated[position] = score
+    return deduplicated
 
 
 def _try_notifying_about_experiment_completion(
@@ -939,9 +957,11 @@ def evaluate_experiment(
     client.flush()
 
     # Compute experiment scores
-    computed_experiment_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=test_results,
+    computed_experiment_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=test_results,
+        )
     )
 
     if verbose >= 1:
