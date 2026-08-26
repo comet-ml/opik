@@ -390,7 +390,9 @@ class TestMergeWithPreviouslyCompleted:
                 "prepare_resume_context",
                 return_value=context,
             ),
-            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluator, "_evaluate_task", return_value=new_result
+            ) as mock_evaluate_task,
             mock.patch.object(
                 evaluator.resume_merge,
                 "reconstruct_previous_test_results",
