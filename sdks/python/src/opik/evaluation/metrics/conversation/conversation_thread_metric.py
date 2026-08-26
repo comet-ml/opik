@@ -13,6 +13,11 @@ class ConversationThreadMetric(base_metric.BaseMetric):
     single input-output pairs. They accept a conversation as a list of message dictionaries,
     where each message has a 'role' (either 'user' or 'assistant') and 'content'.
 
+    Agent messages may carry an extra ``context`` key - the documents the answer was
+    grounded on - when ``evaluate_threads`` is called with a ``trace_context_transform``.
+    Metrics that don't need it can ignore it; prompts should render ``role`` and
+    ``content`` explicitly rather than stringifying the message dicts.
+
     Args:
         name: The name of the metric. If not provided, uses the class name as default.
         track: Whether to track the metric. Defaults to True.

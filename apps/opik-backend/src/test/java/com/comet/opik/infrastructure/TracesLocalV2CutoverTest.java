@@ -104,6 +104,26 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code exchange_and_wrap.sh}'s replication-settle gate, {@code finalize.sh}'s empty-live refusal — are exercised by the
  * OPIK-6901 staging dry-run, not by this test (which runs the SQL those scripts wrap, directly). This test asserts the
  * logic is correct when invoked; the staging rehearsal asserts the scripts invoke it safely.
+ *
+ * <p><b>On the {@code SETTINGS} these statements carry.</b> They hardcode {@code max_insert_block_size = 100000}
+ * and {@code max_partitions_per_insert_block = 2000}, and omit {@code max_insert_threads} — while
+ * {@code backfill.sh} / {@code delta_replay.sh} make all three configurable. The split is deliberate and follows
+ * what each setting can do:
+ *
+ * <ul>
+ * <li>{@code max_partitions_per_insert_block} is <b>mirrored because it is a correctness gate, not pacing</b>: a
+ * value below the number of partitions a block spans aborts the INSERT outright ({@code TOO_MANY_PARTS}), which is
+ * exactly the failure the runbook's far-future section exists for. It is pinned at the drivers' own default.</li>
+ * <li>{@code max_insert_threads} is <b>omitted because it is pacing</b>, and because omitting it is meaningful
+ * here in the same way it is in the drivers: an absent key inherits whatever the server sets, so this gate asserts
+ * the SQL's logic rather than an operator's tuning choice.</li>
+ * <li>{@code max_insert_block_size} is fixed only to keep CI memory predictable.</li>
+ * </ul>
+ *
+ * <p>The standing gap this implies: because the mirrored values are hardcoded rather than read from the scripts,
+ * this gate cannot catch a driver configured with an invalid value — that belongs to the staging dry-run. A future
+ * setting that changes RESULTS rather than pacing must be mirrored here; {@code 000002}'s header asks that the SQL
+ * and this test be kept in step, and pacing settings are the documented exception to that.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -902,7 +922,7 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:week_lo, 9, 'UTC')
                   AND created_at < toDateTime64(:week_hi, 9, 'UTC')
-                SETTINGS max_insert_block_size = 100000
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("week_lo", weekLo).bind("week_hi", weekHi));
     }
@@ -922,7 +942,7 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:backfill_start, 6)
                    OR last_updated_at >= toDateTime64(:backfill_start, 6)
-                SETTINGS max_insert_block_size = 100000
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("backfill_start", backfillStart));
     }

@@ -5,6 +5,13 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.AuthenticationException;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.exception.InternalServerException;
+import dev.langchain4j.exception.InvalidRequestException;
+import dev.langchain4j.exception.NonRetriableException;
+import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -12,7 +19,9 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,6 +42,7 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
@@ -520,6 +530,185 @@ class ChatCompletionServiceTest {
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider");
+        }
+    }
+
+    @Nested
+    @DisplayName("Provider Reported Status Fallback:")
+    class ProviderReportedStatusFallback {
+
+        /**
+         * Shapes taken from production: 163 upstream-proxy 503s, 72 Anthropic billing rejections and 53 Cloudflare
+         * 1015s were all reported as 500s because {@code getLlmProviderError} could not parse them — the two
+         * plain-text bodies carry no JSON envelope, and the Anthropic typed exception arrives nested rather than bare.
+         * The last two rows are the invariants that keep the fallback honest: an {@code HttpException} anywhere in the
+         * chain outranks the typed exception wrapping it (otherwise langchain4j's
+         * {@code InternalServerException(HttpException(503))} would flatten to 500), and a failure that never reached
+         * HTTP carries no status to recover, so it stays a 500.
+         *
+         * <p>The same rows drive {@code create}, {@code scoreTrace} and the streaming handler, because the three paths
+         * are only worth having if they agree on the status.
+         */
+        private static Stream<Arguments> providerStatusProvider() {
+            return Stream.of(
+                    Arguments.of(
+                            "upstream proxy 503 with a plain-text body",
+                            new RuntimeException(new HttpException(503, "[PROXY] service temporarily unavailable")),
+                            503,
+                            "[PROXY] service temporarily unavailable"),
+                    Arguments.of(
+                            "Anthropic billing rejection nested under a retry wrapper",
+                            new NonRetriableException(new InvalidRequestException(
+                                    "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API.\"}}")),
+                            400,
+                            "credit balance is too low"),
+                    Arguments.of(
+                            "Cloudflare rate limit with a plain-text body",
+                            new RuntimeException(new HttpException(429, "error code: 1015")),
+                            429,
+                            "error code: 1015"),
+                    Arguments.of(
+                            "bare RateLimitException with no HttpException in the chain",
+                            new RateLimitException("slow down"),
+                            429,
+                            "slow down"),
+                    Arguments.of(
+                            "bare AuthenticationException",
+                            new AuthenticationException("bad key"),
+                            401,
+                            "bad key"),
+                    Arguments.of(
+                            "bare TimeoutException",
+                            new TimeoutException("provider timed out"),
+                            408,
+                            "provider timed out"),
+                    Arguments.of(
+                            "typed exception wrapping an HttpException",
+                            new InternalServerException(new HttpException(503, "upstream is down")),
+                            503,
+                            "upstream is down"),
+                    Arguments.of(
+                            "failure that never reached HTTP",
+                            new RuntimeException("Connection error", new ConnectException("Connection refused")),
+                            500,
+                            "Service is unreachable"),
+                    Arguments.of(
+                            "status outside the error families",
+                            new RuntimeException(new HttpException(302, "moved")),
+                            500,
+                            "moved"),
+                    Arguments.of(
+                            "status outside the valid HTTP range",
+                            new RuntimeException(new HttpException(0, "no response")),
+                            500,
+                            "no response"));
+        }
+
+        @ParameterizedTest(name = "create: when {0}, then report status {2}")
+        @MethodSource("providerStatusProvider")
+        @DisplayName("An unparsed provider error keeps the status langchain4j determined")
+        void create__whenProviderErrorUnparsed__thenReportProviderStatus(
+                String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(providerFailure);
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+
+            // When
+            var thrown = catchThrowable(() -> chatCompletionService.create(request, workspaceId));
+
+            // Then
+            assertThat(thrown)
+                    .isInstanceOf(WebApplicationException.class)
+                    .hasMessageContaining(expectedMessagePart);
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
+        }
+
+        @ParameterizedTest(name = "scoreTrace: when {0}, then stay a retryable 500")
+        @MethodSource("providerStatusProvider")
+        @DisplayName("Online scoring deliberately keeps the blanket 500, so the subscriber still retries")
+        void scoreTrace__whenProviderErrorUnparsed__thenStayRetryable(
+                String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
+            // Given — scoreTrace has no JAX-RS caller: the three OnlineScoring*LlmAsJudgeScorer subscribers are the
+            // only callers, so a recovered status would reach no HTTP client. It would, however, reach
+            // BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS, which lists ClientErrorException — so a recovered 429 or
+            // 408 (both RetriableException upstream) would be acked and dropped instead of retried up to
+            // onlineScoring.maxRetries. Whatever the provider reported, this path must stay a 500.
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+
+            // When
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
+
+            // Then — InternalServerErrorException is absent from NON_RETRYABLE_EXCEPTIONS, which is what keeps the
+            // evaluation retryable; expectedStatus is deliberately unused here
+            assertThat(thrown)
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .isNotInstanceOf(ClientErrorException.class)
+                    .hasMessageContaining(expectedMessagePart);
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
+        }
+
+        @ParameterizedTest(name = "streaming: when {0}, then stream status {2}")
+        @MethodSource("providerStatusProvider")
+        @DisplayName("Streaming delivers the provider status in-stream instead of a code-500 ErrorMessage")
+        void createAndStreamResponse__whenProviderErrorUnparsed__thenStreamProviderStatus(
+                String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+            var handlers = mock(ChunkedOutputHandlers.class);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+            doAnswer(invocation -> {
+                Consumer<Throwable> errorHandler = invocation.getArgument(4);
+                errorHandler.accept(providerFailure);
+                return null;
+            }).when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
+
+            // When — the streaming contract is HTTP 200 with the error delivered in-stream, so recovering the status
+            // must change the ErrorMessage code only: nothing may escape here, or the playground would get an HTTP
+            // status where it expects a stream
+            assertThatCode(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
+                    .doesNotThrowAnyException();
+
+            // Then
+            var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
+            verify(handlers).handleError(errorCaptor.capture());
+            assertThat(errorCaptor.getValue().getCode()).isEqualTo(expectedStatus);
+            assertThat(errorCaptor.getValue().getMessage()).contains(expectedMessagePart);
+        }
+
+        @Test
+        @DisplayName("a parsed provider envelope still wins, so existing classification is untouched")
+        void create__whenProviderErrorParsed__thenEnvelopeStatusWins() {
+            // Given — the envelope says 401 while the chain would yield 429; the parsed envelope is the more specific
+            // provider verdict and must not be second-guessed by the fallback
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(new RateLimitException("slow down"));
+            when(llmProviderService.getLlmProviderError(any()))
+                    .thenReturn(Optional.of(new ErrorMessage(401, "Invalid API key")));
+
+            // When
+            var thrown = catchThrowable(() -> chatCompletionService.create(request, workspaceId));
+
+            // Then
+            assertThat(thrown).hasMessageContaining("Invalid API key");
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(401);
         }
     }
 

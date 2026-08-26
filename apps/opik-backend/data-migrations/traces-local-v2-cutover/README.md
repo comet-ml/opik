@@ -73,14 +73,17 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
    `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
    `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
-   again. The ceiling is a backend per-query setting applied on the backend's own ClickHouse client, so the migration
-   scripts' direct `clickhouse-client` session **cannot read or verify it**. It is therefore **operator-asserted**:
-   `exchange_and_wrap.sh` refuses the EXCHANGE without `--confirm-buffer-raised` (a fail-fast acknowledgment gate — it
-   forces the operator to confirm the step, though it cannot prove the value took effect). Confirm it actually took
-   effect on the prod-clone/staging load test (the Go/No-Go "Async-insert ceiling confirmed" item) before production.
-   **Also confirm client/SDK insert timeouts
-   exceed the widened buffer** (~10s) — with `wait_for_async_insert=1` a raised ceiling blocks each insert until it
-   flushes, so a shorter client timeout would surface as ingestion errors during the window.
+   again. **Where it is set, the exact value, the rollout and the revert step are in
+   ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it)** — it is a temporary env var on the
+   deployment's own backend config, not a chart value (OPIK-7686). Have that config change written and reviewed *before*
+   the window, so applying it is a merge, not an edit. The ceiling is a backend per-query setting applied on the backend's own
+   ClickHouse client, so the migration scripts' direct `clickhouse-client` session **cannot read or verify it**. It is
+   therefore **operator-asserted**: `exchange_and_wrap.sh` refuses the EXCHANGE without `--confirm-buffer-raised` (a
+   fail-fast acknowledgment gate — it forces the operator to confirm the step, though it cannot prove the value took
+   effect). Confirm it actually took effect on the prod-clone/staging load test (the Go/No-Go "Async-insert ceiling
+   confirmed" item) before production. **Also confirm client/SDK insert timeouts exceed the widened buffer** (~10s) —
+   with `wait_for_async_insert=1` a raised ceiling blocks each insert until it flushes, so a shorter client timeout would
+   surface as ingestion errors during the window.
 7. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
    `ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE`, default `false`). The successor's `end_time`/`ttft` are
    **non-nullable sentinel** columns, so the app must represent an absent value as the epoch/NaN sentinel — not `null` —
@@ -158,7 +161,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    It executes the reference statement in
    [`000001_backfill_traces_local_v2.sql`](scripts/db-app-analytics/000001_backfill_traces_local_v2.sql) — the script
    reads that file and substitutes the window bounds, so the two never drift.
-2. **Raise the buffer ceiling** (config, see below), then **[`scripts/delta_replay.sh`](scripts/delta_replay.sh)**
+2. **Raise the buffer ceiling** (config — see
+   ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it) for the key, the value and the
+   restart wait), then **[`scripts/delta_replay.sh`](scripts/delta_replay.sh)**
    (reference SQL [`000002_delta_and_deletion_replay.sql`](scripts/db-app-analytics/000002_delta_and_deletion_replay.sql))
    — delta-insert (anchored at `backfill_start`), then **deletion replay**. The replay runs with
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
@@ -263,6 +268,100 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 delta one). This is normal — `ReplacingMergeTree` collapses them on merge / under `FINAL` / `LIMIT 1 BY id`, highest
 `last_updated_at` winning. Do not "fix" it.
 
+### Where the buffer bump lives (and how to revert it)
+
+**Decision (OPIK-7686): a temporary env var on the deployed backend's own configuration — not a chart value.** The three
+`ANALYTICS_DB_ASYNC_INSERT_*` knobs are deliberately absent from the chart's `values.yaml` (OPIK-6880, #7675).
+Rationale:
+
+- **No chart change is needed.** `component.backend.env` is a free-form map rendered straight into the backend
+  ConfigMap, so a deployment-level entry is already sufficient.
+- **Removal is a clean one-step rollback.** Unset means "leave `queryParameters` alone" (`DatabaseAnalyticsFactory`), so
+  *deleting* the key restores whatever `queryParameters` carries — `async_insert_busy_timeout_max_ms=250` on the shipped
+  `config.yml` default. There is no "set it back to 250" edit, and therefore no pinned value that can later drift from
+  that default. For a time-boxed window that reversibility is the property worth optimising for.
+  > **If your deployment overrides `ANALYTICS_DB_QUERY_PARAMETERS`, `250` is not your baseline.** Deleting the key
+  > restores *that* chain's `async_insert_busy_timeout_max_ms` — or, if the chain omits it, the ClickHouse server value.
+  > Read your effective `queryParameters` before the window and record the number you are reverting to.
+- **The value is deployment- and window-specific** — one environment, for the length of the cutover. Keeping it in that
+  deployment's own config leaves it version-controlled and auditable without turning a temporary state into a permanent
+  chart default that every install inherits.
+- **A chart value would save no work**: you edit the deployment config either way.
+
+> For the record, the reason first given on #7675 for excluding these — that rendering them would send empty strings
+> where the backend expects an integer, so it "would not be inert" — was **wrong**. `config.yml` ships
+> `${ANALYTICS_DB_ASYNC_INSERT_*:-}` as the default for all three, so the empty case is the normal path in every
+> environment today: an empty substitution leaves a bare YAML scalar that parses to `null` on the boxed field behind it
+> (`Integer` for the two busy-timeout knobs, `Long` for `asyncInsertMaxDataSize`), and the `@Min(1)` each of them carries
+> does not fire on null. Exposing them in the chart with empty defaults *would* be safe. The decision above rests on
+> reversibility and scope, not on safety.
+
+> **Never bump it by editing `ANALYTICS_DB_QUERY_PARAMETERS`.** That means re-pasting the entire tuning string
+> (`compress`, `failover`, `async_insert`, `wait_for_async_insert`, the skip-index and shard settings, …), which risks
+> silently dropping one of the others and drifting from the `config.yml` default. The dedicated
+> `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` override exists precisely so the cutover states only the one value it
+> is changing.
+
+**What to set.** One key on the backend. The two delivery forms are not interchangeable — under Helm it is a YAML entry
+in the values map, so `KEY=VALUE` shell syntax there renders nothing:
+
+```yaml
+# Helm — under component.backend.env (quote the value; the ConfigMap takes strings)
+component:
+  backend:
+    env:
+      ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS: "10000"
+```
+
+```bash
+# docker-compose — a backend environment variable (the compose file already forwards it)
+ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=10000
+```
+
+Only the ceiling changes: leave `…_MIN_MS` and `…_MAX_DATA_SIZE` unset, so the floor stays at the
+`async_insert_busy_timeout_min_ms=100` carried by `queryParameters`, and widening the ceiling alone is what parks the
+inserts.
+
+**How to revert: delete the key** — do not set `250` (see the caveat above on what your baseline actually is). The revert
+is owed on **every** exit path, not just the happy one: after a successful EXCHANGE it is sequence step 5, and after a
+**rollback** it is equally required. `rollback.sh` is SQL-only and does not touch backend config, so no stage removes the
+override for you — a rolled-back deployment left with the widened ceiling keeps parking every insert for up to ~10s.
+Treat the revert (and its restart) as part of finishing either outcome.
+
+**It takes effect only on a backend restart — so confirm the restart finished before continuing.** The backend receives
+this through the container environment (`envFrom.configMapRef` under Helm), which Kubernetes injects at container start
+only: editing the ConfigMap does not reach a running pod. **How that restart is triggered is deployment-specific** — the
+chart ships no automation for it, so some deployments run a ConfigMap watcher that rolls the workload on its own while
+others need an explicit `kubectl rollout restart deployment/opik-backend`. Know which one yours is *before* the window.
+Either way the operator's obligation is identical, because the ceiling has to be live on **every** instance before step
+2 — so verify rather than assume:
+
+```bash
+kubectl rollout status deployment/opik-backend -n <namespace>
+kubectl get cm opik-backend -n <namespace> \
+    -o jsonpath='{.data.ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS}{"\n"}'
+# and confirm no surviving pod predates the roll:
+kubectl get pods -n <namespace> -l component=opik-backend \
+    -o custom-columns=NAME:.metadata.name,START:.status.startTime
+```
+
+These names are what the chart renders by default — Deployment and ConfigMap `opik-backend`, label
+`component=opik-backend`. They are derived from `opik.name`, so a `nameOverride` (or a parent chart supplying one) moves
+all three; substitute your release's actual names.
+
+Three consequences to plan for:
+
+- **One restart, not two, before the tail.** `traceColumnsNonNullable = true` (prereq 7) is another entry in the same
+  backend config and the same ConfigMap — and step 1 of "The final cutover window" asks for both. Land them **together**
+  so the fleet restarts once.
+- **Keep the chosen ceiling below the pod's termination grace period.** The revert is delivered by a *second* restart, and
+  at that moment pods are holding inserts parked for up to the widened ceiling. The chart does not set
+  `terminationGracePeriodSeconds`, so it is the Kubernetes default **30s** — comfortably above a ~10000ms ceiling, but a
+  much larger ceiling would let `SIGKILL` land on parked inserts. Check the two numbers against each other before
+  choosing a value.
+- **The restart itself costs ingestion capacity** (rolling-update `maxUnavailable`, plus any PodDisruptionBudget), so do
+  it while there is slack — not between the final delta and the EXCHANGE.
+
 ### The final cutover window (the zero-loss invariant)
 
 The buffer widening (prereq 6) is what makes the flip lossless, but the guarantee rests on a timing invariant worth
@@ -273,7 +372,9 @@ still land in the *old* `traces` in the gap between the last delta read and the 
 run. The binding constraint is therefore **not** "replay < buffer window"; it is that the **gap between the final delta
 and the `EXCHANGE` completing must stay within the buffer hold**. So run the tail as tightly as possible:
 
-1. Widen the buffer, and **roll out `traceColumnsNonNullable = true` to every backend instance** (see below).
+1. Widen the buffer, and **roll out `traceColumnsNonNullable = true` to every backend instance** (see below). Both are
+   entries in the same backend config and the same ConfigMap, so land them **together** and let the single restart carry
+   both — see ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it).
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step.
@@ -322,6 +423,30 @@ the `traceColumnsNonNullable` flip").
 
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
+**The `tracesWeeklyPartitionPruningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled`
+(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED`, default `false`) lets a trace `DELETE` bind itself to
+the weekly partitions its own ids resolve to (OPIK-6901), instead of being planned against every part of the table — on
+prod-test, 12 ids rewrote 3,928 parts / 5.40 TiB without it. It asserts a **schema** fact: that `traces` (or
+`traces_local`) is the successor, with `id_at` as `DateTime64(0,'UTC')` under the weekly `PARTITION BY`.
+
+> **It enables the *pruning*, not the partitioning — the name is deliberate.** Setting it does not create, activate or
+> migrate anything; the partitioned schema arrives with the `EXCHANGE` above and nowhere else. So it is never a step that
+> *makes* the cutover progress, and setting it early does not bring the partitioning forward — it only starts emitting a
+> predicate against whatever table is live, which is the failure below.
+
+It is a third flag precisely because **neither of the two above marks the `EXCHANGE`**, which is when the partitioning
+appears: `traceColumnsNonNullable` must lead it (above), and `tracesDistributedWrapEnabled` flips at the wrap, which may
+be deferred long after it (`--skip-wrap` … `--wrap-only`). So gate on this one, not on either of those.
+
+Unlike its siblings it is **safe to lag and unsafe to lead**: `false` is the previous unbounded delete, always correct
+and merely slower, so turn it on at leisure **after** the `EXCHANGE` is confirmed. Turning it on early — while `traces` is
+still the original — is the failure mode worth avoiding: the original has **no `PARTITION BY` at all** (nothing to prune)
+and declares `id_at` as a 32-bit `DateTime` that overflows past 2106, so a far-future id (the litellm ~2201 rows) is
+stored under a wrapped recent timestamp that the derived partition cannot match, and the delete reports success having
+matched **zero rows**. For the same reason, a stage B/C **rollback must revert it to `false` — and roll-restart every
+instance — before promoting the original**, ahead of the swap rather than after it. Like its siblings it comes from a
+startup snapshot of `OpikConfiguration`, so the config change alone changes nothing until each instance restarts.
+
 ## Batching and throttling
 
 On a large production table a single week can be enormous, so the backfill does **not** run one INSERT per week. Two
@@ -341,6 +466,71 @@ independent controls keep each statement safe:
   so peak insert memory is a small multiple of ~256 MB regardless of the window size — the statement does not load the
   window into memory. Lower this (or `min_insert_block_size_bytes`) on a memory-constrained data node.
 
+- **Insert pipeline threads (`--max-insert-threads`, omitted by default → `SETTINGS max_insert_threads`).**
+  Often the throughput ceiling: where nothing sets it, ClickHouse's default `0` means *"`INSERT SELECT` no
+  parallel execution"*, so the insert side runs serialised. Passing a value controls how much of the machine
+  the backfill may use and can speed the copy up substantially.
+
+  **Omitting the flag means *inherit*, not zero.** The drivers strip the setting line from the SQL when the
+  flag isn't passed, so the server's own value applies. Rendering an explicit `0` would **override** a profile
+  that sets it and force the insert serial — a silent slowdown, not a no-op. Pass `0` only to *force* serial.
+
+  Three caveats, all from upstream: the setting applies to **`INSERT SELECT`** only; **ClickHouse Cloud
+  defaults it to `1`/`2`/`4`** by node memory, not `0`; and it helps only if the read side is parallel too
+  (*"has effect only if the `SELECT` part is executed in parallel"* — see `max_threads`).
+
+  **Why the insert side, and how sure we are.** The destination materialises `output_keys` by parsing the
+  `output` JSON (there is no `input_keys` column), plus `truncated_input`/`truncated_output` and the length,
+  `duration` and `id_at` columns. Upstream says materialized values are calculated *"when rows are inserted"*
+  but not by which stage, so blaming the insert side is an **inference from profiling**, not a guarantee.
+  Confirm it on your own data: effective cores near 1 while the machine is idle and `OSIOWaitMicroseconds` is
+  0, then rising towards the thread count once raised. Mind the units — `ProfileEvents` are microseconds,
+  `query_duration_ms` is milliseconds:
+
+  ```sql
+  (ProfileEvents['UserTimeMicroseconds'] + ProfileEvents['SystemTimeMicroseconds']) / (query_duration_ms * 1000)
+  ```
+
+  A result above the node's core count means the arithmetic is wrong. Note it is *query-wide* CPU: `query_log`
+  does not separate read from insert threads, so the delta on raising the setting is what carries the argument.
+
+  **Two costs.** Upstream: *"higher values will lead to higher memory usage"* — and on this table a single very
+  large `output` document is a **per-row** cost that no block cap bounds, so raise `max_memory_usage` alongside
+  or narrow the window. And parts per partition grow; watch them against **this cluster's** `parts_to_throw_insert` and
+  `parts_to_delay_insert` — read them from `system.merge_tree_settings`. **Do not work from a
+  remembered default**: ClickHouse has changed these across versions (older releases shipped far lower values
+  than current ones), and a deployment may tune them further, so a hardcoded ratio can be an order of magnitude
+  wrong in either direction.
+  Value choice is a capacity decision, not a benchmark: on an idle rehearsal box a large value looks free, but
+  on production those threads compete with live query latency. `estimate.sh` does **not** model this setting —
+  time a real window at your intended value and feed it back via `--rows-per-sec`.
+  Full diagnosis in `backfill.sh`'s `--max-insert-threads` option docs.
+
+  **If you edit the rendering, re-validate it by hand — nothing in this repo checks it for you.** The drivers
+  render this setting by requiring exactly one line-anchored `max_insert_threads = ${MAX_INSERT_THREADS},` in
+  `000001`/`000002` and then either stripping it (inherit) or substituting it. The trailing comma is **required**: it is
+  what makes removing the line safe, so the assignment must not be the last entry in the `SETTINGS` clause. A line
+  ending in `;`, or in nothing with the `;` on the next line, carries the clause terminator — stripping it would
+  leave a dangling comma and no terminator, so both spellings are refused rather than rendered. Every way that can go wrong is
+  silent: a reformatted or shared line, a missing assignment, a duplicate one, or a placeholder that survives
+  into an executable line. The drivers' own guards abort on each of those, but there is deliberately **no
+  committed harness** here — this directory holds operator drivers only — so after changing either driver or the
+  `SETTINGS` clause of `000001`/`000002`, exercise those cases manually against corrupted copies before a
+  cutover window. Each driver fences its rendering block with `>>> BEGIN max_insert_threads rendering` /
+  `<<< END` so it can be extracted verbatim rather than reimplemented. The
+  block reads no files: it operates on a `$sql` variable the caller must populate, and names the SQL path only in
+  its two error messages, so whatever you extract it into has to load the file itself. It is otherwise
+  CWD-independent, as are the drivers (`SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`), so it can be
+  run from anywhere.
+
+- **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
+  max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is
+  weekly-partitioned, so a block spans as many partitions as the ids in it imply; ClickHouse's default of 100 aborts the
+  INSERT (`throw_on_max_partitions_per_insert_block = 1`) rather than degrading, and far-future UUIDv7 ids reach that on
+  real data. Neither of the two bounds above can prevent it. **`delta_replay.sh` takes the same flag and needs the same
+  value** — the delta INSERT writes into the same partitioned shadow. See "Far-future partitions from
+  far-future-timestamp ids".
+
 **Throttle** with `--pause-seconds` (recommended 30–60s at peak): it sleeps after each inserted window so background
 merges consolidate the new parts before the next window piles on more.
 
@@ -356,8 +546,18 @@ For an exact figure, time one real window with `backfill.sh` and feed its rows/s
 It is a planning ballpark — real throughput varies with concurrent load, merges and cold-tier reads.
 
 The **delta-insert** (step 2) covers only writes during the backfill window, not the whole table, so it is normally one
-statement (with the same block-size bound); `000002` documents how to split it into two batched passes if a long backfill
-made it large. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
+statement (with the same block-size **and partition** bounds); `000002` documents how to split it into two batched passes
+if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes — but carry
+the settings, not the placeholders.** Hand-written statements bypass the driver, so nothing substitutes `${...}` and
+none of the driver's guards apply; substitute every placeholder concretely first, and note that
+`${MAX_INSERT_THREADS}` has no substitutable "default" — its unset state means *inherit*, which the driver expresses by
+removing the line, and `0` is not equivalent (it forces serial execution). Either put the same concrete thread count on
+both passes, or delete that one line, comma and all, keeping `max_partitions_per_insert_block` and `log_comment`. Then
+check what you are about to run — `grep -n '\${' <your-statements>.sql` must print nothing. The driver
+does not implement the split, so those statements are hand-written, and the second arm
+(`last_updated_at >= backfill_start AND created_at < backfill_start`) is the updates-to-old-rows arm that carries
+far-future ids, so it is the pass that most needs `max_partitions_per_insert_block` and the easiest one to write without
+it. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
 mutation; `000002` / `000004` note how to bound it by partition if it is ever large.
 
 ## Why slice by `created_at` (and not `id` or workspace)
@@ -398,8 +598,71 @@ customer data — a valid UUIDv7 that merely carries a future timestamp — so t
 ([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
 and its `id_at` is a `DateTime64` (honest to 2299), so each such row lands in its **own honest ~2201 (`22010601`-shaped)
 weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITION` / retention / tiering operation never
-touches them by accident, and vice versa. The extra partitions are bounded (few distinct
-far-future timestamps → few extra weeks) and harmless (they never tier to cold and are skipped by time-bounded reads).
+touches them by accident, and vice versa. Once written, the extra partitions are benign at rest: they never tier to cold
+and are skipped by time-bounded reads.
+
+> **They are NOT few, and they break the backfill unless `max_partitions_per_insert_block` is raised.** An earlier
+> version of this section claimed the extra partitions were "bounded (few distinct far-future timestamps → few extra
+> weeks) and harmless". The first half is wrong on real data and the second half is only true *after* the copy
+> succeeds. Measured on a production-shape environment (2026-08-17, 269.2 M rows):
+>
+> | Measure | Value |
+> |---|---|
+> | Far-future rows | **11,128,875** — 4.1% of the table, not a handful |
+> | Distinct far-future weekly partitions | **1,517**, spanning ~2194 → 2299-12-31 |
+> | Result of running `backfill.sh` unmodified | **`Code: 252 … TOO_MANY_PARTS`** on week `2025-06-16` |
+>
+> This is reproduced, not projected: the driver was run against the real cluster and aborted with
+> `Too many partitions for single INSERT block (more than 100)`.
+>
+> **What drives it is the tail, not the volume.** In the failing window:
+>
+> | Measure | Value |
+> |---|---|
+> | Far-future partitions in the window | 275 |
+> | …holding ≤ 5 rows each | **268** — about 635 rows in total |
+> | Head partitions | 7, holding 125,553 of the window's 126,188 far-future rows |
+> | Primary-key footprint of that rare tail | **12 projects** |
+> | Worst single block: total destination partitions | **333** (269 far-future, the rest ordinary weeks it touched) |
+>
+> So the mechanism is: the byte cap `min_insert_block_size_bytes` (256 MB) binds long before
+> `max_insert_block_size`, so for ~54 KiB trace rows a block holds only ~4,841 rows; and because the rare tail occupies
+> a narrow primary-key range, one such block picks up most of those 268 partitions at once. ClickHouse caps partitions
+> per block at **100** by default and, with `throw_on_max_partitions_per_insert_block = 1`, **aborts the INSERT**
+> instead of degrading.
+>
+> **This survives parallelism, which is the counter-intuitive part.** The statement has no `ORDER BY` and the read is
+> parallel (`max_insert_threads = 0`, `max_threads = auto(48)`), so it is tempting to assume 48 interleaved streams
+> scatter the tail across many blocks and keep every block under the limit. They do not — the abort above happened
+> under exactly that configuration. Do not reason your way past this one; measure it.
+>
+> **The abort is not all-or-nothing.** In the run above, 511,328 rows had already committed as 119 parts before the
+> offending block threw. The destination is a `ReplacingMergeTree` keyed on `(workspace_id, project_id, id)`, so
+> re-running the window converges rather than duplicating — but a failed window leaves partial data behind, and
+> prerequisite #2 ("`traces_local_v2` is empty") no longer holds until it is cleared with `rollback.sh --stage A`.
+>
+> **No batching flag avoids this.** `backfill.sh` splits a week only by `created_at`, to respect
+> `--max-rows-per-insert`; a week already under that bound is one unsplit INSERT however many partitions it spans (two
+> such weeks failed in the measurement above). Lowering `--max-insert-block-size` does not help either, since the byte
+> cap already binds. So the fix belongs in the setting: `backfill.sh --max-partitions-per-insert-block` defaults to
+> **2000**. Pass the same value to `delta_replay.sh`, which needs it for the same reason: the delta writes into the same
+> partitioned shadow, and its `last_updated_at` arm re-copies updates to old rows, so a far-future-id row touched during
+> the window is pulled in. Where the migration user has a settings profile, set it there too, so the value does not
+> depend on the invocation.
+>
+> **Why 2000 is sound, and it is not the simulation below that establishes it.** A block cannot span more partitions
+> than the table has, so **the destination's total distinct partition count is a hard upper bound** on partitions per
+> block. Size the setting above that total and it can never be exceeded, whatever the read order or thread count turns
+> out to be. In the measurement above that total is about 1,616 (1,517 far-future plus roughly 99 real weeks), so 2000
+> clears it with margin. Derive your own number the same way, from `far_future_weeks` plus the real week count, rather
+> than from any per-block estimate.
+>
+> The observed worst block is consistent with that bound and shows why the far-future count alone is not the right input:
+> its 333 partitions are 269 far-future plus 64 of the 99 real weeks, so a block's spread mixes both and lands well
+> under the 1,616 ceiling. Sizing from `far_future_weeks` alone would have undercounted it by 64.
+>
+> The cost of raising it is a larger part count per insert — one part per partition touched — which background merges
+> then compact. That is strictly better than the alternative, which is the backfill not running.
 
 Quantify them in the **source** before the cutover so their scale is known. The source `traces.id_at` is a 32-bit
 `DateTime` (migration 000091) that overflows for far-future values, so derive the timestamp from `id` via
@@ -419,8 +682,45 @@ WHERE ts > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
 ```
 
 `far_future_weeks` uses the destination's honest partition expression, so it equals the number of extra weekly partitions
-`traces_local_v2` will hold. If the count is material, remediate the source `id`s at their origin; otherwise no action is
-needed — they partition honestly on their own.
+`traces_local_v2` will hold. **This is the number that sizes `--max-partitions-per-insert-block`**, not merely a
+curiosity: add it to the real week count and set the limit above the total, which is the hard bound argued above. If
+`far_future_weeks` alone exceeds the default 100, the copy needs the raised setting or it will abort. Remediating the
+source `id`s at their origin is the only thing that removes the extra partitions; short of that they partition honestly
+on their own and the setting is what lets the copy through.
+
+Because the failure is per **block**, not per week, the row count alone does not tell you whether a given window is
+anywhere near the limit. The query below is an **approximate locality heuristic, not a preflight gate**: it answers "is
+this window's far-future tail concentrated enough to be a risk at all", and nothing stronger. Read it with two
+limitations in mind, or it will mislead you:
+
+- It imposes `ORDER BY workspace_id, project_id, id` and chunks on `rowNumberInAllBlocks()`. The real `INSERT ... SELECT`
+  has **no `ORDER BY`** and reads in parallel (`max_threads`, with `max_insert_threads` governing the sink), so its block
+  composition is not this ordering and the numbers here are not the blocks ClickHouse will actually form.
+- It does not reproduce the production INSERT's settings.
+
+So use it to decide whether you are exposed, and use the total-partition-count bound above to decide the value. Do not
+read `worst_partitions_per_block` as the minimum safe setting.
+
+```sql
+-- APPROXIMATE: is this window's far-future tail concentrated enough to be a risk?
+-- Not a safe-value calculation — see the two limitations above.
+SELECT max(p) AS worst_partitions_per_block, countIf(p > 100) AS blocks_over_default
+FROM (
+    SELECT intDiv(rn, 4841) AS b, uniqExact(part) AS p
+    FROM (
+        SELECT toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(id))) -
+                          toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(id)), 1))) AS part,
+               rowNumberInAllBlocks() AS rn
+        FROM ( SELECT id FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
+               WHERE created_at >= toDateTime64('<WINDOW_LO>', 9, 'UTC')
+                 AND created_at <  toDateTime64('<WINDOW_HI>', 9, 'UTC')
+               ORDER BY workspace_id, project_id, id )
+    ) GROUP BY b
+);
+```
+
+Derive the `4841` from your own data (`min_insert_block_size_bytes` ÷ uncompressed bytes per row, both readable from
+`system.parts`) rather than reusing it — it is a property of row width, not a constant.
 
 **No explicit `ORDER BY` on the `INSERT ... SELECT`.** Not needed for correctness or reproducibility: the final table
 state is a `ReplacingMergeTree` reduction keyed on `(workspace_id, project_id, id)` with `last_updated_at` as the version
@@ -553,7 +853,8 @@ server's major version, either way:
   `CLICKHOUSE_HOST`; for a ClickHouse on the host's own loopback, add `--network=host` via `CLICKHOUSE_CLIENT_DOCKER_OPTS`.
 
 **The only manual actions are not SQL:** (1) raising/restoring the async-insert buffer ceiling
-(`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3; (2) flipping
+(`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3 — see
+["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it); (2) flipping
 `databaseAnalyticsDataModel.traceColumnsNonNullable` to `true` in lockstep with the EXCHANGE (and back on rollback) —
 see "The final cutover window"; and (3) the go/no-go judgement between steps. All three are *backend config* / judgement changes (env + rolling
 restart, or a config push) that these DB-facing scripts cannot and should not make. They are deliberately operator-owned;
@@ -656,6 +957,11 @@ statements, so a failure *between* them needs a restart path:
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
 complete until they land.
+
+> **If `tracesWeeklyPartitionPruningEnabled` was turned on, revert it *before* the stage runs, not after.** It asserts the
+> live table is the partitioned successor, and the restored original is not one, so a stale `true` makes trace deletes
+> match zero rows while reporting success — see "The `tracesWeeklyPartitionPruningEnabled` flip". It is the one flag whose
+> revert has to lead the swap; the two steps below follow it.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
    **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
@@ -891,12 +1197,25 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **Final-delta→EXCHANGE gap fits inside the buffer hold with margin** — the binding invariant is the gap between
       the final delta and the EXCHANGE completing (≈ replay wall time + EXCHANGE), staying within the buffer hold and
       accounting for size-triggered flushes — **not** "replay < buffer window" alone (see "The final cutover window").
-- [ ] **Far-future partitions quantified** — run the bad-`id` audit query above; remediated or explicitly accepted.
+- [ ] **Far-future partitions quantified — and `max_partitions_per_insert_block` sized from the result.** Run the
+      bad-`id` audit query above; remediated or explicitly accepted. The count is not just informational: if
+      `far_future_weeks` exceeds the ClickHouse default of 100, the backfill **aborts** without a raised
+      `--max-partitions-per-insert-block` (driver default 2000), because the far-future rows cluster into a single insert
+      block. Size the value from `far_future_weeks` plus the real week count, which is a hard upper bound on partitions
+      per block, and pass the same value to **both `backfill.sh` and `delta_replay.sh`** — the delta writes into the same
+      partitioned shadow and aborts the same way, immediately before the EXCHANGE. Set it on the migration user's
+      settings profile too, so it does not depend on the invocation.
 - [ ] **`EXCHANGE TABLES ... ON CLUSTER` works end-to-end** — or the fallback `RENAME` sequence is documented for the
       variant that needs it.
 - [ ] **Async-insert ceiling confirmed** — raising `asyncInsertBusyTimeoutMaxMs` demonstrably widens the adaptive buffer
       under load, not just the cap. `exchange_and_wrap.sh` enforces the acknowledgment via `--confirm-buffer-raised`, but
       that is an assertion only — this checklist item is the actual "it took effect under load" verification.
+- [ ] **The buffer-bump and revert changes are pre-written and reviewed** — the config entry raising
+      `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` (with `traceColumnsNonNullable = true` alongside it) and the revert
+      that *deletes* the key, both prepared before the window so each is a merge rather than an edit under pressure.
+      Confirm the chosen ceiling is below `terminationGracePeriodSeconds`, and that you know how a backend restart is
+      triggered on the target deployment and that it fits the schedule — see
+      ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it).
 - [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`). Retention deletes bypass
       the deletion bridge, so a sweep in the window would leak/resurrect across the swap; `exchange_and_wrap.sh` and
       `rollback.sh` (stages B/C) enforce `--confirm-retention-paused`, but that is an assertion — this item is the real

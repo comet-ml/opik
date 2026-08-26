@@ -24,7 +24,6 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.Builder;
@@ -311,8 +310,10 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 llmProviderFactory.getStructuredOutputStrategy(modelName),
                 onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spanStructureJson);
         // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
-        // handleToolCalls so the model can decide when to stop investigating.
-        scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+        // handleToolCalls so the model can decide when to stop investigating. Providers that reject
+        // a forced choice outright get AUTO here too — see firstRoundToolChoice.
+        scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
+                agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
         return LlmRequests.builder().score(scoreRequest).structured(structuredRequest).build();
     }
 

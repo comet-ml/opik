@@ -118,7 +118,7 @@ Opik provides powerful CLI commands for exporting and importing data between pro
 - **Migration**: Move data between projects or environments
 - **Backup**: Create local backups of your project data
 
-For detailed information about the CLI export/import functionality, see [Import/Export Commands](../../apps/opik-documentation/documentation/fern/docs/tracing/import_export_commands.mdx).
+For detailed information about the CLI export/import functionality, see [Import/Export Commands](../../apps/opik-documentation/documentation/fern/docs-v2/observability/migrate_data.mdx).
 
 ## Development & Contribution Guidelines
 

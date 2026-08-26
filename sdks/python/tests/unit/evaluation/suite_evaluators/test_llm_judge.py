@@ -1,3 +1,5 @@
+import logging
+import pytest
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
@@ -289,3 +291,140 @@ class TestLLMJudgeFromConfig:
             "seed": 123,
             "customParameters": {"reasoning_effort": "low"},
         }
+
+
+class TestLLMJudgeRetries:
+    """Empty responses are transient and retried; permanent errors are not."""
+
+    def _judge_with_model(self, model):
+        evaluator = llm_judge.LLMJudge(
+            assertions=["The response contains the literal text PASS."],
+            track=False,
+        )
+        evaluator._model = model
+        return evaluator
+
+    def test_score__transient_empty_llm_response__retries_and_succeeds(self):
+        from opik import exceptions
+
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class FlakyModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise exceptions.EmptyLLMResponseError(
+                        "LLM returned no content and no tool calls"
+                    )
+                return {"role": "assistant", "content": valid}
+
+        evaluator = self._judge_with_model(FlakyModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 2, "the empty first response should have been retried"
+        assert len(results) == 1
+        assert results[0].value == 1.0
+
+    def test_score__permanent_llm_error__not_retried(self):
+        from opik import exceptions
+
+        calls = {"n": 0}
+
+        class FailingModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                raise exceptions.BaseLLMError("AuthenticationError: missing key")
+
+        evaluator = self._judge_with_model(FailingModel())
+        with pytest.raises(exceptions.BaseLLMError):
+            evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 1, "auth failures must not be retried"
+
+    def test_score__empty_response_logged__diagnostic_reaches_logger(self, caplog):
+        from opik import exceptions
+        from opik.evaluation.models import base_model
+
+        class EmptyModel:
+            def generate_provider_response(self, messages, **kwargs):
+                raise exceptions.EmptyLLMResponseError("no content, no tool calls")
+
+        caplog.set_level(logging.ERROR)
+        with pytest.raises(exceptions.EmptyLLMResponseError):
+            with base_model.get_provider_response(
+                model_provider=EmptyModel(), messages=[]
+            ):
+                pass
+
+        assert any(
+            "Failed to call LLM provider" in record.message for record in caplog.records
+        )
+
+    @pytest.mark.asyncio
+    async def test_ascore__transient_empty_llm_response__retries_and_succeeds(self):
+        from opik import exceptions
+
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class FlakyAsyncModel:
+            async def agenerate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise exceptions.EmptyLLMResponseError(
+                        "LLM returned no content and no tool calls"
+                    )
+                return {"role": "assistant", "content": valid}
+
+        evaluator = self._judge_with_model(FlakyAsyncModel())
+        results = await evaluator.ascore(input="q", output="PASS")
+
+        assert calls["n"] == 2
+        assert len(results) == 1
+        assert results[0].value == 1.0
+
+    @pytest.mark.asyncio
+    async def test_ascore__permanent_llm_error__not_retried(self):
+        from opik import exceptions
+
+        calls = {"n": 0}
+
+        class FailingAsyncModel:
+            async def agenerate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                raise exceptions.BaseLLMError("AuthenticationError: missing key")
+
+        evaluator = self._judge_with_model(FailingAsyncModel())
+        with pytest.raises(exceptions.BaseLLMError):
+            await evaluator.ascore(input="q", output="PASS")
+
+        assert calls["n"] == 1
+
+    @pytest.mark.asyncio
+    async def test_aget_provider_response__empty_response__logged_and_type_preserved(
+        self, caplog
+    ):
+        from opik import exceptions
+        from opik.evaluation.models import base_model
+
+        class EmptyAsyncModel:
+            async def agenerate_provider_response(self, messages, **kwargs):
+                raise exceptions.EmptyLLMResponseError("no content, no tool calls")
+
+        caplog.set_level(logging.ERROR)
+        with pytest.raises(exceptions.EmptyLLMResponseError):
+            async with base_model.aget_provider_response(
+                model_provider=EmptyAsyncModel(), messages=[]
+            ):
+                pass
+
+        assert any(
+            "Failed to call LLM provider" in record.message for record in caplog.records
+        )
