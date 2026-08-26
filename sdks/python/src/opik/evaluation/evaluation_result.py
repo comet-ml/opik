@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, TYPE_CHECKING
 from collections import defaultdict
 import logging
+import math
 
 import dataclasses
 
@@ -13,6 +14,67 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+def normalize_experiment_score(
+    score: object,
+    default_name: str,
+) -> score_result.ScoreResult:
+    """Normalize raw values or malformed ScoreResult instances into a valid ScoreResult."""
+    if not isinstance(score, score_result.ScoreResult):
+        return score_result.ScoreResult(
+            name=default_name,
+            value=0.0,
+            reason=(
+                "Experiment scoring function returned "
+                f"{type(score).__name__}; expected ScoreResult."
+            ),
+            scoring_failed=True,
+            metadata={"_fabricated": True},
+        )
+
+    name = score.name
+    if not isinstance(name, str) or not name.strip():
+        return score_result.ScoreResult(
+            name=default_name,
+            value=0.0,
+            reason=(
+                "Expected non-empty string score name, got "
+                f"{type(name).__name__ if not isinstance(name, str) else 'empty string'}."
+            ),
+            scoring_failed=True,
+            category_name=score.category_name,
+            metadata={**(score.metadata or {}), "_fabricated": True},
+        )
+
+    if score.scoring_failed:
+        value = (
+            score.value
+            if isinstance(score.value, (int, float))
+            and not isinstance(score.value, bool)
+            and math.isfinite(score.value)
+            else 0.0
+        )
+        if value != score.value:
+            return dataclasses.replace(score, value=value)
+        return score
+
+    value = score.value
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+    ):
+        return score_result.ScoreResult(
+            name=name,
+            value=0.0,
+            reason=f"Expected finite numeric score value, got {value!r}.",
+            scoring_failed=True,
+            category_name=score.category_name,
+            metadata=score.metadata,
+        )
+
+    return score
+
+
 def compute_experiment_scores(
     experiment_scoring_functions: List["ExperimentScoreFunction"],
     test_results: List[test_result.TestResult],
@@ -23,43 +85,37 @@ def compute_experiment_scores(
 
     all_scores: List[score_result.ScoreResult] = []
     for score_function in experiment_scoring_functions:
+        default_name = getattr(
+            score_function, "__name__", type(score_function).__name__
+        )
+        if not isinstance(default_name, str) or not default_name.strip():
+            default_name = "invalid_experiment_score"
+
         try:
             scores = score_function(test_results)
-            # Handle Union[ScoreResult, List[ScoreResult]]
             if isinstance(scores, list):
                 all_scores.extend(
-                    score
-                    if isinstance(score, score_result.ScoreResult)
-                    else score_result.ScoreResult(
-                        name=getattr(score_function, "__name__", type(score_function).__name__),
-                        value=0.0,
-                        reason=(
-                            "Experiment scoring function returned "
-                            f"{type(score).__name__}; expected ScoreResult."
-                        ),
-                        scoring_failed=True,
-                    )
+                    normalize_experiment_score(score, default_name=default_name)
                     for score in scores
                 )
-            elif isinstance(scores, score_result.ScoreResult):
-                all_scores.append(scores)
             else:
                 all_scores.append(
-                    score_result.ScoreResult(
-                        name=getattr(score_function, "__name__", type(score_function).__name__),
-                        value=0.0,
-                        reason=(
-                            "Experiment scoring function returned "
-                            f"{type(scores).__name__}; expected ScoreResult."
-                        ),
-                        scoring_failed=True,
-                    )
+                    normalize_experiment_score(scores, default_name=default_name)
                 )
         except Exception as e:
             LOGGER.warning(
                 "Failed to compute experiment score: %s",
                 e,
                 exc_info=True,
+            )
+            all_scores.append(
+                score_result.ScoreResult(
+                    name=default_name,
+                    value=0.0,
+                    reason=f"Experiment scoring function raised {type(e).__name__}: {e}",
+                    scoring_failed=True,
+                    metadata={"_fabricated": True},
+                )
             )
 
     return all_scores

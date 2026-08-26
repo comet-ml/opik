@@ -1,7 +1,7 @@
 import functools
 import logging
 from concurrent import futures
-from typing import List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
@@ -329,7 +329,10 @@ class Experiment:
 
         ``preserve_unrelated`` retains persisted names not recomputed (default false); failed supplied scores return but are not persisted.
         """
-        experiment_scores: List[rest_api_types.ExperimentScore] = []
+        if not score_results:
+            return []
+
+        experiment_scores_map: Dict[str, rest_api_types.ExperimentScore] = {}
         effective_scores: List["score_result.ScoreResult"] = []
         recomputed_names = {score_result_.name for score_result_ in score_results}
 
@@ -340,10 +343,8 @@ class Experiment:
             existing_scores = existing_experiment.experiment_scores or []
             for score in existing_scores:
                 if score.name not in recomputed_names:
-                    experiment_scores.append(
-                        rest_api_types.ExperimentScore(
-                            name=score.name, value=score.value
-                        )
+                    experiment_scores_map[score.name] = rest_api_types.ExperimentScore(
+                        name=score.name, value=score.value
                     )
                     effective_scores.append(
                         score_result_module.ScoreResult(
@@ -354,14 +355,15 @@ class Experiment:
         for score_result_ in score_results:
             effective_scores.append(score_result_)
             if score_result_.scoring_failed:
+                experiment_scores_map.pop(score_result_.name, None)
                 continue
 
-            experiment_score = rest_api_types.ExperimentScore(
+            experiment_scores_map[score_result_.name] = rest_api_types.ExperimentScore(
                 name=score_result_.name,
                 value=score_result_.value,
             )
-            experiment_scores.append(experiment_score)
 
+        experiment_scores = list(experiment_scores_map.values())
         self._rest_client.experiments.update_experiment(
             id=self.id,
             experiment_scores=experiment_scores,

@@ -66,24 +66,15 @@ def _deduplicate_experiment_scores(
 ) -> List[score_result.ScoreResult]:
     deduplicated: List[score_result.ScoreResult] = []
     successful_positions: Dict[str, int] = {}
-    for score in scores:
-        if not isinstance(score, score_result.ScoreResult):
+    for raw_score in scores:
+        if not isinstance(raw_score, score_result.ScoreResult):
             LOGGER.warning(
                 "Experiment scoring function returned %s; marking the score as failed.",
-                type(score).__name__,
+                type(raw_score).__name__,
             )
-            deduplicated.append(
-                score_result.ScoreResult(
-                    name="invalid_experiment_score",
-                    value=0.0,
-                    reason=(
-                        "Experiment scoring function returned "
-                        f"{type(score).__name__}; expected ScoreResult."
-                    ),
-                    scoring_failed=True,
-                )
-            )
-            continue
+        score = evaluation_result.normalize_experiment_score(
+            raw_score, default_name="invalid_experiment_score"
+        )
         if score.scoring_failed:
             deduplicated.append(score)
             continue
@@ -697,9 +688,11 @@ def _evaluate_task(
     total_time = time.time() - start_time
 
     # Compute experiment scores
-    computed_experiment_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=test_results,
+    computed_experiment_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=test_results,
+        )
     )
 
     if verbose >= 1:
@@ -1000,9 +993,13 @@ def evaluate_experiment(
     # Log experiment scores to backend
     effective_experiment_scores = computed_experiment_scores
     if computed_experiment_scores:
+        has_fabricated_names = any(
+            bool(score.metadata and score.metadata.get("_fabricated"))
+            for score in computed_experiment_scores
+        )
         persisted_scores = experiment.log_experiment_scores(
             score_results=computed_experiment_scores,
-            preserve_unrelated=True,
+            preserve_unrelated=not has_fabricated_names,
         )
         if isinstance(persisted_scores, list):
             effective_experiment_scores = persisted_scores
@@ -1292,9 +1289,11 @@ def evaluate_prompt(
     total_time = time.time() - start_time
 
     # Compute experiment scores
-    computed_experiment_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=test_results,
+    computed_experiment_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=test_results,
+        )
     )
 
     if verbose >= 1:
@@ -1679,14 +1678,20 @@ def evaluate_resume(
     )
 
     # Log merged aggregates while preserving persisted scores not recomputed here.
-    merged_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=merged.test_results,
+    merged_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=merged.test_results,
+        )
     )
     if merged_scores:
+        has_fabricated_names = any(
+            bool(score.metadata and score.metadata.get("_fabricated"))
+            for score in merged_scores
+        )
         persisted_scores = context.experiment.log_experiment_scores(
             score_results=merged_scores,
-            preserve_unrelated=True,
+            preserve_unrelated=not has_fabricated_names,
         )
         merged.experiment_scores = (
             persisted_scores if isinstance(persisted_scores, list) else merged_scores

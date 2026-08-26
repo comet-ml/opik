@@ -744,3 +744,39 @@ def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__single_it
     assert f1_stats.min == 0.85
     assert f1_stats.values == [0.85]
     assert f1_stats.std is None  # std is None for single value
+
+
+@pytest.mark.parametrize("bad_score", [None, "string_score", 123, object()])
+def test_normalize_experiment_score__non_score_result(bad_score):
+    res = evaluation_result.normalize_experiment_score(
+        bad_score, default_name="fallback"
+    )
+    assert res.name == "fallback"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert res.metadata == {"_fabricated": True}
+
+
+@pytest.mark.parametrize("bad_name", ["", "   ", None, 123])
+def test_normalize_experiment_score__invalid_name(bad_name):
+    score = score_result.ScoreResult(name=bad_name, value=0.5)  # type: ignore
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "fallback"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert res.metadata == {"_fabricated": True}
+
+
+@pytest.mark.parametrize("bad_val", ["nan", float("nan"), float("inf"), True, None])
+def test_normalize_experiment_score__invalid_value(bad_val):
+    score = score_result.ScoreResult(name="accuracy", value=bad_val)  # type: ignore
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "accuracy"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+
+
+def test_normalize_experiment_score__valid_score():
+    score = score_result.ScoreResult(name="accuracy", value=0.95)
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res == score
