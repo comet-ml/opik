@@ -22,7 +22,31 @@ public record RedactionRule(@NonNull Pattern pattern, @NonNull String quotedRepl
         return new RedactionRule(Pattern.compile(regex), Matcher.quoteReplacement(replacement));
     }
 
-    public String apply(@NonNull String text) {
-        return pattern.matcher(text).replaceAll(quotedReplacement);
+    /**
+     * @return the rewritten text, or {@link MatchBudget#EXCEEDED} when evaluating this rule against this value
+     *         exhausted the budget - see {@link MatchBudget} for why that is not treated as "no match".
+     */
+    public String apply(@NonNull String text, @NonNull MatchBudget budget) {
+        try {
+            var matcher = pattern.matcher(budget.wrap(text));
+            StringBuilder rewritten = null;
+            int last = 0;
+
+            while (matcher.find()) {
+                if (rewritten == null) {
+                    rewritten = new StringBuilder(text.length());
+                }
+                rewritten.append(text, last, matcher.start()).append(quotedReplacement);
+                last = matcher.end();
+            }
+
+            if (rewritten == null) {
+                return text;
+            }
+
+            return rewritten.append(text, last, text.length()).toString();
+        } catch (MatchBudget.Exceeded exceeded) {
+            return MatchBudget.EXCEEDED;
+        }
     }
 }
