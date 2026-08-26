@@ -5,6 +5,13 @@ Reads the running series from data.json, appends today's public star count,
 and writes a light and a dark SVG. Standard library only -- no pip install
 in CI, and no chart service at page-render time.
 
+No font is embedded. An SVG loaded through <img> cannot fetch external
+resources, so a webfont would have to ship inline -- which is why
+star-history.com embeds xkcd Script (CC BY-NC 3.0, unusable here). The
+hand-drawn character comes from the feTurbulence filter rather than the
+typeface, so a system font stack costs almost nothing visually and takes
+each SVG from ~225 KB to ~21 KB with no font asset to license.
+
 GitHub restricted stargazer *history* to a repo's admins and collaborators on
 2026-06-30, but the *total* count stays public, so this needs no token at all.
 The historical curve was seeded once (see star_history_seed.py) and is carried
@@ -14,7 +21,7 @@ forward in data.json.
 
 See DND-1580.
 """
-import argparse, base64, datetime as dt, json, os, pathlib, urllib.request
+import argparse, datetime as dt, json, pathlib, urllib.request
 
 REPO = "comet-ml/opik"
 API = f"https://api.github.com/repos/{REPO}"
@@ -28,7 +35,7 @@ BASE = 423.833            # y of zero stars
 STEP = 5000               # y-axis tick interval
 
 HERE = pathlib.Path(__file__).parent
-FONT = HERE / "assets" / "PatrickHand.ttf"
+FONT_STACK = "system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
 THEMES = {
     "light": dict(bg="#ffffff", ink="#000000", muted="#666666",
@@ -51,7 +58,7 @@ def human(n):
     return f"{n/1000:g}k" if n >= 1000 else f"{n:g}"
 
 
-def render(series, theme, font_b64):
+def render(series, theme):
     c = THEMES[theme]
     xs = [dt.date.fromisoformat(p["date"]).toordinal() for p in series]
     ys = [p["count"] for p in series]
@@ -61,11 +68,9 @@ def render(series, theme, font_b64):
 
     o = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}"'
-        f' style="stroke-width:3;font-family:chartfont;background:{c["bg"]}">',
+        f' style="stroke-width:3;font-family:{FONT_STACK};background:{c["bg"]}">',
         f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>',
         '<defs>',
-        '<style>@font-face{font-family:"chartfont";'
-        f'src:url(data:font/ttf;base64,{font_b64}) format("truetype")}}</style>',
         '<filter id="xkcdify" width="100%" height="100%" x="-5" y="-5"'
         ' filterUnits="userSpaceOnUse">'
         '<feTurbulence baseFrequency=".05" result="noise" type="fractalNoise"/>'
@@ -144,9 +149,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     (out / "data.json").write_text(json.dumps(data))
 
-    font_b64 = base64.b64encode(FONT.read_bytes()).decode()
     for theme in THEMES:
-        svg = render(data["series"], theme, font_b64)
+        svg = render(data["series"], theme)
         f = out / f"star-history-{theme}.svg"
         f.write_text(svg)
         print(f"{f.name}  {len(svg):,} bytes")
