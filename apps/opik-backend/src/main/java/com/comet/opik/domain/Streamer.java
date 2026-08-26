@@ -74,17 +74,28 @@ public class Streamer {
 
     private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
         try {
-            // deepCopy only when something will be rewritten: JsonUtils.readTree is convertValue, which returns
-            // the same instance when handed a JsonNode, and the redactor rewrites in place. Copying
-            // unconditionally would duplicate every tree on the streaming hot path of every deployment, since
-            // redaction is off by default.
             var tree = JsonUtils.readTree(item);
             outputStream.write(rules.isEmpty()
                     ? tree
-                    : JsonNodeRedactor.redact(tree.deepCopy(), rules, item.getClass()));
+                    : JsonNodeRedactor.redact(copyIfShared(tree, item), rules, item.getClass()));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
+    }
+
+    /**
+     * The redactor rewrites in place, so what it is handed must belong to nobody else.
+     * <p>
+     * JsonUtils.readTree is convertValue, which serializes the item into a TokenBuffer and reads it back - a
+     * tree built for this call, sharing no node with the item, whatever the item was. Copying it again duplicates
+     * every streamed tree for nothing.
+     * <p>
+     * The identity check is what makes that safe to rely on rather than a claim about Jackson: convertValue is
+     * documented as free to return its argument when the argument is already of the target type, and an item that
+     * is itself a JsonNode is the case where that would matter. If it ever does, this copies.
+     */
+    static <T> JsonNode copyIfShared(JsonNode tree, T item) {
+        return tree == item ? tree.deepCopy() : tree;
     }
 
     private <T> Flux<T> handleError(Throwable throwable, ChunkedOutput<JsonNode> outputStream) {
