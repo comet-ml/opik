@@ -68,6 +68,6 @@ public class RedactionRequestFilter implements ContainerRequestFilter {
      * versioned API.
      */
     static boolean coversPath(@NonNull String path) {
-        return COVERED_PATHS.stream().anyMatch(path::contains);
+        return COVERED_PATHS.stream().anyMatch(path::startsWith);
     }
 }
