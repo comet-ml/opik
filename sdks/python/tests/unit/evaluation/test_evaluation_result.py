@@ -847,3 +847,36 @@ def test_compute_experiment_scores__list_isolation_and_error_sanitization():
     assert "failed with RuntimeError" in scores[1].reason
     assert len(scores[1].reason) <= 300
     assert scores[2] == valid2
+
+
+def test_compute_experiment_scores__unstringifiable_exception():
+    class UnstringifiableError(Exception):
+        def __str__(self):
+            raise ValueError("Cannot convert exception to string")
+
+    def broken_scorer(_):
+        raise UnstringifiableError("hidden")
+
+    scores = evaluation_result.compute_experiment_scores(
+        experiment_scoring_functions=[broken_scorer],
+        test_results=[
+            test_result.TestResult(
+                test_case=test_case.TestCase(
+                    trace_id="t1",
+                    dataset_item_id="d1",
+                    mapped_scoring_inputs={"input": "test"},
+                    task_output={"output": "out"},
+                ),
+                score_results=[],
+                trial_id=1,
+            )
+        ],
+    )
+    assert len(scores) == 1
+    assert scores[0].name == "broken_scorer"
+    assert scores[0].scoring_failed is True
+    assert scores[0].metadata == {"_fabricated": True}
+    assert (
+        scores[0].reason
+        == "Experiment scoring function 'broken_scorer' failed with UnstringifiableError."
+    )

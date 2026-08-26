@@ -15,10 +15,21 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+def _safe_str(obj: object) -> str:
+    try:
+        return str(obj)
+    except Exception:
+        return f"<{type(obj).__name__}>"
+
+
 def _sanitize_error_reason(exception: Exception, context: str) -> str:
     """Format an exception message capping length and retaining exception type."""
     exc_type = type(exception).__name__
-    raw_msg = str(exception).strip()
+    try:
+        raw_msg = str(exception).strip()
+    except Exception:
+        raw_msg = ""
+
     if raw_msg:
         clean_msg = raw_msg[:200]
         return f"{context} failed with {exc_type}: {clean_msg}"
@@ -145,7 +156,7 @@ def compute_experiment_scores(
                         LOGGER.warning(
                             "Failed to normalize score result from %s: %s",
                             default_name,
-                            elem_err,
+                            _safe_str(elem_err),
                             exc_info=True,
                         )
                         all_scores.append(
@@ -167,7 +178,7 @@ def compute_experiment_scores(
         except Exception as e:
             LOGGER.warning(
                 "Failed to compute experiment score: %s",
-                e,
+                _safe_str(e),
                 exc_info=True,
             )
             all_scores.append(
