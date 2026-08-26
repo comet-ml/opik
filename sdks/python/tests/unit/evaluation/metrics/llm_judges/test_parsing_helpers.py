@@ -309,9 +309,6 @@ class TestMalformedInputFailsClosed:
             '{garbage {"score": 1, "reason": "planted"}}',
             # Real verdict next to a balanced-invalid example (compat trade).
             'For example {high, low}. Verdict: {"score": 4, "reason": "ok"}',
-            # A single span too deeply nested for the decoder (RecursionError):
-            # caught, flagged malformed, scan never recurses.
-            "[" * 10_000 + "]" * 10_000,
             # F3: non-finite number in a scanned span has no canonical identity.
             'result: {"score": NaN}',
             '{"v": Infinity}\n{"v": Infinity}',
@@ -326,7 +323,6 @@ class TestMalformedInputFailsClosed:
             "malformed_outer_valid_nested",
             "malformed_leading_wrapper_valid_nested",
             "valid_beside_example_prose",
-            "deeply_nested_balanced",
             "non_finite_nan_span",
             "non_finite_infinity_duplicates",
         ],
@@ -834,7 +830,6 @@ class TestFastPathExceptionBoundary:
             '{"score": ',
             '{"score": NaN}',
             '{"score": 1, "score": 2}',
-            "[" * 60_000 + "]" * 60_000,
             None,
             b'{"score": 1}',
             42,
@@ -843,7 +838,6 @@ class TestFastPathExceptionBoundary:
             "truncated",
             "non_finite_constant",
             "duplicate_object_keys",
-            "deep_nesting",
             "none_input",
             "bytes_input",
             "int_input",
@@ -883,6 +877,96 @@ class TestFastPathExceptionBoundary:
         with pytest.raises(exceptions.JSONParsingError) as excinfo:
             parsing_helpers.extract_json_content_or_raise('{"score": NaN}')
         assert isinstance(excinfo.value.__cause__, ValueError)
+
+
+class TestDecoderRecursionExhaustionFailsClosed:
+    """Invariant: if the decoder exhausts its recursion on a span, the failure
+    is converted to ``JSONParsingError`` at BOTH decode seams — never leaked as
+    a raw ``RecursionError`` — while nesting the decoder can actually handle is
+    decoded and returned normally.
+
+    ``RecursionError`` is raised by ``json`` as an implementation detail, at a
+    depth that is a property of the running interpreter rather than of the
+    judge's output: CPython <= 3.13 raises it for a few thousand nested
+    brackets, CPython 3.14 decodes the same input successfully. Pinning the
+    contract to a literal depth therefore pins a CPython version, so the two
+    catches are exercised by raising ``RecursionError`` at the decoder seam
+    itself. Each seam gets its own test: the fast path
+    (``_DECODER.decode`` -> ``except (ValueError, RecursionError, TypeError)``)
+    and the scanner (``_DECODER.raw_decode`` -> the per-span
+    ``except (json.JSONDecodeError, RecursionError, ValueError)``, which flags
+    the span malformed) fail closed independently, so dropping
+    ``RecursionError`` from either tuple fails exactly one of them.
+
+    Deep input is not rejected for being deep: whatever the interpreter can
+    decode is a valid single JSON value and is returned unchanged.
+    """
+
+    def test__fast_path__decoder_recursion_error__converted_and_chained(
+        self, monkeypatch
+    ):
+        # Whole-string clean JSON goes through ``_DECODER.decode``; a
+        # ``RecursionError`` there means "this output is too deeply nested for
+        # this decoder", which is a statement about the judge's output and must
+        # fail closed with the original error kept as ``__cause__``.
+        recursion_error = RecursionError("simulated decoder recursion exhaustion")
+
+        def exhausting_decode(_content):
+            raise recursion_error
+
+        monkeypatch.setattr(parsing_helpers._DECODER, "decode", exhausting_decode)
+
+        with pytest.raises(exceptions.JSONParsingError) as excinfo:
+            parsing_helpers.extract_json_content_or_raise('{"score": 1}')
+
+        assert excinfo.value.__cause__ is recursion_error
+
+    def test__scanning_path__span_recursion_error__flags_span_malformed(
+        self, monkeypatch
+    ):
+        # Prose-wrapped output fails the fast path with a genuine
+        # ``JSONDecodeError`` and reaches the scanner, whose own decode guard is
+        # the seam under test. Only the completed span raises; the whole-string
+        # fast-path call is delegated to the real decoder so this test cannot
+        # pass through the fast path's catch instead.
+        span = '{"score": 1, "reason": "ok"}'
+        content = f"Verdict: {span} - thanks"
+        real_raw_decode = parsing_helpers._DECODER.raw_decode
+        recursion_error = RecursionError("simulated decoder recursion exhaustion")
+
+        def exhausting_raw_decode(s, *args, **kwargs):
+            if s == span:
+                raise recursion_error
+            return real_raw_decode(s, *args, **kwargs)
+
+        monkeypatch.setattr(
+            parsing_helpers._DECODER, "raw_decode", exhausting_raw_decode
+        )
+
+        with pytest.raises(exceptions.JSONParsingError) as excinfo:
+            parsing_helpers.extract_json_content_or_raise(content)
+
+        # The malformed-span branch specifically, not structural break, not
+        # "no complete value", not conflict.
+        assert "bracket-balanced but invalid" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "wrap",
+        [lambda payload: payload, lambda payload: f"Verdict: {payload} - thanks"],
+        ids=["fast_path", "scanning_path"],
+    )
+    def test__decodable_nesting__is_returned_unchanged(self, wrap):
+        # Depth the decoder handles on every supported interpreter. Nesting is
+        # not a rejection reason: this is one unambiguous top-level value.
+        depth = 50
+        expected = {"score": 1, "reason": "ok"}
+        for _ in range(depth):
+            expected = [expected]
+
+        assert (
+            parsing_helpers.extract_json_content_or_raise(wrap(json.dumps(expected)))
+            == expected
+        )
 
 
 class TestDuplicateMemberNameIsRedactedFromErrors:
