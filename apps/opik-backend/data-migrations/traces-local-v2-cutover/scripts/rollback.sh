@@ -66,6 +66,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_DIR="$SCRIPT_DIR/db-app-analytics"
 
 DATABASE=""
+REPLAY_CHECK_FAILED=0    # set by verify_replay_postcondition; decides the exit code without cutting the guidance short
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 STAGE=""
@@ -249,7 +250,35 @@ assert_topology() {
     esac
 }
 
-# Run one rollback .sql file wholesale, substituting the placeholders. Each file is exactly one stage's statements.
+# Same sourcing contract as run_file (versioned .sql, same two placeholders), but captures the returned value so the
+# driver asserts on it instead of leaving a number on the operator's screen to interpret.
+verify_replay_postcondition() {
+    local file="$SQL_DIR/000004_rollback_verify_replay.sql" sql resurrected
+    [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
+    sql="$(cat "$file")"
+    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
+    resurrected="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --query "$sql")"
+    if [[ "$resurrected" == "0" ]]; then
+        echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'traces'."
+        return 0
+    fi
+    # Never aborts: the promote already succeeded either way, and the operator still needs the flag-revert and repair
+    # guidance that prints after this. The failure travels in the exit code instead. A failed client (dead port-forward,
+    # auth, network) returns empty or non-numeric output, which is "not verified" rather than "N resurrected" — both fail
+    # the check, but only one is a connection problem, so say which.
+    if ! [[ "$resurrected" =~ ^[0-9]+$ ]]; then
+        echo "WARNING: reverse-replay postcondition COULD NOT BE EVALUATED — the query returned no usable count." >&2
+        echo "         Treat the rollback as unverified, not as clean. Fix connectivity and re-run the check below." >&2
+    else
+        echo "WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live again" >&2
+        echo "         on 'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
+    fi
+    echo "         Re-run the replay (idempotent), then this check repeats:" >&2
+    echo "           ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --reverse-replay-only --cutover-start '$CUTOVER_START' --confirm-retention-paused" >&2
+    return 1
+}
+
 run_file() {
     local file="$SQL_DIR/$1" sql
     [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
@@ -310,8 +339,8 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     echo "     Distributed, which rejects mutations (Code 36) AND exposes the cross-node skew unbuffered. Either window is"
     echo "     delete-path-only — reads and inserts never consult the flag — so keep it short and fail loud."
     echo "  2. Leave databaseAnalyticsDataModel.traceColumnsNonNullable=true: the live table keeps the successor's sentinel"
-    echo "     schema. Leave tracesWeeklyPartitionPruningEnabled as it is — it asserts the live table is the partitioned"
-    echo "     successor, which is still true. No sentinel/duration repair is needed (that is a stage B/C concern)."
+    echo "     schema. That is the only flag to leave alone — partition pruning is unconditional and has no flag. No"
+    echo "     sentinel/duration repair is needed either (that is a stage B/C concern)."
     echo "  3. The partition metrics relabel back: the opik.clickhouse.partition.* parts gauges move from"
     echo "     table=\"traces_local\" to table=\"traces\", so restore any dashboards/alerts adjusted at wrap time. AND if the"
     echo "     wrap-time option to point PARTITION_METRICS_LWD_TABLES at 'traces_local' was taken, revert it to 'traces'"
@@ -363,7 +392,8 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
     run_file 000004_rollback_reverse_replay.sql
     echo "Reverse-replay-only done: bridged deletes since cutover_start re-applied to the live 'traces'."
-    exit 0
+    verify_replay_postcondition || REPLAY_CHECK_FAILED=1
+    exit "$REPLAY_CHECK_FAILED"
 fi
 
 assert_topology
@@ -386,12 +416,14 @@ case "$STAGE" in
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
         run_file 000004_rollback_stage_b_exchange_back.sql
         run_file 000004_rollback_reverse_replay.sql
+        verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
         ;;
     C)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
         run_file 000004_rollback_stage_c_promote_original.sql
         run_file 000004_rollback_reverse_replay.sql
+        verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
         ;;
 esac
@@ -427,10 +459,13 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "the successor in its original week). Triage with --drill-down, then look each differing id up in the successor"
     echo "WITHOUT a week filter: last_updated_at >= cutover_start means benign. Absent from the successor entirely is the"
     echo "real signal — that one is a copy gap."
-    echo "Then run finalize.sh once healthy — it recycles the backup into an empty traces_local_v2 (restoring the"
-    echo "pre-cutover shadow), the one irreversible step."
     echo
     echo "NEXT, on the restored original (see README 'Rolling back the traceColumnsNonNullable flip'):"
+    if [[ "$STAGE" == "C" ]]; then
+        echo "  0. Set databaseAnalyticsDataModel.tracesDistributedWrapEnabled=false and roll-restart. Stage C removed the"
+        echo "     wrapper and parked 'traces_local', so a stale true sends trace DELETEs at a table that no longer exists"
+        echo "     (Code 60 UNKNOWN_TABLE). Nothing else consults the flag, so the window is delete-path-only."
+    fi
     echo "  1. Set databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance."
     echo "     (Config push or rolling restart, whichever this deployment uses — the mechanism is outside these"
     echo "     DB-facing scripts by design; see the runbook, \"The only manual actions are not SQL\".)"
@@ -450,4 +485,16 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "     NOTE: these two statements need ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces'. A user scoped to"
     echo "     the rollback grant set has only ALTER UPDATE(_row_exists) — all the reverse replay needs — and will get"
     echo "     ACCESS_DENIED here, so run the repair as a more privileged user or add those two column grants."
+    echo
+    echo "LAST, and only once every step above has landed: finalize.sh recycles traces_post_rollback_backup into an"
+    echo "empty traces_local_v2. That is the irreversible step — it destroys the only copy of the post-cutover writes"
+    echo "this rollback discarded, and with it the cheap retry. Do not run it until the flag reverts, the sentinel"
+    echo "repair and the checks above are done (runbook: 'When the rollback is done')."
+fi
+
+# Last, so the guidance above always prints: a caller reading only $? must not be told this rollback succeeded.
+if [[ "$REPLAY_CHECK_FAILED" != "0" ]]; then
+    echo >&2
+    echo "ROLLBACK INCOMPLETE: the reverse-replay postcondition failed (see the WARNING above). Exiting non-zero." >&2
+    exit 1
 fi
