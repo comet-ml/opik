@@ -83,12 +83,24 @@ class ClaudeAggregator(ChunkAggregator):
                         LOGGER.debug(
                             "Claude message_delta: output_tokens=%d", output_tokens
                         )
+                    if "cache_creation_input_tokens" in usage:
+                        cache_creation_input_tokens = usage[
+                            "cache_creation_input_tokens"
+                        ]
+                    if "cache_read_input_tokens" in usage:
+                        cache_read_input_tokens = usage["cache_read_input_tokens"]
 
                 elif chunk_type == "message_stop":
                     metrics = chunk_data.get("amazon-bedrock-invocationMetrics", {})
                     if metrics:
                         input_tokens = metrics.get("inputTokenCount", input_tokens)
                         output_tokens = metrics.get("outputTokenCount", output_tokens)
+                        cache_creation_input_tokens = metrics.get(
+                            "cacheWriteInputTokenCount", cache_creation_input_tokens
+                        )
+                        cache_read_input_tokens = metrics.get(
+                            "cacheReadInputTokenCount", cache_read_input_tokens
+                        )
                         LOGGER.debug(
                             "Claude bedrock metrics: input=%d, output=%d",
                             input_tokens,
