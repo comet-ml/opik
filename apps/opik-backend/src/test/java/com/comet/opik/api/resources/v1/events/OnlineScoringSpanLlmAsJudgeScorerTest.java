@@ -190,7 +190,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName(fileName)
                 .build();
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
@@ -228,7 +227,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var persistentAttachment = AttachmentInfo.builder()
                 .entityId(span.id()).entityType(EntityType.SPAN).fileName("diagram.png").build();
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
@@ -254,7 +252,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan();
         var message = buildMessage(span, code);
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         // Attachment listing fails — onErrorReturn(List.of()) degrades to a structure without attachment
@@ -289,7 +286,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName(fileName)
                 .build();
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         // Cold lookup: first subscription sees the not-yet-uploaded state (empty), the retry sees it land.
@@ -368,33 +364,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     }
 
     @Test
-    void spanVariableWithToggleOffRendersEmptyStructureWithoutToolsOrFetch() {
-        var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_SPAN, SpanLlmAsJudgeCode.class);
-        var span = createSpan();
-        var message = buildMessage(span, code);
-
-        // Agentic tools OFF, but the prompt references {{span}}. We must NOT fetch attachments or attach
-        // tools — yet {{span}} must still render (as "{}"), never the literal sentinel word "span".
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
-        when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
-        ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
-        when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
-                .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
-        when(feedbackScoreService.scoreBatchOfSpans(any())).thenReturn(Mono.empty());
-
-        scorer.score(message).block();
-
-        assertThat(requestCaptor.getValue().toolSpecifications()).isNullOrEmpty();
-        verifyNoInteractions(attachmentService);
-        String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
-        assertThat(prompt).contains("Score this span: {}");
-        assertThat(prompt).doesNotContain("{{span}}");
-    }
-
-    @Test
     void spanVariableOnNonToolProviderCapsInjectedStructure() {
-        // {{span}} + agentic tools ON, but the provider can't call tools → inline fallback. The injected
+        // {{span}} + a provider that can't call tools → inline fallback. The injected
         // span structure (built from the full span) must be CAPPED so a large span can't overflow the
         // model's context window; without the cap the whole span input/output would be inlined verbatim.
         var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_SPAN, SpanLlmAsJudgeCode.class);
@@ -411,7 +382,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .build();
         var message = buildMessage(span, code);
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         // OLLAMA does not support tool-calling → the {{span}} rule falls back to the inline path.
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OLLAMA);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
@@ -441,7 +411,6 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan();
         var message = buildMessage(span, code);
 
-        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
         lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
