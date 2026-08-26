@@ -25,10 +25,18 @@ public record RedactionRule(@NonNull Pattern pattern, @NonNull String replacemen
     }
 
     /**
+     * @param outputLimit the longest output this rewrite may produce, past which the value is masked whole
+     *                    rather than materialized. A replacement longer than the text it replaces multiplies the
+     *                    value's length by however many matches it contains - a rule replacing single characters
+     *                    with a ten-character token turns a 2 MB value into a 20 MB one, and two such rules
+     *                    chained turn 100 KB into 10 MB - so the size of the response is otherwise a product of
+     *                    the caller's payload and the operator's replacement, with nothing bounding it.
+     *                    {@code StreamReadConstraints} do not: they bound what is parsed in, not what is built
+     *                    on the way out.
      * @return the rewritten text, or {@link MatchBudget#EXCEEDED} when evaluating this rule against this value
-     *         exhausted the budget - see {@link MatchBudget} for why that is not treated as "no match".
+     *         exhausted either bound - see {@link MatchBudget} for why that is not treated as "no match".
      */
-    public String apply(@NonNull String text, @NonNull MatchBudget budget) {
+    public String apply(@NonNull String text, @NonNull MatchBudget budget, long outputLimit) {
         try {
             var matcher = pattern.matcher(budget.wrap(text));
             StringBuilder rewritten = null;
@@ -40,6 +48,13 @@ public record RedactionRule(@NonNull Pattern pattern, @NonNull String replacemen
                 }
                 rewritten.append(text, last, matcher.start()).append(replacement);
                 last = matcher.end();
+
+                // Checked as it grows rather than predicted: the builder is the allocation being bounded, so
+                // stopping once it is over the limit costs one comparison per match and never holds more than
+                // the limit plus one replacement.
+                if (rewritten.length() > outputLimit) {
+                    return MatchBudget.EXCEEDED;
+                }
             }
 
             if (rewritten == null) {

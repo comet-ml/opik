@@ -118,6 +118,56 @@ class MatchBudgetTest {
     }
 
     @Test
+    @DisplayName("a replacement longer than what it replaces cannot multiply the response")
+    void aLongReplacementCannotMultiplyTheResponse() {
+        // Unbounded this returns a string ten times the length of its input, and the input is a caller's own
+        // content up to jacksonConfig.maxStringLength - 100 MB in, a gigabyte out.
+        var amplifying = new RedactionRules(List.of(RedactionRule.of("[0-9]", "[REDACTED]")));
+        var digits = "0123456789".repeat(20_000);
+
+        var masked = amplifying.apply(digits);
+
+        assertThat(masked).isEqualTo("[REDACTED]");
+        assertThat(masked.length()).isLessThan(digits.length());
+    }
+
+    @Test
+    @DisplayName("chained rules cannot compound the growth between them")
+    void chainedRulesCannotCompoundTheGrowth() {
+        // Ten times, then ten times again: bounding each rule against its own input would allow the product.
+        var chained = new RedactionRules(List.of(
+                RedactionRule.of("[0-9]", "0000000000"),
+                RedactionRule.of("0", "1111111111")));
+        var digits = "0123456789".repeat(20_000);
+
+        assertThat(chained.apply(digits)).isEqualTo("[REDACTED]");
+    }
+
+    @Test
+    @DisplayName("a token longer than the value it masks is still emitted")
+    void aTokenLongerThanTheValueItMasksIsStillEmitted() {
+        // The ordinary shape of an expanding rule, and the reason for the floor: growth measured as a factor
+        // alone would refuse to replace a short match with a long token.
+        var expanding = new RedactionRules(List.of(
+                RedactionRule.of("\\b\\d{3}-\\d{3}-\\d{4}\\b", "[PHONE_NUMBER_REDACTED_FOR_THIS_READER]")));
+
+        assertThat(expanding.apply("555-123-4567"))
+                .isEqualTo("[PHONE_NUMBER_REDACTED_FOR_THIS_READER]");
+    }
+
+    @Test
+    @DisplayName("a large value whose rewrite stays within the bound is rewritten, not masked")
+    void aLargeValueWithinTheBoundIsRewritten() {
+        var expanding = new RedactionRules(List.of(RedactionRule.of("secret", "[REDACTED]")));
+        var stored = "the secret is in here somewhere among other words ".repeat(20_000);
+
+        var rewritten = expanding.apply(stored);
+
+        assertThat(rewritten).doesNotContain("secret").contains("[REDACTED]");
+        assertThat(rewritten.length()).isGreaterThan(stored.length());
+    }
+
+    @Test
     @DisplayName("a replacement is emitted literally, not with its own escaping visible")
     void aReplacementIsEmittedLiterally() {
         // Matcher.quoteReplacement escapes $ and \ for appendReplacement to undo. Appending the quoted form
