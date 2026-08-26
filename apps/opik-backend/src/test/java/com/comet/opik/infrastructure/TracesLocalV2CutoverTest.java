@@ -1687,8 +1687,13 @@ class TracesLocalV2CutoverTest {
 
     /**
      * The reverse-replay postcondition, mirroring {@code 000004_rollback_verify_replay.sql} — same key, same
-     * {@code toFixedString(36)} casts, same window and length guards, same aggregate. Kept in step with that file
-     * (its {@code log_comment} is observability, not semantics, so it is omitted here as elsewhere in this class).
+     * {@code toFixedString(36)} casts, same window and length guards, same aggregate, and the same database
+     * qualification on both tables. Kept in step with that file; its {@code log_comment} is the one omission, being
+     * observability rather than semantics, as elsewhere in this class.
+     *
+     * <p>The qualification is deliberate, not boilerplate: this is the only statement in the runbook that reads through
+     * {@code clusterAllReplicas}, so qualifying both the outer table and the {@code IN} subquery keeps it correct
+     * regardless of the connecting session's default database. A single-node container cannot show that.
      */
     private long verifyReplayPostcondition(String cutoverStart) {
         var sql = """
@@ -1699,14 +1704,14 @@ class TracesLocalV2CutoverTest {
                         workspace_id,
                         toFixedString(project_id, 36),
                         toFixedString(deleted_id, 36)
-                    FROM deletion_events_local
+                    FROM %s.deletion_events_local
                     WHERE source_table = 'traces'
                       AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id != ''
                       AND length(project_id) = 36
                       AND length(deleted_id) = 36
                 )
-                """.formatted(DATABASE_NAME);
+                """.formatted(DATABASE_NAME, DATABASE_NAME);
         return template
                 .nonTransaction(connection -> Mono
                         .from(connection.createStatement(sql)
