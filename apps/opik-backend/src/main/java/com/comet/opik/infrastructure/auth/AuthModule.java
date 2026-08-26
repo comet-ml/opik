@@ -12,6 +12,7 @@ import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
@@ -19,6 +20,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Objects;
 
+@Slf4j
 public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
@@ -31,6 +33,16 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             @NonNull RedactionService redactionService) {
 
         if (!config.isEnabled()) {
+            if (redactionService.isEnabled()) {
+                // trace_original_data_view is resolved by the authentication call and nothing else sets it, so
+                // with authentication off no caller can hold it and every response is masked for everybody, with
+                // no way to grant an exemption. Said out loud because the configuration reads as if it were a
+                // per-caller control here, and it is not.
+                log.warn("Read-time redaction is enabled while authentication is disabled: no caller can hold "
+                        + "'{}', so every response will be redacted for every caller",
+                        WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue());
+            }
+
             return new AuthServiceImpl(requestContext);
         }
 

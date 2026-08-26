@@ -1845,6 +1845,11 @@ agentConfig:
 redaction:
   # Default: false
   # Description: Master switch. Also gates the workspace settings that expose this in the UI.
+  # REQUIRES AUTHENTICATION. The exemption is the trace_original_data_view workspace permission, which arrives on
+  # the authentication call and from nowhere else, so with authentication.enabled=false no caller can hold it and
+  # every response is masked for everybody with no way to grant an exemption. The backend logs that at startup.
+  # This is why there is no self-hosted guide for the feature: on a deployment without the platform's
+  # authentication there is nothing to configure per caller.
   enabled: ${OPIK_REDACTION_ENABLED:-false}
   # Default: [] - which is valid only while enabled=false. An empty set with enabled=true fails startup
   # ("redaction.rules must not be empty when redaction.enabled=true") rather than masking nothing while
