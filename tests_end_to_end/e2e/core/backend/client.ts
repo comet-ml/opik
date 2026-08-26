@@ -50,6 +50,13 @@ export interface RawApiResult {
   status: number;
   /** The backend's `message` field, or the raw body when it isn't JSON. */
   message: string;
+  /**
+   * The `Location` header, when the endpoint answers 201 with one. Creation
+   * endpoints in this API return no body, so this is the only place the new
+   * entity's id appears. Optional because the callers that only assert a
+   * status code build this shape themselves and have no header to report.
+   */
+  location?: string | null;
 }
 
 /** One row of the dataset's Version history tab. */
@@ -302,7 +309,7 @@ export function makeBackendClient(apiKey: string | null = null) {
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -330,7 +337,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json };
+    return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
   /**
@@ -844,6 +851,119 @@ export function makeBackendClient(apiKey: string | null = null) {
       }));
     },
 
+    /**
+     * Create a python-metric automation rule and return its id.
+     *
+     * Raw-fetched rather than typed: the pinned SDK's evaluator model has no
+     * `trace_thread_user_defined_metric_python` variant, and the create
+     * endpoint answers 201 with an empty body, so the `Location` header is the
+     * only place the new rule's id appears.
+     *
+     * The two scopes take different `code` shapes and the difference is not
+     * cosmetic — a thread rule's metric is handed the whole conversation as a
+     * single positional argument, so there is no variable mapping to express,
+     * and sending one is rejected. Trace scope must send a resolvable mapping:
+     * the backend refuses to call the evaluator with an empty argument map.
+     */
+    async createAutomationRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Python source for the metric class. */
+      metric: string;
+      /** `score()` parameter name -> extraction path (e.g. `output.answer`). Trace scope only. */
+      arguments?: Record<string, string>;
+      type?: 'user_defined_metric_python' | 'trace_thread_user_defined_metric_python';
+      triggerScope?: 'production' | 'experiment' | 'both';
+      enabled?: boolean;
+    }): Promise<string> {
+      const type = args.type ?? 'user_defined_metric_python';
+      const isThreadScope = type === 'trace_thread_user_defined_metric_python';
+      if (isThreadScope && args.arguments) {
+        throw new Error(
+          `createAutomationRule: '${args.name}' is thread-scope, which takes no variable ` +
+            'mapping — the metric receives the whole conversation positionally.',
+        );
+      }
+      if (!isThreadScope && !args.arguments) {
+        throw new Error(
+          `createAutomationRule: '${args.name}' is trace-scope and needs a variable mapping — ` +
+            'the backend will not call the evaluator with an empty argument map.',
+        );
+      }
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type,
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            code: {
+              metric: args.metric,
+              ...(args.arguments ? { arguments: args.arguments } : {}),
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createAutomationRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createAutomationRule: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * The `code` block of a python-metric rule, as it was persisted.
+     *
+     * Read raw because the pinned SDK's evaluator model does not expose the
+     * code block's `arguments` map. That map is the point: it is where the
+     * rule dialog's variable mappings end up, so it is the only place a
+     * mapping the form auto-filled can be shown to have been WRITTEN rather
+     * than merely hidden from the user.
+     */
+    async getAutomationRuleCode(
+      ruleId: string,
+    ): Promise<{ metric: string; arguments: Record<string, string> }> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getAutomationRuleCode: ${ruleId} answered ${status}: ${message}`);
+      }
+      const code = (json as { code?: { metric?: unknown; arguments?: unknown } } | null)?.code;
+      if (!code || typeof code.metric !== 'string') {
+        throw new Error(
+          `getAutomationRuleCode: ${ruleId} returned no python code block — it is not a ` +
+            'python-metric rule, or the response shape changed.',
+        );
+      }
+      // An absent `arguments` and an empty one are different answers: the first
+      // means the rule stored no mapping at all, which is exactly what a broken
+      // auto-fill would produce. Do not collapse them into `{}`.
+      if (code.arguments === undefined || code.arguments === null) {
+        throw new Error(`getAutomationRuleCode: ${ruleId} returned no 'arguments' map`);
+      }
+      return {
+        metric: code.metric,
+        arguments: code.arguments as Record<string, string>,
+      };
+    },
+
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
       try {
         await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
@@ -916,6 +1036,39 @@ export function makeBackendClient(apiKey: string | null = null) {
           source: String(fs.source),
         })),
       };
+    },
+
+    /**
+     * The names of a trace's spans, as the server holds them — not as the
+     * seeding SDK reported them.
+     *
+     * Names only, sorted: the callers are asserting *which* spans a trace owns
+     * before something downstream claims to have been handed them, never the
+     * spans' content.
+     */
+    async listSpanNamesForTrace(args: {
+      projectId: string;
+      traceId: string;
+    }): Promise<string[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        traceId: args.traceId,
+        size: 100,
+      });
+      return (page.content ?? []).map((s) => String(s.name ?? '')).sort();
+    },
+
+    /**
+     * Close a thread, which is what makes it eligible for thread-scope online
+     * scoring: the engine only enqueues a thread once it is inactive, so a
+     * spec that seeded its turns moments ago would otherwise wait out the
+     * inactivity timeout instead of asserting.
+     */
+    async closeThread(args: { projectName: string; threadId: string }): Promise<void> {
+      await opik.api.traces.closeTraceThread({
+        projectName: args.projectName,
+        threadId: args.threadId,
+      });
     },
 
     /**

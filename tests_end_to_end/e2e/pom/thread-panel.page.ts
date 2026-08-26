@@ -101,6 +101,17 @@ export class ThreadPanelPage {
   }
 
   /**
+   * The Reason cell for a named score. Returned as a locator rather than text
+   * so callers assert with `toContainText`, which retries: the scores table
+   * hydrates after the tab renders, so reading `textContent` once can catch an
+   * empty cell.
+   */
+  feedbackScoreReasonCell(scoreName: string): Locator {
+    // Columns are: Key | Score | Reason | <actions>
+    return this.feedbackScoreRow(scoreName).getByRole('cell').nth(2);
+  }
+
+  /**
    * Read the number in the Score column for a named score. Requires the tab to
    * be open. Throws — rather than returning a sentinel — if the cell is not a
    * number, so a renamed column fails loudly instead of comparing as NaN.
