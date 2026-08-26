@@ -944,6 +944,19 @@ as one file per stage (`000004_rollback_stage_a_discard_shadow.sql`, `…_stage_
 `000004_rollback_reverse_replay.sql`) and driven by [`scripts/rollback.sh`](scripts/rollback.sh), so no one authors it
 under pressure.
 
+**Roll back only for a regression you cannot serve through.** The successor is the live table once the `EXCHANGE`
+lands, so a fault in it is a production fault and the normal choice applies: fix forward, or reverse. Reverse when the
+data or the read path is wrong in a way that harms users now — wrong or missing rows, absent-value semantics breaking
+filters and sorts, a latency regression the product cannot absorb. Fix forward for anything you would fix forward in any
+other feature: a slow query to tune, a dashboard label, a metric gone quiet, a bug with a known patch. Rolling back is
+not the safer default — it discards post-cutover writes, runs the guard-less reverse replay, and returns the estate to
+the unpartitioned original, so it costs more than most faults are worth.
+
+Two things bound the decision rather than a stopwatch. The **window** is open only while the parked original exists —
+`finalize.sh` closes it, and nothing reopens it (see "Point of no return"). And in practice the decision is made in the
+hours after the cutover, while the soak is still fresh: the longer the successor serves traffic well, the less a rollback
+buys and the more post-cutover writes it throws away. If the service is progressing, you are past needing this section.
+
 **Reverse the smallest thing that fixes the problem.** The cutover delivers two independent changes — *partitioning* (the
 `EXCHANGE`) and *sharding-readiness* (the wrap) — and they roll back separately. If only the **wrap** is at fault, use
 `--unwrap-only`: it keeps the partitioned successor live, so there is no write loss, no reverse replay, no sentinel
@@ -1061,7 +1074,11 @@ Use stage B/C while the parked original still exists.
 > shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
 
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
-statements, so a failure *between* them needs a restart path:
+statements. Note what that means even when both succeed: between them the restored original is live with the
+post-cutover deletes **not yet re-applied**, so traces a user deleted after the cutover are briefly readable again. The
+interval is the replay's wall time — seconds for a rollback taken hours after the cutover, since it only covers deletes
+bridged since `cutover_start` — but it is a real exposure, and one more reason to run the promote with reads quiesced as
+the note above says. A failure *between* the two needs a restart path:
 
 - **Reverse-replay interrupted (stage B or C).** The promote already restored the original, so `traces` is back in the
   canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
@@ -1116,6 +1133,25 @@ complete until they land.
    > scoped to that set gets `ACCESS_DENIED` here, so the repair cannot simply be pasted into the session that ran
    > `rollback.sh`. Either grant both columns alongside the rollback grants, or run the repair as a more privileged
    > user.
+
+**When the rollback is done.** The stages leave the estate correct but not self-evidently so — the promote and the
+replay report success independently of whether the result is consistent, and two of the steps are config rather than SQL.
+Treat a stage B/C rollback as complete only when all of these hold:
+
+- [ ] **Fidelity** — the bounded compare on the post-rollback pair passes, using the `--to-week` offset `rollback.sh`
+      printed (see "Verifying after a rollback", including which mismatches inside the bound are benign and how to tell).
+- [ ] **No delete resurrected** — no id bridged since `cutover_start` is live on the restored `traces`. This is the
+      replay's whole job, and the one thing a successful-looking promote can silently leave undone; if the replay was
+      interrupted, re-run it with `--reverse-replay-only` (above) rather than re-running the stage.
+- [ ] **Flags reverted and the restart landed on every instance** — `traceColumnsNonNullable`,
+      `tracesWeeklyPartitionPruningEnabled`, and `tracesDistributedWrapEnabled` if the wrap had been applied. Verify
+      positively, not by absence of errors: absent `end_time`/`ttft` must read back as `null`.
+- [ ] **Sentinel repair applied** — `sentinel_end_time` and `sentinel_ttft` at `0`. Not `duration < 0`, which has a
+      non-zero floor from rows whose `end_time` genuinely precedes `start_time`.
+- [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
+      of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
+
+Until the last box is ticked, do not run `finalize.sh`: it is what forecloses both going back and retrying cheaply.
 
 **Retrying the cutover after a stage B/C rollback — without re-backfilling.** A rollback leaves the successor's data
 parked as `traces_post_rollback_backup`, and the documented next step (`finalize.sh`) **truncates** it into an empty
