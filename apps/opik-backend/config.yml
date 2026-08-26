@@ -1846,6 +1846,11 @@ redaction:
   # Default: false
   # Description: Master switch. Also gates the workspace settings that expose this in the UI.
   enabled: ${OPIK_REDACTION_ENABLED:-false}
+  # Default: [] with enabled=false. An empty set with enabled=true fails startup rather than masking nothing
+  # while appearing to be on.
+  # NOTE ON SHAPE: this key names the mechanism (regex rules). If the enforcement mechanism is ever replaced,
+  # deployments configured on `rules` face a breaking migration. A `mode:` discriminator with the rules nested
+  # under it would make that additive instead; worth doing before this is enabled anywhere.
   # Default: [] (no rules, so nothing is redacted even when enabled)
   # Description: JSON array of {"regex", "replace"} applied in order to every string in a response, each rule
   # seeing the previous rule's output. "replace" is literal text: unlike the SDK anonymizer, backreferences are
@@ -1854,6 +1859,21 @@ redaction:
   # rather than silently disabling redaction.
   # Object keys are never rewritten, only values: a key is part of the document's shape, and rewriting it would
   # break lookups into that object. Sensitive data therefore has to be in values, not field names.
+  # THEREFORE a payload shaped {"john.doe@example.com": "..."} carries the identifier in a key and is returned as
+  # stored. Rewriting keys is not the fix: two keys collapsing to the same replacement produce a document with
+  # duplicate keys, and the parser that reads it keeps only one of them - valid JSON that has silently lost data.
+  # Keys are structure; the place to keep identifiers out of them is the instrumentation that writes them.
+  # The permission is read from the cached authentication result, so granting or revoking trace_original_data_view
+  # takes effect within authentication.apiKeyResolutionCacheTTLInSec (default 5s) rather than immediately.
+  # Revocation is the direction that matters: for those few seconds a caller who has just lost it still reads
+  # originals.
+  # NOT YET COVERED: the dataset CSV export (datasetExport.enabled, false by default) writes its file from a
+  # background job with no caller, and the download streams those bytes without applying the rules. Enable the
+  # export feature and an unpermitted caller can read stored content through it. Masking belongs on the download,
+  # which does have a caller, applied per cell through the CSV parser so the rules cannot reach the delimiters.
+  # A value whose rules cannot be evaluated within the internal match budget is masked whole rather than returned
+  # (see MatchBudget). Anchored rules never approach it; an unanchored one on a long token will, and the value is
+  # then withheld rather than shown.
   # Callers with no credentials reading a public project are redacted too: an anonymous reader cannot hold the
   # permission, so the public view shows the redacted content rather than what is stored. The MCP OAuth route resolves the
   # caller from a username header rather than an authenticated principal, so on a deployment that enables it the
