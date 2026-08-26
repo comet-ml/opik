@@ -1,32 +1,21 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.google.cloud.vertexai.VertexAI;
-import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel;
 import lombok.experimental.UtilityClass;
 
-import java.lang.reflect.Field;
-
-/**
- * Reads the host a generated client settled on. Used for the cases that must not issue a request — a single-region
- * location resolves to a real Google host, so calling it would mean network egress and DNS timeouts in CI.
- */
+/** Reads back the {@link VertexAI} (and its host) that a generated model is bound to. */
 @UtilityClass
 class VertexAITestClients {
 
     static String apiEndpointOf(ChatModel model) {
-        try {
-            Field generativeModelField = VertexAiGeminiChatModel.class.getDeclaredField("generativeModel");
-            generativeModelField.setAccessible(true);
-            var generativeModel = generativeModelField.get(model);
+        return vertexAiOf(model).getApiEndpoint();
+    }
 
-            Field vertexAiField = GenerativeModel.class.getDeclaredField("vertexAi");
-            vertexAiField.setAccessible(true);
-
-            return ((VertexAI) vertexAiField.get(generativeModel)).getApiEndpoint();
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Could not read the endpoint off the generated client", e);
+    static VertexAI vertexAiOf(ChatModel model) {
+        if (model instanceof CloseableVertexAiChatModel wrapper) {
+            return wrapper.vertexAI();
         }
+        throw new AssertionError("Expected a CloseableVertexAiChatModel but got " + model.getClass());
     }
 }

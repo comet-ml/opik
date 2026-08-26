@@ -42,7 +42,7 @@ class ExperimentMessageRenderer {
         return messages.stream()
                 .map(msg -> {
                     if (msg.content().isTextual()) {
-                        String rendered = mustacheParser.renderUnescaped(msg.content().asText(), context);
+                        String rendered = mustacheParser.render(msg.content().asText(), context);
                         return ExperimentExecutionRequest.PromptVariant.Message.builder()
                                 .role(msg.role())
                                 .content(JsonUtils.valueToTree(rendered))
@@ -52,7 +52,7 @@ class ExperimentMessageRenderer {
                         var renderedParts = JsonUtils.getMapper().createArrayNode();
                         for (JsonNode part : msg.content()) {
                             if (part.has("text")) {
-                                String rendered = mustacheParser.renderUnescaped(part.get("text").asText(), context);
+                                String rendered = mustacheParser.render(part.get("text").asText(), context);
                                 var renderedPart = ((ObjectNode) part.deepCopy()).put("text", rendered);
                                 renderedParts.add(renderedPart);
                             } else {

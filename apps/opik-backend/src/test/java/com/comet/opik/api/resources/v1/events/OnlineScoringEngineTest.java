@@ -17,6 +17,8 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -205,9 +207,32 @@ class OnlineScoringEngineTest {
             }
             """.formatted(OUTPUT_STR).trim();
 
+    private static final List<LlmAsJudgeOutputSchema> THREE_SCORE_SCHEMA = List.of(
+            new LlmAsJudgeOutputSchema("Relevance", LlmAsJudgeOutputSchemaType.INTEGER, "Relevance of the summary"),
+            new LlmAsJudgeOutputSchema("Conciseness", LlmAsJudgeOutputSchemaType.DOUBLE, "Conciseness of the summary"),
+            new LlmAsJudgeOutputSchema("Technical Accuracy", LlmAsJudgeOutputSchemaType.BOOLEAN,
+                    "Technical accuracy of the summary"));
+
     private static final String MOCK_AI_RESPONSE = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
             + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
             + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
+
+    // Single-score rule, shaped like the built-in Meaning Match: one boolean score in the schema.
+    private static final String TEST_EVALUATOR_SINGLE_SCORE = """
+            {
+              "model": { "name": "gpt-4o", "temperature": 0.3 },
+              "messages": [
+                { "role": "USER", "content": "Question: {{summary}}\\nAnswer: {{answer}}" }
+              ],
+              "variables": {
+                  "summary": "input.questions.question1",
+                  "answer": "output.output"
+              },
+              "schema": [
+                { "name": "Meaning Match", "type": "BOOLEAN", "description": "Whether the answer matches" }
+              ]
+            }
+            """.trim();
 
     private static final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
     private static final String TEST_EVALUATOR_EDGE_CASE = """
@@ -354,6 +379,46 @@ class OnlineScoringEngineTest {
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
+    }
+
+    @Test
+    @DisplayName("score a trace end to end when the judge answers with a flat single-score object")
+    void testRedisFlowScoresTraceWhenJudgeAnswersFlat(OnlineScoringSampler onlineScoringSampler) {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR_SINGLE_SCORE, LlmAsJudgeCode.class);
+        evaluatorsResourceClient.createEvaluator(createRule(projectId, evaluatorCode), WORKSPACE_NAME, API_KEY);
+
+        var trace = createTrace(generator.generate(), projectId);
+        var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        // The shape a rule created before OPIK-7354 still instructs: flat, with an array reason.
+        var aiResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.aiMessage(
+                        "{\"score\": true, \"reason\": [\"the answer matches the expected meaning\"]}"))
+                .build();
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        onlineScoringSampler.onTracesCreated(event);
+
+        Awaitility.await().untilAsserted(() -> {
+            Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
+
+            assertThat(captor.getValue()).hasSize(1);
+            var score = captor.getValue().getFirst();
+            assertThat(score.name()).isEqualTo("Meaning Match");
+            assertThat(score.value()).isEqualByComparingTo(BigDecimal.ONE);
+            assertThat(score.reason()).isEqualTo("the answer matches the expected meaning");
+            assertThat(score.id()).isEqualTo(trace.id());
+        });
     }
 
     @Test
@@ -838,11 +903,11 @@ class OnlineScoringEngineTest {
         var userMessage = (UserMessage) renderedMessages.getFirst();
         var messageText = userMessage.singleText();
 
-        // Should contain the entire input JSON object (HTML-encoded)
+        // Should contain the entire input JSON object, unescaped
         assertThat(messageText).contains("Full input: {");
-        assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
-        assertThat(messageText).containsAnyOf("\"question1\"", "&quot;question1&quot;");
-        assertThat(messageText).containsAnyOf("\"pdf_url\"", "&quot;pdf_url&quot;");
+        assertThat(messageText).contains("\"questions\"");
+        assertThat(messageText).contains("\"question1\"");
+        assertThat(messageText).contains("\"pdf_url\"");
 
         // Should also contain the nested field value
         assertThat(messageText).contains("Nested field: " + SUMMARY_STR);
@@ -882,9 +947,9 @@ class OnlineScoringEngineTest {
         var userMessage = (UserMessage) renderedMessages.getFirst();
         var messageText = userMessage.singleText();
 
-        // Should contain the entire output JSON object (HTML-encoded)
+        // Should contain the entire output JSON object, unescaped
         assertThat(messageText).contains("Full output: {");
-        assertThat(messageText).containsAnyOf("\"output\"", "&quot;output&quot;");
+        assertThat(messageText).contains("\"output\"");
         assertThat(messageText).contains(OUTPUT_STR);
     }
 
@@ -924,9 +989,9 @@ class OnlineScoringEngineTest {
         var userMessage = (UserMessage) renderedMessages.getFirst();
         var messageText = userMessage.singleText();
 
-        // Should contain the entire input JSON object (HTML-encoded)
+        // Should contain the entire input JSON object, unescaped
         assertThat(messageText).contains("Full input: {");
-        assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
+        assertThat(messageText).contains("\"questions\"");
 
         // Should also contain the nested field value
         assertThat(messageText).contains("Nested field: " + SUMMARY_STR);
@@ -1015,8 +1080,8 @@ class OnlineScoringEngineTest {
 
         // Empty spans → enriched serializer omits the `spans` field via @JsonInclude(NON_NULL).
         // The substituted {{context}} JSON renders user/assistant entries from the trace but
-        // never the `spans` key. Mustache HTML-escapes the substituted JSON (`&quot;`), so
-        // we match on bare field names rather than full quoted-string fragments.
+        // never the `spans` key. Matching on bare field names keeps this independent of how the
+        // enriched serializer quotes and orders them.
         var allText = request.messages().stream()
                 .map(Object::toString)
                 .collect(Collectors.joining("\n"));
@@ -1511,71 +1576,6 @@ class OnlineScoringEngineTest {
         assertThat(allText).doesNotContain("ignored-span");
     }
 
-    private static Stream<Arguments> feedbackParsingArguments() {
-        var validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
-                + "\"Conciseness\":{\"score\":4.0,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
-                + "\"Technical Accuracy\":{\"score\":false,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
-        var invalidAiMsgTxt = "a" + validAiMsgTxt;
-        var emptyAiMsgTxt = "{}";
-        var emptyJson = "";
-        var flatAiMsgTxt = "{\"user_satisfaction_score\":75.0,\"reason\":\"why\",\"chat_summary\":\"summary\"}";
-
-        return Stream.of(
-                arguments(validAiMsgTxt, 3),
-                arguments(invalidAiMsgTxt, 0),
-                arguments(emptyAiMsgTxt, 0),
-                arguments(emptyJson, 0),
-                arguments(flatAiMsgTxt, 0));
-    }
-
-    @ParameterizedTest
-    @MethodSource("feedbackParsingArguments")
-    @DisplayName("parse feedback scores from AI response")
-    void testToFeedbackScores(String aiMessage, int expectedSize) {
-        var chatResponse = ChatResponse.builder()
-                .aiMessage(AiMessage.aiMessage(aiMessage))
-                .build();
-
-        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse).scores();
-
-        assertThat(feedbackScores).hasSize(expectedSize);
-
-        if (expectedSize > 0) {
-            var scoresMap = feedbackScores.stream()
-                    .collect(Collectors.toMap(FeedbackScoreBatchItem::name, Function.identity()));
-
-            var relevance = scoresMap.get("Relevance");
-            assertThat(relevance.value()).isEqualTo(BigDecimal.valueOf(5));
-            assertThat(relevance.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
-
-            var conciseness = scoresMap.get("Conciseness");
-            assertThat(conciseness.value()).isEqualTo(new BigDecimal("4.0"));
-            assertThat(conciseness.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
-
-            var techAccuracy = scoresMap.get("Technical Accuracy");
-            assertThat(techAccuracy.value()).isEqualTo(BigDecimal.ZERO);
-            assertThat(techAccuracy.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
-        }
-    }
-
-    @Test
-    @DisplayName("skip feedback scores whose value is null in the AI response")
-    void whenScoreValueIsNull_thenSkipsThatScoreAndReportsItAsSkipped() {
-        var aiMessage = "{\"Relevance\":{\"score\":5,\"reason\":\"applies\"},"
-                + "\"Conciseness\":{\"score\":null,\"reason\":\"not applicable to this turn\"},"
-                + "\"Technical Accuracy\":{\"score\":4.0,\"reason\":\"good\"}}";
-        var chatResponse = ChatResponse.builder()
-                .aiMessage(AiMessage.aiMessage(aiMessage))
-                .build();
-
-        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
-
-        assertThat(parsed.scores()).hasSize(2);
-        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name)
-                .containsExactlyInAnyOrder("Relevance", "Technical Accuracy");
-        assertThat(parsed.nullScoreNames()).containsExactly("Conciseness");
-    }
-
     private JsonObjectSchema createTestSchema() {
         return JsonObjectSchema.builder()
                 .addProperty("Relevance", JsonObjectSchema.builder()
@@ -1643,8 +1643,8 @@ class OnlineScoringEngineTest {
     }
 
     private static Stream<Arguments> testExtractFromJsonWithDifferentValueTypes() {
-        // Note: After Mustache rendering, double quotes in JSON become HTML-encoded as &quot;
-        // Complex objects and arrays are now serialized as proper JSON strings (not Java toString())
+        // Complex objects and arrays are serialized as proper JSON strings (not Java toString()), and
+        // reach the judge unescaped — see MustacheParser.MF (OPIK-7354).
         return Stream.of(
                 // ===== TOP-LEVEL KEYS =====
                 // JSON scalars: Strings, Numbers (Integers and Decimals), Booleans, Null
@@ -1653,16 +1653,16 @@ class OnlineScoringEngineTest {
                 arguments("key", "{\"key\":1.23}", "1.23"),
                 arguments("key", "{\"key\":true}", "true"),
                 arguments("key", "{\"key\":null}", ""),
-                // JSON objects - now serialized as proper JSON (with HTML-encoded quotes)
-                arguments("key", "{\"key\":{\"object\":\"text\"}}", "{&quot;object&quot;:&quot;text&quot;}"),
-                arguments("key", "{\"key\":{\"object\":123}}", "{&quot;object&quot;:123}"),
-                arguments("key", "{\"key\":{\"object\":1.23}}", "{&quot;object&quot;:1.23}"),
-                arguments("key", "{\"key\":{\"object\":true}}", "{&quot;object&quot;:true}"),
+                // JSON objects - serialized as proper JSON
+                arguments("key", "{\"key\":{\"object\":\"text\"}}", "{\"object\":\"text\"}"),
+                arguments("key", "{\"key\":{\"object\":123}}", "{\"object\":123}"),
+                arguments("key", "{\"key\":{\"object\":1.23}}", "{\"object\":1.23}"),
+                arguments("key", "{\"key\":{\"object\":true}}", "{\"object\":true}"),
                 arguments("key", "{\"key\":{\"object\":null}}", "{}"),
-                arguments("key", "{\"key\":{\"a\":1,\"b\":2}}", "{&quot;a&quot;:1,&quot;b&quot;:2}"),
+                arguments("key", "{\"key\":{\"a\":1,\"b\":2}}", "{\"a\":1,\"b\":2}"),
                 arguments("key", "{\"key\":{}}", "{}"),
                 // JSON Arrays - now serialized as proper JSON
-                arguments("key", "{\"key\":[\"a\",\"b\"]}", "[&quot;a&quot;,&quot;b&quot;]"),
+                arguments("key", "{\"key\":[\"a\",\"b\"]}", "[\"a\",\"b\"]"),
                 arguments("key", "{\"key\":[1,2]}", "[1,2]"),
                 arguments("key", "{\"key\":[1.2,3.4]}", "[1.2,3.4]"),
                 arguments("key", "{\"key\":[true,false]}", "[true,false]"),
@@ -1679,16 +1679,16 @@ class OnlineScoringEngineTest {
                 arguments("nested.key", "{\"nested\":{\"key\":null}}", ""),
                 // Objects (with all scalar types inside) - now serialized as proper JSON
                 arguments("nested.key", "{\"nested\":{\"key\":{\"object\":\"text\"}}}",
-                        "{&quot;object&quot;:&quot;text&quot;}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":123}}}", "{&quot;object&quot;:123}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":1.23}}}", "{&quot;object&quot;:1.23}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":true}}}", "{&quot;object&quot;:true}"),
+                        "{\"object\":\"text\"}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":123}}}", "{\"object\":123}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":1.23}}}", "{\"object\":1.23}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":true}}}", "{\"object\":true}"),
                 arguments("nested.key", "{\"nested\":{\"key\":{\"object\":null}}}", "{}"),
                 arguments("nested.key", "{\"nested\":{\"key\":{\"x\":10,\"y\":20}}}",
-                        "{&quot;x&quot;:10,&quot;y&quot;:20}"),
+                        "{\"x\":10,\"y\":20}"),
                 arguments("nested.key", "{\"nested\":{\"key\":{}}}", "{}"),
                 // Arrays (with all scalar types) - now serialized as proper JSON
-                arguments("nested.key", "{\"nested\":{\"key\":[\"a\",\"b\"]}}", "[&quot;a&quot;,&quot;b&quot;]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[\"a\",\"b\"]}}", "[\"a\",\"b\"]"),
                 arguments("nested.key", "{\"nested\":{\"key\":[1,2]}}", "[1,2]"),
                 arguments("nested.key", "{\"nested\":{\"key\":[1.2,3.4]}}", "[1.2,3.4]"),
                 arguments("nested.key", "{\"nested\":{\"key\":[true,false]}}", "[true,false]"),

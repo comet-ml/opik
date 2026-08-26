@@ -8,6 +8,7 @@ import {
   getMetricKPICardConfigs,
 } from "@/v2/pages-shared/experiments/KPICard/KPICard";
 import { StatCard } from "@/ui/stat-card";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   formatAsDuration,
   formatAsCurrency,
@@ -25,6 +26,21 @@ import {
 } from "./optimizationOverviewHelpers";
 
 type MetricValue = number | undefined;
+
+/**
+ * Six significant digits keep sub-cent figures intact ($0.00095615) while
+ * dropping the float noise a client-side sum produces
+ * (0.1 + 0.05 = 0.15000000000000002). Lowering this starts truncating real
+ * reflection-scale spend; raising it puts the noise back.
+ */
+const COST_TOOLTIP_SIGNIFICANT_DIGITS = 6;
+
+/**
+ * Unrounded cost for the tooltip, where the card's 2-4 decimal places would hide
+ * the difference this run actually made.
+ */
+const exactCost = (dollars: number): string =>
+  String(Number(dollars.toPrecision(COST_TOOLTIP_SIGNIFICANT_DIGITS)));
 
 const CANDIDATE_KEY_MAP: Record<string, keyof AggregatedCandidate> = {
   score: "score",
@@ -67,6 +83,12 @@ type OptimizationKPICardsProps = {
   optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
   /**
+   * Backend aggregate for the whole run (Optimization.total_optimization_cost).
+   * Includes optimizer-internal spend (e.g. GEPA reflection calls) that belongs
+   * to no trial (OPIK-7521), so it wins over the client-side trial sum.
+   */
+  totalOptimizationCost?: number;
+  /**
    * When not `NONE`, the score card shows a caption naming the cause, so a
    * degenerate run is not a bare 0%/- (OPIK-7029, OPIK-7458).
    */
@@ -91,13 +113,26 @@ const OptimizationKPICards: React.FunctionComponent<
   isInProgress,
   emptyRunCause = EMPTY_RUN_CAUSE.NONE,
   scoringHealth,
+  totalOptimizationCost,
 }) => {
   const kpiData = useMemo(
     () => ({
-      totalOptCost: experiments.reduce(
-        (sum, e) => sum + (e.total_estimated_cost ?? 0),
-        0,
-      ),
+      // The backend aggregate wins when it has a value, because it also covers
+      // optimizer-internal spend that belongs to no trial, and because it spans
+      // the whole run — the client-side sum below only sees the current page of
+      // trials, so it under-reports any run with more trials than fit one page.
+      // The aggregate comes back as 0 rather than null when there is nothing to
+      // report, so treat 0 as "no answer" and fall back — otherwise a run whose
+      // trials clearly cost something would render as "-".
+      usesBackendTotal:
+        totalOptimizationCost != null && totalOptimizationCost > 0,
+      totalOptCost:
+        totalOptimizationCost != null && totalOptimizationCost > 0
+          ? totalOptimizationCost
+          : experiments.reduce(
+              (sum, e) => sum + (e.total_estimated_cost ?? 0),
+              0,
+            ),
       totalDuration: getCompletedRunDurationSeconds({
         isInProgress,
         optimizationCreatedAt,
@@ -110,10 +145,20 @@ const OptimizationKPICards: React.FunctionComponent<
       optimizationCreatedAt,
       optimizationLastUpdatedAt,
       isInProgress,
+      totalOptimizationCost,
     ],
   );
 
   const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
+
+  // The value can exceed the sum of the trials in the table below, both because
+  // optimizer-internal calls belong to no trial and because that table is
+  // paginated. Name the source, or the card reads as an arithmetic error.
+  const costTooltip = `$${exactCost(kpiData.totalOptCost)}. ${
+    kpiData.usesBackendTotal
+      ? "Whole-run spend, including optimizer-internal LLM calls (e.g. reflection) that belong to no trial."
+      : "Summed from the trials loaded on this page."
+  }`;
 
   return (
     <div className="grid grid-cols-4 gap-4">
@@ -140,13 +185,15 @@ const OptimizationKPICards: React.FunctionComponent<
       })}
 
       <KPICard icon={Coins} label="Optimization cost">
-        <StatCard.Value
-          className={kpiData.totalOptCost > 0 ? "" : "text-muted-slate"}
-        >
-          {kpiData.totalOptCost > 0
-            ? formatAsCurrency(kpiData.totalOptCost)
-            : "-"}
-        </StatCard.Value>
+        {kpiData.totalOptCost > 0 ? (
+          <TooltipWrapper content={costTooltip}>
+            <StatCard.Value>
+              {formatAsCurrency(kpiData.totalOptCost)}
+            </StatCard.Value>
+          </TooltipWrapper>
+        ) : (
+          <StatCard.Value className="text-muted-slate">-</StatCard.Value>
+        )}
         {isInProgress && optimizationCreatedAt ? (
           <ElapsedDuration startedAt={optimizationCreatedAt} />
         ) : (

@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
@@ -48,6 +49,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -88,15 +91,11 @@ class LlmProviderFactoryTest {
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
                         .provider(llmProvider)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
+                        .build()));
 
         // SUT - use config with disabled free model to not interfere with other tests
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
@@ -162,18 +161,14 @@ class LlmProviderFactoryTest {
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
                         .provider(LlmProvider.CUSTOM_LLM)
                         .providerName(providerName)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
                         .baseUrl("http://localhost:11434/v1")
                         .configuration(Map.of("models", configuredModels))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
+                        .build()));
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
@@ -181,7 +176,8 @@ class LlmProviderFactoryTest {
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
-        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig);
+        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
+                mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -202,18 +198,14 @@ class LlmProviderFactoryTest {
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
                         .provider(LlmProvider.CUSTOM_LLM)
                         .providerName(providerName)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
                         .baseUrl("http://localhost:11434/v1")
                         .configuration(Map.of("models", configuredModels))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
+                        .build()));
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
@@ -221,7 +213,8 @@ class LlmProviderFactoryTest {
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
-        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig);
+        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
+                mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException

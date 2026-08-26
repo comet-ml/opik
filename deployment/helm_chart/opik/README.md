@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.23](https://img.shields.io/badge/Version-2.2.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.23](https://img.shields.io/badge/AppVersion-2.2.23-informational?style=flat-square)
+![Version: 2.2.40](https://img.shields.io/badge/Version-2.2.40-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.40](https://img.shields.io/badge/AppVersion-2.2.40-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -249,6 +249,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS | string | `"300"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_ENABLED | string | `"false"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_URL | string | `""` |  |
+| component.backend.env.LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
@@ -266,6 +267,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.ingress.annotations | object | `{}` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
@@ -379,6 +381,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.extraServerHeaders.X-XSS-Protection | string | `"0"` |  |
 | component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.frontend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.ingress.annotations | object | `{}` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
@@ -434,6 +437,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.python-backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.ingress.annotations | object | `{}` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
@@ -442,11 +446,24 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.enabled | bool | `false` |  |
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
+| component.python-backend.lifecycle.preStop.exec.command[0] | string | `"/bin/sh"` |  |
+| component.python-backend.lifecycle.preStop.exec.command[1] | string | `"-c"` |  |
+| component.python-backend.lifecycle.preStop.exec.command[2] | string | `"sleep 5"` |  |
+| component.python-backend.livenessProbe.failureThreshold | int | `3` |  |
+| component.python-backend.livenessProbe.httpGet.path | string | `"/health/liveness"` |  |
+| component.python-backend.livenessProbe.httpGet.port | int | `8000` |  |
+| component.python-backend.livenessProbe.periodSeconds | int | `15` |  |
+| component.python-backend.livenessProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
 | component.python-backend.networkPolicy.additionalRules | list | `[]` |  |
 | component.python-backend.networkPolicy.annotations | object | `{}` |  |
 | component.python-backend.networkPolicy.enabled | bool | `false` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
+| component.python-backend.readinessProbe.failureThreshold | int | `3` |  |
+| component.python-backend.readinessProbe.httpGet.path | string | `"/health/liveness"` |  |
+| component.python-backend.readinessProbe.httpGet.port | int | `8000` |  |
+| component.python-backend.readinessProbe.periodSeconds | int | `10` |  |
+| component.python-backend.readinessProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
 | component.python-backend.securityContext.privileged | bool | `true` |  |
@@ -457,6 +474,11 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
+| component.python-backend.startupProbe.failureThreshold | int | `60` |  |
+| component.python-backend.startupProbe.httpGet.path | string | `"/health/liveness"` |  |
+| component.python-backend.startupProbe.httpGet.port | int | `8000` |  |
+| component.python-backend.startupProbe.periodSeconds | int | `5` |  |
+| component.python-backend.startupProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.waitForRedis.enabled | bool | `true` |  |
 | component.python-backend.waitForRedis.image.registry | string | `"docker.io"` |  |
 | component.python-backend.waitForRedis.image.repository | string | `"busybox"` |  |
@@ -474,6 +496,7 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.tracesDistributedWrapEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled | bool | `false` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.argocd | bool | `false` |  |

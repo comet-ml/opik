@@ -3,6 +3,7 @@ from typing import Optional
 import guardrails
 
 from . import guardrails_decorator
+from ... import analytics
 
 
 def track_guardrails(
@@ -20,6 +21,7 @@ def track_guardrails(
     Returns:
         The modified Guard instance with Opik tracking enabled for its validators.
     """
+    analytics.track_event("integration", "guardrails")
     validators = guard._validators
     decorator_factory = guardrails_decorator.GuardrailsValidatorValidateDecorator()
 

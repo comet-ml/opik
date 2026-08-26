@@ -92,6 +92,9 @@ component:
     metrics:
       enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-backend
       pullPolicy: IfNotPresent
     replicaCount: 1
@@ -175,6 +178,9 @@ component:
       ANALYTICS_DB_DATABASE_NAME: "opik"
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"
       REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
+      # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
+      LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: "relaxed"
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
@@ -232,6 +238,9 @@ component:
     metrics:
       enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
     replicaCount: 1
@@ -253,6 +262,57 @@ component:
           selectPolicy: Max
     backendConfigMap:
       enabled: true
+    # Without a readiness probe a pod joins the Service's endpoints as soon as its container
+    # starts, so during a rollout the backend's evaluator calls reach a gunicorn that is not
+    # listening yet and get "connection refused" (HttpHostConnectException) — the backend's four
+    # retries span only ~3.5s, less than a pod takes to boot. Readiness gates the endpoint on the
+    # app actually answering; the preStop sleep covers the other side of the race, giving
+    # kube-proxy time to drop a terminating pod from the endpoint list before the process exits.
+    #
+    # Overriding any of these replaces only the keys you set — Helm merges the rest of the map in
+    # from here. Set every field you care about, or null the ones you want gone
+    # (`httpGet: null`, `periodSeconds: null`, ...).
+    #
+    # The startup probe is what makes the liveness probe safe: with
+    # PYTHON_CODE_EXECUTOR_STRATEGY=docker, entrypoint.sh waits up to 30s for dockerd and then
+    # loads the sandbox executor image before gunicorn binds, so liveness alone (15s x 3) could
+    # restart the pod before it ever finished starting. Kubernetes suppresses both liveness and
+    # readiness until the startup probe passes, and 5s x 60 gives startup five minutes.
+    startupProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 60
+    livenessProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 15
+      # Above the 1s Kubernetes default: gunicorn under load can take longer than
+      # a second to answer, and a probe timeout counts as a failure.
+      timeoutSeconds: 3
+      failureThreshold: 3
+    # Deliberately /health/liveness, not /health/readiness: the latter pings Redis whenever the RQ
+    # worker is enabled, which it is by default (RQ_WORKER_ENABLED defaults to "true" and this chart
+    # never sets it). That would put a shared dependency in the endpoint-membership decision, so a
+    # Redis blip would fail readiness on every replica at once and leave the backend's evaluator
+    # calls with no endpoints — the same outage this probe exists to prevent. Code execution needs
+    # no Redis; only the Optimization Studio worker does, and that is not what Service endpoints
+    # gate. (REDIS_TIMEOUT_SECONDS also defaults to 5s, above the timeout below, so a slow Redis
+    # would trip the probe before the handler could answer.)
+    readinessProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    lifecycle:
+      preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 5"]
     podDisruptionBudget:
       enabled: false
     # Init container that blocks startup until Redis is reachable. Rendered only
@@ -407,6 +467,9 @@ component:
     metrics:
       enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-frontend
       pullPolicy: IfNotPresent
     replicaCount: 1
@@ -731,6 +794,10 @@ databaseAnalyticsDataModel:
   # Turn true in lockstep with applying the Distributed wrap, so trace delete/retention mutations target
   # traces_local (a Distributed traces rejects mutations). Leave false while traces is still a MergeTree.
   tracesDistributedWrapEnabled: false
+  # Turn true only once the EXCHANGE has put the weekly partitioned successor under `traces`, so a trace DELETE
+  # can prune to the partitions its own ids resolve to. Enables the PRUNING, not the partitioning - setting it creates
+  # nothing. Purely an optimisation; false keeps the unbounded delete.
+  tracesWeeklyPartitionPruningEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps

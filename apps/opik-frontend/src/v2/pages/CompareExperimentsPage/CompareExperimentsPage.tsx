@@ -12,8 +12,23 @@ import ExperimentInsightsTab from "@/v2/pages/CompareExperimentsPage/ExperimentI
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
-import { isTestSuiteExperiment } from "@/lib/experiments";
+import {
+  EXPERIMENT_TAB,
+  ExperimentTabId,
+  getAvailableExperimentTabs,
+  isExperimentTabId,
+  isTestSuiteExperiment,
+} from "@/lib/experiments";
 import CompareExperimentsDetails from "@/v2/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
+import ExperimentLogsTab from "@/v2/pages/CompareExperimentsPage/ExperimentLogsTab/ExperimentLogsTab";
+
+const EXPERIMENT_TAB_LABELS: Record<ExperimentTabId, string> = {
+  [EXPERIMENT_TAB.items]: "Results",
+  [EXPERIMENT_TAB.insights]: "Insights",
+  [EXPERIMENT_TAB.config]: "Configuration",
+  [EXPERIMENT_TAB.scores]: "Feedback scores",
+  [EXPERIMENT_TAB.logs]: "Logs",
+};
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -41,18 +56,15 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
 
   const isTestSuite = isTestSuiteExperiment(memorizedExperiments[0]);
 
-  const showScoresTab = memorizedExperiments.length > 0 && !isTestSuite;
+  const availableTabs = useMemo(
+    () => getAvailableExperimentTabs(memorizedExperiments),
+    [memorizedExperiments],
+  );
 
-  const availableTabs = useMemo(() => {
-    const tabs = new Set(["items", "config"]);
-    if (!isTestSuite) tabs.add("insights");
-    if (showScoresTab) tabs.add("scores");
-    return tabs;
-  }, [isTestSuite, showScoresTab]);
-
-  const effectiveTab = availableTabs.has(tab as string)
-    ? (tab as string)
-    : "items";
+  const effectiveTab =
+    isExperimentTabId(tab) && availableTabs.includes(tab)
+      ? tab
+      : EXPERIMENT_TAB.items;
 
   const renderContent = () => {
     return (
@@ -64,45 +76,38 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
       >
         <PageBodyStickyContainer direction="horizontal" limitWidth>
           <TabsList variant="segmented-primary">
-            <TabsTrigger variant="segmented-primary" value="items">
-              Results
-            </TabsTrigger>
-            {!isTestSuite && (
-              <TabsTrigger variant="segmented-primary" value="insights">
-                Insights
+            {availableTabs.map((tabId) => (
+              <TabsTrigger
+                key={tabId}
+                variant="segmented-primary"
+                value={tabId}
+              >
+                {EXPERIMENT_TAB_LABELS[tabId]}
               </TabsTrigger>
-            )}
-            <TabsTrigger variant="segmented-primary" value="config">
-              Configuration
-            </TabsTrigger>
-            {showScoresTab && (
-              <TabsTrigger variant="segmented-primary" value="scores">
-                Feedback scores
-              </TabsTrigger>
-            )}
+            ))}
           </TabsList>
         </PageBodyStickyContainer>
-        <TabsContent value="items">
+        <TabsContent value={EXPERIMENT_TAB.items}>
           <ExperimentItemsTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
             isTestSuite={isTestSuite}
           />
         </TabsContent>
-        {!isTestSuite && (
-          <TabsContent value="insights">
+        {availableTabs.includes(EXPERIMENT_TAB.insights) && (
+          <TabsContent value={EXPERIMENT_TAB.insights}>
             <ExperimentInsightsTab experimentsIds={experimentsIds} />
           </TabsContent>
         )}
-        <TabsContent value="config">
+        <TabsContent value={EXPERIMENT_TAB.config}>
           <ConfigurationTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
             isPending={isPending}
           />
         </TabsContent>
-        {showScoresTab && (
-          <TabsContent value="scores">
+        {availableTabs.includes(EXPERIMENT_TAB.scores) && (
+          <TabsContent value={EXPERIMENT_TAB.scores}>
             <ExperimentFeedbackScoresTab
               experimentsIds={experimentsIds}
               experiments={memorizedExperiments}
@@ -110,6 +115,12 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             />
           </TabsContent>
         )}
+        <TabsContent value={EXPERIMENT_TAB.logs}>
+          <ExperimentLogsTab
+            experimentsIds={experimentsIds}
+            experiments={memorizedExperiments}
+          />
+        </TabsContent>
       </Tabs>
     );
   };

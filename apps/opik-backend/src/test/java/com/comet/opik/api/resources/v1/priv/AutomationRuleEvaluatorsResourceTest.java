@@ -982,6 +982,73 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @ValueSource(floats = {-0.1f, 1.1f})
+        @DisplayName("create evaluator: when the sampling rate is outside [0,1], then reject at the API boundary")
+        void createEvaluator__whenSamplingRateOutOfRange__thenReturnUnprocessableEntity(float samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.createEvaluator(
+                    evaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("samplingRate"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {0f, 1f})
+        @DisplayName("create evaluator: the inclusive sampling rate bounds are accepted")
+        void createEvaluator__whenSamplingRateOnBounds__thenSucceed(float samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            assertThat(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY)).isNotNull();
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {-0.1f, 1.1f})
+        @DisplayName("update evaluator: when the sampling rate is outside [0,1], then reject at the API boundary")
+        void updateEvaluator__whenSamplingRateOutOfRange__thenReturnUnprocessableEntity(float samplingRate) {
+            var projectId = createProject();
+            var id = createLlmRule("Resample me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("samplingRate"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {0f, 1f})
+        @DisplayName("update evaluator: the inclusive sampling rate bounds are accepted")
+        void updateEvaluator__whenSamplingRateOnBounds__thenSucceed(float samplingRate) {
+            var projectId = createProject();
+            var id = createLlmRule("Resample me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
         @Test
         @DisplayName("a rule literally named '%' does not swallow unrelated names in the same project")
         void whenAWildcardNamedRuleExists__thenUnrelatedNamesAreNotSuffixed() {

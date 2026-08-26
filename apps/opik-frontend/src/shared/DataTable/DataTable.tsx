@@ -28,6 +28,7 @@ import DataTableWrapper, {
 } from "@/shared/DataTable/DataTableWrapper";
 import DataTableBody, {
   DataTableBodyProps,
+  RowVirtualizationConfig,
 } from "@/shared/DataTable/DataTableBody";
 import DataTableSkeletonBody from "@/shared/DataTable/DataTableSkeletonBody";
 import {
@@ -54,6 +55,13 @@ import {
 } from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import useCustomRowClick from "@/shared/DataTable/useCustomRowClick";
+import useColumnVirtualization, {
+  ColumnVirtualizationConfig,
+  ColumnSpacerCell,
+  isColumnSpacer,
+  sliceColumnWindow,
+  sliceColumnWindowHeaders,
+} from "@/shared/DataTable/columnVirtualization";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -63,7 +71,6 @@ declare module "@tanstack/react-table" {
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
-    enableUserFeedbackEditing?: boolean;
     projectId?: string;
     projectName?: string;
   }
@@ -140,6 +147,8 @@ interface DataTableProps<TData, TValue> {
   stickyHeader?: boolean;
   TableWrapper?: React.FC<DataTableWrapperProps>;
   TableBody?: React.FC<DataTableBodyProps<TData>>;
+  columnVirtualization?: ColumnVirtualizationConfig;
+  rowVirtualization?: RowVirtualizationConfig;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -172,6 +181,8 @@ const DataTable = <TData, TValue>({
   autoWidth = false,
   TableWrapper = DataTableWrapper,
   TableBody = DataTableBody,
+  columnVirtualization,
+  rowVirtualization,
   stickyHeader = false,
   meta,
   getSubRows,
@@ -255,6 +266,10 @@ const DataTable = <TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, columnSizing]);
 
+  const columnWindow = useColumnVirtualization(table, columnVirtualization, {
+    supported: !isFunction(renderCustomRow),
+  });
+
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
   const { ref: tableRef } = useObserveResizeNode<HTMLTableElement>((node) => {
@@ -312,7 +327,13 @@ const DataTable = <TData, TValue>({
             }
           : {})}
       >
-        {cells.map((cell) => renderCell(row, cell))}
+        {sliceColumnWindow(cells, columnWindow).map((cell) =>
+          isColumnSpacer(cell) ? (
+            <ColumnSpacerCell key={cell.id} spacer={cell} />
+          ) : (
+            renderCell(row, cell)
+          ),
+        )}
       </TableRow>
     );
   };
@@ -421,7 +442,7 @@ const DataTable = <TData, TValue>({
             }}
           >
             <colgroup>
-              {cols.map((i) => (
+              {sliceColumnWindow(cols, columnWindow).map((i) => (
                 <col key={i.id} style={{ width: `${i.size}px` }} />
               ))}
             </colgroup>
@@ -442,10 +463,25 @@ const DataTable = <TData, TValue>({
                       !isLastRow && "!border-b-0",
                     )}
                   >
-                    {headerGroup.headers.map((header) => {
+                    {sliceColumnWindowHeaders(
+                      headerGroup.headers,
+                      columnWindow,
+                    ).map((entry) => {
+                      if (isColumnSpacer(entry)) {
+                        return (
+                          <ColumnSpacerCell
+                            key={entry.id}
+                            spacer={entry}
+                            isHeader
+                          />
+                        );
+                      }
+
+                      const { header, colSpan, key } = entry;
+
                       return (
                         <TableHead
-                          key={header.id}
+                          key={key ?? header.id}
                           data-header-id={header.id}
                           style={{
                             zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
@@ -461,7 +497,7 @@ const DataTable = <TData, TValue>({
                             isHeader: true,
                             lastLeftPinnedColumnId,
                           })}
-                          colSpan={header.colSpan}
+                          colSpan={colSpan}
                         >
                           {header.isPlaceholder
                             ? ""
@@ -480,13 +516,17 @@ const DataTable = <TData, TValue>({
               })}
             </TableHeader>
             {showSkeleton ? (
-              <DataTableSkeletonBody table={table} />
+              <DataTableSkeletonBody
+                table={table}
+                columnWindow={columnWindow}
+              />
             ) : (
               <TableBody
                 table={table}
                 renderRow={renderRow}
                 renderNoData={renderNoData}
                 showLoadingOverlay={showLoadingOverlay}
+                rowVirtualization={rowVirtualization}
               />
             )}
           </Table>

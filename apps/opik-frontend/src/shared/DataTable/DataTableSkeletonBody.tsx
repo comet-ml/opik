@@ -4,6 +4,12 @@ import { TableBody, TableCell, TableRow } from "@/ui/table";
 import { Skeleton } from "@/ui/skeleton";
 import { ROW_HEIGHT } from "@/types/shared";
 import { ROW_HEIGHT_MAP } from "@/constants/shared";
+import {
+  ColumnSpacerCell,
+  ColumnWindow,
+  isColumnSpacer,
+  sliceColumnWindow,
+} from "@/shared/DataTable/columnVirtualization";
 
 const MAX_SKELETON_ROWS = 50;
 
@@ -15,12 +21,18 @@ const SCREEN_FRACTION: Record<ROW_HEIGHT, number> = {
 
 type DataTableSkeletonBodyProps<TData> = {
   table: Table<TData>;
+  columnWindow: ColumnWindow;
 };
 
 const DataTableSkeletonBody = <TData,>({
   table,
+  columnWindow,
 }: DataTableSkeletonBodyProps<TData>) => {
-  const columns = table.getAllLeafColumns();
+  const visibleColumns = table.getVisibleLeafColumns();
+  const columns = useMemo(
+    () => sliceColumnWindow(visibleColumns, columnWindow),
+    [visibleColumns, columnWindow],
+  );
   const rowHeightEnum = table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
   const rowHeightStyle = table.options.meta?.rowHeightStyle;
   const defaultHeight = ROW_HEIGHT_MAP[rowHeightEnum].height as string;
@@ -39,13 +51,17 @@ const DataTableSkeletonBody = <TData,>({
     <TableBody>
       {Array.from({ length: count }, (_, rowIndex) => (
         <TableRow key={rowIndex}>
-          {columns.map((column) => (
-            <TableCell key={column.id}>
-              <div className="flex items-center p-2" style={rowHeightStyle}>
-                <Skeleton className="size-full" />
-              </div>
-            </TableCell>
-          ))}
+          {columns.map((column) =>
+            isColumnSpacer(column) ? (
+              <ColumnSpacerCell key={column.id} spacer={column} />
+            ) : (
+              <TableCell key={column.id}>
+                <div className="flex items-center p-2" style={rowHeightStyle}>
+                  <Skeleton className="size-full" />
+                </div>
+              </TableCell>
+            ),
+          )}
         </TableRow>
       ))}
     </TableBody>

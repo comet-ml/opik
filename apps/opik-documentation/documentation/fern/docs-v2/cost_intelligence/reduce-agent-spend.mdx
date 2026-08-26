@@ -17,6 +17,17 @@ Cost Intelligence closes that loop. It shows you where the money went, prices wh
   If it isn't yet, start with [Installation](/cost-intelligence/install/overview).
 </Note>
 
+## Recommended rollout sequence
+
+The loop below works at any scale, but you don't have to run it fleet-wide on day one. The lowest-risk way in is staged:
+
+1. **Observe first.** Roll out to a pilot group and collect data only — no policies yet. You learn where the money goes before anything changes.
+2. **Apply to the pilot.** Review the recommendations priced from the pilot's own traffic and apply the ones you approve. Policies only reach machines where Cost Intelligence is installed, so while only the pilot is rolled out, the changes land on the pilot's machines alone.
+3. **Widen.** Expand observability and the approved policies to the whole organization.
+4. **Tune per user.** Use [user policies](/cost-intelligence/roll-out-cost-policies) to handle the heaviest spenders and the teams that genuinely need different settings.
+
+Each stage produces the evidence for the next: the pilot's realized savings are what you take to the org-wide decision.
+
 ## Step 1: See where the money goes
 
 The home view gives you total spend, how it is trending, and what it is composed of. This is the first time most teams see the split between the work their developers asked for and the overhead carried on every request.
@@ -70,6 +81,14 @@ Every change is a hypothesis until the data agrees:
 - Re-check the savings page. It reprices from current traffic, so the remaining opportunities update as you act.
 
 Giving developers their own view helps more than it sounds like it should. **My AI usage** shows each person their own spend, composition and activity, and in practice a good share of the saving happens there on its own: developers who can see that a habit is expensive tend to change it without being asked.
+
+## How do we know the savings are safe?
+
+A recommendation that cuts spend by making the agent worse is not a saving, so every savings method is validated on both sides before it ships to you.
+
+**Against benchmarks.** We evaluate agent performance on open and private benchmarks — TerminalBench among them — before and after each change, so a method that degrades what the agent can do never becomes a recommendation.
+
+**Against real sessions.** We maintain a body of tens of thousands of real, labeled coding-agent sessions — drawn from our own internal usage and from customers who explicitly opt in — that are replayable inside Opik. Every method is tuned against it offline, in large experiments, and monitored online with LLM-as-a-judge evaluation of real outcomes. As agents and usage patterns evolve, the same loop keeps the recommendations current.
 
 ## Next steps
 

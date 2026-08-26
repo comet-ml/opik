@@ -19,6 +19,30 @@ on:
 
 jobs:
   trigger-release:
+    # A called reusable workflow can only narrow its caller's token, never widen
+    # it. Every permission required by any job in release.yaml — or in the
+    # workflows it calls in turn — must therefore also be granted here, so this
+    # map is their union, not just what release.yaml itself declares:
+    #
+    #   contents: write  — tags, gh-pages helm chart push, version-bump commits,
+    #                      the GitHub release
+    #   packages: write  — every Docker build/merge job logs in to ghcr.io with
+    #                      secrets.GITHUB_TOKEN (build_and_push_docker.yaml)
+    #   id-token: write  — npm trusted publishing (OIDC). Unlike the other two
+    #                      this is NEVER part of the repo default, so before this
+    #                      block existed the `id-token: write` declared in
+    #                      release.yaml / typescript_sdk_publish.yml was silently
+    #                      capped to `none`: no OIDC token was minted, and since
+    #                      the setup-node _authToken stub is deleted before
+    #                      publishing there was no fallback credential either, so
+    #                      all 7 packages failed with ENEEDAUTH. See DND-1565.
+    #
+    # Jobs that declare their own narrower `permissions:` still get only what
+    # they ask for — this is a ceiling, not a grant.
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
     uses: ./.github/workflows/release.yaml  # Call the actual release workflow
     secrets: inherit
     with:
