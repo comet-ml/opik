@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.client.JerseyClientBuilder;
+import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.core.Cookie;
@@ -71,6 +72,13 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RemoteAuthServiceTest {
 
+    // Auth-call timeout/retry knobs (see AuthenticationConfig). Retries are disabled here so the
+    // existing assertions observe a single request; retry behaviour is covered separately.
+    private static final Duration TEST_AUTH_TIMEOUT = Duration.seconds(3);
+    private static final int TEST_AUTH_MAX_RETRIES = 0;
+    private static final Duration TEST_AUTH_MIN_BACKOFF = Duration.milliseconds(250);
+    private static final Duration TEST_AUTH_MAX_BACKOFF = Duration.seconds(1);
+
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String NOT_LOGGED_USER = "Please login first";
@@ -89,7 +97,8 @@ class RemoteAuthServiceTest {
         remoteAuthService = new RemoteAuthService(client,
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
-                new NoopCacheService());
+                new NoopCacheService(),
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF);
     }
 
     @AfterAll
@@ -185,7 +194,8 @@ class RemoteAuthServiceTest {
         var cachingService = new RemoteAuthService(TestHttpClientUtils.client(),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
-                mockCache);
+                mockCache,
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF);
         var contextInfo = ContextInfoHolder.builder()
                 .uriInfo(createMockUriInfo("/priv/something"))
                 .method("GET")
@@ -271,7 +281,8 @@ class RemoteAuthServiceTest {
         var gzipEnabledAuthService = new RemoteAuthService(newGzipEnabledClient(),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
-                new NoopCacheService());
+                new NoopCacheService(),
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF);
 
         gzipEnabledAuthService.authenticate(
                 getHeadersMock(workspaceName, apiKey), null,

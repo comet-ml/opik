@@ -43,7 +43,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                 : new NoopCacheService();
 
         return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
-                config.getRequestTimeoutMs(), config.getRequestRetries(), config.getRetryBackoffMs());
+                config.getRequestTimeout(), config.getRequestMaxRetries(),
+                config.getRequestRetryMinBackoff(), config.getRequestRetryMaxBackoff());
     }
 
     @Provides

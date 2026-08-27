@@ -6,12 +6,13 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.dropwizard.util.Duration;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
+import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -95,9 +97,10 @@ class RemoteAuthService implements AuthService {
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
-    private final int requestTimeoutMs;
-    private final int requestRetries;
-    private final int retryBackoffMs;
+    private final Duration requestTimeout;
+    private final int requestMaxRetries;
+    private final Duration requestRetryMinBackoff;
+    private final Duration requestRetryMaxBackoff;
 
     @Builder(toBuilder = true)
     record AuthRequest(String workspaceName, String path,
@@ -222,7 +225,7 @@ class RemoteAuthService implements AuthService {
     @Override
     public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
-        var response = withAuthRetry("authorizeOAuth", () -> withAuthTimeout(client
+        var response = withAuthRetry(() -> withAuthTimeout(client
                 .target(URI.create(reactServiceUrl.url()))
                 .path("opik")
                 .path("auth-by-username")
@@ -249,7 +252,7 @@ class RemoteAuthService implements AuthService {
         if (isDefaultWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        var response = withAuthRetry("authorizeWorkspace", () -> withAuthTimeout(client
+        var response = withAuthRetry(() -> withAuthTimeout(client
                 .target(URI.create(reactServiceUrl.url()))
                 .path("opik")
                 .path("auth-session")
@@ -399,7 +402,7 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        var response = withAuthRetry("authenticateUsingSessionToken", () -> withAuthTimeout(client
+        var response = withAuthRetry(() -> withAuthTimeout(client
                 .target(URI.create(reactServiceUrl.url()))
                 .path("opik")
                 .path("auth-session")
@@ -441,7 +444,7 @@ class RemoteAuthService implements AuthService {
                 requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            var response = withAuthRetry("validateApiKeyAndGetCredentials", () -> withAuthTimeout(client
+            var response = withAuthRetry(() -> withAuthTimeout(client
                     .target(URI.create(reactServiceUrl.url()))
                     .path("opik")
                     .path("auth")
@@ -544,47 +547,34 @@ class RemoteAuthService implements AuthService {
      * Not applied to {@code listEligibleWorkspaces}, which has a documented large-payload case.
      */
     private Invocation.Builder withAuthTimeout(Invocation.Builder builder) {
-        if (requestTimeoutMs <= 0) {
+        if (requestTimeout == null || requestTimeout.toMilliseconds() <= 0) {
             return builder;
         }
-        return builder.property(ClientProperties.READ_TIMEOUT, requestTimeoutMs);
+        return builder.property(ClientProperties.READ_TIMEOUT, (int) requestTimeout.toMilliseconds());
     }
 
     /**
-     * Runs an auth call, retrying only on transport failures (timeout / connect), never on an
-     * HTTP response — a 4xx/5xx from React is an answer and must not be retried.
+     * Runs an auth call under the codebase-standard retry policy
+     * ({@link RetryUtils#handleHttpErrors}), so the retriable-exception set and backoff behaviour
+     * match every other outbound call here. That set already covers this hop's failure modes:
+     * {@code SocketTimeoutException} and {@code ConnectTimeoutException} extend
+     * {@code InterruptedIOException}, {@code HttpHostConnectException} extends
+     * {@code SocketException}, and {@code ProcessingException} wrappers are unwrapped.
      * <p>
      * Retries recover sub-second blips. They will not recover a request stalled by a React CPU
      * brownout: those last 1-3 minutes in production, so the retry lands in the same brownout.
-     * The timeout is what bounds user-visible latency; this only reclaims the transient cases.
+     * The timeout is what bounds user-visible latency; this reclaims the transient cases.
      */
-    private <T> T withAuthRetry(String operation, Supplier<T> call) {
-        int attempts = Math.max(0, requestRetries) + 1;
-        ProcessingException lastFailure = null;
-
-        for (int attempt = 1; attempt <= attempts; attempt++) {
-            try {
-                return call.get();
-            } catch (ProcessingException e) {
-                lastFailure = e;
-                if (attempt == attempts) {
-                    break;
-                }
-                log.warn("Auth call '{}' failed on attempt {}/{} ({}), retrying in {}ms",
-                        operation, attempt, attempts, e.getMessage(), retryBackoffMs);
-                if (retryBackoffMs > 0) {
-                    try {
-                        Thread.sleep(retryBackoffMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw e;
-                    }
-                }
-            }
+    private <T> T withAuthRetry(Supplier<T> call) {
+        if (requestMaxRetries <= 0) {
+            return call.get();
         }
-
-        log.error("Auth call '{}' failed after {} attempt(s)", operation, attempts);
-        throw lastFailure;
+        return Mono.fromCallable(call::get)
+                .retryWhen(RetryUtils.handleHttpErrors(
+                        requestMaxRetries,
+                        java.time.Duration.ofMillis(requestRetryMinBackoff.toMilliseconds()),
+                        java.time.Duration.ofMillis(requestRetryMaxBackoff.toMilliseconds())))
+                .block();
     }
 
     private String getWorkspaceIdFromResponse(Response response) {
