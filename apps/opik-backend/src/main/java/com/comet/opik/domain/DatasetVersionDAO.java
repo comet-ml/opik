@@ -623,6 +623,7 @@ public interface DatasetVersionDAO {
               AND NOT EXISTS (
                   SELECT 1 FROM dataset_versions
                   WHERE dataset_id = :dataset_id
+                    AND workspace_id = :workspace_id
               )
             """)
     int ensureVersion1Exists(@Bind("dataset_id") UUID datasetId,
