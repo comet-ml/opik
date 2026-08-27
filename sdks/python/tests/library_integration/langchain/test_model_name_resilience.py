@@ -10,7 +10,7 @@ from opik.integrations.langchain.provider_usage_extractors import usage_extracto
 def _openai_streaming_run_without_generation_info() -> Dict[str, Any]:
     """Streaming-shape OpenAI run: usage in message usage_metadata, no generation_info."""
     return {
-        "serialized": {"kwargs": {"openai_api_key": "sk-test"}},
+        "serialized": {"kwargs": {"openai_api_key": "fixture-value"}},
         "extra": {},
         "outputs": {
             "llm_output": None,
@@ -35,7 +35,7 @@ def _openai_streaming_run_without_generation_info() -> Dict[str, Any]:
 def _openai_run_without_extra() -> Dict[str, Any]:
     """Invoke-shape OpenAI run with usage but no 'extra' key at all."""
     return {
-        "serialized": {"kwargs": {"openai_api_key": "sk-test"}},
+        "serialized": {"kwargs": {"openai_api_key": "fixture-value"}},
         "outputs": {
             "llm_output": {
                 "token_usage": {
@@ -51,7 +51,7 @@ def _openai_run_without_extra() -> Dict[str, Any]:
 def _openai_run_with_null_metadata() -> Dict[str, Any]:
     """OpenAI run where extra.metadata and extra.invocation_params are explicit None."""
     return {
-        "serialized": {"kwargs": {"openai_api_key": "sk-test"}},
+        "serialized": {"kwargs": {"openai_api_key": "fixture-value"}},
         "extra": {"metadata": None, "invocation_params": None},
         "outputs": {
             "llm_output": {
