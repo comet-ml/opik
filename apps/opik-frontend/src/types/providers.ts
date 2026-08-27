@@ -996,7 +996,7 @@ export interface LLMOpenRouterConfigsType {
   maxConcurrentRequests?: number;
 }
 
-export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
+export type GeminiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high";
 
 export interface LLMGeminiConfigsType {
   temperature: number;
