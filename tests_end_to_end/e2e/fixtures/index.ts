@@ -89,6 +89,21 @@ export {
 export type { GroupedDatasetRef, GroupedDatasetFixtures } from './grouped-dataset.fixture';
 export { GROUP_COLUMN, TARGET_GROUP } from './grouped-dataset.fixture';
 export type {
+  VersionedDatasetRef,
+  VersionedDatasetItemRef,
+  VersionedDatasetFixtures,
+} from './versioned-dataset.fixture';
+export {
+  VERSIONED_DATASET_MATCHING,
+  VERSIONED_DATASET_BYSTANDERS,
+  VERSION_GROUP_COLUMN,
+  VERSION_TARGET_GROUP,
+} from './versioned-dataset.fixture';
+export type {
+  VersionedComparisonRef,
+  VersionedComparisonFixtures,
+} from './versioned-comparison.fixture';
+export type {
   TokenUsageSpanSeed,
   TokenUsageSpansRef,
   TokenUsageSpansFixtures,

@@ -2,6 +2,15 @@ import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
+/** One clause of the grid's `filters` query param, as the Filters popover serialises it. */
+export interface DatasetItemsFilter {
+  field: string;
+  operator: string;
+  value: string;
+  type?: string;
+  key?: string;
+}
+
 export class DatasetItemsPage {
   constructor(
     private readonly page: Page,
@@ -9,11 +18,28 @@ export class DatasetItemsPage {
     private readonly datasetId: string,
   ) {}
 
-  async goto(): Promise<void> {
+  /**
+   * Opens the items page, optionally with the grid already filtered.
+   *
+   * `filters` is written straight to the `filters` query param — the same
+   * serialised value the Filters popover writes, read back by the same
+   * `useQueryParam` the popover feeds, so the grid takes the identical code
+   * path. Driven through the URL rather than by clicking, for the reason
+   * CompareExperimentsPage.searchItems gives about its own controls: the
+   * popover's trigger is an icon-only button with no accessible name and no
+   * `data-testid` (FiltersButton with `layout="icon"`), so the only handle on
+   * it today is a structural one. A `data-testid` on that shared trigger is
+   * worth adding, but it would not reach a deployed environment in time for
+   * this spec to use it.
+   */
+  async goto(opts: { filters?: DatasetItemsFilter[] } = {}): Promise<void> {
     return test.step('Open dataset items page', async () => {
       const env = loadEnvConfig();
+      const query = opts.filters?.length
+        ? `?filters=${encodeURIComponent(JSON.stringify(opts.filters))}`
+        : '';
       await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/datasets/${this.datasetId}/items`,
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/datasets/${this.datasetId}/items${query}`,
       );
     });
   }
@@ -112,6 +138,63 @@ export class DatasetItemsPage {
   async selectRow(index: number): Promise<void> {
     return test.step(`Select row at index ${index}`, async () => {
       await this.itemRow(index).getByRole('checkbox', { name: 'Select row' }).click();
+    });
+  }
+
+  /** The header checkbox: ticks every row on the CURRENT page, not the whole filtered set. */
+  async selectAllOnPage(): Promise<void> {
+    return test.step('Tick the header checkbox (all rows on this page)', async () => {
+      await this.page.getByRole('checkbox', { name: 'Select all' }).click();
+    });
+  }
+
+  /**
+   * Escalates a page-wide selection to the whole filtered set, via the banner's
+   * "Select all N items?" link.
+   *
+   * This is the only control that sets `isAllItemsSelected`, and that flag is
+   * what routes the next bulk action to the filter-scoped endpoint instead of
+   * an id list. The banner only renders when the filtered set spans more than
+   * one page, so a fixture under 10 rows can never reach this path.
+   */
+  async selectAllMatching(total: number): Promise<void> {
+    return test.step(`Escalate the selection to all ${total} matching items`, async () => {
+      await this.page.getByRole('button', { name: `Select all ${total} items?` }).click();
+      await this.allItemsSelectedBanner(total).waitFor({ state: 'visible' });
+    });
+  }
+
+  /** The banner's confirmation that the selection covers the whole filtered set. */
+  allItemsSelectedBanner(total: number): Locator {
+    return this.page.getByText(`All ${total} items are selected`);
+  }
+
+  /** The pagination summary, e.g. "Showing 1-10 of 12". */
+  get paginationSummary(): Locator {
+    return this.page.getByText(/Showing \d+-\d+ of \d+/);
+  }
+
+  get emptyState(): Locator {
+    return this.page.getByText('No records yet');
+  }
+
+  /**
+   * Bulk-deletes the whole filtered set after `selectAllMatching`.
+   *
+   * Distinct from `bulkDeleteSelected`: an explicit per-row selection stages a
+   * draft for the user to commit, whereas the select-all path posts to
+   * `/datasets/items/delete` immediately and commits its own version. There is
+   * no Draft badge to wait on here, so this waits on that response instead —
+   * and returns its status, so a caller can tell "the server refused" apart
+   * from "the server accepted and deleted nothing".
+   */
+  async bulkDeleteAllSelected(): Promise<number> {
+    return test.step('Bulk-delete every matching item', async () => {
+      const response = this.page.waitForResponse((res) =>
+        res.url().includes('/datasets/items/delete'),
+      );
+      await this.page.getByTestId('dataset-items-bulk-delete-button').click();
+      return (await response).status();
     });
   }
 

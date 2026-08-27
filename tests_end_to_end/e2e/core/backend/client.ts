@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
@@ -49,6 +50,13 @@ export interface DatasetItemWithTagsRef {
   id: string;
   data: Record<string, unknown>;
   tags: string[];
+  /**
+   * The ITEM's authorship instant (`item_created_at`, aliased to `created_at`
+   * by the read path), not the version snapshot row's. The two diverge as soon
+   * as a dataset is versioned more than once, which is exactly what a caller
+   * asserting on a `created_at` filter needs to be able to see.
+   */
+  createdAt: Date;
 }
 
 /** A raw REST answer, kept as status + message so a negative path can assert both. */
@@ -73,6 +81,18 @@ export interface DatasetVersionRef {
   itemsModified: number;
   itemsDeleted: number;
   isLatest: boolean;
+  /**
+   * When the version was committed — and therefore when its snapshot rows were
+   * stamped. A caller comparing this against an item's own `createdAt` is
+   * measuring how far the two column sets have diverged.
+   */
+  createdAt: Date;
+}
+
+/** One row of the experiment-comparison grid, with the timestamp it renders. */
+export interface CompareItemRef {
+  id: string;
+  createdAt: Date;
 }
 
 /** The windowed stats one row of the Projects table renders. */
@@ -245,6 +265,27 @@ export function numericStat(value: ThreadStatValue | undefined, name: string): n
     );
   }
   return value;
+}
+
+/**
+ * Narrow an optional timestamp to a `Date`, or throw naming what was missing.
+ *
+ * The generated REST types mark `createdAt` optional on every entity. Defaulting
+ * an absent one to `new Date(0)` or to "now" would turn a field the endpoint
+ * stopped returning into a comparison that quietly still passes — and the
+ * comparisons this feeds (item authorship vs version snapshot) are the whole
+ * assertion. Fail here instead, the same way `numericStat` does for an absent
+ * aggregate.
+ */
+export function requireTimestamp(value: Date | string | undefined | null, what: string): Date {
+  if (value === undefined || value === null) {
+    throw new Error(`${what}: the endpoint returned no timestamp`);
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${what}: "${String(value)}" is not a parseable timestamp`);
+  }
+  return date;
 }
 
 /** A backend filter as the REST layer serialises it (the `filters` query param). */
@@ -497,6 +538,31 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * Hoisted so `listDatasetItemsFiltered` can delegate to it without going
+   * through `this` — callers of this client destructure it out of the fixture,
+   * so a method that depended on its own receiver would break there.
+   */
+  const localListDatasetItemsPage = async (args: {
+    datasetId: string;
+    filters?: BackendFilter[];
+  }): Promise<{ total: number; items: DatasetItemWithTagsRef[] }> => {
+    const page = await opik.api.datasets.getDatasetItems(args.datasetId, {
+      size: 1000,
+      page: 1,
+      ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+    });
+    return {
+      total: Number(page.total ?? 0),
+      items: (page.content ?? []).map((item) => ({
+        id: String(item.id),
+        data: (item.data ?? {}) as Record<string, unknown>,
+        tags: (item as { tags?: string[] }).tags ?? [],
+        createdAt: requireTimestamp(item.createdAt, `dataset item ${item.id} createdAt`),
+      })),
+    };
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -771,6 +837,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         itemsModified: Number(v.itemsModified ?? 0),
         itemsDeleted: Number(v.itemsDeleted ?? 0),
         isLatest: Boolean(v.isLatest),
+        createdAt: requireTimestamp(v.createdAt, `dataset version ${v.versionName} createdAt`),
       }));
     },
 
@@ -805,15 +872,80 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       datasetId: string;
       filters?: BackendFilter[];
     }): Promise<DatasetItemWithTagsRef[]> {
-      const page = await opik.api.datasets.getDatasetItems(args.datasetId, {
-        size: 1000,
+      return (await localListDatasetItemsPage(args)).items;
+    },
+
+    /**
+     * The same read as `listDatasetItemsFiltered`, plus the `total` the endpoint
+     * reports — the number the items page renders as "Showing 1-10 of N", and
+     * the number a select-all delete scopes itself by.
+     *
+     * Both halves are worth having together: a caller asserting the scope of a
+     * filter needs the ids, and a caller asserting that the *page* agrees with
+     * the rows behind it needs the total. Reading only the ids would pass for a
+     * response whose total disagreed with the collection it carried.
+     */
+    listDatasetItemsPage: localListDatasetItemsPage,
+
+    /**
+     * Commits a new dataset version by tagging every item the filter matches —
+     * `PATCH /v1/private/datasets/items/batch` WITH a `batch_group_id`.
+     *
+     * This is the grouped form, and the distinction is load-bearing. Without a
+     * `batch_group_id` the backend mutates the latest version in place; with one
+     * it snapshots a NEW version, re-stamping every snapshot row with a fresh id
+     * and a fresh `created_at` while the items keep their own authorship values.
+     * That divergence is the precondition for anything asserting which of the
+     * two column sets a filter binds to, and an SDK re-insert cannot produce it:
+     * re-inserting an item rewrites its content, so `item_created_at` moves
+     * forward with the snapshot and the two agree again.
+     *
+     * Raw fetch because the pinned SDK's `DatasetItemBatchUpdate` has no
+     * `batchGroupId` field, so the grouped call — the one the UI's select-all
+     * "Add tag" sends — cannot be expressed through the typed client.
+     */
+    async commitDatasetItemVersionByTagging(args: {
+      datasetId: string;
+      filters?: BackendFilter[];
+      tag: string;
+    }): Promise<void> {
+      const { status, message } = await rawFetch('PATCH', '/v1/private/datasets/items/batch', {
+        body: {
+          dataset_id: args.datasetId,
+          filters: args.filters ?? [],
+          update: { tags_to_add: [args.tag] },
+          batch_group_id: randomUUID(),
+        },
+      });
+      if (status !== 204) {
+        throw new Error(
+          `commitDatasetItemVersionByTagging: expected 204 from the grouped batch update, got ${status} — ${message}`,
+        );
+      }
+    },
+
+    /**
+     * The rows the experiment-comparison grid renders, with the timestamp each
+     * one carries — `GET /v1/private/datasets/{id}/items/experiments/items`.
+     *
+     * Separate from `listCompareItemIds`, which deliberately reads ids only so
+     * an ordering assertion cannot accidentally depend on content. This one
+     * exists for the opposite reason: the timestamp is the thing under test.
+     */
+    async listCompareItems(args: {
+      datasetId: string;
+      experimentIds: string[];
+      size?: number;
+    }): Promise<CompareItemRef[]> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        size: args.size ?? 200,
         page: 1,
-        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        truncate: true,
       });
       return (page.content ?? []).map((item) => ({
         id: String(item.id),
-        data: (item.data ?? {}) as Record<string, unknown>,
-        tags: (item as { tags?: string[] }).tags ?? [],
+        createdAt: requireTimestamp(item.createdAt, `compare row ${item.id} createdAt`),
       }));
     },
 
