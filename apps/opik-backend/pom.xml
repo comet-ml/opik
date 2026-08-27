@@ -26,6 +26,7 @@
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.10.0</clickhouse-java.version>
         <google-protobuf.version>4.36.0</google-protobuf.version>
+        <google-cloud-vertexai.version>1.52.0</google-cloud-vertexai.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
@@ -235,6 +236,24 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-vertex-ai-gemini</artifactId>
+        </dependency>
+
+        <!--
+            Overrides the 1.27.0 that langchain4j-vertex-ai-gemini pins transitively: GenerationConfig only gained
+            the thinking_config field in 1.52.0, and Gemini thinking cannot be configured without it.
+            The excluded org.jetbrains:annotations is a downgrade to 13.0, whose @NotNull lacks TYPE_USE and so
+            fails to compile the test sources' type-context usages.
+        -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-vertexai</artifactId>
+            <version>${google-cloud-vertexai.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.jetbrains</groupId>
+                    <artifactId>annotations</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

@@ -128,8 +128,13 @@ recreate_backend
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start>'
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start>' \
     --confirm-buffer-raised --confirm-retention-paused --skip-wrap
-#    Record the cutover_start it prints. Run the post-swap compare NOW, before writes resume — afterwards the current
-#    week legitimately diverges (live is a superset of the frozen backup), so bound it with --to-week N instead.
+#    Record the cutover_start it prints. Run the post-swap compare NOW, while writes are still held — and UNBOUNDED,
+#    because the current week is where the delta and the final deletion replay just landed, making it the week most worth
+#    comparing. Once writes resume, live legitimately outgrows the frozen backup and that week diverges for good; from
+#    then on the compare only means anything bounded, which skips exactly that week:
+#      $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --to-week last-sealed
+#    ('last-sealed' excludes the current calendar week, so it covers the cutover week only in a same-week rehearsal —
+#     which a local run always is. Elsewhere, bound below cutover_start's week explicitly.)
 $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 
 # 9. Restore the buffer ceiling (unset the env var and recreate_backend), keeping traceColumnsNonNullable=true and
@@ -205,7 +210,25 @@ $RUNBOOK/scripts/rollback.sh --database opik --stage C --cutover-start '<cutover
 # If a stage B/C run's reverse-replay was interrupted, re-apply just it (idempotent):
 $RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start>' \
     --confirm-retention-paused
+
+# Un-wrap — reverses the WRAP while keeping the cutover, landing in the post-EXCHANGE/pre-wrap state. Needs no
+# cutover_start and no write-loss flag: the successor stays live, so nothing is discarded and nothing is replayed.
+$RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance
 ```
+
+**Rehearsing `--unwrap-only`** is worth doing in both estates, because only the second one is exclusive to it:
+
+* *Backup still parked* (before `finalize.sh`) — the round trip. Un-wrap, confirm `traces` is the partitioned successor
+  again with `traces_local`/`traces_dist_old` gone and post-wrap writes still live, then re-apply with
+  `exchange_and_wrap.sh --wrap-only …`. Note the writes surviving: this is the contrast with stage C, which would
+  discard them.
+* *After `finalize.sh --confirm`* — the case with no alternative. Stages B/C now refuse (their parked original is gone),
+  so this is the only wrap recovery left. The closing message correctly reports the re-wrap as unavailable here, since
+  `--wrap-only` refuses without the parked original; do not hand-roll around that.
+
+Then flip `tracesDistributedWrapEnabled` back to `false` and restart. Triggering that window on purpose is instructive:
+between the DDL and the restart, deletes fail with `Code: 60 … Table opik.traces_local does not exist` while reads and
+inserts keep succeeding — the mismatch is delete-path-only, in both directions.
 
 Check afterwards that no post-cutover-deleted id is live again on the restored `traces` (the reverse-replay's job), and
 that the estate is canonical (`traces` = original; for B/C the successor is parked as `traces_post_rollback_backup`,
@@ -213,25 +236,38 @@ while stage A just empties the `traces_local_v2` shadow). A rollback leaves `tra
 re-seeding for the next iteration works without a fresh volume.
 
 To verify a rollback, use the **post-rollback table pair** — the `verify.sh` defaults do not apply (`traces_local_v2` is
-gone, so a bare run dies with `Unknown table … traces_local_v2`) — and bound it to the sealed weeks, because the current
-week legitimately diverges by the post-cutover writes the rollback discarded:
+gone, so a bare run dies with `Unknown table … traces_local_v2`) — and stop below the cutover window's own week, because
+that week legitimately diverges by the post-cutover writes the rollback discarded:
 
 ```bash
-$RUNBOOK/scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week N
+# rollback.sh prints this with --to-week already filled in — the last week wholly before cutover_start.
+$RUNBOOK/scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week <N>
 ```
 
-**Chaining the stages.** Only stage A leaves you able to retry immediately (it truncates the shadow and leaves `traces`
-untouched — a re-run of `backfill.sh` reuses the original anchor from the state file). Stages B/C consume the shadow: they
-park the successor as `traces_post_rollback_backup` and leave **no** `traces_local_v2`, so retrying the cutover for the
-next stage needs `finalize.sh --confirm` to recycle that backup back into an empty shadow — the irreversible step — or a
-fresh volume. So rehearsing all three stages takes one recycle (or reset) between B and C.
+**Chaining the stages.** Stage A leaves you able to retry immediately (it truncates the shadow and leaves `traces`
+untouched — a re-run of `backfill.sh` reuses the original anchor from the state file). Stages B/C park the successor as
+`traces_post_rollback_backup` and leave **no** `traces_local_v2`, but that does not cost you a re-backfill: the runbook's
+"Retrying the cutover after a stage B/C rollback" renames the parked backup back to `traces_local_v2` (it is the same
+physical object, so this restores the shadow with its data intact), then resumes at `delta_replay.sh`. So all three
+stages chain on one seeded volume, with no irreversible step in between.
+
+`finalize.sh --confirm` is the *other* option and a different trade: its recycle branch TRUNCATEs the backup into an
+empty shadow, which discards the copy and forces a full re-backfill. Use it to rehearse that branch on purpose, not to
+get from one stage to the next.
 
 **Then finish the config half of the rollback** — `rollback.sh` prints both steps, and stage B/C is not complete without
 them (runbook: "Rolling back the `traceColumnsNonNullable` flip"). Set `traceColumnsNonNullable=false` and
 `recreate_backend`; then repair the epoch/NaN sentinels the pre-swap window wrote into the original, which the promote
 made live again — including its large **negative** `duration`, which `verify.sh` cannot see (materialized columns are
-excluded from the fingerprint) and which a `MATERIALIZE COLUMN` does **not** fix. Confirming `countIf(duration < 0)`
-goes from non-zero to `0` across that repair is the point of rehearsing it. After the wrap, also flip
+excluded from the fingerprint) and which a `MATERIALIZE COLUMN` does **not** fix. Watch the **sentinel** counters
+(`sentinel_end_time`, `sentinel_ttft`) reach `0`: those are the repair's actual success criterion, and the ones that
+still mean something on a real dataset.
+
+Locally `countIf(duration < 0)` reaches `0` too, but do not carry that expectation into production. It only holds
+because seeded and generated traces never end before they start, so every negative duration here is sentinel-caused. A
+real table also holds rows whose `end_time` genuinely precedes `start_time` — a pre-existing source artifact this repair
+does not address — so there `duration < 0` settles at a non-zero floor while the sentinel counters still go to `0`.
+Treating `0` as the target would read a correct repair as a failed one. After the wrap, also flip
 `tracesDistributedWrapEnabled` back to `false` before traffic resumes, or deletes 500 against the now-parked
 `traces_local`.
 

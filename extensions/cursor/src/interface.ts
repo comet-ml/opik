@@ -14,6 +14,20 @@ export interface Session {
     cursorSession?: CursorSession;
 }
 
+export interface SpanData {
+    name: string;
+    type: 'llm' | 'tool' | 'general';
+    startTime: Date;
+    endTime: Date;
+    model?: string;
+    provider?: string;
+    input?: any;
+    output?: any;
+    errorInfo?: { exceptionType: string; message: string; traceback: string };
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+}
+
 export interface TraceData {
     name: string;
     project_name?: string;
@@ -26,6 +40,7 @@ export interface TraceData {
     thread_id?: string;
     tags?: string[];
     metadata?: any;
+    spans?: SpanData[];
 }
 
 export interface TurnUsage {
