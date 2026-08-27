@@ -8,6 +8,8 @@ export {
   type DatasetVersionRef,
   type RawApiResult,
   type BackendSort,
+  type CompareItemRef,
+  type CompareItemsPage,
   type MetricSeries,
   type MetricInterval,
   type WorkspaceMetricType,

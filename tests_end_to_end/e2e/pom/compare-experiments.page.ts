@@ -205,6 +205,69 @@ export class CompareExperimentsPage {
     });
   }
 
+  /** Tick the header checkbox, selecting every row currently in the grid. */
+  async selectAllRows(): Promise<void> {
+    await test.step('select every row in the grid', async () => {
+      const selectAll = this.page.getByRole('checkbox', { name: 'Select all' });
+      await expect(selectAll, 'the grid header select-all checkbox').toHaveCount(1);
+      await selectAll.click();
+    });
+  }
+
+  /**
+   * Export the selected rows as JSON and return the parsed file.
+   *
+   * The export is a client-side download of a re-fetched page (the grid's own
+   * query with `truncate` turned off), so the file — not the DOM — is the only
+   * place its contents can be asserted. Read through the download stream rather
+   * than saved: nothing here needs to outlive the test, and a saved file would
+   * become an artifact the run has to clean up.
+   */
+  async exportSelectedAsJson(): Promise<Array<Record<string, unknown>>> {
+    return test.step('export the selected rows as JSON', async () => {
+      await expect(this.exportButton, 'the Results toolbar Export button').toHaveCount(1);
+      await this.exportButton.click();
+
+      const menuItem = this.exportMenuItem('JSON');
+      await expect(menuItem, 'the "Export as JSON" menu item').toBeVisible();
+
+      const downloadStarted = this.page.waitForEvent('download');
+      await menuItem.click();
+      const download = await downloadStarted;
+
+      const stream = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(chunk as Buffer);
+      const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (!Array.isArray(parsed)) {
+        throw new Error(
+          `CompareExperimentsPage.exportSelectedAsJson: expected a JSON array, got ${typeof parsed}`,
+        );
+      }
+      return parsed as Array<Record<string, unknown>>;
+    });
+  }
+
+  /**
+   * The Export dropdown trigger in the Results toolbar.
+   *
+   * Icon-only, with the "Export" label in a hover tooltip portal, so it has no
+   * accessible name to select on and the FE carries no testid for it. Narrowing
+   * the menu triggers by the lucide download glyph is the most stable handle
+   * available without a front-end change; a `data-testid` on
+   * `ExportToButton` would be better and is worth adding when this page is next
+   * touched.
+   */
+  private get exportButton(): Locator {
+    return this.page
+      .locator('button[aria-haspopup="menu"]')
+      .filter({ has: this.page.locator('svg.lucide-download') });
+  }
+
+  private exportMenuItem(format: 'CSV' | 'JSON'): Locator {
+    return this.page.getByRole('menuitem', { name: `Export as ${format}`, exact: true });
+  }
+
   /** Dataset-item ids in current row order, top to bottom. */
   async itemRowOrder(): Promise<string[]> {
     return test.step('read the current row order', async () => {

@@ -275,6 +275,22 @@ export interface OptimizationRef {
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
+/**
+ * One row of the experiment-comparison read: the shared dataset item, plus the
+ * per-experiment result bands the grid renders beside it.
+ */
+export interface CompareItemRef {
+  id: string;
+  data: Record<string, unknown>;
+  experimentItems: Array<{ experimentId: string; output: unknown }>;
+}
+
+/** A page of `CompareItemRef`s, with the server's own total for the query. */
+export interface CompareItemsPage {
+  total: number;
+  items: CompareItemRef[];
+}
+
 /** One clause of the `sorting` query param the grids serialise. */
 export interface BackendSort {
   field: string;
@@ -391,6 +407,58 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * The read behind the experiment-comparison Results grid AND its export —
+   * `GET /v1/private/datasets/{id}/items/experiments/items`.
+   *
+   * The two differ only in `truncate`: the grid leaves it on, the export turns
+   * it off so the downloaded payloads are complete (OPIK-8031). `search`
+   * travels alongside `sorting`, which is what the export was changed to carry
+   * (OPIK-8030).
+   *
+   * `total` comes back with the rows because a search assertion that only looks
+   * at the rows it expected cannot tell "the answer was exactly these" from
+   * "these, plus rows that should have been excluded, on a later page".
+   *
+   * Hoisted so `listCompareItemIds` can delegate to it without depending on the
+   * not-yet-constructed return object.
+   */
+  const localListCompareItems = async (args: {
+    datasetId: string;
+    experimentIds: string[];
+    sorting?: BackendSort[];
+    search?: string;
+    /** Defaults to false — the export's setting, i.e. full payloads. */
+    truncate?: boolean;
+    size?: number;
+  }): Promise<CompareItemsPage> => {
+    const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+      experimentIds: JSON.stringify(args.experimentIds),
+      size: args.size ?? 200,
+      page: 1,
+      truncate: args.truncate ?? false,
+      ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+      ...(args.search ? { search: args.search } : {}),
+    });
+    if (typeof page.total !== 'number') {
+      throw new Error(
+        `listCompareItems: dataset ${args.datasetId} returned no page total — ` +
+          `cannot assert the answer was exactly the rows returned.`,
+      );
+    }
+    return {
+      total: page.total,
+      items: (page.content ?? []).map((item) => ({
+        id: String(item.id),
+        data: (item.data ?? {}) as Record<string, unknown>,
+        experimentItems: (item.experimentItems ?? []).map((experimentItem) => ({
+          experimentId: String(experimentItem.experimentId),
+          output: experimentItem.output ?? null,
+        })),
+      })),
+    };
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -767,15 +835,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       sorting?: BackendSort[];
       size?: number;
     }): Promise<string[]> {
-      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
-        experimentIds: JSON.stringify(args.experimentIds),
-        size: args.size ?? 200,
-        page: 1,
-        truncate: true,
-        ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
-      });
-      return (page.content ?? []).map((item) => String(item.id));
+      const { items } = await localListCompareItems({ ...args, truncate: true });
+      return items.map((item) => item.id);
     },
+
+    listCompareItems: localListCompareItems,
 
     /**
      * `POST /v1/private/workspaces/metrics/spans` — the aggregation a dashboard

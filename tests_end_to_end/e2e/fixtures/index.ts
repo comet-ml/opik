@@ -1,4 +1,4 @@
-export { test, expect } from './bystander.fixture';
+export { test, expect } from './clock-skewed-traces.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -93,5 +93,16 @@ export type {
   TokenUsageSpansRef,
   TokenUsageSpansFixtures,
 } from './token-usage-spans.fixture';
+export type {
+  ExportComparisonRef,
+  ExportComparisonExperimentRef,
+  ExportComparisonFixtures,
+} from './export-comparison.fixture';
+export { EXPORT_LABEL_COLUMN } from './export-comparison.fixture';
+export type {
+  ClockSkewedTraceRef,
+  ClockSkewedTracesRef,
+  ClockSkewedTracesFixtures,
+} from './clock-skewed-traces.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
 export type { ProjectRef } from '../core/backend';
