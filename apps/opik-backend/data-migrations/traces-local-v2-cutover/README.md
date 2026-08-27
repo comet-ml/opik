@@ -212,8 +212,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
 > deletes run against `traces_local`; reads and inserts stay on the Distributed `traces`. The flag is **startup-bound**
 > (read once at boot; no hot-reload), so making it "live across the fleet" means a **completed rolling restart of every
-> backend instance** — there is no readiness endpoint exposing its value, so confirm via the deploy's restart completion
-> or by observing that trace deletes hit the intended table (queries are `log_comment`-tagged). A mismatch is
+> backend instance**. Since OPIK-7773 the flag's value is observable per instance: the `clickhouse-traces-topology`
+> readiness check asserts it against the live `traces` engine on every probe, so
+> `GET /health-check?name=clickhouse-traces-topology` reports which side of the cutover that instance believes it is on
+> and, on a mismatch, names both the flag and the observed engine. A mismatch is
 > **fail-loud**, not silent: a stale-`false` instance issues `DELETE` against the `Distributed` `traces` (code 36/48), a
 > stale-`true` instance against an absent `traces_local` — both 500 the delete path, so a partial rollout surfaces at
 > once and is recoverable. While it is `false` (the deploy
@@ -227,7 +229,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > the EXCHANGE. Defer the
 > wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
 >
-> **"In lockstep" cannot mean simultaneous — plan for a short fail-loud delete window.** The toggle is a
+> **"In lockstep" cannot mean simultaneous — plan for a short mismatch window.** The toggle is a
 > config push plus a rolling restart; the wrap is a DDL statement. They cannot land at the same instant, so
 > one of two windows is unavoidable:
 > - **toggle first** (recommended): from the moment the last backend comes up with `true` until the wrap
@@ -236,10 +238,30 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > - **wrap first**: from the swap until the rolling restart finishes, deletes hit the `Distributed` `traces`
 >   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew with no buffer.
 >
+> **Since OPIK-7773 the mismatch window is also a readiness window.** `clickhouse-traces-topology` is a
+> `critical`/`ready` check, so for as long as flag and topology disagree — in **either** order — every instance that
+> sees the mismatch fails `/health-check?name=all&type=ready` and Kubernetes takes it out of rotation. That is the
+> point of the check (an instance whose deletes cannot work should not serve), but it changes the cost of the window
+> from "delete-path 500s" to "no backend in rotation", so the window must sit **inside the declared maintenance window**
+> that `--confirm-maintenance` already asserts for the wrap. It is self-clearing: the probe re-evaluates continuously,
+> so rotation returns on the next successful probe once the two sides are back in step. **Neither ordering needs an
+> extra restart** — both spend exactly the one planned rolling restart the toggle already requires; only its position
+> differs, and with it what closes the window: on the toggle-first path the restart comes first and the **wrap DDL**
+> closes the window, on the wrap-first path the wrap comes first and the **restart completing** closes it.
+>
+> **The check reads one replica per probe.** It queries the node-local `system.tables` on whichever ClickHouse node the
+> load-balanced service hands it, so across the cross-node `ON CLUSTER` skew described below the mismatch is seen only
+> by the probes that land on a not-yet-wrapped host: pods flap instead of the fleet going dark in lockstep. That is
+> expected inside the window and is why the probe is not the propagation gate — to confirm the wrap actually reached
+> every replica, use the cluster-wide `clusterAllReplicas('{cluster}', system.tables)` form that `finalize.sh`
+> classifies with (also in the self-host troubleshooting page). Fan-out is deliberately out of the probe: it needs
+> `REMOTE` + `CLUSTER` grants the app user is not guaranteed to hold, and one unreachable replica would take the whole
+> fleet out of rotation.
+>
 > Prefer **toggle first**, have the `--wrap-only` command ready to run the moment every backend instance is up, and
-> keep the window to seconds. Both directions are delete-path-only and fail loudly rather than corrupting
-> anything, which is what makes a short window acceptable — but on a shared environment announce it, and do
-> not leave the toggle `true` without the wrap (or vice versa) for any length of time.
+> keep the window to seconds. Nothing in either direction corrupts data — that is what makes a short window
+> acceptable — but announce it on a shared environment, and do not leave the toggle `true` without the wrap (or vice
+> versa) for any length of time: with the readiness check in place that is now an outage, not a degradation.
 >
 > **Monitoring consequence of the flip:** `system.parts` only knows `traces_local` post-wrap, so the
 > `opik.clickhouse.partition.*` parts gauges relabel from `table="traces"` to `table="traces_local"`, while the
@@ -795,7 +817,7 @@ run by hand.** Each `.sql` file is the single source a driver reads:
 | 2 — delta + replay | `000002_delta_and_deletion_replay.sql` | `delta_replay.sh` |
 | 3 — EXCHANGE + wrap | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
 | QA — fidelity compare (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
-| rollback | `000004_rollback_stage_{a,b,c}_*.sql` + `000004_rollback_reverse_replay.sql` | `rollback.sh` |
+| rollback | `000004_rollback_stage_{a,b,c}_*.sql`, `000004_rollback_unwrap.sql`, `000004_rollback_reverse_replay.sql` + its postcondition `000004_rollback_verify_replay.sql` | `rollback.sh` |
 | finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
 
 Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOUSE_HOST`, `CLICKHOUSE_USER` and
@@ -832,9 +854,9 @@ read-only drivers cannot surface a mutation-privilege gap by construction.
 | `EXCHANGE` | `EXCHANGE TABLES <source> AND <shadow> ON CLUSTER` | **`INSERT` + `CREATE TABLE` + `DROP TABLE` on BOTH names** — `INSERT` is required even though the swap is metadata-only and moves no rows. |
 | post-swap `RENAME` | `RENAME TABLE <shadow> TO <backup>` | `CREATE TABLE` + `DROP TABLE` (grant `INSERT` on the backup name too, so the rename cannot trip the same check) |
 | **wrap** (sharding) | `CREATE TABLE traces_dist … ENGINE = Distributed(…)`, then `RENAME traces → traces_local, traces_dist → traces` | `CREATE TABLE` + `DROP TABLE` on **`traces_dist`** and **`traces_local`** — two names that **do not exist yet**, so a grant set scoped to the cutover's three names will NOT cover the wrap. Plus `SELECT` on `traces_local` (post-wrap reads route through the wrapper to it) and `REMOTE` for the `Distributed` engine. |
-| rollback stage A/B (if in scope) | stage A `TRUNCATE`, reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). Withhold unless a rollback is actually planned. |
-| rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces_dist_old`** and **`traces_post_rollback_backup`**, `DROP TABLE` on `traces_local`, plus `ALTER UPDATE(_row_exists)` on the restored `traces`. **Decide this before applying the wrap:** without these grants there is no way back to the pre-cutover table until another grant change lands. (The *wrap itself* stays reversible via the un-wrap row below, which needs no extra grants — but that returns to the successor, not to the original.) |
-| **un-wrap** (`--unwrap-only`, if the wrap is applied) | 2-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces`**, **`traces_local`** and **`traces_dist_old`** — a **subset of what stage C's statements require** (same source and destination names, minus `traces_pre_cutover_backup` and `traces_post_rollback_backup`), so a grant set that genuinely covers stage C covers this with nothing added. No `ALTER UPDATE` and no `TRUNCATE`: it promotes no backup and replays nothing. Grant it even when stage C is out of scope — it is the only wrap recovery once `finalize.sh` has dropped the parked original. |
+| rollback stage A/B (if in scope) | stage A `TRUNCATE`; stage B 2-way `RENAME` + reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). **Stage B also renames**, so it needs **`INSERT` + `CREATE TABLE`** on **`traces_post_rollback_backup`** — a destination that **does not exist yet**, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — and **`SELECT` + `DROP TABLE`** on **`traces_pre_cutover_backup`**, its source. Note stage B is the *likelier* rollback, not the exotic one: the wrap is deferred by default, so the post-`EXCHANGE` resting state is the one stage B reverses, and reaching it needs no extra step. Withhold unless a rollback is actually planned. |
+| rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | **`INSERT` + `CREATE TABLE`** on **`traces_dist_old`** and **`traces_post_rollback_backup`** — both `RENAME` destinations, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — plus `DROP TABLE` on `traces_dist_old`, which is dropped after the rotation. `DROP TABLE` on `traces_local`, plus `ALTER UPDATE(_row_exists)` on the restored `traces`. **Decide this before applying the wrap:** without these grants there is no way back to the pre-cutover table until another grant change lands. (The *wrap itself* stays reversible via the un-wrap row below, which needs no extra grants — but that returns to the successor, not to the original.) |
+| **un-wrap** (`--unwrap-only`, if the wrap is applied) | 2-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces`**, **`traces_local`** and **`traces_dist_old`**, plus **`INSERT` + `CREATE TABLE`** on **`traces_dist_old`** as the `RENAME` destination — a **subset of what stage C's statements require** (same source and destination names, minus `traces_pre_cutover_backup` and `traces_post_rollback_backup`), so a grant set that genuinely covers stage C covers this with nothing added. No `ALTER UPDATE` and no `TRUNCATE`: it promotes no backup and replays nothing. Grant it even when stage C is out of scope — it is the only wrap recovery once `finalize.sh` has dropped the parked original. |
 | post-rollback sentinel repair (stage B/C only) | `ALTER TABLE traces UPDATE end_time = NULL …`, same for `ttft` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` on the repair `rollback.sh` prints when it finishes. Either grant these two columns with the rollback grants, or plan to run the repair as a more privileged user. |
 | `finalize.sh` (if in scope) | `TRUNCATE` / `DROP TABLE` | `TRUNCATE`, `DROP TABLE`, and `max_table_size_to_drop` override |
 
@@ -922,6 +944,19 @@ as one file per stage (`000004_rollback_stage_a_discard_shadow.sql`, `…_stage_
 `000004_rollback_reverse_replay.sql`) and driven by [`scripts/rollback.sh`](scripts/rollback.sh), so no one authors it
 under pressure.
 
+**Roll back only for a regression you cannot serve through.** The successor is the live table once the `EXCHANGE`
+lands, so a fault in it is a production fault and the normal choice applies: fix forward, or reverse. Reverse when the
+data or the read path is wrong in a way that harms users now — wrong or missing rows, absent-value semantics breaking
+filters and sorts, a latency regression the product cannot absorb. Fix forward for anything you would fix forward in any
+other feature: a slow query to tune, a dashboard label, a metric gone quiet, a bug with a known patch. Rolling back is
+not the safer default — it discards post-cutover writes, runs the guard-less reverse replay, and returns the estate to
+the unpartitioned original, so it costs more than most faults are worth.
+
+Two things bound the decision rather than a stopwatch. The **window** is open only while the parked original exists —
+`finalize.sh` closes it, and nothing reopens it (see "Point of no return"). And in practice the decision is made in the
+hours after the cutover, while the soak is still fresh: the longer the successor serves traffic well, the less a rollback
+buys and the more post-cutover writes it throws away. If the service is progressing, you are past needing this section.
+
 **Reverse the smallest thing that fixes the problem.** The cutover delivers two independent changes — *partitioning* (the
 `EXCHANGE`) and *sharding-readiness* (the wrap) — and they roll back separately. If only the **wrap** is at fault, use
 `--unwrap-only`: it keeps the partitioned successor live, so there is no write loss, no reverse replay, no sentinel
@@ -948,7 +983,22 @@ and leaves the untouched live `traces` — there is no backup to soak or finaliz
 > it is irreversible in the moment, stages B/C require `--accept-post-cutover-write-loss`, and `rollback.sh` prints the
 > recovery pointer before the promote.
 
-Pick the stage by how far the cutover got (`cutover_start` is the value `exchange_and_wrap.sh` printed):
+**Use exactly the `cutover_start` that `exchange_and_wrap.sh` printed** (`RECORD cutover_start=…`), and record it with
+the run: it is an artifact *of* the forward run, not a value to derive afterwards. The driver captures it deliberately
+**before** the final deletion replay and **before** the `EXCHANGE`, so the window covers every delete bridged from that
+instant onward — including those bridged during the replay and during the swap itself.
+
+Estimating it loses data in either direction. **Too early** and the guard-less reverse replay masks deletes that were
+already applied to the original while it was live — including any id deleted and then re-created before the cutover,
+which is legitimately live in the parked original. **Too late** — anchoring to the `EXCHANGE` rather than to the
+capture — and every delete bridged between the two is missed, so those rows come back live on the restored original.
+That gap is the whole run time of the final deletion replay.
+
+**If the printed value was lost, stop and escalate.** Nothing recovers it in-procedure: statements come only from the
+versioned `.sql` files the drivers read, and none of them reads this value back. Rolling back on an estimated boundary
+destroys data or resurrects it, and both are worse than pausing.
+
+Pick the stage by how far the cutover got:
 
 - **Stage A — before EXCHANGE:** `./scripts/rollback.sh --database opik --stage A`. Discards the disposable shadow
   `traces_local_v2`; the live `traces` was never touched. (Guarded: aborts unless `traces` is still the original schema.)
@@ -985,7 +1035,7 @@ repair to do. `--unwrap-only` reverses just the sharding half.
 | Post-cutover writes stay live | No | No | **Yes** |
 | Runs the guard-less reverse replay | Yes | Yes | **No — not needed** |
 | Sentinel + `duration` repair afterwards | Yes | Yes | **No** |
-| Flags to revert | 2 + repair | 3 + repair | **1** |
+| Flags to revert | 1 + repair | 2 + repair | **1** |
 | Needs `traces_pre_cutover_backup` | Yes | Yes | **No** |
 | Available after `finalize.sh` | No | No | **Yes** |
 | Re-backfill needed to go forward again | Only if the parked copy is not reused (see "Retrying the cutover") | Same | **No — never left the cutover** |
@@ -1015,9 +1065,9 @@ where `traces_local` does not exist *yet*. It is sub-second and fails loudly, bu
 async-insert buffer alone does not cover it: quiesce traffic or take a maintenance window. That is what
 `--confirm-maintenance` asserts.
 
-`traceColumnsNonNullable` stays `true` and `tracesWeeklyPartitionPruningEnabled` stays as it was: the live table is still
-the partitioned, sentinel-schema successor, which is precisely what both flags assert. Only stage B/C revert them,
-because only they restore the unpartitioned original.
+`traceColumnsNonNullable` stays `true`: the live table is still the partitioned, sentinel-schema successor, which is
+precisely what that flag asserts. Only stage B/C revert it, because only they restore the unpartitioned original.
+Partition pruning needs no attention in either direction — it is unconditional and has no flag.
 
 **Monitoring reverses with it.** The `opik.clickhouse.partition.*` parts gauges relabel back from `table="traces_local"`
 to `table="traces"`, so restore anything adjusted at wrap time. And if the wrap-time option to point
@@ -1038,8 +1088,21 @@ Use stage B/C while the parked original still exists.
 > maintenance moment / with reads quiesced. `finalize.sh` is **exempt** — it renames only the parked backup / disposable
 > shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
 
+**What the reverse replay can and cannot re-apply.** It re-applies the deletes the bridge **recorded**. Capture runs
+after the delete succeeds and is best-effort by design — an auxiliary insert must never fail a user's delete — so a
+delete whose bridge row has not landed yet, or whose capture errored, is invisible to the replay *and* to its
+postcondition check, which reads the same bridge: that trace is live again on the restored original while the check still
+reports `0`. No query here can detect it, so the bound is operational — **quiesce trace deletes before the promote**, not
+just reads, and let in-flight ones land. It takes a delete concurrent with the promote, or a capture failure (which the
+backend logs), so the exposure is small — but `0` means "every recorded delete is masked", not "no delete escaped".
+
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
-statements, so a failure *between* them needs a restart path:
+statements. Note what that means even when both succeed: from the moment the promote lands until the replay finishes,
+the restored original is live with the post-cutover deletes **not yet re-applied**, so traces a user deleted after the
+cutover are readable again. The window is the whole gap — the driver returning from one file and starting the next, plus
+the replay's own run time — not just the replay. It is short for a rollback taken hours after the cutover, since only
+deletes bridged since `cutover_start` are in scope, but it is a real exposure: keep reads quiesced from the promote
+through the replay, not merely across the rename. A failure *between* the two needs a restart path:
 
 - **Reverse-replay interrupted (stage B or C).** The promote already restored the original, so `traces` is back in the
   canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
@@ -1054,7 +1117,9 @@ statements, so a failure *between* them needs a restart path:
 
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
-complete until they land.
+complete until they land. **After stage C specifically, `tracesDistributedWrapEnabled` must go back to `false` first**:
+the stage removed the wrapper and parked `traces_local`, so a stale `true` aims trace deletes at a table that no longer
+exists (`Code 60`). That is the second of the two flags the stage comparison table counts for stage C.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
    **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
@@ -1095,6 +1160,33 @@ complete until they land.
    > `rollback.sh`. Either grant both columns alongside the rollback grants, or run the repair as a more privileged
    > user.
 
+**When the rollback is done.** The stages leave the estate correct but not self-evidently so — the promote and the
+replay report success independently of whether the result is consistent, and two of the steps are config rather than SQL.
+Treat a stage B/C rollback as complete only when all of these hold:
+
+- [ ] **Fidelity** — the bounded compare on the post-rollback pair passes, using the `--to-week` offset `rollback.sh`
+      printed (see "Verifying after a rollback", including which mismatches inside the bound are benign and how to tell).
+      If it printed no offset — every row sits in the cutover window's own week, so there is no earlier week to compare —
+      this box is **not applicable**: `verify.sh` has nothing to bound to, and an unbounded run would report the
+      cutover week's expected divergence as a failure. Rely on the next box instead, which does not depend on a window.
+- [ ] **No deleted row resurrected** — `rollback.sh` printed `Reverse-replay postcondition OK`. It runs
+      `000004_rollback_verify_replay.sql` after every replay (stages B/C and `--reverse-replay-only`); that file explains
+      why the compare above cannot stand in for it, and what a `0` does and does not prove. A failure prints a `WARNING`
+      rather than aborting — the promote has already succeeded and the guidance below still has to print — but the run
+      **exits non-zero**, and names the `--reverse-replay-only` command to re-run. The replay is idempotent and the
+      check repeats after it.
+- [ ] **Flags reverted and the restart landed on every instance** — `traceColumnsNonNullable`, plus
+      `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
+      unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
+      as `null`.
+- [ ] **Sentinel repair applied** — `sentinel_end_time` and `sentinel_ttft` at `0`. Not `duration < 0`, which has a
+      non-zero floor from rows whose `end_time` genuinely precedes `start_time`.
+- [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
+      of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
+
+Until the last box is ticked, do not run `finalize.sh`: it is what forecloses both going back and retrying cheaply.
+`rollback.sh` prints that instruction last, after the steps it depends on, for the same reason.
+
 **Retrying the cutover after a stage B/C rollback — without re-backfilling.** A rollback leaves the successor's data
 parked as `traces_post_rollback_backup`, and the documented next step (`finalize.sh`) **truncates** it into an empty
 `traces_local_v2`, so a naive retry starts from a full re-backfill. On a large table that is the difference between
@@ -1125,9 +1217,8 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    you to set `traceColumnsNonNullable` back to `false`, so it *is* false now; the retry puts the sentinel-schema
    successor back under `traces`, which needs it `true` and needs every backend instance restarted to pick it up (it
    comes from a startup snapshot). Skipping this is silent, not loud: absent `end_time` reads back as `1970-01-01` while
-   writes keep succeeding. Raise the async-insert buffer for the window too. `tracesWeeklyPartitionPruningEnabled` is
-   separate — safe to lag, unsafe to lead — so leave it `false` and turn it on after the `EXCHANGE` is confirmed, per
-   "The `tracesWeeklyPartitionPruningEnabled` flip".
+   writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: partition
+   pruning is unconditional, so the retry's `EXCHANGE` needs no pruning step in either direction.
 5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
    every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the

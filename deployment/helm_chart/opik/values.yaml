@@ -793,6 +793,10 @@ databaseAnalyticsDataModel:
   deletionEventsInsertBatchSize: 1000
   # Turn true in lockstep with applying the Distributed wrap, so trace delete/retention mutations target
   # traces_local (a Distributed traces rejects mutations). Leave false while traces is still a MergeTree.
+  # Asserted against the live database by the backend's `clickhouse-traces-topology` readiness probe: if this
+  # disagrees with the actual `traces` engine in either direction, the backend fails readiness at startup with a
+  # message naming the flag and the observed engine. That is intentional — it beats serving traffic whose trace
+  # deletes are guaranteed to fail — and it clears on the next probe once the two sides are back in step.
   tracesDistributedWrapEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the

@@ -6,8 +6,27 @@ import { SessionInfo } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
 import { executeQuery, executeQueryPaginated } from './sqlite';
+import { orderBubbles } from './bubbleOrder';
+import { buildSpans, buildTurnOutput, DEFAULT_SPAN_OPTIONS, SpanBuildOptions } from './spanBuilder';
 
 import { TraceData } from "../interface";
+
+function readSpanOptions(): SpanBuildOptions | null {
+    const config = vscode.workspace.getConfiguration();
+    if (!config.get<boolean>('opik.detailedSpans.enabled', true)) {
+        return null;
+    }
+    return {
+        maxPayloadChars: config.get<number>(
+            'opik.detailedSpans.maxPayloadChars',
+            DEFAULT_SPAN_OPTIONS.maxPayloadChars
+        ),
+        maxSpansPerTurn: config.get<number>(
+            'opik.detailedSpans.maxSpansPerTurn',
+            DEFAULT_SPAN_OPTIONS.maxSpansPerTurn
+        ),
+    };
+}
 
 /**
  * Convert cursor conversations to Opik traces with per-session tracking.
@@ -303,33 +322,25 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                 // Get bubbles for this composer
                 const bubbles = bubblesByComposer[threadId] || [];
                 
-                // Sort bubbles using fullConversationHeadersOnly order
-                if (composerData.fullConversationHeadersOnly && Array.isArray(composerData.fullConversationHeadersOnly)) {
-                    // Create a map of bubbleId to order index
-                    const orderMap = new Map();
-                    composerData.fullConversationHeadersOnly.forEach((header: any, index: number) => {
-                        if (header.bubbleId) {
-                            orderMap.set(header.bubbleId, index);
-                        }
-                    });
-                    
-                    // Sort bubbles according to the order in fullConversationHeadersOnly
-                    bubbles.sort((a, b) => {
-                        const aOrder = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-                        const bOrder = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-                        return aOrder - bOrder;
-                    });
-                }
-                
+                const orderedBubbles = orderBubbles(bubbles, composerData.fullConversationHeadersOnly);
+
                 // Add conversation
                 conversations.push({
                     chatTitle: composerData.name || `Composer Session ${index + 1}`,
-                    bubbles: bubbles,
+                    bubbles: orderedBubbles,
                     lastSendTime: composerData.lastUpdatedAt || composerData.createdAt,
                     composerId: threadId,
                     createdAt: composerData.createdAt,
                     model: composerData.modelConfig?.modelName,
-                    bubbleCount: bubbles.length
+                    bubbleCount: orderedBubbles.length,
+                    unifiedMode: composerData.unifiedMode,
+                    isAgentic: composerData.isAgentic,
+                    createdOnBranch: composerData.createdOnBranch,
+                    contextTokensUsed: composerData.contextTokensUsed,
+                    contextTokenLimit: composerData.contextTokenLimit,
+                    filesChangedCount: composerData.filesChangedCount,
+                    totalLinesAdded: composerData.totalLinesAdded,
+                    totalLinesRemoved: composerData.totalLinesRemoved
                 });
             } catch (parseErr) {
                 captureException(parseErr);
@@ -416,7 +427,7 @@ export async function findAndReturnNewTraces(
 }
 
 // Helper function to group bubbles by conversation turns
-function groupBubblesByType(bubbles: any[]) {
+export function groupBubblesByType(bubbles: any[]) {
     const groups: { userMessages: any[], aiMessages: any[] }[] = [];
     let currentGroup: { userMessages: any[], aiMessages: any[] } | null = null;
 
@@ -463,21 +474,13 @@ function createTraceFromBubbleGroup(
         .filter(content => content.trim())
         .join('\n\n');
     
-    // Extract and clean AI content inline
-    const assistantContent = aiMessages
-        .map(msg => {
-            let content = msg.text || msg.content || msg.rawText || '';
-            // Clean cursor-specific markup
-            return content
-                .replace(/⛢Thought☤[\s\S]*?⛢\/Thought☤/g, '')
-                .replace(/⛢Action☤[\s\S]*?⛢\/Action☤/g, '')
-                .replace(/⛢RawAction☤[\s\S]*?⛢\/RawAction☤/g, '')
-                .trim();
-        })
-        .filter(content => content)
-        .join('\n\n');
-    
-    // Filter out traces without proper input or output
+    // The messages the assistant wrote, with the name of every tool call in
+    // between. A turn that is only tool calls still produces an output.
+    const assistantContent = buildTurnOutput(aiMessages);
+
+    const spanOptions = readSpanOptions();
+    const spans = spanOptions ? buildSpans(group, conversation, spanOptions) : [];
+
     if (!userContent || !assistantContent) {
         return null;
     }
@@ -489,21 +492,21 @@ function createTraceFromBubbleGroup(
     const startTime = firstUserMessage.resolvedTimestamp || conversation.createdAt || Date.now();
     const endTime = lastAiMessage.resolvedTimestamp || startTime + 1000; // Add 1 second if no end time
 
-    // Create metadata inline
-    const cleanMessages = (messages: any[]) => 
-        messages.map(msg => {
-            const cleanMsg = { ...msg };
-            delete cleanMsg.delegate;
-            return cleanMsg;
-        });
-
+    // The raw bubbles used to be copied here. The child spans now hold that
+    // data in a readable form, and the copy was the largest part of the payload.
     const metadata = {
         conversationTitle: conversation.chatTitle,
         composerId: conversation.composerId,
-        userMessages: cleanMessages(userMessages),
-        aiMessages: cleanMessages(aiMessages),
         totalBubbles: conversation.bubbleCount,
         conversationCreatedAt: conversation.createdAt,
+        mode: conversation.unifiedMode,
+        isAgentic: conversation.isAgentic,
+        createdOnBranch: conversation.createdOnBranch,
+        contextTokensUsed: conversation.contextTokensUsed,
+        contextTokenLimit: conversation.contextTokenLimit,
+        filesChangedCount: conversation.filesChangedCount,
+        totalLinesAdded: conversation.totalLinesAdded,
+        totalLinesRemoved: conversation.totalLinesRemoved,
         gitInfo: gitInfo
     };
 
@@ -541,7 +544,8 @@ function createTraceFromBubbleGroup(
         output: { output: assistantContent },
         thread_id: conversation.composerId,
         tags: tags,
-        metadata: metadata
+        metadata: metadata,
+        spans: spans
     };
 }
 
