@@ -226,13 +226,16 @@ public class CostService {
             String modelPrefix = originalModelName.substring(0, prefixSlash);
             String canonicalFromPrefix = PROVIDER_ALIASES.getOrDefault(modelPrefix, modelPrefix);
             if (canonicalFromPrefix != null && !canonicalFromPrefix.equalsIgnoreCase(provider)) {
-                String prefixKey = createModelProviderKey(modelName, canonicalFromPrefix);
-                ModelPrice prefixMatch = modelProviderPrices.get(prefixKey);
-                if (prefixMatch != null) {
-                    log.debug(
-                            "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
-                            originalModelName, provider, canonicalFromPrefix);
-                    return prefixMatch;
+                for (String candidate : new String[]{modelName, normalizedModelName, baseOriginalModelName,
+                        baseNormalizedModelName, baseOriginalVersionName, baseNormalizedVersionName}) {
+                    ModelPrice prefixMatch = modelProviderPrices
+                            .get(createModelProviderKey(candidate, canonicalFromPrefix));
+                    if (prefixMatch != null) {
+                        log.debug(
+                                "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
+                                originalModelName, provider, canonicalFromPrefix);
+                        return prefixMatch;
+                    }
                 }
             }
         }
@@ -408,7 +411,7 @@ public class CostService {
      */
     private static String buildRuntimeKey(String modelName, ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        if (provider.isEmpty()) {
+        if (provider.isBlank()) {
             return null;
         }
         String canonical = PROVIDER_ALIASES.getOrDefault(provider, provider);
@@ -420,11 +423,11 @@ public class CostService {
 
     private static ModelPrice buildModelPrice(ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        if (provider.isEmpty()) {
+        if (provider.isBlank()) {
             return null;
         }
         // Resolve alias; unknown providers use their own name as canonical.
-        provider = PROVIDER_ALIASES.getOrDefault(provider, provider);
+        String canonicalProvider = PROVIDER_ALIASES.getOrDefault(provider, provider);
 
         BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);

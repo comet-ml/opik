@@ -1012,6 +1012,8 @@ class CostServiceTest {
                 Arguments.of("ai21/jamba-mini-1.7", "openrouter", "0.00028"),
                 // OpenRouter namespaces Z.ai as z-ai/, the price file as zai/.
                 Arguments.of("z-ai/glm-4.5", "openrouter", "0.00104"),
+                // Date-suffixed variant: prefix fallback must also try date-stripped name.
+                Arguments.of("z-ai/glm-4.5-2025-12-17", "openrouter", "0.00104"),
                 Arguments.of("z-ai/glm-5", "openrouter", "0.00164"),
                 Arguments.of("morph/morph-v3-fast", "openrouter", "0.00104"),
                 Arguments.of("morph/morph-v3-large", "openrouter", "0.00128"),
