@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SessionInfo } from './interface';
+import { PendingUsage, SessionInfo } from './interface';
 
 export function getSessionInfo(context: vscode.ExtensionContext): Record<string, SessionInfo> {
   return context.globalState.get<Record<string, SessionInfo>>('sessionInfo', {});
@@ -39,8 +39,17 @@ export function updateLastSyncedAt(context: vscode.ExtensionContext, timestamp: 
   context.globalState.update('lastSyncedAt', timestamp);
 }
 
+export function getPendingUsage(context: vscode.ExtensionContext): PendingUsage[] {
+  return context.globalState.get<PendingUsage[]>('pendingUsage', []);
+}
+
+export function updatePendingUsage(context: vscode.ExtensionContext, pending: PendingUsage[]) {
+  context.globalState.update('pendingUsage', pending);
+}
+
 export function resetExtensionState(context: vscode.ExtensionContext) {
   context.globalState.update('sessionInfo', undefined);
   context.globalState.update('lastSyncTime', null);
   context.globalState.update('lastSyncedAt', undefined);
+  context.globalState.update('pendingUsage', undefined);
 }

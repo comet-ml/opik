@@ -1,0 +1,92 @@
+# Renders the GitHub stars chart for the READMEs and publishes the SVGs to
+# cdn.comet.com. The star total is public, so no GitHub token is needed; AWS
+# credentials come from OIDC. Nothing is written back to the repository.
+#
+# data.json on the CDN is the series. A run reads it, appends today's total,
+# re-renders both SVGs, and uploads. If it cannot be read the job fails rather
+# than reseeding, which would discard every point gathered so far.
+name: Create Github Stars History Chart
+run-name: Create Github Stars History Chart
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays, 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: "First run only: seed the series from the committed snapshot"
+        type: boolean
+        default: false
+
+concurrency:
+  group: star-history
+  cancel-in-progress: false
+
+env:
+  S3_PREFIX: ${{ vars.AWS_OPIK_CDN_BUCKET }}/star-history
+  CDN_PATHS: /opik/star-history/*
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC only
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.CDN_PUBLISH_ROLE_ARN }}
+          role-session-name: star-history
+          aws-region: us-east-1
+
+      - name: Fetch current series
+        if: ${{ inputs.bootstrap != true }}
+        run: aws s3 cp "$S3_PREFIX/data.json" data.json
+
+      - name: Render
+        env:
+          BOOTSTRAP: ${{ inputs.bootstrap }}
+        run: |
+          args=(--data data.json --out out)
+          if [ "$BOOTSTRAP" = "true" ]; then args+=(--bootstrap); fi
+          python3 .github/scripts/star_history.py "${args[@]}"
+
+      - name: Publish
+        env:
+          DISTRIBUTION_ID: ${{ secrets.CDN_DISTRIBUTION_ID }}
+        run: |
+          for theme in light dark; do
+            aws s3 cp "out/star-history-$theme.svg" "$S3_PREFIX/star-history-$theme.svg" \
+              --content-type image/svg+xml --cache-control max-age=300
+          done
+          aws s3 cp out/data.json "$S3_PREFIX/data.json" \
+            --content-type application/json --cache-control max-age=300
+          aws cloudfront create-invalidation \
+            --distribution-id "$DISTRIBUTION_ID" --paths "$CDN_PATHS"
+
+  notify-slack:
+    name: "Slack Notification"
+    runs-on: ubuntu-latest
+    needs: publish
+    # Main only, and the notifier comes from main: this step holds a webhook
+    # secret and must not run code from a dispatched ref.
+    if: always() && needs.publish.result == 'failure' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Send Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+        run: .github/scripts/notify-slack-test-failure.sh "Star History Chart Publish"
