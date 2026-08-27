@@ -33,6 +33,7 @@ class DatasetItemVersionQueryShapeTest {
     private static String sql;
     private static String phaseOne;
     private static String phaseTwo;
+    private static String countSql;
 
     @BeforeAll
     static void readQuery() throws Exception {
@@ -40,6 +41,10 @@ class DatasetItemVersionQueryShapeTest {
         Field field = dao.getDeclaredField("SELECT_DATASET_ITEM_VERSIONS");
         field.setAccessible(true);
         sql = (String) field.get(null);
+
+        Field countField = dao.getDeclaredField("SELECT_DATASET_ITEM_VERSIONS_COUNT");
+        countField.setAccessible(true);
+        countSql = (String) countField.get(null);
 
         // The CTE is closed by a line containing only ')'. Everything before it is phase 1.
         Matcher close = Pattern.compile("(?m)^\\s*\\)\\s*$").matcher(sql);
@@ -136,6 +141,29 @@ class DatasetItemVersionQueryShapeTest {
                         mitigation.""")
                 .doesNotContain("<if(truncate)>");
         assertThat(phaseTwo).contains("<if(truncate)>");
+    }
+
+    @Test
+    @DisplayName("the count query resolves filters against the same item-level aliases as the page")
+    void countQuery__projectsTheSameFilterVisibleAliases() {
+        // The page and its total resolve the same bare column names. When only the page carried the aliases,
+        // a created_at filter returned one row while the endpoint reported a total of 176. This assertion is
+        // the cheap half of that guard: the behavioural test needs testcontainers and a divergent fixture,
+        // this one fails in milliseconds against a string.
+        assertThat(countSql)
+                .contains("dataset_item_id AS id")
+                .contains("item_created_at AS created_at")
+                .contains("item_last_updated_at AS last_updated_at")
+                .contains("item_created_by AS created_by")
+                .contains("item_last_updated_by AS last_updated_by");
+
+        assertThat(countSql)
+                .as("* EXCEPT keeps data, source, tags, trace_id and span_id resolvable for their own filters")
+                .contains("* EXCEPT");
+
+        assertThat(countSql.indexOf("item_created_at AS created_at"))
+                .as("the filters must be applied inside the subquery that defines the aliases, not outside it")
+                .isLessThan(countSql.indexOf("<dataset_item_filters>"));
     }
 
     private static String orderByOf(String phase) {

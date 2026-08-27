@@ -446,6 +446,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      *       long after the items were authored, a {@code created_at} filter returned 175 items where the correct
      *       answer was 0.</li>
      * </ol>
+     * <p>
+     * One caveat for whoever edits this next: alias binding is the default of a ClickHouse setting, not a
+     * language guarantee. Under {@code prefer_column_name_to_alias=1} resolution flips back to the source
+     * columns and every filter below silently returns to the broken behaviour. That setting is off by default
+     * in every version we run and is set nowhere in this repo, which is why these queries filter against the
+     * projection instead of paying for an extra subquery on the read path. The two facts are linked: flipping
+     * it would reintroduce exactly the defect this shape exists to prevent.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
             WITH page AS (
@@ -516,6 +523,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code * EXCEPT} keeps every other column in scope so filters on {@code data}, {@code source},
      * {@code tags}, {@code trace_id} and {@code span_id} still resolve. It costs nothing: ClickHouse prunes
      * the unread payload through the wrapper, and the read is byte-identical to the unwrapped form.
+     * <p>
+     * Alias binding here is the default of {@code prefer_column_name_to_alias} rather than a language
+     * guarantee; see the note on {@code SELECT_DATASET_ITEM_VERSIONS}.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
             SELECT count(DISTINCT dataset_item_id) as count
@@ -596,10 +606,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tags,
                         evaluators,
                         execution_policy,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by
+                        item_created_at AS created_at,
+                        item_last_updated_at AS last_updated_at,
+                        item_created_by AS created_by,
+                        item_last_updated_by AS last_updated_by
                     FROM dataset_item_versions FINAL
                     WHERE workspace_id = :workspace_id
                       AND dataset_id = :datasetId
@@ -675,6 +685,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
             	LEFT JOIN dataset_item_versions AS lookup_div FINAL
             	    ON lookup_div.workspace_id = ei.workspace_id
+            	    AND lookup_div.dataset_id = :datasetId
             	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
@@ -765,10 +776,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
                     div_dedup.tags AS tags,
-                    div_dedup.created_at AS created_at,
-                    div_dedup.last_updated_at AS last_updated_at,
-                    div_dedup.created_by AS created_by,
-                    div_dedup.last_updated_by AS last_updated_by
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -853,10 +864,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
                     div_dedup.tags AS tags,
-                    div_dedup.created_at AS created_at,
-                    div_dedup.last_updated_at AS last_updated_at,
-                    div_dedup.created_by AS created_by,
-                    div_dedup.last_updated_by AS last_updated_by
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -892,6 +903,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM experiment_item_aggregates AS eia FINAL
                 LEFT JOIN dataset_item_versions AS lookup_div FINAL
                     ON lookup_div.workspace_id = eia.workspace_id
+                    AND lookup_div.dataset_id = :datasetId
                     AND lookup_div.id = eia.dataset_item_id
                 WHERE eia.workspace_id = :workspace_id
                 AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -1089,6 +1101,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
             	LEFT JOIN dataset_item_versions AS lookup_div FINAL
             	    ON lookup_div.workspace_id = ei.workspace_id
+            	    AND lookup_div.dataset_id = :datasetId
             	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
@@ -1136,10 +1149,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.tags AS tags,
                     div_dedup.evaluators AS evaluators,
                     div_dedup.execution_policy AS execution_policy,
-                    div_dedup.created_at AS item_created_at,
-                    div_dedup.last_updated_at AS item_last_updated_at,
-                    div_dedup.created_by AS item_created_by,
-                    div_dedup.last_updated_by AS item_last_updated_by
+                    div_dedup.item_created_at AS item_created_at,
+                    div_dedup.item_last_updated_at AS item_last_updated_at,
+                    div_dedup.item_created_by AS item_created_by,
+                    div_dedup.item_last_updated_by AS item_last_updated_by,
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -1359,10 +1376,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tags,
                         evaluators,
                         execution_policy,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by
+                        item_created_at AS created_at,
+                        item_last_updated_at AS last_updated_at,
+                        item_created_by AS created_by,
+                        item_last_updated_by AS last_updated_by
                     FROM dataset_item_versions FINAL
                     WHERE workspace_id = :workspace_id
                     AND dataset_id  = :datasetId
@@ -1401,10 +1418,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.tags AS tags,
                     div_dedup.evaluators AS evaluators,
                     div_dedup.execution_policy AS execution_policy,
-                    div_dedup.created_at AS item_created_at,
-                    div_dedup.last_updated_at AS item_last_updated_at,
-                    div_dedup.created_by AS item_created_by,
-                    div_dedup.last_updated_by AS item_last_updated_by
+                    div_dedup.item_created_at AS item_created_at,
+                    div_dedup.item_last_updated_at AS item_last_updated_at,
+                    div_dedup.item_created_by AS item_created_by,
+                    div_dedup.item_last_updated_by AS item_last_updated_by,
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
                 FROM (
                     SELECT *
                     FROM dataset_item_versions
@@ -1549,6 +1570,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FROM experiment_item_aggregates AS eia FINAL
                     LEFT JOIN dataset_item_versions AS lookup_div FINAL
                         ON lookup_div.workspace_id = eia.workspace_id
+                        AND lookup_div.dataset_id = :datasetId
                         AND lookup_div.id = eia.dataset_item_id
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -2274,6 +2296,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 LEFT JOIN dataset_item_versions AS lookup_div FINAL
                     ON lookup_div.workspace_id = ei.workspace_id
+                    AND lookup_div.dataset_id = :datasetId
                     AND lookup_div.id = ei.dataset_item_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
@@ -2441,10 +2464,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             div_dedup.trace_id AS trace_id,
                             div_dedup.span_id AS span_id,
                             div_dedup.tags AS tags,
-                            div_dedup.created_at AS created_at,
-                            div_dedup.last_updated_at AS last_updated_at,
-                            div_dedup.created_by AS created_by,
-                            div_dedup.last_updated_by AS last_updated_by,
+                            div_dedup.item_created_at AS created_at,
+                            div_dedup.item_last_updated_at AS last_updated_at,
+                            div_dedup.item_created_by AS created_by,
+                            div_dedup.item_last_updated_by AS last_updated_by,
                             div_dedup.dataset_version_id AS dataset_version_id
                         FROM (
                             SELECT *
@@ -2486,7 +2509,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             div_dedup.source AS source,
                             div_dedup.trace_id AS trace_id,
                             div_dedup.span_id AS span_id,
-                            div_dedup.tags AS tags
+                            div_dedup.tags AS tags,
+                            div_dedup.item_created_at AS created_at,
+                            div_dedup.item_last_updated_at AS last_updated_at,
+                            div_dedup.item_created_by AS created_by,
+                            div_dedup.item_last_updated_by AS last_updated_by
                         FROM (
                             SELECT *
                             FROM dataset_item_versions

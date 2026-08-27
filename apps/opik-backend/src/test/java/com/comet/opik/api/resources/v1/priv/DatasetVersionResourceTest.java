@@ -61,7 +61,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
-import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -5859,8 +5858,7 @@ class DatasetVersionResourceTest {
                         .bind("version_id", versionId.toString())
                         .bind("workspace_id", WORKSPACE_ID);
 
-                Mono<? extends Result> result = Mono.from(statement.execute());
-                return result;
+                return Mono.from(statement.execute());
             }).block();
         }
 
@@ -5957,8 +5955,7 @@ class DatasetVersionResourceTest {
                         .bind("tag", "\"" + tag + "\"")
                         .bind("workspace_id", WORKSPACE_ID);
 
-                Mono<? extends Result> result = Mono.from(statement.execute());
-                return result;
+                return Mono.from(statement.execute());
             }).block();
         }
 
@@ -6062,8 +6059,7 @@ class DatasetVersionResourceTest {
                         .bind("row_user", ROW_LEVEL_USER)
                         .bind("workspace_id", WORKSPACE_ID);
 
-                Mono<? extends Result> result = Mono.from(statement.execute());
-                return result;
+                return Mono.from(statement.execute());
             }).block();
         }
 
