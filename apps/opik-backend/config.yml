@@ -1887,3 +1887,82 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}
+
+# Read-time redaction: rewrites trace and span content on the way out for callers who may not see the
+# originals. Data is stored as sent; nothing is rewritten at ingestion. With enabled=false no serializer is
+# registered and every response is byte-identical to before this feature existed.
+redaction:
+  # Default: false
+  # Description: Master switch. Also gates the workspace settings that expose this in the UI.
+  # REQUIRES AUTHENTICATION. The exemption is the original_data_view workspace permission, read from the
+  # platform's workspace permissions API and from nowhere else, so with authentication.enabled=false no caller can
+  # hold it and every response is masked for everybody with no way to grant an exemption. The backend logs that at
+  # startup. Redaction is opt-in per caller: the permission is granted to every default role that can read data,
+  # so enabling this masks nothing until an admin revokes it for someone.
+  # This is why there is no self-hosted guide for the feature: on a deployment without the platform's
+  # authentication there is nothing to configure per caller.
+  enabled: ${OPIK_REDACTION_ENABLED:-false}
+  # Default: [] - which is valid only while enabled=false. An empty set with enabled=true fails startup
+  # ("redaction.rules must not be empty when redaction.enabled=true") rather than masking nothing while
+  # appearing to be on, so switching the feature on means setting this at the same time, e.g.
+  # OPIK_REDACTION_RULES='[{"regex":"(?<![\w.+-])[\w.+-]+@[\w-]+\.[\w.]+","replace":"[EMAIL]"}]'
+  # NOT A STABLE CONTRACT YET: this key names the mechanism (regex rules), so replacing the mechanism means
+  # replacing the key. Left as-is deliberately - the feature is in beta and off by default, so the shape can
+  # change in a later PR rather than being generalised now for a successor that does not exist yet. Do not build
+  # tooling or deployment templates against `rules` on the assumption that it is fixed.
+  # Description: JSON array of {"regex", "replace"} applied in order to every string in a response, each rule
+  # seeing the previous rule's output. "replace" is literal text: unlike the SDK anonymizer, backreferences are
+  # not expanded, so a partial-mask replacement such as "\1***@\2" is emitted verbatim rather than substituted.
+  # Callable rules have no equivalent here either: the server only runs regexes. A malformed regex fails startup
+  # rather than silently disabling redaction.
+  # Object keys are never rewritten, only values: a key is part of the document's shape, and rewriting it would
+  # break lookups into that object. Sensitive data therefore has to be in values, not field names.
+  # THEREFORE a payload shaped {"john.doe@example.com": "..."} carries the identifier in a key and is returned as
+  # stored. Rewriting keys is not the fix: two keys collapsing to the same replacement produce a document with
+  # duplicate keys, and the parser that reads it keeps only one of them - valid JSON that has silently lost data.
+  # Keys are structure; the place to keep identifiers out of them is the instrumentation that writes them.
+  # The permission is resolved alongside the cached credentials, so granting or revoking original_data_view
+  # takes effect within authentication.apiKeyResolutionCacheTTLInSec (default 5s) rather than immediately.
+  # Revocation is the direction that matters: for those few seconds a caller who has just lost it still reads
+  # originals.
+  # NOT GUARDED: a client that reads masked content and writes it back persists the replacement over the
+  # original. Nothing rejects that - the write path is untouched by this feature, by design, since content is
+  # stored exactly as sent. A caller without the permission editing and saving a prompt, dataset item or
+  # experiment they have only ever seen masked will therefore overwrite stored content with the replacement.
+  # Out of scope here; it needs the write path to recognise the token or refuse the write, which is a separate
+  # decision about how much editing such a caller should be able to do at all.
+  # NOT YET COVERED: the dataset CSV export (datasetExport.enabled, false by default) writes its file from a
+  # background job with no caller, and the download streams those bytes without applying the rules. Enable the
+  # export feature and an unpermitted caller can read stored content through it. Masking belongs on the download,
+  # which does have a caller, applied per cell through the CSV parser so the rules cannot reach the delimiters.
+  # A value whose rules cannot be evaluated within the internal bounds is masked whole rather than returned (see
+  # MatchBudget). Two bounds apply: the work one rule may do against one value, which an anchored rule never
+  # approaches and an unanchored one on a long token will, and how much longer than the stored value the rewrite
+  # may come out - four times, or 64 KB, whichever is larger. The second only binds on a rule whose replacement
+  # is longer than the text it matches, applied to a value full of such matches; that combination would otherwise
+  # let a caller's payload and the replacement multiply into a response many times the size of either.
+  # original_data_view is a workspace-scoped grant, so only a member of the workspace can hold it. That
+  # settles what a public project shows: a viewer who is not a member is never a holder, so with this enabled the
+  # public view is redacted, always. A member who holds it reads originals on public and private projects alike.
+  # The mechanism follows from where permissions are set - the public fallback in RemoteAuthService.authenticate
+  # runs only after member authentication has failed, and it sets workspace, visibility and a "Public" user name
+  # but no permissions. An empty permission set is redacted, so no separate public-visibility branch is needed.
+  # The MCP OAuth route resolves the
+  # caller from a username header rather than an authenticated principal, so on a deployment that enables it the
+  # gate is only as strong as the network boundary in front of the platform's auth endpoint.
+  # An environment name auto-created from a trace is exempt as an entity name, so a value that survives the
+  # ^[A-Za-z0-9_-]+$ filter can read redacted on the trace and verbatim on /v1/private/environments. Digits and
+  # hyphens pass that filter, so a rule written for dates or national identifiers can differ across the two.
+  # A span's model and provider are exempt by decision: they name a vendor and a model rather than carry personal
+  # data, and the UI filters and groups by them, so redacting them would rewrite legitimate identifiers such as
+  # gpt-4o-2024-08-06 under a date rule. Content placed in those two fields is therefore returned as stored.
+  # Structural properties (project_name, thread_id, dataset_name and similar lookup keys) are exempt:
+  # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
+  # its keys are named.
+  # thread_id specifically is exempt by decision, not by oversight. It is chosen by the caller and used for
+  # navigation and grouping, so what goes in it is the instrumentation's responsibility - the same contract as
+  # object keys above. Do not put content there that the workspace's readers may not see.
+  # Anchor patterns so they cannot start mid-token — an unanchored local part such as [\w.+-]+@... is quadratic
+  # on long base64 payloads. The match budget now bounds that rather than leaving it to the pattern, but an
+  # anchored rule is still the difference between exact masking and a value withheld whole.
+  rules: '${OPIK_REDACTION_RULES:-[]}'

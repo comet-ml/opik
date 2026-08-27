@@ -190,4 +190,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private RedactionConfig redaction = new RedactionConfig();
 }

@@ -249,6 +249,9 @@ public class AuthCredentialsCacheServiceTest {
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
                 .quotas(List.of())
+                // A record written before permissions were cached has no such field, and reads back as none
+                // held — the same answer an unpermitted caller gets, so a stale entry withholds, never grants.
+                .permissions(List.of())
                 .build();
         assertThat(resolved).contains(expected);
     }
@@ -264,5 +267,34 @@ public class AuthCredentialsCacheServiceTest {
 
     private String getRandomId() {
         return RandomStringUtils.secure().nextAlphanumeric(32);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void cacheAndRetrievePermissions(List<String> permissions) {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+
+        // Without this round-trip the permissions are lost on every cache hit, so a caller holding
+        // original_data_view would be treated as unpermitted for the length of the cache TTL.
+        cacheService.cache(apiKey, workspaceName, List.of(),
+                CacheService.AuthCredentials.builder()
+                        .userName(getRandomId()).workspaceId(getRandomId())
+                        .workspaceName(getRandomId()).permissions(permissions).build());
+
+        Optional<CacheService.AuthCredentials> credentials = cacheService
+                .resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, List.of());
+
+        assertThat(credentials).isPresent();
+        assertThat(credentials.get().permissions()).isEqualTo(ListUtils.emptyIfNull(permissions));
+    }
+
+    Stream<Arguments> cacheAndRetrievePermissions() {
+        return Stream.of(
+                arguments(named("null permissions", null)),
+                arguments(named("no permissions", List.of())),
+                arguments(named("the original-data permission", List.of("original_data_view"))),
+                arguments(named("several permissions",
+                        List.of("original_data_view", "project_data_view", "dataset_view"))));
     }
 }
