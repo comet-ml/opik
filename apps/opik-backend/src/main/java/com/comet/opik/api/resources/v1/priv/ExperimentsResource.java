@@ -400,9 +400,11 @@ public class ExperimentsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
         log.info("Streaming experiments by '{}', workspaceId '{}', userName '{}'", request, workspaceId, userName);
+        // Snapshot rather than the provider: this lambda runs at subscribe time on a scheduler thread where the
+        // request scope is gone. Going through setRequestContext keeps the read-time masking decision attached.
+        var ctxSnapshot = requestContext.get();
         var experiments = experimentService.get(request)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
         var stream = streamer.getOutputStream(experiments);
         log.info("Streamed experiments by '{}', workspaceId '{}', userName '{}'", request, workspaceId, userName);
         return stream;
@@ -452,9 +454,9 @@ public class ExperimentsResource {
                 .truncate(request.truncate())
                 .projectName(request.projectName())
                 .build();
+        var ctxSnapshot = requestContext.get();
         var items = experimentItemService.getExperimentItems(criteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
         var stream = streamer.getOutputStream(items);
         log.info("Streamed experiment items by '{}', workspaceId '{}'", request, workspaceId);
         return stream;

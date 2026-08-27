@@ -190,7 +190,7 @@ public class AttachmentResource {
             @QueryParam("entity_id") @NotNull UUID entityId,
             @QueryParam("file_name") @NotBlank String fileName,
             @QueryParam("mime_type") @NotBlank String mimeType) {
-        // Streams bytes that never become a JsonNode, so no serializer can reach the content.
+        // Streams bytes that never become a JsonNode, so masking cannot reach the content.
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Attachment download");
 
         String workspaceId = requestContext.get().getWorkspaceId();

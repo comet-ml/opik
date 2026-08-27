@@ -40,6 +40,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+
 /**
  * Sub-resource for dataset version operations.
  * Handles all endpoints under /datasets/{id}/versions
@@ -210,9 +212,7 @@ public class DatasetVersionsResource {
         log.info("Restoring dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
                 workspaceId);
         DatasetVersion version = versionService.restoreVersion(datasetId, request.versionRef())
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Restored dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
                 workspaceId);

@@ -10,6 +10,9 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.infrastructure.redaction.FieldMasker;
+import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.infrastructure.redaction.RedactionSupport;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.annotations.VisibleForTesting;
@@ -1349,6 +1352,7 @@ class ThreadDAOImpl implements ThreadDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull RedactionService redactionService;
 
     /**
      * Sort mapping applied under {@code traceColumnsNonNullable}: a thread's {@code end_time} is
@@ -1629,6 +1633,11 @@ class ThreadDAOImpl implements ThreadDAO {
     }
 
     private Publisher<TraceThread> mapThreadToDto(Result result) {
+        // Resolved per result set from the reactive context: see TraceDAO.mapToDto.
+        return RedactionSupport.masked(redactionService, masker -> mapThreadToDto(result, masker));
+    }
+
+    private Publisher<TraceThread> mapThreadToDto(Result result, FieldMasker masker) {
         return result.map((row, rowMetadata) -> TraceThread.builder()
                 .id(row.get("id", String.class))
                 .workspaceId(row.get("workspace_id", String.class))
@@ -1640,11 +1649,13 @@ class ThreadDAOImpl implements ThreadDAO {
                         .filter(it -> !it.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
                                 "first_message_truncated", row, value))
+                        .map(masker::mask)
                         .orElse(null))
                 .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
                         .filter(it -> !it.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
                                 "last_message_truncated", row, value))
+                        .map(masker::mask)
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
                 .usage(row.get("usage", Map.class))

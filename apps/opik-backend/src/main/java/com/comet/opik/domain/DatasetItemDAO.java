@@ -11,6 +11,8 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.infrastructure.redaction.RedactionSupport;
 import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
@@ -1037,6 +1039,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull RedactionService redactionService;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -1105,7 +1108,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(DatasetItemResultMapper::mapItem)
+                    .flatMap(result -> RedactionSupport.masked(redactionService,
+                            masker -> DatasetItemResultMapper.mapItem(result, masker)))
                     .singleOrEmpty();
         });
     }
@@ -1153,7 +1157,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(DatasetItemResultMapper::mapItem);
+                    .flatMap(result -> RedactionSupport.masked(redactionService,
+                            masker -> DatasetItemResultMapper.mapItem(result, masker)));
         }));
     }
 
@@ -1420,7 +1425,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                             return Flux.from(selectStatement.execute())
                                     .doFinally(signalType -> endSegment(segmentContent))
-                                    .flatMap(DatasetItemResultMapper::mapItem)
+                                    .flatMap(result -> RedactionSupport.masked(redactionService,
+                                            masker -> DatasetItemResultMapper.mapItem(result, masker)))
                                     .collectList()
                                     .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, List.of()))
                                     .flatMap(

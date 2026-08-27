@@ -8,7 +8,7 @@ import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
-import com.comet.opik.infrastructure.redaction.RedactionGuard;
+import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.google.common.base.Throwables;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -54,6 +54,7 @@ import java.util.concurrent.CompletionException;
 public class AnalyticsQueriesResource {
 
     private final @NonNull FreeFormSqlQueryService freeFormSqlQueryService;
+    private final @NonNull RedactionService redactionService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles;
 
@@ -72,10 +73,6 @@ public class AnalyticsQueriesResource {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 
-        // The caller chooses the projection, so rewriting the result is not enforceable: a value returned
-        // through base64() or substring() matches no rule written against the plain text.
-        RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
-
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Executing Agent Insights free-form SQL for workspace '{}', project '{}'", workspaceId, projectId);
@@ -87,10 +84,35 @@ public class AnalyticsQueriesResource {
             AnalyticsQueryResponse response = freeFormSqlQueryService
                     .executeQuery(workspaceId, projectId, request.query())
                     .join();
-            return Response.ok(response).build();
+
+            return Response.ok(maskIfRequired(response)).build();
         } catch (CompletionException e) {
             Throwables.throwIfUnchecked(e.getCause());
             throw e;
         }
+    }
+
+    /**
+     * Masks by shape rather than by field name, because the caller shaped the result.
+     * <p>
+     * The final query returns one {@code result} column built by the caller's own {@code toJSONString(...)}, so
+     * they choose the key names as well as the projection. Name-matching would key off a name they pick, and
+     * {@code map('x', input)} walks past any configured set - as would {@code base64(input)} past a pattern.
+     * Replacing every string sidesteps both, since no projection of content arrives as anything else.
+     * <p>
+     * Numbers and booleans are left alone, which is why this masks rather than refuses: counts, averages and
+     * grouping over non-content dimensions keep working for a caller without the permission, and only the
+     * content they were never allowed to read is withheld.
+     */
+    private AnalyticsQueryResponse maskIfRequired(AnalyticsQueryResponse response) {
+        if (!requestContext.get().isRedactResponse()) {
+            return response;
+        }
+
+        var masker = redactionService.masker();
+
+        return new AnalyticsQueryResponse(response.results().stream()
+                .map(result -> masker.maskEveryString(result.deepCopy()))
+                .toList());
     }
 }
