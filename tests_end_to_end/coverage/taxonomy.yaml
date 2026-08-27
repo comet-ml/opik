@@ -368,8 +368,9 @@ areas:
     specs:
       - dashboards/workspace-span-metrics.spec.ts
       - dashboards/project-span-metrics.spec.ts
+      - dashboards/dashboards-list-filters.spec.ts
     capabilities:
-      list-dashboards:      { covered: false }
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }

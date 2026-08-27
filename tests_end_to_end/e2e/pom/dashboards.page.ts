@@ -246,4 +246,64 @@ export class DashboardsPage {
       await popover.waitFor({ state: 'hidden' });
     });
   }
+
+  /** A row in the dashboards list, addressed by its name cell. */
+  row(name: string): Locator {
+    return this.page
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
+  }
+
+  /**
+   * Applies a single list filter through the Filters popover.
+   *
+   * The popover's two selects expose `role="combobox"` but carry no accessible
+   * name, so they are taken in DOM order — column first, operator second. The
+   * value box is the only textbox inside the popover. Nothing here has a
+   * `data-testid`; that matches the rest of this page object.
+   */
+  async applyListFilter(column: string, operator: string, value: string): Promise<void> {
+    await test.step(`Filter the list by ${column} ${operator} "${value}"`, async () => {
+      await this.page.getByRole('button', { name: /^Filters/ }).click();
+      const popover = this.page.locator('[data-radix-popper-content-wrapper]');
+      await popover.waitFor({ state: 'visible' });
+
+      await popover.getByRole('combobox').nth(0).click();
+      await this.page.getByRole('option', { name: column, exact: true }).click();
+
+      // The operator select defaults to the first operator for the chosen
+      // column; only touch it when the test wants a different one.
+      const operatorSelect = popover.getByRole('combobox').nth(1);
+      if ((await operatorSelect.innerText()).trim() !== operator) {
+        await operatorSelect.click();
+        await this.page.getByRole('option', { name: operator, exact: true }).click();
+      }
+
+      // `fill()` sets the value in one shot and the filter row never commits —
+      // the list request goes out without a `filters` param. Typing emits the
+      // per-key events the row listens for.
+      const valueBox = popover.getByRole('textbox');
+      await valueBox.click();
+      await valueBox.pressSequentially(value);
+
+      // Close the popover so it stops covering the table, and wait for the
+      // filtered request rather than a generic idle — the value box is
+      // debounced, so `networkidle` can resolve against the *unfiltered* list.
+      // Close by clicking outside, not with Escape: Escape dismisses the popover
+      // *and* discards the pending filter row, leaving the list unfiltered.
+      //
+      // Wait on the filtered request rather than a generic idle — the value box
+      // is debounced, so `networkidle` can resolve against the *unfiltered*
+      // list and the caller then asserts on stale rows. Any status is accepted
+      // here so that a backend rejecting the filter surfaces as the caller's
+      // row assertion (which says what the user would see) rather than as an
+      // opaque wait timeout.
+      const filtered = this.page.waitForResponse((res) =>
+        res.url().includes('/v1/private/dashboards') && res.url().includes('filters='),
+      );
+      await this.page.getByRole('heading', { name: 'Dashboards' }).click();
+      await popover.waitFor({ state: 'hidden' });
+      await filtered;
+    });
+  }
 }

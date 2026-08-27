@@ -550,9 +550,11 @@ class DashboardsResourceTest {
             var dashboards = List.of(
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.MULTI_PROJECT)
+                            .description(RandomStringUtils.secure().nextAlphabetic(30))
                             .build(),
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.EXPERIMENTS)
+                            .description(RandomStringUtils.secure().nextAlphabetic(30))
                             .build());
 
             var created = dashboards.stream()
@@ -602,7 +604,67 @@ class DashboardsResourceTest {
                                             .value(DashboardScope.WORKSPACE.getValue())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(1), dashboards.get(0))));
+                                    dashboards.get(1), dashboards.get(0))),
+                    // Filter by description CONTAINS — a substring from the middle of the second description
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.DESCRIPTION)
+                                            .operator(Operator.CONTAINS)
+                                            .value(dashboards.get(1).description().substring(10, 20))
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(1))),
+                    // Filter by description CONTAINS is case insensitive
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.DESCRIPTION)
+                                            .operator(Operator.CONTAINS)
+                                            .value(dashboards.get(0).description().substring(10, 20).toUpperCase())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(0))),
+                    // Filter by description NOT_CONTAINS — excludes only the dashboard whose description matches
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.DESCRIPTION)
+                                            .operator(Operator.NOT_CONTAINS)
+                                            .value(dashboards.get(0).description().substring(10, 20))
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(1))),
+                    // Filter by description STARTS_WITH
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.DESCRIPTION)
+                                            .operator(Operator.STARTS_WITH)
+                                            .value(dashboards.get(1).description().substring(0, 12))
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(1))),
+                    // Filter by description ENDS_WITH
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.DESCRIPTION)
+                                            .operator(Operator.ENDS_WITH)
+                                            .value(dashboards.get(0).description().substring(18))
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(0))),
+                    // Filter by description EQUAL
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.DESCRIPTION)
+                                            .operator(Operator.EQUAL)
+                                            .value(dashboards.get(1).description())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(1))));
         }
 
         @Test
