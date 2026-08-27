@@ -46,8 +46,15 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
 
             // The span is created without usage. Cursor only exposes token counts
             // a few seconds later over its usage API, so UsageEnricher patches it.
+            //
+            // This one span carries the usage of the whole turn on purpose.
+            // Cursor records tokens once per turn, never per model call: only
+            // 477 of 19691 bubbles in a real database hold a non-zero
+            // tokenCount, always the last bubble of a turn, and the billing API
+            // reports one request per turn too. Splitting that total across the
+            // child llm spans would invent numbers.
             const span = trace.span({
-                name: traceData.name,
+                name: 'llm_turn',
                 type: 'llm',
                 model: traceData.model,
                 provider: 'cursor',
@@ -58,6 +65,22 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
                 tags: traceData.tags,
                 metadata: traceData.metadata
             });
+
+            for (const child of traceData.spans ?? []) {
+                span.span({
+                    name: child.name,
+                    type: child.type,
+                    model: child.model,
+                    provider: child.provider,
+                    input: child.input,
+                    output: child.output,
+                    errorInfo: child.errorInfo,
+                    startTime: child.startTime,
+                    endTime: child.endTime,
+                    tags: child.tags,
+                    metadata: child.metadata
+                });
+            }
             // Deliberately not calling span.end()/trace.end(): both overwrite
             // endTime with the current time, which would replace the real Cursor
             // turn end with the upload time.
