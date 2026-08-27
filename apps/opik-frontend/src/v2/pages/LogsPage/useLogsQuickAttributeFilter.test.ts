@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { Filter } from "@/types/filters";
 import { LOGS_TYPE } from "@/constants/traces";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+
+vi.mock("@/lib/analytics/tracking", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/analytics/tracking")>();
+  return { ...actual, trackEvent: vi.fn() };
+});
 
 const urlSetters: Record<string, ReturnType<typeof vi.fn>> = {};
 const urlValues: Record<string, unknown> = {};
@@ -53,7 +60,12 @@ describe("useLogsQuickAttributeFilter", () => {
     for (const key of Object.keys(urlSetters)) delete urlSetters[key];
     for (const key of Object.keys(urlValues)) delete urlValues[key];
     setPinnedIds.mockClear();
+    vi.mocked(trackEvent).mockClear();
   });
+
+  // Only the events named here; the hook also fires QUICK_FILTER_APPLIED.
+  const eventsNamed = (name: string) =>
+    vi.mocked(trackEvent).mock.calls.filter(([event]) => event === name);
 
   describe("the panel's entity picks the destination view", () => {
     it("threads + trace: writes the Traces view and moves the table there", () => {
@@ -178,6 +190,89 @@ describe("useLogsQuickAttributeFilter", () => {
       expect(writtenTo(SPANS_KEY)).toEqual([existing]);
       // The table still moves: the user asked to see that filtered view.
       expect(onLogsTypeChange).toHaveBeenCalledWith(LOGS_TYPE.spans);
+    });
+  });
+
+  describe("the chip events follow the filter to its destination", () => {
+    it("reports FILTER_APPLIED against the destination table", () => {
+      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      act(() => result.current.filter("metadata", "model", "opus"));
+
+      // The mocked setter only records the updater, so run it once.
+      writtenTo(SPANS_KEY);
+
+      expect(eventsNamed(OpikEvent.FILTER_APPLIED)).toEqual([
+        [
+          OpikEvent.FILTER_APPLIED,
+          {
+            filter_name: "metadata",
+            operators: ["contains"],
+            values: ["opus"],
+            table_id: "logs.spans",
+          },
+        ],
+      ]);
+    });
+
+    it("reports FILTER_PINNED against the destination table", () => {
+      const { result } = setup(LOGS_TYPE.traces, "span-1");
+      act(() => result.current.filter("input", "messages[0].content", "hi"));
+
+      expect(eventsNamed(OpikEvent.FILTER_PINNED)).toEqual([
+        [
+          OpikEvent.FILTER_PINNED,
+          { filter_name: "custom", table_id: "logs.spans" },
+        ],
+      ]);
+    });
+
+    it("carries every row of the destination chip, as the mounted chip would", () => {
+      urlValues[SPANS_KEY] = [
+        {
+          id: "1",
+          field: "metadata",
+          type: "dictionary",
+          operator: "contains",
+          key: "env",
+          value: "prod",
+        } as Filter,
+      ];
+      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      act(() => result.current.filter("metadata", "model", "opus"));
+      writtenTo(SPANS_KEY);
+
+      expect(eventsNamed(OpikEvent.FILTER_APPLIED)[0][1]).toMatchObject({
+        operators: ["contains"],
+        values: ["prod", "opus"],
+      });
+    });
+
+    it("stays quiet on FILTER_APPLIED when the destination already has the row", () => {
+      urlValues[SPANS_KEY] = [
+        {
+          id: "1",
+          field: "metadata",
+          type: "dictionary",
+          operator: "contains",
+          key: "env",
+          value: "prod",
+        } as Filter,
+      ];
+      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      act(() => result.current.filter("metadata", "env", "prod"));
+      writtenTo(SPANS_KEY);
+
+      expect(eventsNamed(OpikEvent.FILTER_APPLIED)).toEqual([]);
+      // The chip is still pinned: the user asked to see that filtered view.
+      expect(eventsNamed(OpikEvent.FILTER_PINNED)).toHaveLength(1);
+    });
+
+    it("leaves the events to the mounted chips when nothing moves", () => {
+      const { result } = setup(LOGS_TYPE.traces, "");
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+
+      expect(eventsNamed(OpikEvent.FILTER_APPLIED)).toEqual([]);
+      expect(eventsNamed(OpikEvent.FILTER_PINNED)).toEqual([]);
     });
   });
 });

@@ -6,6 +6,8 @@ import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 import { ChipValue, ChipValueMap } from "@/shared/filter-chips/types";
 import { QuickAttributeFilterApi } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import { queryBuilderFilterEventProps } from "@/shared/filter-chips/hooks/useFilterChipsAnalytics";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   SPAN_DEFAULT_PINNED_CHIPS,
   TRACE_DEFAULT_PINNED_CHIPS,
@@ -41,6 +43,11 @@ export const SPANS_VIEW: LogsView = {
  * `useFilterChips` takes over once it mounts. The row is appended as-is, never
  * re-derived from chip definitions, so filters this hook knows nothing about
  * survive untouched.
+ *
+ * The chip events are emitted here too. `useFilterChips` normally owns them,
+ * but it is not mounted for the destination, so without this the funnels would
+ * count a quick filter on the Traces or Spans tab and miss the same click made
+ * from Threads or from a selected span.
  */
 const useHandoffWriter = (view: LogsView) => {
   const [, setRawFilters] = useQueryParam<Filter[] | undefined>(
@@ -64,7 +71,23 @@ const useHandoffWriter = (view: LogsView) => {
             r.operator === row.operator &&
             String(r.value) === String(row.value),
         );
-        return duplicate ? prevRaw : [...existing, row];
+        if (duplicate) return prevRaw;
+
+        const next = [...existing, row];
+        trackEvent(OpikEvent.FILTER_APPLIED, {
+          ...queryBuilderFilterEventProps(
+            chipId,
+            next.filter((r) => r.field === row.field),
+          ),
+          table_id: view.tableId,
+        });
+        return next;
+      });
+      // Unconditional, to match `useFilterChips.pinChip`, which reports every
+      // call even when the chip is pinned already.
+      trackEvent(OpikEvent.FILTER_PINNED, {
+        filter_name: chipId,
+        table_id: view.tableId,
       });
       setPinnedIds((prev = view.defaultPinned) =>
         prev.includes(chipId) ? prev : [...prev, chipId],
