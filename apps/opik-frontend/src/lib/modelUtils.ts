@@ -376,9 +376,6 @@ export const updateProviderConfig = <
 export const sanitizeConfigForRequest = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Record<string, unknown>,
-  // Opt-in because only the playground proxy reads custom_parameters; the optimizer gateway takes
-  // this same output as its flat llm_model.parameters and would see an unknown nested key.
-  { foldThinkingLevel = false }: { foldThinkingLevel?: boolean } = {},
 ): Record<string, unknown> => {
   if (!model) return configs;
 
@@ -423,10 +420,12 @@ export const sanitizeConfigForRequest = (
     delete sanitized.topP;
   }
 
-  // The playground body is a flat spread of the config, and the backend deserializes it into
+  // The request body is a flat spread of the config, and the backend deserializes it into
   // langchain4j's ChatCompletionRequest, which ignores unknown top-level fields. A flat
   // thinking_level is therefore silently dropped, so it has to be nested under
-  // custom_parameters — the only free-form slot the request actually captures.
+  // custom_parameters — the only free-form slot the request actually captures. This holds for
+  // every caller: the playground proxy, experiment runs, and the optimizer, which all render the
+  // same Gemini config panel and reach the model through the same request shape.
   if (sanitized.thinkingLevel != null) {
     const level = sanitized.thinkingLevel as GeminiThinkingLevel;
 
@@ -436,10 +435,7 @@ export const sanitizeConfigForRequest = (
 
     // Only fold it in when the model actually accepts that level — a stale selection left over
     // from another model (say "off" carried onto Gemini 3) would otherwise be rejected upstream.
-    if (
-      foldThinkingLevel &&
-      getThinkingLevelOptions(model).some((o) => o.value === level)
-    ) {
+    if (getThinkingLevelOptions(model).some((o) => o.value === level)) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
       // Merge into any existing thinking block rather than replacing it — the backend also reads

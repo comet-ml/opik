@@ -86,7 +86,6 @@ const getCompletionProxyStream = async ({
   const configsRecord = sanitizeConfigForRequest(
     model,
     configs as unknown as Record<string, unknown>,
-    { foldThinkingLevel: true },
   );
 
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {

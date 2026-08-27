@@ -635,7 +635,6 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       { thinkingLevel: "low" },
-      { foldThinkingLevel: true },
     );
 
     expect(result.thinkingLevel).toBeUndefined();
@@ -646,7 +645,6 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
       { thinkingLevel: "high" },
-      { foldThinkingLevel: true },
     );
 
     expect(result.custom_parameters).toEqual({ thinking: { level: "high" } });
@@ -656,7 +654,6 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       { thinkingLevel: "off" },
-      { foldThinkingLevel: true },
     );
 
     expect(result.custom_parameters).toEqual({ thinking: { level: "off" } });
@@ -666,7 +663,6 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
       { thinkingLevel: "medium", custom_parameters: { foo: "bar" } },
-      { foldThinkingLevel: true },
     );
 
     expect(result.custom_parameters).toEqual({
@@ -676,11 +672,9 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
   });
 
   it("drops a level the model does not accept rather than sending it", () => {
-    const result = sanitizeConfigForRequest(
-      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
-      { thinkingLevel: "off" },
-      { foldThinkingLevel: true },
-    );
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_PRO, {
+      thinkingLevel: "off",
+    });
 
     expect(result.thinkingLevel).toBeUndefined();
     expect(result.custom_parameters).toBeUndefined();
@@ -690,7 +684,6 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
       { thinkingLevel: "high" },
-      { foldThinkingLevel: true },
     );
 
     expect(result.thinkingLevel).toBeUndefined();
@@ -706,22 +699,11 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
           thinking: { budget_tokens: 4096, include_thoughts: true },
         },
       },
-      { foldThinkingLevel: true },
     );
 
     expect(result.custom_parameters).toEqual({
       thinking: { budget_tokens: 4096, include_thoughts: true, level: "low" },
     });
-  });
-
-  it("does not fold into custom_parameters unless the caller opts in", () => {
-    const result = sanitizeConfigForRequest(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-      { thinkingLevel: "off" },
-    );
-
-    expect(result.thinkingLevel).toBeUndefined();
-    expect(result.custom_parameters).toBeUndefined();
   });
 });
 
