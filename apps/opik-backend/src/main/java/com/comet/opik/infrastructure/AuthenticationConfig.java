@@ -33,8 +33,14 @@ public class AuthenticationConfig {
      * Per-call read timeout for auth requests to the React service, overriding the shared
      * jerseyClient timeout (30s) for this hop only. Sized from measured production latency of
      * successful auth calls: p50 22ms, p99 147ms, p99.9 305ms, p99.99 1.15s. 3s is ~2.6x p99.99,
-     * so normal calls never reach it, while a stalled call fails in 3s instead of 30s.
+     * so normal calls never reach it, while a stalled attempt fails in 3s instead of 30s.
      * Set to 0 to disable the override and inherit the shared client timeout.
+     * <p>
+     * This bounds a single <em>attempt</em>, not the whole operation. With retries enabled the
+     * end-to-end worst case is {@code (requestMaxRetries + 1) * requestTimeout} plus the backoff
+     * between attempts -- ~6.4s at the defaults (2 attempts, 250ms min backoff with Reactor's
+     * jitter). That is still well under the 30s shared timeout it replaces, but callers that need
+     * a hard sub-3s ceiling must set {@link #requestMaxRetries} to 0.
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
@@ -48,10 +54,17 @@ public class AuthenticationConfig {
      * {@link com.comet.opik.utils.RetryUtils#handleHttpErrors} so the retriable-exception set and
      * backoff behaviour match the rest of the codebase.
      * <p>
+     * That set is transport-level only: {@code SocketException}, {@code TimeoutException},
+     * {@code InterruptedIOException} (covering {@code SocketTimeoutException} and
+     * {@code ConnectTimeoutException}), {@code NoHttpResponseException},
+     * {@code RetryUtils.RetryableHttpException}, and a {@code ProcessingException} wrapping any of
+     * those. An HTTP error <em>status</em> is deliberately not retried: {@code verifyResponse} maps
+     * 4xx/5xx to {@code ClientErrorException}/{@code InternalServerErrorException}, neither of which
+     * is retriable, so a 503 surfaces to the caller on the first attempt.
+     * <p>
      * Note: React CPU brownouts observed in production last 1-3 minutes, so a retry will not
-     * recover a request stalled by one of those - it recovers sub-second blips and 503s emitted
-     * during graceful shutdown. The timeout above is what bounds user-visible latency.
-     * Set to 0 to disable retries.
+     * recover a request stalled by one of those - it recovers sub-second connection blips. The
+     * timeout above is what bounds user-visible latency. Set to 0 to disable retries.
      */
     @Valid @JsonProperty
     @Min(0)

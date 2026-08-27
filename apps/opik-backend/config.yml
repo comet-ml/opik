@@ -332,14 +332,21 @@ authentication:
   #   p99.99 and normal calls never reach it. Without this override a stalled auth call blocks
   #   for the full 30s and returns a 500 to the user. Set to 0s to inherit the shared timeout.
   #   Does NOT apply to listEligibleWorkspaces, which has a documented large-payload case.
+  #   NOTE: this bounds a single attempt, not the whole operation -- see requestMaxRetries for
+  #   the end-to-end budget.
   requestTimeout: ${AUTH_REQUEST_TIMEOUT:-3s}
   # Default: 1
   # Description: Maximum retry attempts for a failed auth request. Uses RetryUtils.handleHttpErrors,
-  #   so the retriable-exception set matches the rest of the codebase (SocketException,
-  #   InterruptedIOException -- which covers SocketTimeoutException and ConnectTimeoutException --
-  #   NoHttpResponseException, and 503/504). Recovers sub-second blips and 503s emitted during
-  #   React's graceful shutdown. It will NOT recover a request stalled by a React CPU brownout:
-  #   those last 1-3 minutes, so the retry lands in the same brownout. Set to 0 to disable.
+  #   so the retriable-exception set matches the rest of the codebase: SocketException,
+  #   TimeoutException, InterruptedIOException (which covers SocketTimeoutException and
+  #   ConnectTimeoutException), NoHttpResponseException, and RetryUtils.RetryableHttpException --
+  #   plus ProcessingException wrapping any of those. These are transport-level failures only:
+  #   an HTTP error status is NOT retried, because verifyResponse maps 4xx/5xx to
+  #   ClientErrorException/InternalServerErrorException, which are not in that set.
+  #   Retries therefore recover sub-second connection blips, not React CPU brownouts: those last
+  #   1-3 minutes, so the retry lands in the same brownout. Set to 0 to disable.
+  #   Worst-case end-to-end budget = (requestMaxRetries + 1) x requestTimeout + backoff between
+  #   attempts, i.e. ~6.4s at these defaults -- still well under the 30s it replaces.
   requestMaxRetries: ${AUTH_REQUEST_MAX_RETRIES:-1}
   # Default: 250ms
   # Description: Minimum backoff between auth request attempts. Deliberately non-zero -- an
