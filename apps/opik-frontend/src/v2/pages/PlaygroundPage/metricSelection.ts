@@ -1,6 +1,6 @@
-// Metric selection is a plain list of rule ids. An empty list -- or a legacy null persisted by
-// an older session -- means nothing is selected: the run is then scored by the rules that target
-// experiments, and by nothing else.
+// Metric selection is a plain list of rule ids. Both an empty list and null mean nothing is
+// selected -- the store still writes null whenever a dataset has no stored selection -- and the
+// run is then scored only by the rules that target experiments.
 
 export const toggleMetricSelection = (
   current: string[] | null,

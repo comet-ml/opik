@@ -219,7 +219,8 @@ public class OnlineScoringSampler {
         // fetch automation rules per project
         tracesByProject.forEach((projectId, projectTraces) -> {
             // Only experiment traces carry an explicit rule selection, made by the user in the playground.
-            // We deliberately do not read selected_rule_ids from production traffic.
+            // We deliberately do not read selected_rule_ids from production traffic. A playground run
+            // without a dataset is neither, so it is not scored at all.
             var scorableTraces = new ArrayList<Trace>();
             var selectedRuleIdsByTrace = new HashMap<UUID, Set<UUID>>();
             for (var trace : projectTraces) {
@@ -229,7 +230,7 @@ public class OnlineScoringSampler {
                     if (!ruleIds.isEmpty()) {
                         selectedRuleIdsByTrace.put(trace.id(), ruleIds);
                     }
-                } else if (Source.isLoggingSource(trace.source()) || trace.source() == Source.PLAYGROUND) {
+                } else if (Source.isLoggingSource(trace.source())) {
                     scorableTraces.add(trace);
                 }
             }
