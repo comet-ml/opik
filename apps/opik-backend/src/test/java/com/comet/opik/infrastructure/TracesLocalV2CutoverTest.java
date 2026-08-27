@@ -829,29 +829,28 @@ class TracesLocalV2CutoverTest {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var startTime = Instant.parse("2025-03-04T10:00:00Z");
-        var epoch = "toDateTime64('1970-01-01 00:00:00', 9)";
-        var ended = "toDateTime64('" + ClickHouseDateTimeFormat.formatNanos(startTime.plusMillis(100)) + "', 9)";
+        var ended = startTime.plusMillis(100);
         // A real end_time BEFORE start_time: a negative duration owed to the source data, not to the flip.
-        var endedEarly = "toDateTime64('" + ClickHouseDateTimeFormat.formatNanos(startTime.minusSeconds(5)) + "', 9)";
+        var endedEarly = startTime.minusSeconds(5);
 
         // Exact counts per cohort, so every expected number below is self-evident.
         for (int i = 0; i < 4; i++) {
-            insertShapedTrace(workspaceId, projectId, "sentinel-both", startTime, epoch, "toFloat64('nan')");
+            insertShapedTrace(workspaceId, projectId, "sentinel-both", startTime, Instant.EPOCH, Double.NaN);
         }
         for (int i = 0; i < 2; i++) {
-            insertShapedTrace(workspaceId, projectId, "sentinel-end-time", startTime, epoch, "1.5");
+            insertShapedTrace(workspaceId, projectId, "sentinel-end-time", startTime, Instant.EPOCH, 1.5);
         }
         for (int i = 0; i < 2; i++) {
-            insertShapedTrace(workspaceId, projectId, "sentinel-ttft", startTime, ended, "toFloat64('nan')");
+            insertShapedTrace(workspaceId, projectId, "sentinel-ttft", startTime, ended, Double.NaN);
         }
         for (int i = 0; i < 3; i++) {
-            insertShapedTrace(workspaceId, projectId, "genuine-negative", startTime, endedEarly, "2.5");
+            insertShapedTrace(workspaceId, projectId, "genuine-negative", startTime, endedEarly, 2.5);
         }
         for (int i = 0; i < 3; i++) {
-            insertShapedTrace(workspaceId, projectId, "clean", startTime, ended, "2.5");
+            insertShapedTrace(workspaceId, projectId, "clean", startTime, ended, 2.5);
         }
         for (int i = 0; i < 2; i++) {
-            insertShapedTrace(workspaceId, projectId, "absent", startTime, "NULL", "NULL");
+            insertShapedTrace(workspaceId, projectId, "absent", startTime, null, null);
         }
 
         assertThat(sentinelCounts())
@@ -1742,20 +1741,36 @@ class TracesLocalV2CutoverTest {
 
     /**
      * One trace with explicitly chosen {@code start_time}, {@code end_time} and {@code ttft}, tagged by {@code name} so
-     * a cohort can be asserted on afterwards. The last two arguments are raw SQL fragments rather than values because
-     * that is the only way to write what the sentinel repair has to tell apart: bound as a Java null, the epoch/NaN
-     * sentinels the flip produced and a genuine NULL all arrive identically.
+     * a cohort can be asserted on afterwards. A {@code null} {@code endTime} or {@code ttft} stores SQL {@code NULL};
+     * pass {@link Instant#EPOCH} or {@link Double#NaN} to store the sentinels the flip produced. The timestamps go over
+     * the wire as text and through {@code toDateTime64} so the nanosecond precision the source column carries survives,
+     * which a bound {@code Instant} would not guarantee — but they are still bound values, not spliced text.
      */
     private void insertShapedTrace(String workspaceId, UUID projectId, String name, Instant startTime,
-            String endTimeSql, String ttftSql) {
-        var startNs = ClickHouseDateTimeFormat.formatNanos(startTime);
-        execute(("INSERT INTO traces (id, workspace_id, project_id, name, start_time, end_time, created_at, "
-                + "last_updated_at, ttft) VALUES ('%s','%s','%s','%s', toDateTime64('%s', 9), %s, "
-                + "toDateTime64('%s', 9), toDateTime64('%s', 6), %s)")
-                .formatted(ID_GENERATOR.generateId(), workspaceId, projectId, name, startNs, endTimeSql, startNs,
-                        ClickHouseDateTimeFormat.formatMicros(startTime), ttftSql),
-                _ -> {
-                });
+            Instant endTime, Double ttft) {
+        execute("""
+                INSERT INTO traces (id, workspace_id, project_id, name, start_time, end_time, created_at,
+                                    last_updated_at, ttft)
+                VALUES (:id, :workspace_id, :project_id, :name, toDateTime64(:start_time, 9),
+                        toDateTime64(:end_time, 9), toDateTime64(:start_time, 9), toDateTime64(:created_at, 6), :ttft)
+                """, statement -> {
+            statement.bind("id", ID_GENERATOR.generateId())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_id", projectId)
+                    .bind("name", name)
+                    .bind("start_time", ClickHouseDateTimeFormat.formatNanos(startTime))
+                    .bind("created_at", ClickHouseDateTimeFormat.formatMicros(startTime));
+            if (endTime == null) {
+                statement.bindNull("end_time", String.class);
+            } else {
+                statement.bind("end_time", ClickHouseDateTimeFormat.formatNanos(endTime));
+            }
+            if (ttft == null) {
+                statement.bindNull("ttft", Double.class);
+            } else {
+                statement.bind("ttft", ttft);
+            }
+        });
     }
 
     private void lightweightDelete(Set<String> ids, String workspaceId) {
