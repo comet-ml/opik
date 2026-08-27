@@ -136,7 +136,7 @@ class RichInstallView(mcp_view.InstallView):
             text.Text.assemble(
                 ("Restart ", ""),
                 ("them" if len(assistants) > 1 else "it", "bold"),
-                (', then ask "list my Opik projects"', ""),
+                (', then ask "list my Opik projects via Opik MCP"', ""),
             ),
         )
         console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))

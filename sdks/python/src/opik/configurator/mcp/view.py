@@ -148,7 +148,7 @@ class LoggingInstallView(InstallView):
     def done(self, components: List[str], assistants: List[str]) -> None:
         LOGGER.info(
             "Done. %s set up for %s. Restart %s, then ask it to 'list my Opik "
-            "projects'.",
+            "projects via Opik MCP'.",
             " and ".join(components) or "Nothing",
             ", ".join(assistants) or "your AI client",
             "them" if len(assistants) > 1 else "it",

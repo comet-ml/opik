@@ -194,6 +194,18 @@ def setup_mcp_server(
                 check_tls_certificate=check_tls_certificate,
             )
         display.verification(verification.succeeded, verification.detail)
+        # Only the hosted server has a sign-in step, and how it is triggered is
+        # the host's choice, not ours: some open the browser on first use, others
+        # leave the server sitting unauthorized until the user asks. An
+        # unauthorized server contributes no tools at all rather than an error,
+        # so a user who is not told to look never finds out why it went quiet.
+        if isinstance(server_spec, mcp_spec.RemoteServerSpec):
+            display.note(
+                "Signing in: depending on your assistant, you will either be "
+                "prompted with a sign-in link the first time it uses Opik, or "
+                "need to authorize the opik-mcp server yourself from its MCP "
+                "settings."
+            )
         if verification.succeeded and announce_next_steps:
             display.done(
                 ["MCP server"],

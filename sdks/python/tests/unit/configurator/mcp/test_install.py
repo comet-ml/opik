@@ -426,6 +426,37 @@ def test_setup_mcp_server__hosted_detected__does_not_prefetch(
     install_spy.assert_called_once()
 
 
+def test_setup_mcp_server__hosted_detected__mentions_signing_in(monkeypatch):
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://dev.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+    args = _make_args()
+
+    install.setup_mcp_server(**args)
+
+    said = args["view"].said
+    assert "sign-in link" in said
+    assert "authorize the opik-mcp server yourself" in said
+
+
+def test_setup_mcp_server__local_server__says_nothing_about_signing_in(monkeypatch):
+    """The stdio server takes its credentials at startup — there is nothing to sign in to."""
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+    args = _make_args()
+
+    install.setup_mcp_server(**args)
+
+    assert "sign-in link" not in args["view"].said
+
+
 def test_setup_mcp_server__force_local__skips_probe_and_installs_uvx(monkeypatch):
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     detect_spy = mock.Mock(return_value="https://dev.comet.com/opik/api/v1/mcp")
