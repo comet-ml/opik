@@ -122,20 +122,26 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, ["low", "high"]],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"]],
-  // Gemini 2.5. Flash Lite is the only model Google ships with thinking off, so it is the only one
-  // offered an explicit "off" — see getDefaultThinkingLevel.
-  [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, LOW_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, LOW_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, LOW_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, LOW_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, ["off", ...LOW_TO_HIGH]],
+  // Gemini 2.5 takes a numeric thinking_budget rather than a level, so these levels are translated
+  // server-side. They lead with "auto" because a budget left unset is how Google's own default works
+  // — "the model automatically controls how much it thinks up to a maximum of 8,192 tokens" — and
+  // without it, merely opening the control would pin a hard budget over that default.
+  //
+  // Only Flash Lite gets "off": it is the one 2.5 model Google ships with thinking already off, and
+  // 2.5 Pro cannot disable thinking at all.
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, ["auto", "off", ...LOW_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
-    ["off", ...LOW_TO_HIGH],
+    ["auto", "off", ...LOW_TO_HIGH],
   ],
 ]);
 
 const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
+  auto: "Auto",
   off: "Off",
   minimal: "Minimal",
   low: "Low",
@@ -186,17 +192,25 @@ export const getThinkingLevelOptions = (
 
 // Each model's own default thinking level, from the same Google support table. Preselecting the
 // documented default keeps the control from silently changing a model's behaviour just by being
-// shown: 2.5 Flash Lite ships with thinking off, 3.7/3.6/3.5 Flash default to medium, and
-// 3.5 Flash Lite to minimal — none of which is "high". Models absent here default to "high",
-// which is what the 2.5 Pro/Flash and Gemini 3 Pro rows document.
+// shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
+// ("auto"), 3.7/3.6/3.5 Flash default to medium, and 3.5 Flash Lite to minimal — none of which is
+// "high". Models absent here default to "high", which is what the Gemini 3 Pro rows document.
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
   PROVIDER_MODEL_TYPE,
   GeminiThinkingLevel
 > = new Map([
+  // Flash Lite ships with thinking off, so "off" rather than "auto" is its documented default.
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, "off" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
     "off" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, "auto" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, "auto" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, "auto" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    "auto" as GeminiThinkingLevel,
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, "medium" as GeminiThinkingLevel],
   [
@@ -492,9 +506,13 @@ export const sanitizeConfigForRequest = (
     // level, so leaving it on the payload can only be dead weight.
     delete sanitized.thinkingLevel;
 
-    // Only fold it in when the model actually accepts that level — a stale selection left over
-    // from another model (say "off" carried onto Gemini 3) would otherwise be rejected upstream.
-    if (thinkingLevelOptions.some((o) => o.value === level)) {
+    // "auto" means "send nothing and let the model decide", so it is deliberately not folded in —
+    // that absence IS the setting. Anything else is folded only when the model accepts that level: a
+    // stale selection from another model (say "off" carried onto Gemini 3) would be rejected upstream.
+    if (
+      level !== "auto" &&
+      thinkingLevelOptions.some((o) => o.value === level)
+    ) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
       // Merge into any existing thinking block rather than replacing it — the backend also reads

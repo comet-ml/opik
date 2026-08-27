@@ -160,7 +160,7 @@ const LLMJudgeBaseSchema = z.object({
     // Held as its own field so the shared model-config control can drive it, then folded into
     // custom_parameters.thinking on save — the backend reads it from there.
     thinkingLevel: z
-      .enum(["off", "minimal", "low", "medium", "high"])
+      .enum(["auto", "off", "minimal", "low", "medium", "high"])
       .optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
@@ -589,8 +589,11 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 
   // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
   // are not represented in the form, so an unchanged load -> save must not drop them.
+  // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
+  // as no thinking block rather than as a level the backend would have to special-case.
   const thinkingCustomParameters =
     thinkingLevel != null &&
+    thinkingLevel !== "auto" &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )

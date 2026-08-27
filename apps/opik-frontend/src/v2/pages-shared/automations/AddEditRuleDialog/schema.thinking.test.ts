@@ -104,6 +104,24 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
+  // Auto is stored as the absence of a thinking block, and reads back as auto because the reconciler
+  // fills in the model default — so the round trip is stable without persisting an Opik-only value.
+  it("stores auto as no thinking block and reads it back as auto", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+      }),
+    );
+
+    expect(object.model.custom_parameters).toBeUndefined();
+
+    const reloaded = convertLLMJudgeObjectToLLMJudgeData(
+      persisted(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {}),
+    );
+
+    expect(reloaded.config.thinkingLevel).toBe("auto");
+  });
+
   it("drops a persisted level the newly selected model does not accept", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_PRO, {

@@ -120,6 +120,13 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
+    @DisplayName("an auto level sends no thinking config: absence is how the model's own default is asked for")
+    void autoLevelSendsNoThinkingConfig() {
+        assertThat(GeminiThinkingConfigMapper.fromCustomParameters(GEMINI_2_5,
+                Map.of("thinking", Map.of("level", "auto")))).isNull();
+    }
+
+    @Test
     void producesNoConfigWhenThinkingIsAbsent() {
         assertThat(GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3, GeminiThinkingParams.ABSENT)).isEmpty();
     }

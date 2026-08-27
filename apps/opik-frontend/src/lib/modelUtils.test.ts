@@ -685,7 +685,7 @@ describe("Gemini thinking level", () => {
       getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO).map(
         (o) => o.value,
       ),
-    ).toEqual(["low", "medium", "high"]);
+    ).toEqual(["auto", "low", "medium", "high"]);
     expect(
       getThinkingLevelOptions(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO).map(
         (o) => o.value,
@@ -704,13 +704,64 @@ describe("Gemini thinking level", () => {
     ).toBe("off");
   });
 
-  it("defaults other thinking models to high", () => {
+  // Pre-Gemini-3 models take a numeric budget whose documented default is dynamic, so they lead with
+  // "auto" — pinning `high` would silently triple the thinking budget over Google's own default.
+  it("defaults pre-Gemini-3 models to auto", () => {
     expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO)).toBe(
-      "high",
+      "auto",
     );
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH)).toBe(
+      "auto",
+    );
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH),
+    ).toBe("auto");
+  });
+
+  it("still defaults Gemini 3 Pro to high", () => {
     expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toBe(
       "high",
     );
+  });
+
+  it("offers auto only for pre-Gemini-3 models", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+    ]) {
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should offer auto`,
+      ).toContain("auto");
+    }
+
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+    ]) {
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should not offer auto`,
+      ).not.toContain("auto");
+    }
+  });
+
+  // "auto" is the absence of a setting, so it must not reach custom_parameters.
+  it("sends no thinking block for auto, letting the model decide", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+      }).custom_parameters,
+    ).toBeUndefined();
+
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toBeUndefined();
   });
 });
 
@@ -851,7 +902,7 @@ describe("updateProviderConfig — Gemini thinking level", () => {
         model: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
         provider: GEMINI,
       })?.thinkingLevel,
-    ).toBe("high");
+    ).toBe("auto");
   });
 
   it("leaves a level the model accepts untouched", () => {
