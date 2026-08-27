@@ -102,3 +102,52 @@ class TestNovaStreamAggregation:
         usage = chunks_aggregator.aggregate_chunks_to_dataclass(chunks).usage
 
         assert usage["totalTokens"] == 19
+
+    def test_aggregate_chunks__metrics_report_cache_tokens__metrics_win(self):
+        # amazon-bedrock-invocationMetrics is the terminal record, so its cache counts
+        # replace whatever metadata.usage reported earlier. Mirrors the Claude path.
+        chunks = _stream(
+            reported_usage={
+                "inputTokens": 12,
+                "outputTokens": 7,
+                "cacheReadInputTokens": 4096,
+                "cacheWriteInputTokens": 1024,
+            },
+            invocation_metrics={
+                "inputTokenCount": 15,
+                "outputTokenCount": 9,
+                "cacheReadInputTokenCount": 128,
+                "cacheWriteInputTokenCount": 64,
+            },
+        )
+
+        usage = chunks_aggregator.aggregate_chunks_to_dataclass(chunks).usage
+
+        assert usage["cacheReadInputTokens"] == 128
+        assert usage["cacheWriteInputTokens"] == 64
+        assert usage["inputTokens"] == 15
+        assert usage["outputTokens"] == 9
+
+    def test_aggregate_chunks__metrics_report_null_cache__reported_counts_kept(self):
+        # A null in the terminal metrics must not replace a real count from
+        # metadata.usage, because the backend usage dict keeps only integers and the
+        # field would vanish from the span entirely.
+        chunks = _stream(
+            reported_usage={
+                "inputTokens": 12,
+                "outputTokens": 7,
+                "cacheReadInputTokens": 4096,
+                "cacheWriteInputTokens": 1024,
+            },
+            invocation_metrics={
+                "inputTokenCount": 15,
+                "outputTokenCount": 9,
+                "cacheReadInputTokenCount": None,
+                "cacheWriteInputTokenCount": None,
+            },
+        )
+
+        usage = chunks_aggregator.aggregate_chunks_to_dataclass(chunks).usage
+
+        assert usage["cacheReadInputTokens"] == 4096
+        assert usage["cacheWriteInputTokens"] == 1024
