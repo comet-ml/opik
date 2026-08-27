@@ -550,11 +550,11 @@ class DashboardsResourceTest {
             var dashboards = List.of(
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.MULTI_PROJECT)
-                            .description("Latency overview across services")
+                            .description(RandomStringUtils.secure().nextAlphabetic(30))
                             .build(),
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.EXPERIMENTS)
-                            .description("Experiment cost breakdown")
+                            .description(RandomStringUtils.secure().nextAlphabetic(30))
                             .build());
 
             var created = dashboards.stream()
@@ -605,13 +605,13 @@ class DashboardsResourceTest {
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(1), dashboards.get(0))),
-                    // Filter by description CONTAINS
+                    // Filter by description CONTAINS — a substring from the middle of the second description
                     Arguments.of(
                             (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
                                             .field(DashboardField.DESCRIPTION)
                                             .operator(Operator.CONTAINS)
-                                            .value("cost breakdown")
+                                            .value(dashboards.get(1).description().substring(10, 20))
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(1))),
@@ -621,17 +621,17 @@ class DashboardsResourceTest {
                                     DashboardFilter.builder()
                                             .field(DashboardField.DESCRIPTION)
                                             .operator(Operator.CONTAINS)
-                                            .value("LATENCY")
+                                            .value(dashboards.get(0).description().substring(10, 20).toUpperCase())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(0))),
-                    // Filter by description NOT_CONTAINS
+                    // Filter by description NOT_CONTAINS — excludes only the dashboard whose description matches
                     Arguments.of(
                             (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
                                             .field(DashboardField.DESCRIPTION)
                                             .operator(Operator.NOT_CONTAINS)
-                                            .value("Latency")
+                                            .value(dashboards.get(0).description().substring(10, 20))
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(1))),
@@ -641,7 +641,7 @@ class DashboardsResourceTest {
                                     DashboardFilter.builder()
                                             .field(DashboardField.DESCRIPTION)
                                             .operator(Operator.STARTS_WITH)
-                                            .value("Experiment")
+                                            .value(dashboards.get(1).description().substring(0, 12))
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(1))),
@@ -651,7 +651,7 @@ class DashboardsResourceTest {
                                     DashboardFilter.builder()
                                             .field(DashboardField.DESCRIPTION)
                                             .operator(Operator.ENDS_WITH)
-                                            .value("across services")
+                                            .value(dashboards.get(0).description().substring(18))
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(0))),
@@ -661,7 +661,7 @@ class DashboardsResourceTest {
                                     DashboardFilter.builder()
                                             .field(DashboardField.DESCRIPTION)
                                             .operator(Operator.EQUAL)
-                                            .value("Experiment cost breakdown")
+                                            .value(dashboards.get(1).description())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                     dashboards.get(1))));
