@@ -11,7 +11,8 @@ import {
   DEFAULT_ANTHROPIC_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
   REASONING_MODELS,
-  THINKING_LEVEL_OPTIONS_2_5,
+  THINKING_LEVEL_OPTIONS_2_5_FLASH,
+  THINKING_LEVEL_OPTIONS_2_5_PRO,
   THINKING_LEVEL_OPTIONS_FLASH,
   THINKING_LEVEL_OPTIONS_PRO,
 } from "@/constants/llm";
@@ -81,9 +82,21 @@ export const getDefaultTemperatureForModel = (
   return isReasoningModel(model) ? 1 : 0;
 };
 
-// Gemini 2.5 models take thinking through the same level control as Gemini 3, but their option
-// list includes "off": 2.5 Flash Lite ships with thinking disabled, so the customer-visible case
-// is turning it on, and turning it back off has to stay reachable.
+// Gemini 2.5 models take thinking through the same level control as Gemini 3. Flash and Flash Lite
+// can disable it — 2.5 Flash Lite ships that way, so the customer-visible case is turning it on and
+// turning it back off has to stay reachable — but 2.5 Pro cannot, so the two get different options.
+const GEMINI_2_5_FLASH_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
+  PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+  PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+];
+
+const GEMINI_2_5_PRO_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
+  PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+];
+
 const GEMINI_2_5_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
   PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
   PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
@@ -95,12 +108,6 @@ const VERTEX_AI_2_5_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
   PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
   PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
 ];
-
-export const isGemini25ThinkingModel = (
-  model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  GEMINI_2_5_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE) ||
-  VERTEX_AI_2_5_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE);
 
 /**
  * Checks if a Gemini model supports thinking level parameter
@@ -139,19 +146,20 @@ export const supportsVertexAIThinkingLevel = (
 
 /**
  * The thinking levels a model accepts. Gemini families differ — Pro has no minimal, Flash has all
- * four, and the 2.5 family adds "off" — and sending a level a model does not accept is rejected.
+ * four, and 2.5 Flash adds "off" — and sending a level a model does not accept is rejected.
  */
 export const getThinkingLevelOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: GeminiThinkingLevel }> => {
-  if (isGemini25ThinkingModel(model)) {
-    return THINKING_LEVEL_OPTIONS_2_5;
+  if (GEMINI_2_5_PRO_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE)) {
+    return THINKING_LEVEL_OPTIONS_2_5_PRO;
   }
 
-  if (
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH ||
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW
-  ) {
+  if (GEMINI_2_5_FLASH_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE)) {
+    return THINKING_LEVEL_OPTIONS_2_5_FLASH;
+  }
+
+  if (model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH) {
     return THINKING_LEVEL_OPTIONS_FLASH;
   }
 
@@ -244,6 +252,7 @@ export const updateProviderConfig = <
     topP?: number;
     thinkingEffort?: AnthropicThinkingEffort;
     reasoningEffort?: ReasoningEffort;
+    thinkingLevel?: GeminiThinkingLevel;
   },
 >(
   currentConfig: T | undefined,
@@ -332,6 +341,34 @@ export const updateProviderConfig = <
     return changed ? next : currentConfig;
   }
 
+  if (
+    providerType === PROVIDER_TYPE.GEMINI ||
+    providerType === PROVIDER_TYPE.VERTEX_AI
+  ) {
+    const next: T = { ...currentConfig };
+    let changed = false;
+
+    // thinkingLevel: drop it for models without a level option list, coerce stale values to the
+    // model's own default otherwise. Without this a level carried over from another model (an "off"
+    // selected on 2.5 Flash Lite, say) leaves the dropdown showing a value it does not offer while
+    // sanitizeConfigForRequest silently drops it from the request. Mirrors the handling above.
+    const levelOptions = getThinkingLevelOptions(params.model);
+    if (levelOptions.length === 0) {
+      if (next.thinkingLevel !== undefined) {
+        next.thinkingLevel = undefined;
+        changed = true;
+      }
+    } else if (
+      next.thinkingLevel !== undefined &&
+      !levelOptions.some((o) => o.value === next.thinkingLevel)
+    ) {
+      next.thinkingLevel = getDefaultThinkingLevel(params.model);
+      changed = true;
+    }
+
+    return changed ? next : currentConfig;
+  }
+
   return currentConfig;
 };
 
@@ -341,6 +378,9 @@ export const updateProviderConfig = <
 export const sanitizeConfigForRequest = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Record<string, unknown>,
+  // Opt-in because only the playground proxy reads custom_parameters; the optimizer gateway takes
+  // this same output as its flat llm_model.parameters and would see an unknown nested key.
+  { foldThinkingLevel = false }: { foldThinkingLevel?: boolean } = {},
 ): Record<string, unknown> => {
   if (!model) return configs;
 
@@ -398,10 +438,20 @@ export const sanitizeConfigForRequest = (
 
     // Only fold it in when the model actually accepts that level — a stale selection left over
     // from another model (say "off" carried onto Gemini 3) would otherwise be rejected upstream.
-    if (getThinkingLevelOptions(model).some((o) => o.value === level)) {
+    if (
+      foldThinkingLevel &&
+      getThinkingLevelOptions(model).some((o) => o.value === level)
+    ) {
+      const customParameters =
+        (sanitized.custom_parameters as Record<string, unknown>) ?? {};
+      // Merge into any existing thinking block rather than replacing it — the backend also reads
+      // budget_tokens and include_thoughts from there, and only `level` is ours to set here.
+      const thinking =
+        (customParameters.thinking as Record<string, unknown>) ?? {};
+
       sanitized.custom_parameters = {
-        ...((sanitized.custom_parameters as Record<string, unknown>) ?? {}),
-        thinking: { level },
+        ...customParameters,
+        thinking: { ...thinking, level },
       };
     }
   }

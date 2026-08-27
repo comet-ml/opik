@@ -253,5 +253,49 @@ class ExperimentMessageRendererTest {
             assertThat(request.topP()).isNull();
             assertThat(request.maxCompletionTokens()).isNull();
         }
+
+        @Test
+        @DisplayName("should forward custom_parameters so provider-specific settings reach the request")
+        void forwardCustomParameters() {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            // Snake_case by design, unlike the flat numeric configs above: this is the wire name on
+            // ChatCompletionRequest itself, which is what the playground body already uses.
+            var configs = Map.<String, JsonNode>of(
+                    "custom_parameters",
+                    JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "gemini-2.5-flash-lite", messages, configs, null);
+
+            ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            assertThat(request.customParameters())
+                    .isEqualTo(Map.of("thinking", Map.of("level", "high")));
+        }
+
+        @Test
+        @DisplayName("should ignore custom_parameters that is not an object rather than failing")
+        void ignoreNonObjectCustomParameters() {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var configs = Map.<String, JsonNode>of(
+                    "custom_parameters", JsonUtils.getJsonNodeFromString("[1, 2]"));
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "gemini-2.5-flash-lite", messages, configs, null);
+
+            ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            assertThat(request.customParameters()).isNull();
+        }
     }
 }

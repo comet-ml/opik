@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
@@ -204,7 +205,10 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         Optional.ofNullable(modelParameters.seed()).ifPresent(requestBuilder::seed);
 
         // Round-tripped through the request so the generation config is derived in one place for both paths.
+        // Only an object converts to a Map: custom_parameters is unvalidated free-form JSON, and Jackson throws
+        // IllegalArgumentException on an array or scalar, which would fail the whole run rather than be ignored.
         Optional.ofNullable(modelParameters.customParameters())
+                .filter(JsonNode::isObject)
                 .map(customParameters -> JsonUtils.getMapper()
                         .convertValue(customParameters, new TypeReference<Map<String, Object>>() {
                         }))

@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.domain.template.MustacheParser;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
@@ -147,6 +148,15 @@ class ExperimentMessageRenderer {
         var presencePenalty = configs.get("presencePenalty");
         if (presencePenalty != null && presencePenalty.isNumber()) {
             builder.presencePenalty(presencePenalty.doubleValue());
+        }
+
+        // Provider-specific parameters the flat config above cannot express (Gemini thinking, Anthropic
+        // extended thinking). Only an object converts to a Map — Jackson throws on an array or scalar.
+        var customParameters = configs.get("custom_parameters");
+        if (customParameters != null && customParameters.isObject()) {
+            builder.customParameters(JsonUtils.getMapper()
+                    .convertValue(customParameters, new TypeReference<Map<String, Object>>() {
+                    }));
         }
     }
 }

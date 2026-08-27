@@ -401,5 +401,24 @@ class VertexAIClientGeneratorTest {
             assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
                     .isEqualTo(24576);
         }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"[1, 2]", "\"x\"", "5", "null"})
+        @DisplayName("custom_parameters that is not an object is ignored rather than failing the run")
+        void ignoresNonObjectCustomParameters(String customParameters) {
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
+                    JsonUtils.getJsonNodeFromString(customParameters));
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+                    .generateChat(config, modelParameters)) {
+                client.chat(UserMessage.from("hello"));
+            }
+
+            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        }
     }
 }

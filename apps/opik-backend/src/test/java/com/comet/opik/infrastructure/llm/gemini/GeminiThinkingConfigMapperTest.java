@@ -37,6 +37,15 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
+    @DisplayName("an explicit budget wins over level off, matching how Vertex resolves the same input")
+    void explicitBudgetWinsOverLevelOff() {
+        var config = GeminiThinkingConfigMapper.toThinkingConfig(new GeminiThinkingParams(Level.OFF, 4096, null));
+
+        assertThat(config).isPresent();
+        assertThat(config.get().thinkingBudget()).isEqualTo(4096);
+    }
+
+    @Test
     void forwardsExplicitBudgetAndIncludeThoughts() {
         var config = GeminiThinkingConfigMapper.toThinkingConfig(new GeminiThinkingParams(null, 4096, true));
 

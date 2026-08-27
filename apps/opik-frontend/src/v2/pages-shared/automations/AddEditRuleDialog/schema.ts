@@ -1,5 +1,6 @@
 import { z } from "zod";
 import uniq from "lodash/uniq";
+import omit from "lodash/omit";
 import {
   LLMJudgeObject,
   EVALUATORS_RULE_SCOPE,
@@ -582,17 +583,35 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.seed = seed;
   }
 
+  const persistedThinking = (
+    (custom_parameters ?? {}) as Record<string, unknown>
+  ).thinking as Record<string, unknown> | undefined;
+
+  // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
+  // are not represented in the form, so an unchanged load -> save must not drop them.
   const thinkingCustomParameters =
     thinkingLevel != null &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )
-      ? { thinking: { level: thinkingLevel } }
+      ? { thinking: { ...(persistedThinking ?? {}), level: thinkingLevel } }
       : undefined;
 
-  if (custom_parameters != null || thinkingCustomParameters) {
+  // `thinking` is owned by the thinkingLevel field, which was lifted out of the persisted
+  // custom_parameters on load. Drop the persisted copy before re-adding the current selection, or a
+  // level rejected above survives in the spread — a stale "off" would reach a model that cannot
+  // disable thinking, which is what the check exists to prevent.
+  const otherCustomParameters = omit(
+    (custom_parameters ?? {}) as Record<string, unknown>,
+    "thinking",
+  );
+
+  if (
+    Object.keys(otherCustomParameters).length > 0 ||
+    thinkingCustomParameters
+  ) {
     model.custom_parameters = {
-      ...(custom_parameters ?? {}),
+      ...otherCustomParameters,
       ...thinkingCustomParameters,
     };
   }
