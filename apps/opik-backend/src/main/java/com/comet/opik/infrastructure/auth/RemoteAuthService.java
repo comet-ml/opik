@@ -11,8 +11,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -24,6 +26,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -32,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -91,6 +95,9 @@ class RemoteAuthService implements AuthService {
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
+    private final int requestTimeoutMs;
+    private final int requestRetries;
+    private final int retryBackoffMs;
 
     @Builder(toBuilder = true)
     record AuthRequest(String workspaceName, String path,
@@ -215,19 +222,21 @@ class RemoteAuthService implements AuthService {
     @Override
     public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
+        var response = withAuthRetry("authorizeOAuth", () -> withAuthTimeout(client
+                .target(URI.create(reactServiceUrl.url()))
                 .path("opik")
                 .path("auth-by-username")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
                 .acceptEncoding("identity")
-                .header(OAUTH_USERNAME_HEADER, token.userName())
+                .header(OAUTH_USERNAME_HEADER, token.userName()))
                 .post(Entity.json(AuthRequest.builder()
                         .workspaceName(token.workspaceName())
                         .path(path)
                         .requiredPermissions(contextInfo.requiredPermissions())
-                        .build()))) {
+                        .build())));
+        try (response) {
             var authResponse = verifyResponse(response);
             var credentials = ValidatedAuthCredentials.from(authResponse);
             setCredentialIntoContext(credentials, token.workspaceName(), null);
@@ -240,15 +249,17 @@ class RemoteAuthService implements AuthService {
         if (isDefaultWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
+        var response = withAuthRetry("authorizeWorkspace", () -> withAuthTimeout(client
+                .target(URI.create(reactServiceUrl.url()))
                 .path("opik")
                 .path("auth-session")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
                 .acceptEncoding("identity")
-                .cookie(sessionToken)
-                .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
+                .cookie(sessionToken))
+                .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build())));
+        try (response) {
             var authResponse = verifyResponse(response);
             return UserWorkspace.builder()
                     .userName(authResponse.user())
@@ -388,19 +399,21 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
+        var response = withAuthRetry("authenticateUsingSessionToken", () -> withAuthTimeout(client
+                .target(URI.create(reactServiceUrl.url()))
                 .path("opik")
                 .path("auth-session")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
                 .acceptEncoding("identity")
-                .cookie(sessionToken)
+                .cookie(sessionToken))
                 .post(Entity.json(AuthRequest.builder()
                         .workspaceName(workspaceName)
                         .path(path)
                         .requiredPermissions(requiredPermissions)
-                        .build()))) {
+                        .build())));
+        try (response) {
             var authResponse = verifyResponse(response);
             var credentials = ValidatedAuthCredentials.from(authResponse);
             setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
@@ -428,7 +441,8 @@ class RemoteAuthService implements AuthService {
                 requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            try (var response = client.target(URI.create(reactServiceUrl.url()))
+            var response = withAuthRetry("validateApiKeyAndGetCredentials", () -> withAuthTimeout(client
+                    .target(URI.create(reactServiceUrl.url()))
                     .path("opik")
                     .path("auth")
                     .request()
@@ -436,12 +450,13 @@ class RemoteAuthService implements AuthService {
                     // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
                     .acceptEncoding("identity")
                     .header(HttpHeaders.AUTHORIZATION,
-                            apiKey)
+                            apiKey))
                     .post(Entity.json(AuthRequest.builder()
                             .workspaceName(workspaceName)
                             .path(path)
                             .requiredPermissions(requiredPermissions)
-                            .build()))) {
+                            .build())));
+            try (response) {
                 var authResponse = verifyResponse(response);
                 return ValidatedAuthCredentials.from(authResponse);
             }
@@ -519,6 +534,57 @@ class RemoteAuthService implements AuthService {
 
             return getWorkspaceIdFromResponse(response);
         }
+    }
+
+    /**
+     * Applies the per-call auth read timeout, overriding the shared jerseyClient timeout (30s)
+     * for this hop only. Without it a stalled auth call blocks the request thread for the full
+     * 30s and returns a 500, on a call whose measured p99.99 is 1.15s.
+     * <p>
+     * Not applied to {@code listEligibleWorkspaces}, which has a documented large-payload case.
+     */
+    private Invocation.Builder withAuthTimeout(Invocation.Builder builder) {
+        if (requestTimeoutMs <= 0) {
+            return builder;
+        }
+        return builder.property(ClientProperties.READ_TIMEOUT, requestTimeoutMs);
+    }
+
+    /**
+     * Runs an auth call, retrying only on transport failures (timeout / connect), never on an
+     * HTTP response — a 4xx/5xx from React is an answer and must not be retried.
+     * <p>
+     * Retries recover sub-second blips. They will not recover a request stalled by a React CPU
+     * brownout: those last 1-3 minutes in production, so the retry lands in the same brownout.
+     * The timeout is what bounds user-visible latency; this only reclaims the transient cases.
+     */
+    private <T> T withAuthRetry(String operation, Supplier<T> call) {
+        int attempts = Math.max(0, requestRetries) + 1;
+        ProcessingException lastFailure = null;
+
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                return call.get();
+            } catch (ProcessingException e) {
+                lastFailure = e;
+                if (attempt == attempts) {
+                    break;
+                }
+                log.warn("Auth call '{}' failed on attempt {}/{} ({}), retrying in {}ms",
+                        operation, attempt, attempts, e.getMessage(), retryBackoffMs);
+                if (retryBackoffMs > 0) {
+                    try {
+                        Thread.sleep(retryBackoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                }
+            }
+        }
+
+        log.error("Auth call '{}' failed after {} attempt(s)", operation, attempts);
+        throw lastFailure;
     }
 
     private String getWorkspaceIdFromResponse(Response response) {
