@@ -33,6 +33,7 @@ class NovaAggregator(ChunkAggregator):
         input_tokens = 0
         output_tokens = 0
         reported_usage: Dict[str, Any] = {}
+        metrics_cache_counts: Dict[str, int] = {}
 
         for item in items:
             if "chunk" not in item:
@@ -68,6 +69,16 @@ class NovaAggregator(ChunkAggregator):
                     if metrics:
                         input_tokens = metrics.get("inputTokenCount", input_tokens)
                         output_tokens = metrics.get("outputTokenCount", output_tokens)
+                        # Only integers are taken. A field reported as null would
+                        # otherwise replace a real count from metadata.usage and then
+                        # be dropped, since the backend usage dict keeps only integers.
+                        for metrics_key, usage_key in (
+                            ("cacheWriteInputTokenCount", "cacheWriteInputTokens"),
+                            ("cacheReadInputTokenCount", "cacheReadInputTokens"),
+                        ):
+                            metrics_value = metrics.get(metrics_key)
+                            if isinstance(metrics_value, int):
+                                metrics_cache_counts[usage_key] = metrics_value
                         LOGGER.debug(
                             "Nova bedrock metrics: input=%d, output=%d",
                             input_tokens,
@@ -89,6 +100,7 @@ class NovaAggregator(ChunkAggregator):
         bedrock_usage = usage_converters.nova_to_bedrock_usage(
             {
                 **reported_usage,
+                **metrics_cache_counts,
                 "inputTokens": input_tokens,
                 "outputTokens": output_tokens,
             }
