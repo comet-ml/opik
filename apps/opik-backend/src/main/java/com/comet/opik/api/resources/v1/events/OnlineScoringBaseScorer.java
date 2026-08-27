@@ -65,12 +65,14 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
     protected final OnlineScoringConfig onlineScoringConfig;
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
+    protected final SpanService spanService;
     protected final AutomationRuleEvaluatorType type;
 
     protected OnlineScoringBaseScorer(@NonNull @Config OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull AutomationRuleEvaluatorType type,
             @NonNull String metricsBaseName) {
         super(OnlineScoringStreamConfigurationAdapter.create(config, type),
@@ -81,6 +83,7 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
         this.onlineScoringConfig = config;
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
+        this.spanService = spanService;
         this.type = type;
     }
 
@@ -103,8 +106,8 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      * <p>Shared by both trace-thread scorers so the sentinel semantics and the recovery boundary cannot
      * drift apart between them.
      */
-    protected Mono<Long> spansSizeOrUnavailable(@NonNull SpanService spanService, @NonNull Set<UUID> traceIds,
-            String workspaceId, String userName, String threadId) {
+    protected Mono<Long> spansSizeOrUnavailable(Set<UUID> traceIds, String workspaceId, String userName,
+            String threadId) {
         return spanService.getSpansSizeByTraceIds(traceIds)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, workspaceId)

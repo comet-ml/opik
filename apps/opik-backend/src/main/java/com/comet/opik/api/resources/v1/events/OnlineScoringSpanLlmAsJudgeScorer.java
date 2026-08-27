@@ -9,6 +9,7 @@ import com.comet.opik.api.resources.v1.events.tools.EntityRef;
 import com.comet.opik.api.resources.v1.events.tools.EntityType;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
@@ -76,11 +77,13 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull AgenticScoringService agenticScoringService,
             @NonNull AttachmentService attachmentService,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder) {
-        super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, traceService, spanService, SPAN_LLM_AS_JUDGE,
+                Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);

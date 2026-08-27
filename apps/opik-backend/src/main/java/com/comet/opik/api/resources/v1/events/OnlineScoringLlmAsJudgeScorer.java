@@ -78,7 +78,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
-    private final SpanService spanService;
     private final AgenticScoringService agenticScoringService;
     private final TraceCompressor traceCompressor;
     private final WorkspaceNameService workspaceNameService;
@@ -104,13 +103,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull OpikConfiguration opikConfiguration,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
             @NonNull AttachmentService attachmentService) {
-        super(config, redisson, feedbackScoreService, traceService,
+        super(config, redisson, feedbackScoreService, traceService, spanService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
-        this.spanService = spanService;
         this.agenticScoringService = agenticScoringService;
         this.traceCompressor = traceCompressor;
         this.workspaceNameService = workspaceNameService;
@@ -526,6 +524,13 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      *       {@link OnlineScoringEngine#templateReferencesSpans} for both opt-in shapes
      *       (sentinel-valued variable AND implicit template reference).
      * </ul>
+     *
+     * <p><strong>Deliberately broader than {@link #shouldUseAgenticTools}</strong>, which also weighs
+     * the experimentId branch ({@link LlmAsJudgeToolsMode#shouldUseTools}), the size threshold and
+     * {@code {{trace}}}. Those cannot be consulted here: the size estimate is computed <em>from</em> the
+     * fetched spans, so the pre-fetch necessarily precedes the routing decision it feeds. Narrowing this
+     * gate to the experimentId branch would starve the two triggers that depend on the estimate — a trace
+     * over the token threshold would take the tools path with an unseeded read-tool cache.
      *
      * <p>This gates the {@code spanService.getByTraceIds} I/O only, not the substitution:
      * {@link OnlineScoringEngine#injectSpansIntoReplacements} runs unconditionally inside

@@ -61,7 +61,6 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private final Logger userFacingLogger;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
-    private final SpanService spanService;
     private final AgenticScoringService agenticScoringService;
 
     @Inject
@@ -77,14 +76,14 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull SpanService spanService,
             @NonNull AgenticScoringService agenticScoringService) {
-        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+        super(config, redisson, feedbackScoreService, traceService, spanService,
+                TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
-        this.spanService = spanService;
         this.agenticScoringService = agenticScoringService;
         this.userFacingLogger = UserFacingLoggingFactory
                 .getLogger(OnlineScoringTraceThreadUserDefinedMetricPythonScorer.class);
@@ -221,8 +220,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         var maxPreloadBytes = agenticToolsMaxPreloadBytes();
         // Sizing is advisory, not a prerequisite — see spansSizeOrUnavailable. Degrading keeps the
         // evaluation alive with the unenriched context.
-        var spansSizeMono = spansSizeOrUnavailable(spanService, traceIds, message.workspaceId(),
-                message.userName(), threadId);
+        var spansSizeMono = spansSizeOrUnavailable(traceIds, message.workspaceId(), message.userName(),
+                threadId);
         return spansSizeMono
                 .flatMap(sizeBytes -> {
                     // Without a size we can't tell a small thread from one that would blow the heap, so

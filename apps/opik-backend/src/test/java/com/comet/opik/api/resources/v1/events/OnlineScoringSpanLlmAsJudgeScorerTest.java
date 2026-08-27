@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
@@ -74,6 +75,9 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private ChatCompletionService aiProxyService;
     @Mock
     private TraceService traceService;
+    // Only reaches the base scorer's shared span-size helper, which this scorer never calls.
+    @Mock
+    private SpanService spanService;
     @Mock
     private LlmProviderFactory llmProviderFactory;
     @Mock
@@ -161,6 +165,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 feedbackScoreService,
                 aiProxyService,
                 traceService,
+                spanService,
                 llmProviderFactory,
                 agenticScoringService,
                 attachmentService,

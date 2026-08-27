@@ -68,7 +68,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final AgenticScoringService agenticScoringService;
     private final ServiceTogglesConfig serviceTogglesConfig;
-    private final SpanService spanService;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
 
@@ -87,7 +86,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull SpanService spanService,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
             @NonNull AttachmentService attachmentService) {
-        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
+        super(config, redisson, feedbackScoreService, traceService, spanService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.llmProviderFactory = llmProviderFactory;
@@ -96,7 +95,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.agenticScoringService = agenticScoringService;
         this.serviceTogglesConfig = serviceTogglesConfig;
-        this.spanService = spanService;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
         this.attachmentService = attachmentService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
@@ -228,8 +226,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // Sizing is advisory, not a prerequisite — see spansSizeOrUnavailable. Degrading keeps the
         // evaluation alive on the unenriched inline route, matching the best-effort treatment the
         // attachment probe below already gets.
-        var spansSizeMono = spansSizeOrUnavailable(spanService, traceIds, message.workspaceId(),
-                message.userName(), threadId);
+        var spansSizeMono = spansSizeOrUnavailable(traceIds, message.workspaceId(), message.userName(),
+                threadId);
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per thread evaluation, with an
         // llm span per LLM round and tool spans for the agentic loop. NOOP when the toggle is off.
         // Resolved reactively because the project-name lookup is blocking.
