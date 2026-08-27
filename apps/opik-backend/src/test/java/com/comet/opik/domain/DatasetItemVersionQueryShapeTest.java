@@ -4,10 +4,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,7 +51,7 @@ class DatasetItemVersionQueryShapeTest {
         countField.setAccessible(true);
         countSql = (String) countField.get(null);
 
-        allQueries = new java.util.LinkedHashMap<>();
+        allQueries = new LinkedHashMap<>();
         for (Field f : dao.getDeclaredFields()) {
             if (f.getType() == String.class) {
                 f.setAccessible(true);
@@ -218,30 +220,33 @@ class DatasetItemVersionQueryShapeTest {
 
         assertThat(offenders)
                 .as("""
-                        each of these aliases a snapshot-row column to a name that is read as item-level.                         Source the item_* column instead.""")
+                        each of these aliases a snapshot-row column to a name that is read as item-level. \
+                        Source the item_* column instead.""")
                 .isEmpty();
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS",
+            "SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT",
+            "SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS"})
     @DisplayName("the experiment-items queries expose the filter names from the item-level columns")
-    void experimentItemsQueries__resolveFiltersAgainstItemLevelColumns() {
-        List<String> constants = List.of(
-                "SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS",
-                "SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT",
-                "SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS");
+    void experimentItemsQueries__resolveFiltersAgainstItemLevelColumns(String constant) {
+        String sql = allQueries.get(constant);
 
-        assertThat(constants).allSatisfy(name -> {
-            String sql = allQueries.get(name);
-            assertThat(sql).as("%s must be present on the DAO", name).isNotNull();
-            assertThat(sql)
-                    .as("""
-                            %s interpolates the dataset item filters, so every scope they resolve in must                             expose the filter-visible names from the item-level columns. Before this was                             guarded, one scope aliased the row's columns, another omitted them entirely                             (raising UNKNOWN_IDENTIFIER, i.e. a 500), and a third aliased in the opposite                             direction so the same filter name meant different things per template branch.""",
-                            name)
-                    .contains("item_created_at AS created_at")
-                    .contains("item_last_updated_at AS last_updated_at")
-                    .contains("item_created_by AS created_by")
-                    .contains("item_last_updated_by AS last_updated_by");
-        });
+        assertThat(sql).as("%s must be present on the DAO", constant).isNotNull();
+
+        assertThat(sql)
+                .as("""
+                        %s interpolates the dataset item filters, so every scope they resolve in must expose \
+                        the filter-visible names from the item-level columns. Before this was guarded, one \
+                        scope aliased the row's columns, another omitted them entirely (raising \
+                        UNKNOWN_IDENTIFIER, i.e. a 500), and a third aliased in the opposite direction so the \
+                        same filter name meant different things per template branch.""", constant)
+                .contains("item_created_at AS created_at")
+                .contains("item_last_updated_at AS last_updated_at")
+                .contains("item_created_by AS created_by")
+                .contains("item_last_updated_by AS last_updated_by");
     }
 
     private static String orderByOf(String phase) {
