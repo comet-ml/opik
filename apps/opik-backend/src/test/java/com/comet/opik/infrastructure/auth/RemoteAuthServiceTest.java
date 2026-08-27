@@ -3,8 +3,10 @@ package com.comet.opik.infrastructure.auth;
 import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.WorkspaceUserPermissions;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.RemoteWorkspacePermissionsService;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.http.HttpModule;
@@ -41,6 +43,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -105,7 +108,10 @@ class RemoteAuthServiceTest {
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
-                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF);
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF,
+                new RemoteWorkspacePermissionsService(client,
+                        new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url(""))),
+                false);
     }
 
     @AfterAll
@@ -202,7 +208,10 @@ class RemoteAuthServiceTest {
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 mockCache,
-                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF);
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF,
+                new RemoteWorkspacePermissionsService(TestHttpClientUtils.client(),
+                        new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url(""))),
+                false);
         var contextInfo = ContextInfoHolder.builder()
                 .uriInfo(createMockUriInfo("/priv/something"))
                 .method("GET")
@@ -289,7 +298,10 @@ class RemoteAuthServiceTest {
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
-                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF);
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF,
+                new RemoteWorkspacePermissionsService(TestHttpClientUtils.client(),
+                        new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url(""))),
+                false);
 
         gzipEnabledAuthService.authenticate(
                 getHeadersMock(workspaceName, apiKey), null,
@@ -728,7 +740,10 @@ class RemoteAuthServiceTest {
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
-                timeout, maxRetries, Duration.milliseconds(10), Duration.milliseconds(50));
+                timeout, maxRetries, Duration.milliseconds(10), Duration.milliseconds(50),
+                new RemoteWorkspacePermissionsService(TestHttpClientUtils.client(),
+                        new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url(""))),
+                false);
     }
 
     private void authenticateWith(RemoteAuthService service, String workspaceName, String apiKey) {
@@ -914,5 +929,138 @@ class RemoteAuthServiceTest {
         }
 
         return paramMap;
+    }
+
+    /**
+     * Every path that produces credentials must resolve permissions when redaction is on. Dropping it from one
+     * of them would redact administrators on that path alone - the failure the session-cookie route already
+     * produced once - while the other paths kept working and the suite stayed green.
+     * <p>
+     * The answer is read from the workspace permissions API, one endpoint per credential type, rather than off
+     * the authentication response: what a caller may see is data about the caller, not a by-product of whether
+     * it could be authenticated.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void permissionsAreResolvedOnEveryPath_whenRedactionIsEnabled(String emPath, String permissionsPath) {
+        authenticateVia(emPath, serviceResolvingPermissions(true));
+
+        assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(permissionsPath))))
+                .as("%s should resolve permissions through %s", emPath, permissionsPath)
+                .hasSize(1);
+
+        // And the granted permission reaches the context, so the assertion covers the decision and not just
+        // the call: an endpoint answered but parsed wrong would still leave the caller unprivileged.
+        assertThat(requestContext.getPermissions())
+                .containsExactly(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue());
+    }
+
+    static Stream<Arguments> permissionsAreResolvedOnEveryPath_whenRedactionIsEnabled() {
+        return Stream.of(
+                Arguments.of("/opik/auth", "/opik/workspace-permissions"),
+                Arguments.of("/opik/auth-session", "/opik/workspace-permissions-session"),
+                Arguments.of("/opik/auth-by-username", "/opik/workspace-permissions-by-username"));
+    }
+
+    /**
+     * With redaction off the platform must see exactly the traffic it saw before this feature existed: the
+     * same authentication payload, and no permission lookup at all. That is what makes the toggle safe to
+     * ship, and what lets an older platform run against this build unchanged.
+     */
+    @ParameterizedTest
+    @MethodSource("permissionsAreResolvedOnEveryPath_whenRedactionIsEnabled")
+    void noPermissionTrafficAtAll_whenRedactionIsDisabled(String emPath, String permissionsPath)
+            throws JsonProcessingException {
+        authenticateVia(emPath, serviceResolvingPermissions(false));
+
+        assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(permissionsPath))))
+                .as("%s must not resolve permissions while the feature is off", emPath)
+                .isEmpty();
+
+        // Asserted on the parsed fields, not the raw text: the requirement is that nothing was added to the
+        // authentication request, and a substring check would pass for a payload carrying a new field as false.
+        assertThat(OBJECT_MAPPER.readTree(requestBodySentTo(emPath)).fieldNames())
+                .toIterable()
+                .containsOnly("workspaceName", "path");
+    }
+
+    /**
+     * A platform that predates the session and OAuth permission endpoints. The caller is left unprivileged,
+     * which redacts, rather than the request failing: rolling the platform back must not take the API down.
+     */
+    @Test
+    void anOlderPlatformLeavesTheCallerUnprivileged() {
+        // Higher priority than the granted stub authenticateVia registers, which would otherwise win by
+        // being registered later.
+        WIRE_MOCK.server().stubFor(post(urlPathEqualTo("/opik/workspace-permissions-session"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(404)));
+
+        authenticateVia("/opik/auth-session", serviceResolvingPermissions(true));
+
+        assertThat(requestContext.getPermissions()).isEmpty();
+    }
+
+    private RemoteAuthService serviceResolvingPermissions(boolean resolvePermissions) {
+        return new RemoteAuthService(TestHttpClientUtils.client(),
+                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
+                () -> requestContext,
+                new NoopCacheService(),
+                TEST_AUTH_TIMEOUT, TEST_AUTH_MAX_RETRIES, TEST_AUTH_MIN_BACKOFF, TEST_AUTH_MAX_BACKOFF,
+                new RemoteWorkspacePermissionsService(TestHttpClientUtils.client(),
+                        new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url(""))),
+                resolvePermissions);
+    }
+
+    private void authenticateVia(String emPath, RemoteAuthService service) {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        WIRE_MOCK.server().stubFor(post(emPath)
+                .willReturn(okJson(writeJson(authResponse))));
+
+        // Granted, so a path that resolves permissions correctly ends up privileged and one that skips the
+        // lookup ends up masked - the two outcomes the tests above tell apart.
+        var granted = WorkspaceUserPermissions.builder()
+                .userName("user")
+                .workspaceName("workspace")
+                .permissions(List.of(new WorkspaceUserPermissions.Permission(
+                        WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue(), "true")))
+                .build();
+        Stream.of("/opik/workspace-permissions", "/opik/workspace-permissions-session",
+                "/opik/workspace-permissions-by-username")
+                .forEach(path -> WIRE_MOCK.server().stubFor(post(urlPathEqualTo(path))
+                        .willReturn(okJson(writeJson(granted)))));
+
+        var contextInfo = ContextInfoHolder.builder()
+                .uriInfo(createMockUriInfo("/priv/something"))
+                .method("GET")
+                .build();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+
+        switch (emPath) {
+            case "/opik/auth" -> service.authenticate(
+                    getHeadersMock(workspaceName, "apiKey-" + UUID.randomUUID()), null, contextInfo);
+            case "/opik/auth-session" -> service.authenticate(
+                    getHeadersMock(workspaceName, ""), sessionCookie("session-" + UUID.randomUUID()),
+                    contextInfo);
+            case "/opik/auth-by-username" -> service.authorizeOAuth(ValidatedToken.builder()
+                    .userName("oauth-user-" + UUID.randomUUID())
+                    .workspaceName(workspaceName)
+                    .build(), contextInfo);
+            default -> throw new IllegalArgumentException("Unhandled auth path: " + emPath);
+        }
+    }
+
+    private static String writeJson(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private String requestBodySentTo(String emPath) {
+        var requests = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(emPath)));
+        assertThat(requests).as("a request should have reached %s", emPath).hasSize(1);
+        return requests.getFirst().getBodyAsString();
     }
 }

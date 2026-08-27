@@ -248,6 +248,7 @@ areas:
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
+      - trace-explore/trace-attachments.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -264,7 +265,7 @@ areas:
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       agent-graph-tab:        { covered: false }
-      attachments-media:      { covered: false }
+      attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
       set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
@@ -366,14 +367,16 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/workspace-span-metrics.spec.ts
+      - dashboards/project-span-metrics.spec.ts
+      - dashboards/dashboards-list-filters.spec.ts
     capabilities:
-      list-dashboards:      { covered: false }
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
       add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
-      configure-widget:     { covered: false }
+      configure-widget:     { covered: true,  tier: t2-cuj, note: "scoping a Time series widget to one project and picking its metric through the widget dialog, plus the data contract of the per-project read it then makes (POST /projects/{id}/metrics across every MetricType and span breakdown); the widget dialog's remaining options — chart type, filters, group by, sub-metric — are uncovered" }
       widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
       metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
 
