@@ -5,8 +5,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.DefaultValue;
 import lombok.Builder;
 
@@ -21,7 +23,7 @@ import java.util.UUID;
 public record TraceSearchStreamRequest(
         String projectName,
         UUID projectId,
-        List<TraceFilter> filters,
+        List<@NotNull @Valid TraceFilter> filters,
         UUID lastRetrievedId,
         @Schema(description = "Max number of traces to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         @Schema(description = "Truncate input, output and metadata to slim payloads", defaultValue = "true") @DefaultValue("true") boolean truncate,

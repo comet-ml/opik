@@ -52,7 +52,10 @@ import {
 } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths, cn } from "@/lib/utils";
-import { generateSelectColumDef } from "@/shared/DataTable/utils";
+import {
+  generateSelectColumDef,
+  getVirtualizationConfig,
+} from "@/shared/DataTable/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
@@ -75,7 +78,10 @@ import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/Data
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import DataTable from "@/shared/DataTable/DataTable";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { DataTableWrapperProps } from "@/shared/DataTable/DataTableWrapper";
+import TableScrollContainer from "@/shared/DataTable/TableScrollContainer";
+import ScrollTableWrapper from "@/shared/DataTable/ScrollTableWrapper";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
@@ -887,6 +893,11 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     metadataColumnsOrder,
   ]);
 
+  const virtualization = useMemo(
+    () => getVirtualizationConfig(columns.length, rows.length || (size ?? 0)),
+    [columns.length, rows.length, size],
+  );
+
   const columnsToExport = useMemo(() => {
     return columns
       .map((c) => get(c, "accessorKey", ""))
@@ -1132,6 +1143,9 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
           />
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
+        TableBody={DataTableVirtualBody}
+        columnVirtualization={virtualization}
+        rowVirtualization={virtualization}
         {...extraProps}
       />
     </DataTableStateHandler>
@@ -1196,9 +1210,9 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         {metricsSummary && <div className="px-6 pt-4">{metricsSummary}</div>}
         {/* Same single row as the page layout. */}
         <div className="flex items-start gap-2 px-6 py-4">{toolbarRow}</div>
-        <div className="min-h-0 flex-1 overflow-auto border-b px-6">
-          {renderTable()}
-        </div>
+        <TableScrollContainer className="border-b px-6">
+          {renderTable({ TableWrapper: ScrollTableWrapper })}
+        </TableScrollContainer>
         <div className="border-t px-6 py-3">{pagination}</div>
       </div>
       {panels}

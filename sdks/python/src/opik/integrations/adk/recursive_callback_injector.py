@@ -5,6 +5,7 @@ import logging
 
 from google.adk.tools import agent_tool
 from google.adk import agents
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -119,6 +120,7 @@ def track_adk_agent_recursive(
     Returns:
         The modified root agent with tracking enabled
     """
+    analytics.track_event("integration", "adk_recursive")
 
     recursive_callback_injector = RecursiveCallbackInjector(tracer)
     recursive_callback_injector.inject(root_agent)

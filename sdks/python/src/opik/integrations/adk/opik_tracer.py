@@ -27,6 +27,7 @@ from .patchers import (
 )
 from .patchers.adk_otel_tracer import llm_span_helpers
 from .graph import mermaid_graph_builder
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class OpikTracer:
             project_name: The name of the project for tracing.
             distributed_headers: The distributed trace headers.
         """
+        analytics.track_event("integration", "adk")
         self.name = name
         self.tags = tags
         self.metadata = metadata or {}
@@ -442,9 +444,12 @@ class OpikTracer:
                 if usage_data is not None:
                     model = usage_data.model
                     usage = usage_data.opik_usage
-            except Exception as e:
-                LOGGER.debug(
-                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+            except Exception:
+                # Not debug: this is silent data loss. The span is still logged, but
+                # without output or usage, and nothing else reports that.
+                LOGGER.error(
+                    "Error converting LlmResponse to dict or extracting usage data, "
+                    "the LLM span will be logged without output and usage",
                     exc_info=True,
                 )
 

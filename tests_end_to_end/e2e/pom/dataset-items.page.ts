@@ -53,6 +53,22 @@ export class DatasetItemsPage {
     return this.itemsTableBody.locator(`tr[data-row-id="${id}"]`);
   }
 
+  /**
+   * The dataset item ids the grid is currently rendering, in row order.
+   *
+   * Read from `data-row-id` rather than from cell text: a caller checking which
+   * rows survived a scoped mutation needs identity, and the visible columns are
+   * user-configurable. Single page only — the table paginates at 10 by default,
+   * so a caller asserting an exact set must keep the fixture under a page.
+   */
+  async itemRowIds(): Promise<string[]> {
+    return test.step('Read rendered dataset item ids', async () => {
+      return this.itemsTableBody
+        .locator('tr[data-row-id]')
+        .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-row-id') ?? ''));
+    });
+  }
+
   async clickAddItem(): Promise<void> {
     return test.step('Open add-item panel', async () => {
       await this.page.getByTestId('dataset-header-add-button').click();

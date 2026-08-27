@@ -228,6 +228,13 @@ class BaseLLMError(OpikException):
         return f"LLM infrastructure error: {self.message}"
 
 
+class EmptyLLMResponseError(BaseLLMError):
+    """The provider returned no content and no tool calls.
+
+    Transient: retrying the same request usually succeeds.
+    """
+
+
 class SearchTimeoutError(OpikException):
     """Exception raised when a search times out."""
 

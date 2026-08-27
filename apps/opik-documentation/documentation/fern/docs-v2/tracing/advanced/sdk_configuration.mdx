@@ -123,6 +123,7 @@ Both SDKs support environment variables for configuration. Here's a comparison o
 | TLS Certificate     | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
 | Suppress Batching Warning | `OPIK_SUPPRESS_BATCHING_UPDATE_WARNING` | N/A | Suppress the batching update warning (Python only) |
 | Prompt Cache TTL    | `OPIK_PROMPT_CACHE_TTL_SECONDS` | N/A                  | TTL in seconds for cached prompts (Python only) |
+| Analytics Enable    | `OPIK_ANALYTICS_ENABLE`      | N/A                     | Send SDK usage analytics (Python only)         |
 | Batch Delay         | N/A                          | `OPIK_BATCH_DELAY_MS`   | Batching delay in ms (TypeScript only)         |
 | Hold Until Flush    | N/A                          | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush (TypeScript only) |
 | Console Log Level   | `OPIK_CONSOLE_LOGGING_LEVEL` | N/A                     | Console log level (Python only)                |
@@ -427,6 +428,34 @@ import { flushAll } from "opik";
 await flushAll();
 ```
 
+## Usage analytics
+
+The Python SDK reports usage analytics that tell us which SDK features are being used,
+so we know what to invest in. Each API you call is reported once per run, by name only,
+alongside the same environment details the SDK already reports with error reports: the
+SDK and Python versions, the OS, whether you are in Jupyter, Colab or CI, the kind of
+installation (cloud, self-hosted or local), and the versions of the LLM libraries
+installed next to Opik.
+
+Usage is attributed to your **workspace name** — the same identifier used for error
+reporting, so that an error and the usage around it describe the same user. Installations
+left on the default workspace are attributed to a one-way hash of the hostname and
+username instead.
+
+**Never sent:** the contents of your traces, spans, prompts, datasets or evaluation
+results, your API key, or your project names. Reporting always happens on a background
+thread and never affects your application.
+
+Events are sent to Comet's usage-reporting endpoint, the same pipeline the Opik UI and
+backend already report through.
+
+To turn it off:
+
+```bash
+export OPIK_ANALYTICS_ENABLE=false
+```
+
+
 ## Configuration Reference
 
 ### Python SDK Configuration Values
@@ -447,6 +476,7 @@ await flushAll();
 | logging_file               | `OPIK_LOGGING_FILE`          | File to write logs to - Defaults to `opik.log`                            |
 | suppress_batching_update_warning | `OPIK_SUPPRESS_BATCHING_UPDATE_WARNING` | Suppress the warning about potential data loss when calling `.end()` or `.update()` on spans or traces with batching enabled - Defaults to `false` |
 | prompt_cache_ttl_seconds   | `OPIK_PROMPT_CACHE_TTL_SECONDS` | How long, in seconds, unpinned prompts are cached before they are refreshed from the backend - Defaults to `300` |
+| analytics_enable           | `OPIK_ANALYTICS_ENABLE`      | Send usage analytics about which SDK features are used - Defaults to `true`. See [Usage analytics](#usage-analytics) |
 
 ### TypeScript SDK Configuration Values
 

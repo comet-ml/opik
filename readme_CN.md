@@ -65,18 +65,18 @@ Opik 覆盖了 LLM 应用的完整生命周期，从开发阶段的第一条追�
 - **开发与追踪：**
   - 在开发和生产环境中跟踪所有 LLM 调用和追踪，并附带详细上下文（[快速开始](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik)）。
   - 丰富的第三方集成，便于实现可观测性：可无缝集成不断增长的框架列表，并原生支持其中许多最大和最流行的框架（包括近期新增的 **Google ADK**、**Autogen** 和 **Flowise AI**）。（[集成](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik)）
-  - 通过 [Python SDK](https://www.comet.com/docs/opik/v1/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 或 [UI](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik) 为追踪和 span 添加反馈评分注解。
-  - 在[提示 Playground](https://www.comet.com/docs/opik/prompt_engineering/playground) 中试验提示和模型。
+  - 通过 [Python SDK](https://www.comet.com/docs/opik/tracing/advanced/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 或 [UI](https://www.comet.com/docs/opik/tracing/advanced/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik) 为追踪和 span 添加反馈评分注解。
+  - 在[提示 Playground](https://www.comet.com/docs/opik/development/prompt-playground) 中试验提示和模型。
 
 - **评估与测试**：
-  - 使用[数据集](https://www.comet.com/docs/opik/v1/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik)和[实验](https://www.comet.com/docs/opik/v1/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik)自动化你的 LLM 应用评估。
+  - 使用[数据集](https://www.comet.com/docs/opik/evaluation/advanced/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik)和[实验](https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik)自动化你的 LLM 应用评估。
   - 利用强大的 LLM 作为评判者的指标处理复杂任务，例如[幻觉检测](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik)、[内容审核](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik)以及 RAG 评估（[答案相关性](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik)、[上下文精确度](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)）。
-  - 通过我们的 [PyTest 集成](https://www.comet.com/docs/opik/v1/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik)将评估集成到你的 CI/CD 流水线中。
+  - 通过我们的 [PyTest 集成](https://www.comet.com/docs/opik/evaluation/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik)将评估集成到你的 CI/CD 流水线中。
 
 - **生产监控与优化**：
   - 记录大量生产追踪：Opik 专为规模化设计（每天 4000 万+ 条追踪）。
-  - 在 [Opik 仪表盘](https://www.comet.com/docs/opik/v1/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)中随时间监控反馈评分、追踪数量和 token 用量。
-  - 利用带有 LLM 作为评判者指标的[在线评估规则](https://www.comet.com/docs/opik/v1/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)来识别生产问题。
+  - 在 [Opik 仪表盘](https://www.comet.com/docs/opik/tracing/dashboards/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)中随时间监控反馈评分、追踪数量和 token 用量。
+  - 利用带有 LLM 作为评判者指标的[在线评估规则](https://www.comet.com/docs/opik/production/online-evaluation/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)来识别生产问题。
   - 借助 **Opik Agent Optimizer** 和 **Opik Guardrails**，在生产环境中持续改进并保护你的 LLM 应用。
 
 **适用人群：** 构建 LLM 驱动智能体的机器学习工程师、从原型走向生产的 AI 团队，以及需要可在自有环境中运行的开源、可自托管可观测性的工程团队。
@@ -341,7 +341,7 @@ opik configure
 > [!TIP]
 > 如果你使用的框架未列在上表中，欢迎[提交 issue](https://github.com/comet-ml/opik/issues) 或提交一个包含该集成的 PR。
 
-如果你没有使用上述任何框架，也可以使用 `track` 函数装饰器来[记录追踪](https://www.comet.com/docs/opik/v1/tracing/log_traces/?from=llm&utm_source=opik&utm_medium=github&utm_content=traces_link&utm_campaign=opik)：
+如果你没有使用上述任何框架，也可以使用 `track` 函数装饰器来[记录追踪](https://www.comet.com/docs/opik/tracing/advanced/log_traces/?from=llm&utm_source=opik&utm_medium=github&utm_content=traces_link&utm_campaign=opik)：
 
 ```python
 import opik
@@ -382,14 +382,19 @@ Opik 还包含许多预构建的启发式指标，并支持创建你自己的指
 <a id="-evaluating-your-llm-application"></a>
 ### 🔍 评估你的 LLM 应用
 
-Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/v1/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik)和[实验](https://www.comet.com/docs/opik/v1/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)评估你的 LLM 应用。Opik 仪表盘为实验提供了增强的图表，并能更好地处理大型追踪。你还可以使用我们的 [PyTest 集成](https://www.comet.com/docs/opik/v1/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)将评估作为 CI/CD 流水线的一部分运行。
+Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/evaluation/advanced/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik)和[实验](https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)评估你的 LLM 应用。Opik 仪表盘为实验提供了增强的图表，并能更好地处理大型追踪。你还可以使用我们的 [PyTest 集成](https://www.comet.com/docs/opik/evaluation/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)将评估作为 CI/CD 流水线的一部分运行。
 
 <a id="-star-us-on-github"></a>
 ## ⭐ 在 GitHub 上为我们点亮 Star
 
 如果你觉得 Opik 有用，请考虑给我们点个 star！你的支持将帮助我们壮大社区并持续改进产品。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.comet.com/opik/star-history/star-history-dark.svg" />
+    <img alt="Star History Chart" src="https://cdn.comet.com/opik/star-history/star-history-light.svg" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 参与贡献
