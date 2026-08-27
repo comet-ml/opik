@@ -23,6 +23,8 @@ import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.infrastructure.redaction.FieldMasker;
+import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import io.swagger.v3.oas.annotations.Operation;
@@ -81,6 +83,7 @@ public class LocalRunnersResource {
     private final @NonNull ConnectBridgeService connectBridgeService;
     private final @NonNull LocalRunnerConfig runnerConfig;
     private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull RedactionService redactionService;
 
     @GET
     @Operation(operationId = "listRunners", summary = "List local runners", description = "List local runners owned by the current user in the workspace", responses = {
@@ -194,6 +197,27 @@ public class LocalRunnersResource {
         return Response.created(uri).build();
     }
 
+    /**
+     * Runner jobs are read from Redis rather than through the DAOs, so nothing masks them on the way out unless
+     * it happens here. Their {@code inputs} are the payload an agent was invoked with and their {@code result} is
+     * what it produced, which is the same caller content a trace carries.
+     */
+    private FieldMasker maskerForThisCaller() {
+        return requestContext.get().isRedactResponse() ? redactionService.masker() : FieldMasker.noOp();
+    }
+
+    private LocalRunnerJob masked(LocalRunnerJob job, FieldMasker masker) {
+        if (job == null || masker.isNoOp()) {
+            return job;
+        }
+
+        // deepCopy because the job may be served from a cached deserialisation, and mask rewrites in place.
+        return job.toBuilder()
+                .inputs(job.inputs() == null ? null : masker.mask(job.inputs().deepCopy()))
+                .result(job.result() == null ? null : masker.mask(job.result().deepCopy()))
+                .build();
+    }
+
     @GET
     @Path("/{runnerId}/jobs")
     @Operation(operationId = "listJobs", summary = "List local runner jobs", description = "List jobs for a local runner", responses = {
@@ -205,9 +229,12 @@ public class LocalRunnersResource {
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+        var masker = maskerForThisCaller();
         LocalRunnerJob.LocalRunnerJobPage jobPage = endpointJobService.listJobs(runnerId, projectId, workspaceId,
                 userName, page, size);
-        return Response.ok(jobPage).build();
+        return Response.ok(jobPage.toBuilder()
+                .content(jobPage.content().stream().map(job -> masked(job, masker)).toList())
+                .build()).build();
     }
 
     @POST
@@ -224,8 +251,11 @@ public class LocalRunnersResource {
                 ar -> ar.resume(Response.ok(NullNode.getInstance()).build()));
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+        // Resolved here, on the request thread: the response is written from the reactor thread that resumes the
+        // long poll, where the request-scoped context does not exist.
+        var masker = maskerForThisCaller();
         endpointJobService.nextJob(runnerId, workspaceId, userName)
-                .map(job -> Response.ok(job).build())
+                .map(job -> Response.ok(masked(job, masker)).build())
                 .defaultIfEmpty(Response.ok(NullNode.getInstance()).build())
                 .subscribe(
                         asyncResponse::resume,
@@ -249,7 +279,7 @@ public class LocalRunnersResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         LocalRunnerJob job = endpointJobService.getJob(jobId, workspaceId, userName);
-        return Response.ok(job).build();
+        return Response.ok(masked(job, maskerForThisCaller())).build();
     }
 
     @GET

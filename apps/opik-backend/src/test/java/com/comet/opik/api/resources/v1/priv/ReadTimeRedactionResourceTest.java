@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -12,8 +14,15 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
+import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
+import com.comet.opik.api.runner.LocalRunner;
+import com.comet.opik.api.runner.LocalRunnerJob;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -39,7 +48,16 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -67,6 +85,8 @@ class ReadTimeRedactionResourceTest {
     private static final String EMAIL = "john.doe@example.com";
     private static final String PHONE = "555-123-4567";
     private static final String MASK = "[REDACTED]";
+
+    private static final String RUNNER_AGENT = "redaction-agent";
 
     /**
      * A structural field the config does not name, alongside content it does. It has to survive so the assertions
@@ -116,6 +136,9 @@ class ReadTimeRedactionResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private ClientSupport clientSupport;
+    private LocalRunnersResourceClient runnersClient;
+    private PairingResourceClient pairingClient;
+    private ProjectResourceClient projectClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -123,6 +146,9 @@ class ReadTimeRedactionResourceTest {
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.clientSupport = client;
+        this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
+        this.pairingClient = new PairingResourceClient(client, baseURI);
+        this.projectClient = new ProjectResourceClient(client, baseURI, factory);
 
         ClientSupportUtils.config(client);
 
@@ -329,5 +355,123 @@ class ReadTimeRedactionResourceTest {
         var trace = getTraceWithSessionCookie(traceId, ADMIN_SESSION_TOKEN);
 
         assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE);
+    }
+
+    /**
+     * A runner job is read from Redis rather than through a masked DAO, so it is masked in the resource or not
+     * at all — the coverage boundary of moving masking into the DAOs. It is also the async case: {@code nextJob}
+     * suspends and its response is written from the reactor thread that resumes it, where the request-scoped
+     * context does not exist, so the masker is captured before the chain is subscribed. These two tests are what
+     * says both halves work — the unpermitted caller is masked, and the permitted one is not.
+     */
+    private UUID connectRunner(String apiKey) {
+        UUID projectId = projectClient.createProject("redaction-runner-" + UUID.randomUUID(), apiKey,
+                WORKSPACE_NAME);
+
+        byte[] activationKey = new byte[32];
+        new SecureRandom().nextBytes(activationKey);
+
+        var session = pairingClient.createSession(CreateSessionRequest.builder()
+                .projectId(projectId)
+                .activationKey(Base64.getEncoder().encodeToString(activationKey))
+                .ttlSeconds(300)
+                .type(RunnerType.ENDPOINT)
+                .build(), apiKey, WORKSPACE_NAME);
+
+        String runnerName = "redaction-runner";
+        UUID runnerId = pairingClient.activate(session.sessionId(), ActivateRequest.builder()
+                .runnerName(runnerName)
+                .hmac(hmac(session.sessionId(), activationKey, runnerName))
+                .build(), apiKey, WORKSPACE_NAME);
+
+        runnersClient.registerAgents(runnerId, Map.of(RUNNER_AGENT, LocalRunner.Agent.builder()
+                .name(RUNNER_AGENT).build()), apiKey, WORKSPACE_NAME);
+        runnersClient.heartbeat(runnerId, apiKey, WORKSPACE_NAME);
+
+        return runnerId;
+    }
+
+    private static String hmac(UUID sessionId, byte[] activationKey, String runnerName) {
+        try {
+            var sessionIdBytes = ByteBuffer.allocate(16)
+                    .putLong(sessionId.getMostSignificantBits())
+                    .putLong(sessionId.getLeastSignificantBits())
+                    .array();
+            byte[] runnerNameHash = MessageDigest.getInstance("SHA-256")
+                    .digest(runnerName.getBytes(StandardCharsets.UTF_8));
+            byte[] message = new byte[sessionIdBytes.length + runnerNameHash.length];
+            System.arraycopy(sessionIdBytes, 0, message, 0, sessionIdBytes.length);
+            System.arraycopy(runnerNameHash, 0, message, sessionIdBytes.length, runnerNameHash.length);
+
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(activationKey, "HmacSHA256"));
+            return Base64.getEncoder().encodeToString(mac.doFinal(message));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private UUID createJobWithPii(UUID runnerId, String apiKey) {
+        LocalRunner runner = runnersClient.getRunner(runnerId, apiKey, WORKSPACE_NAME);
+
+        return runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                .agentName(RUNNER_AGENT)
+                .projectId(runner.projectId())
+                .inputs(JsonUtils.getJsonNodeFromString(STORED_INPUT))
+                .build(), apiKey, WORKSPACE_NAME);
+    }
+
+    @Test
+    @DisplayName("a long-polled job is masked, though its response is written off the request thread")
+    void aLongPolledJobIsMasked() {
+        UUID runnerId = connectRunner(ADMIN_API_KEY);
+        UUID jobId = createJobWithPii(runnerId, ADMIN_API_KEY);
+
+        LocalRunnerJob polled;
+        try (var response = runnersClient.callNextJob(runnerId, MEMBER_API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            polled = response.readEntity(LocalRunnerJob.class);
+        }
+
+        assertThat(polled.id()).isEqualTo(jobId);
+        assertThat(polled.inputs().get("prompt").asText()).isEqualTo(MASK);
+        assertThat(polled.inputs().toString()).doesNotContain(EMAIL).doesNotContain(PHONE);
+        // The unnamed field survives, so this says masking rather than wholesale destruction.
+        assertThat(polled.inputs().get("model").asText()).isEqualTo(MODEL);
+
+        // The same job as a permitted caller sees it, which bounds what redaction was allowed to touch: every
+        // other field has to survive intact. Asserting only on inputs() would pass just as well if the rules
+        // had also rewritten agent_name, blueprint_name or the metadata on their way out.
+        var stored = runnersClient.getJob(jobId, ADMIN_API_KEY, WORKSPACE_NAME);
+
+        assertThat(stored.inputs().toString()).contains(EMAIL).contains(PHONE);
+        assertThat(polled).isEqualTo(stored.toBuilder().inputs(polled.inputs()).build());
+
+        // And the two representations of one job have to agree with each other, which is the part that a
+        // thread-bound decision got wrong: before it travelled with the request, only the synchronous read
+        // was masked.
+        assertThat(runnersClient.getJob(jobId, MEMBER_API_KEY, WORKSPACE_NAME).inputs())
+                .isEqualTo(polled.inputs());
+    }
+
+    @Test
+    @DisplayName("a long-polled job reaches a permitted caller as stored")
+    void aLongPolledJobReachesAPermittedCallerAsStored() {
+        // Failing closed on the async path instead of carrying the decision rewrote this response too, for a
+        // caller who is allowed to see it and whose permission was never consulted.
+        UUID runnerId = connectRunner(ADMIN_API_KEY);
+        UUID jobId = createJobWithPii(runnerId, ADMIN_API_KEY);
+
+        LocalRunnerJob polled;
+        try (var response = runnersClient.callNextJob(runnerId, ADMIN_API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            polled = response.readEntity(LocalRunnerJob.class);
+        }
+
+        assertThat(polled.inputs().toString()).contains(EMAIL).contains(PHONE);
+
+        // Whole job, not just inputs: "reaches a permitted caller as stored" is a claim about the entire
+        // response, and the interceptor either leaves it alone or it does not.
+        assertThat(polled).isEqualTo(runnersClient.getJob(jobId, ADMIN_API_KEY, WORKSPACE_NAME));
     }
 }
