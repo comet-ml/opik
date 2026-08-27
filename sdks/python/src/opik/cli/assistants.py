@@ -65,13 +65,18 @@ def setup(
     server's results table, so the user answers it with the outcome in front of
     them.
     """
+    # One view for the whole step, not one per half: it carries what the server
+    # install learned — notably whether the connection needs a sign-in — through
+    # to the closing block below, which is printed after the skill pack.
+    view = install_view.RichInstallView()
+
     configured_hosts = (
         mcp_installer.setup_mcp_server(
             **dict(setup_params),
             force_local_server=force_local_server,
             host_keys=host_keys,
             assume_confirmed=assume_confirmed,
-            view=install_view.RichInstallView(),
+            view=view,
             # The closing "restart your assistant" line is printed once, at the end
             # of the whole step, rather than by each half.
             announce_next_steps=False,
@@ -87,7 +92,6 @@ def setup(
     # knows which locations are supported.
     skills_targets = configured_hosts or skills_installer.detected_host_keys()
 
-    view = install_view.RichInstallView()
     installed_skills = False
 
     if consent.granted(skills, _ask_about_skill_pack):

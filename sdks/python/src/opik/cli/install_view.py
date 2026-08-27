@@ -49,7 +49,9 @@ class RichInstallView(mcp_view.InstallView):
         deployment: str,
         transport: str,
         targets: List[mcp_view.PlannedTarget],
+        needs_sign_in: bool = False,
     ) -> None:
+        self._needs_sign_in = needs_sign_in
         console.print()
         console.print(text.Text("Opik MCP server setup", style="bold"))
 
@@ -136,10 +138,24 @@ class RichInstallView(mcp_view.InstallView):
             text.Text.assemble(
                 ("Restart ", ""),
                 ("them" if len(assistants) > 1 else "it", "bold"),
-                (', then ask "list my Opik projects via Opik MCP"', ""),
+                (", then ask ", ""),
+                ('"list my Opik projects via Opik MCP"', "green"),
             ),
         )
         console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+        # Last, because it is the one thing here the user may still have to act
+        # on, and it should not sit between them and the prompt to try.
+        if self._needs_sign_in:
+            console.print()
+            console.print(
+                padding.Padding(
+                    text.Text.assemble(
+                        ("Signing in: ", "bold"),
+                        (mcp_view.SIGN_IN_HINT, "dim"),
+                    ),
+                    _FIELDS_INDENT,
+                )
+            )
         console.print()
 
     def skipped(self, message: str) -> None:

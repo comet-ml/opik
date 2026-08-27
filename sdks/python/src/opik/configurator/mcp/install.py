@@ -147,6 +147,14 @@ def setup_mcp_server(
     display.plan(
         deployment=_deployment_label(use_local, self_hosted_comet, workspace),
         transport=_transport_label(server_spec),
+        # Only the hosted server has a sign-in step, and how it gets triggered is
+        # the host's choice, not ours: some open the browser on first use, others
+        # leave the server unauthorized until asked. An unauthorized server
+        # contributes no tools at all rather than an error, so a user who is not
+        # told to look never finds out why it went quiet. The view carries this
+        # to its closing block, which `cli.assistants` prints after the skill
+        # pack — by then the spec is out of scope.
+        needs_sign_in=isinstance(server_spec, mcp_spec.RemoteServerSpec),
         targets=[
             mcp_view.PlannedTarget(
                 display_name=target.display_name,
@@ -194,18 +202,6 @@ def setup_mcp_server(
                 check_tls_certificate=check_tls_certificate,
             )
         display.verification(verification.succeeded, verification.detail)
-        # Only the hosted server has a sign-in step, and how it is triggered is
-        # the host's choice, not ours: some open the browser on first use, others
-        # leave the server sitting unauthorized until the user asks. An
-        # unauthorized server contributes no tools at all rather than an error,
-        # so a user who is not told to look never finds out why it went quiet.
-        if isinstance(server_spec, mcp_spec.RemoteServerSpec):
-            display.note(
-                "Signing in: depending on your assistant, you will either be "
-                "prompted with a sign-in link the first time it uses Opik, or "
-                "need to authorize the opik-mcp server yourself from its MCP "
-                "settings."
-            )
         if verification.succeeded and announce_next_steps:
             display.done(
                 ["MCP server"],

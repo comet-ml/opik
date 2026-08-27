@@ -27,7 +27,8 @@ class RecordingView(mcp_view.LoggingInstallView):
         self.problems = []
         self.notes = []
 
-    def plan(self, deployment, transport, targets, extras=()):
+    def plan(self, deployment, transport, targets, needs_sign_in=False, extras=()):
+        super().plan(deployment, transport, targets, needs_sign_in)
         self.plans.append((deployment, transport, list(targets)))
         self.plan_extras.append(list(extras))
 
@@ -426,7 +427,10 @@ def test_setup_mcp_server__hosted_detected__does_not_prefetch(
     install_spy.assert_called_once()
 
 
-def test_setup_mcp_server__hosted_detected__mentions_signing_in(monkeypatch):
+def test_setup_mcp_server__hosted_detected__flags_the_sign_in_for_the_closing_block(
+    monkeypatch,
+):
+    """The CLI closes the run itself, so the fact has to survive on the view."""
     monkeypatch.setattr(
         install.mcp_detection,
         "detect_hosted_mcp_server",
@@ -439,13 +443,11 @@ def test_setup_mcp_server__hosted_detected__mentions_signing_in(monkeypatch):
 
     install.setup_mcp_server(**args)
 
-    said = args["view"].said
-    assert "sign-in link" in said
-    assert "authorize the opik-mcp server yourself" in said
+    assert args["view"]._needs_sign_in is True
 
 
-def test_setup_mcp_server__local_server__says_nothing_about_signing_in(monkeypatch):
-    """The stdio server takes its credentials at startup — there is nothing to sign in to."""
+def test_setup_mcp_server__local_server__does_not_flag_a_sign_in(monkeypatch):
+    """The stdio server takes its credentials at startup — nothing to sign in to."""
     monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
     install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
     monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
@@ -454,7 +456,7 @@ def test_setup_mcp_server__local_server__says_nothing_about_signing_in(monkeypat
 
     install.setup_mcp_server(**args)
 
-    assert "sign-in link" not in args["view"].said
+    assert args["view"]._needs_sign_in is False
 
 
 def test_setup_mcp_server__force_local__skips_probe_and_installs_uvx(monkeypatch):

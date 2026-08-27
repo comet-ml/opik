@@ -57,8 +57,23 @@ class TargetResult:
         return self.summary or self.detail
 
 
+#: How the sign-in step is phrased, once, so both views agree.
+SIGN_IN_HINT = (
+    "Depending on your assistant, you will either be prompted with a sign-in "
+    "link the first time it uses Opik, or need to authorize the opik-mcp "
+    "server yourself from its MCP settings."
+)
+
+
 class InstallView(abc.ABC):
     """Narration hooks for the MCP install flow."""
+
+    #: Whether the connection needs a sign-in, as decided by ``install`` and
+    #: handed over in :meth:`plan`. Kept here rather than passed to :meth:`done`
+    #: because the CLI closes the run from ``cli.assistants``, which never sees
+    #: the server spec — the view carries the fact across that gap. A class
+    #: attribute, so a view that is never planned still renders.
+    _needs_sign_in: bool = False
 
     @abc.abstractmethod
     def plan(
@@ -66,6 +81,7 @@ class InstallView(abc.ABC):
         deployment: str,
         transport: str,
         targets: List[PlannedTarget],
+        needs_sign_in: bool = False,
     ) -> None:
         """Announce what is about to happen, before anything is written."""
 
@@ -116,7 +132,9 @@ class LoggingInstallView(InstallView):
         deployment: str,
         transport: str,
         targets: List[PlannedTarget],
+        needs_sign_in: bool = False,
     ) -> None:
+        self._needs_sign_in = needs_sign_in
         LOGGER.info(
             "Setting up the Opik MCP server (%s, %s) for: %s",
             deployment,
@@ -153,6 +171,8 @@ class LoggingInstallView(InstallView):
             ", ".join(assistants) or "your AI client",
             "them" if len(assistants) > 1 else "it",
         )
+        if self._needs_sign_in:
+            LOGGER.info("Signing in: %s", SIGN_IN_HINT)
 
     def skipped(self, message: str) -> None:
         LOGGER.info(message)

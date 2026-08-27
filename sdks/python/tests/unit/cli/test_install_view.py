@@ -92,6 +92,39 @@ class TestRichInstallView:
 
         assert "Restart it" in capture.get()
 
+    def test_done__suggested_prompt_is_green(self, view, monkeypatch):
+        """It is the one thing here the user is meant to copy, so it stands out."""
+        import rich.console
+
+        recorder = rich.console.Console(force_terminal=True, width=100)
+        monkeypatch.setattr(view, "console", recorder)
+
+        with recorder.capture() as capture:
+            view.RichInstallView().done(["MCP server"], ["Cursor"])
+
+        # Anchored to the prompt itself: the ✓ above is also green (`1;32`), so a
+        # bare search for the colour would pass even if the prompt lost it.
+        assert '\x1b[32m"list my Opik projects via Opik MCP"' in capture.get()
+
+    def test_done__sign_in_needed__hint_comes_after_the_next_step(self, view):
+        installer = view.RichInstallView()
+        installer.plan("Opik Cloud", "Hosted server", [], needs_sign_in=True)
+        with view.console.capture() as capture:
+            installer.done(["MCP server"], ["Claude Code"])
+
+        out = capture.get()
+        assert "Signing in" in out
+        assert out.index("list my Opik projects") < out.index("Signing in")
+
+    def test_done__no_sign_in__stays_quiet(self, view):
+        """The local server takes its credentials at startup — nothing to sign in to."""
+        installer = view.RichInstallView()
+        installer.plan("Local Opik", "Local server via uvx", [], needs_sign_in=False)
+        with view.console.capture() as capture:
+            installer.done(["MCP server"], ["Cursor"])
+
+        assert "Signing in" not in capture.get()
+
     def test_step__propagates_exceptions(self, view):
         with pytest.raises(ValueError):
             with view.RichInstallView().step("probing"):
