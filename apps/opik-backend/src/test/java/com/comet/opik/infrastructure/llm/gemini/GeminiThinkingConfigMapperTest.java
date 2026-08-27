@@ -55,13 +55,13 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
-    @DisplayName("level and budget can be sent together, unlike on Vertex where only the budget exists")
-    void forwardsLevelAndBudgetTogether() {
+    @DisplayName("level and budget are never sent together: Google rejects that pairing with a 400")
+    void sendsOnlyTheLevelWhenBothAreGiven() {
         var config = GeminiThinkingConfigMapper.toThinkingConfig(new GeminiThinkingParams(Level.LOW, 1024, null));
 
         assertThat(config).isPresent();
         assertThat(config.get().thinkingLevel()).isEqualTo("low");
-        assertThat(config.get().thinkingBudget()).isEqualTo(1024);
+        assertThat(config.get().thinkingBudget()).isNull();
     }
 
     @Test

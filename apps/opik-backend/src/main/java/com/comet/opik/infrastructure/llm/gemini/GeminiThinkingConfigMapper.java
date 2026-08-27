@@ -28,10 +28,14 @@ class GeminiThinkingConfigMapper {
 
         var builder = GeminiThinkingConfig.builder();
 
+        // thinking_level and the legacy thinking_budget are mutually exclusive: sending both returns a
+        // 400 from Google, so exactly one is set. The level wins where there is one, since Google
+        // recommends it over the budget; a bare budget is still forwarded for backward compatibility.
         if (params.level() == Level.OFF) {
             builder.thinkingBudget(params.budgetForLevel());
+        } else if (params.level() != null) {
+            builder.thinkingLevel(params.level().wireValue());
         } else {
-            Optional.ofNullable(params.level()).map(Level::wireValue).ifPresent(builder::thinkingLevel);
             Optional.ofNullable(params.budgetTokens()).ifPresent(builder::thinkingBudget);
         }
 
