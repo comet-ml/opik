@@ -471,9 +471,9 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
         exit 1
     }
     assert_post_promote_state "--reverse-replay-only" \
-        "The reverse-replay carries no resurrection guard, so aimed at the live successor (EXCHANGE ran but no rollback" \
-        "did) it would mask deleted-then-recreated rows — silent data loss. Use this mode only when a stage B/C promote" \
-        "succeeded but its replay did not."
+        "The reverse-replay carries no resurrection guard, so if aimed at the live successor (EXCHANGE ran but no" \
+        "rollback did) it would mask deleted-then-recreated rows — silent data loss. Use this mode only when a stage" \
+        "B/C promote succeeded but its replay did not."
     echo "NOTE: re-applying the reverse deletion replay only (no table swap) for deletes since cutover_start" >&2
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
     run_file 000004_rollback_reverse_replay.sql

@@ -862,11 +862,12 @@ class TracesLocalV2CutoverTest {
                         + " negative-duration total useless as a gate")
                 .isEqualTo(9);
 
+        var beforeRepair = serverNow();
         repairSentinels();
 
         // The two commands travel in ONE mutation, which is why the repair costs a single part rewrite rather than two.
         // Asserted because it is a claim the .sql header makes and nothing else would catch if ClickHouse split them.
-        assertThat(sentinelRepairMutations())
+        assertThat(sentinelRepairMutations(beforeRepair))
                 .as("both commands ran, and under ONE mutation id — so the repair is a single pass over the parts, which"
                         + " is the whole reason for combining them")
                 .isEqualTo(new MutationShape(1L, 2L));
@@ -1918,25 +1919,41 @@ class TracesLocalV2CutoverTest {
     /**
      * How ClickHouse recorded the sentinel repair: how many commands, under how many distinct {@code mutation_id}s.
      * {@code system.mutations} keeps one row per command but shares one id across an {@code ALTER}'s commands, which is
-     * the property the repair's single-pass cost rests on. Filtered to this statement's own commands, because schema
-     * migrations leave their own mutations on this table — Liquibase uses the same multi-command form.
+     * the property the repair's single-pass cost rests on.
+     *
+     * <p>Scoped two ways, because that table is cumulative and outlives {@link #resetTables()}: to the repair's own two
+     * commands, and to mutations created at or after {@code since}. Without both, the schema migrations on this table
+     * (Liquibase uses the same multi-command form, so one of its ids also covers two commands) and any earlier test's
+     * mutations would be counted here.
      */
-    private MutationShape sentinelRepairMutations() {
+    private MutationShape sentinelRepairMutations(String since) {
         return template.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                SELECT uniqExact(mutation_id) AS ids, count() AS commands
+                SELECT uniqExact(mutation_id) AS mutationIds, count() AS commands
                 FROM system.mutations
-                WHERE database = :db AND table = 'traces' AND command LIKE '%= NULL WHERE%'
+                WHERE database = :db
+                  AND table = 'traces'
+                  AND create_time >= parseDateTimeBestEffort(:since)
+                  AND (command LIKE '%UPDATE end_time = NULL WHERE%' OR command LIKE '%UPDATE ttft = NULL WHERE%')
                 """)
                 .bind("db", DATABASE_NAME)
+                .bind("since", since)
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> new MutationShape(
-                        row.get("ids", Long.class),
+                        row.get("mutationIds", Long.class),
                         row.get("commands", Long.class))))))
                 .block();
     }
 
+    /** Server clock, for bounding a {@code system.mutations} read to what a test issued after this point. */
+    private String serverNow() {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement(
+                "SELECT toString(now()) AS n").execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("n", String.class)))))
+                .block();
+    }
+
     /** Distinct {@code mutation_id}s and command rows behind one {@code ALTER}. */
-    private record MutationShape(long ids, long commands) {
+    private record MutationShape(long mutationIds, long commands) {
     }
 
     /** The three counts {@code 000004_rollback_verify_sentinels.sql} returns; only the first two are gates. */
