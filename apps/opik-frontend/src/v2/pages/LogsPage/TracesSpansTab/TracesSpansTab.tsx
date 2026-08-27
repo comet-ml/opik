@@ -59,12 +59,14 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
-import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
-import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
+import { QuickAttributeFilterFactoryProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
+import useLogsQuickAttributeFilter, {
+  SPANS_VIEW,
+  TRACES_VIEW,
+} from "@/v2/pages/LogsPage/useLogsQuickAttributeFilter";
 import { ChipDefinition } from "@/shared/filter-chips/types";
 import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import {
-  TRACE_DEFAULT_PINNED_CHIPS,
   buildSharedDynamicChips,
   buildTraceChipDefinitions,
 } from "@/v2/pages-shared/traces/traceChipDefinitions";
@@ -524,8 +526,6 @@ const SPAN_CHIP_ORDER: string[] = [
   "custom",
 ];
 
-const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
-
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
@@ -746,13 +746,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     type === TRACE_DATA_TYPE.traces
       ? traceChipDefinitions
       : spanChipDefinitions;
-  const defaultPinned =
-    type === TRACE_DATA_TYPE.traces
-      ? TRACE_DEFAULT_PINNED_CHIPS
-      : SPAN_DEFAULT_PINNED_CHIPS;
-  const tableId =
-    type === TRACE_DATA_TYPE.traces ? "logs.traces" : "logs.spans";
-  const filtersUrlKey = `${type}_filters`;
+  // One object per view, shared with the quick-filter handoff, so the mounted
+  // tab and a write from the other tab cannot disagree about these keys.
+  const {
+    tableId,
+    urlKey: filtersUrlKey,
+    defaultPinned,
+  } = type === TRACE_DATA_TYPE.traces ? TRACES_VIEW : SPANS_VIEW;
 
   const {
     chipsPinned,
@@ -783,9 +783,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
-  const quickAttributeFilterApi = useQuickAttributeFilterActions({
-    type,
-    tableId,
+  const quickAttributeFilterFactory = useLogsQuickAttributeFilter({
+    logsType,
+    onLogsTypeChange,
     values: chipValues,
     applyValue: applyChipValue,
     pinChip,
@@ -1642,7 +1642,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           />
         </PageBodyStickyContainer>
       </DataTableStateHandler>
-      <QuickAttributeFilterProvider value={quickAttributeFilterApi}>
+      <QuickAttributeFilterFactoryProvider value={quickAttributeFilterFactory}>
         <TraceDetailsPanel
           projectId={projectId}
           traceId={traceId!}
@@ -1655,7 +1655,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           onClose={handleClose}
           onRowChange={handleRowChange}
         />
-      </QuickAttributeFilterProvider>
+      </QuickAttributeFilterFactoryProvider>
       <ThreadDetailsPanel
         projectId={projectId}
         projectName={projectName}
