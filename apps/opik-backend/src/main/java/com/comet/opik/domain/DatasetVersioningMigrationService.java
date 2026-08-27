@@ -337,7 +337,8 @@ public class DatasetVersioningMigrationService {
                             // The backfill only writes rows still holding the sentinel. Zero rows means an API
                             // write already incremented this version from a real baseline, so its counter is
                             // live and this (older) count would overwrite it with a stale value.
-                            log.info("Skipped items_total backfill for dataset '{}' version '{}': already migrated",
+                            log.info(
+                                    "Skipped items_total backfill: datasetId='{}' versionId='{}' reason='already migrated'",
                                     datasetId, versionId);
                         }
                         return null;
