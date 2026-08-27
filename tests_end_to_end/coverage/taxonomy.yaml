@@ -417,6 +417,7 @@ areas:
     specs:
       - playground/playground-smoke.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-selected-metrics.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -424,7 +425,7 @@ areas:
     capabilities:
       compose-run-prompt:        { covered: true,  tier: t1-smoke }
       select-model-provider:     { covered: true,  suites: [provider-sanity] }
-      run-against-dataset:       { covered: true,  tier: t1-smoke, note: "auto-creates experiment" }
+      run-against-dataset:       { covered: true,  tier: t1-smoke, note: "auto-creates experiment; t2 also pins WHICH rules score the run — the ticked metrics plus the project's experiment-scoped rules, and nothing else — and that the selector defaults to none ticked" }
       save-new-prompt:           { covered: true,  tier: t1-smoke }
       save-prompt-version:       { covered: true,  tier: t2-cuj }
       load-prompt-version:       { covered: true,  tier: t2-cuj }
@@ -636,6 +637,7 @@ areas:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-rule-filters.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -644,7 +646,7 @@ areas:
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
-      rule-filters:            { covered: false }
+      rule-filters:            { covered: true,  tier: t2-cuj, note: "API-level: a non-matching filter skips a production trace (asserted through the rule's own log line, not a timeout) and is ignored entirely on an experiment trace. Says nothing about the filter EDITOR in the rule dialog, which no spec drives." }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch; binomial band 15-85%" }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }

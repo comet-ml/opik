@@ -4,6 +4,13 @@ import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+/**
+ * Escape a run-namespaced entity name for use inside an anchored RegExp.
+ * Names carry `-` and digits today, but they are generated rather than literal,
+ * so matching them raw would be one naming change away from a broken locator.
+ */
+const escapeForRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -195,6 +202,88 @@ export class PlaygroundPage {
   /** Confirm the suite/dataset pill is showing with the expected entity name. */
   loadedSourcePill(): Locator {
     return this.page.getByTestId('playground-loaded-source-pill');
+  }
+
+  // ── metric selector (dataset mode) ──────────────────────────────────────
+  //
+  // Selecting a dataset AUTO-OPENS this popover (RunExperimentControl's
+  // handleDatasetChange calls setMetricsOpen(true)), so a test must not click
+  // the trigger to open it — that would toggle it shut.
+  //
+  /**
+   * The metric selector's popover, scoped by the summary row it always renders.
+   * Scoping to that keeps this from resolving to some other Radix dialog that
+   * happens to be mounted.
+   */
+  private metricSelectorPopover(): Locator {
+    return this.page
+      .getByRole('dialog')
+      .filter({ has: this.page.getByTestId('playground-metric-selector-summary') });
+  }
+
+  /** The popover's "<n> of <m> selected" summary row. */
+  metricSelectionSummary(): Locator {
+    return this.metricSelectorPopover().getByTestId(
+      'playground-metric-selector-summary',
+    );
+  }
+
+  /**
+   * The selector's trigger label inside the loaded-source pill: "Select
+   * metrics" while nothing is picked, "Metrics" (plus a count tag) once
+   * something is.
+   */
+  metricSelectorTriggerLabel(text: 'Select metrics' | 'Metrics'): Locator {
+    return this.loadedSourcePill().getByText(text, { exact: true });
+  }
+
+  async waitForMetricSelectorOpen(): Promise<void> {
+    return test.step('wait for the metric selector popover', async () => {
+      await this.metricSelectionSummary().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Tick or untick one rule by name. Clicks the row's name, which is what the
+   * row's own onClick handler is attached to — the checkbox is presentational.
+   */
+  async toggleMetric(ruleName: string): Promise<void> {
+    return test.step(`toggle metric "${ruleName}"`, async () => {
+      const row = this.metricSelectorPopover()
+        .locator('[data-testid^="playground-metric-selector-row-"]')
+        .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(ruleName)}\\s*$`) });
+      // Exactly one row must match, so an ambiguous name fails here rather than
+      // silently ticking whichever rule happened to be first.
+      await expect(row).toHaveCount(1);
+      await row.click();
+    });
+  }
+
+  /** Dismiss the popover so it stops overlaying the Run button. */
+  async closeMetricSelector(): Promise<void> {
+    return test.step('close the metric selector popover', async () => {
+      await this.page.keyboard.press('Escape');
+      await this.metricSelectorPopover().waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * Every rendered feedback-score chip in the experiment-results table, across
+   * all rows. Counting the whole table is deliberate: asserting only that the
+   * expected chips are present would still pass when a rule that should not
+   * have run left a chip behind too.
+   */
+  resultScoreTags(): Locator {
+    return this.resultsTable().getByTestId('feedback-score-tag');
+  }
+
+  /** The rendered chips carrying one exact score name. */
+  resultScoreTagsFor(scoreName: string): Locator {
+    return this.resultScoreTags().filter({
+      has: this.page
+        .getByTestId('feedback-score-tag-label')
+        .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(scoreName)}\\s*$`) }),
+    });
   }
 
   /**
