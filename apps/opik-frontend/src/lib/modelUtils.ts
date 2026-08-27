@@ -348,20 +348,18 @@ export const updateProviderConfig = <
     const next: T = { ...currentConfig };
     let changed = false;
 
-    // thinkingLevel: drop it for models without a level option list, coerce stale values to the
-    // model's own default otherwise. Without this a level carried over from another model (an "off"
-    // selected on 2.5 Flash Lite, say) leaves the dropdown showing a value it does not offer while
-    // sanitizeConfigForRequest silently drops it from the request. Mirrors the handling above.
+    // thinkingLevel: drop it for models without a level option list, otherwise make sure it holds a
+    // level this model actually offers — coercing a stale one (an "off" carried over from 2.5 Flash
+    // Lite) and filling in the default when unset. Setting it rather than only coercing is what keeps
+    // the control honest: the dropdown falls back to the default for display, so leaving the config
+    // empty would show a level that never gets sent. Mirrors the handling above.
     const levelOptions = getThinkingLevelOptions(params.model);
     if (levelOptions.length === 0) {
       if (next.thinkingLevel !== undefined) {
         next.thinkingLevel = undefined;
         changed = true;
       }
-    } else if (
-      next.thinkingLevel !== undefined &&
-      !levelOptions.some((o) => o.value === next.thinkingLevel)
-    ) {
+    } else if (!levelOptions.some((o) => o.value === next.thinkingLevel)) {
       next.thinkingLevel = getDefaultThinkingLevel(params.model);
       changed = true;
     }

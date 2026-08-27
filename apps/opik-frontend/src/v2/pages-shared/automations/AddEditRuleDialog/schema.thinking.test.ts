@@ -4,7 +4,13 @@ import {
   convertLLMJudgeObjectToLLMJudgeData,
 } from "./schema";
 import { LLMJudgeObject } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  GeminiThinkingLevel,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
+import { updateProviderConfig } from "@/lib/modelUtils";
 import { LLM_JUDGE } from "@/types/llm";
 
 const persisted = (
@@ -70,6 +76,31 @@ describe("LLM judge thinking level round trip", () => {
 
     expect(object.model.custom_parameters).toEqual({
       thinking: { level: "off", budget_tokens: 4096, include_thoughts: true },
+    });
+  });
+
+  it("persists the level the control shows after a model is picked", () => {
+    // What the rule form does on model change: reconcile, then save.
+    const initial: {
+      temperature: number;
+      seed: null;
+      custom_parameters: null;
+      thinkingLevel?: GeminiThinkingLevel;
+    } = { temperature: 0, seed: null, custom_parameters: null };
+
+    const reconciled = updateProviderConfig(initial, {
+      model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      provider: PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE,
+    });
+
+    expect(reconciled?.thinkingLevel).toBe("off");
+
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, reconciled),
+    );
+
+    expect(object.model.custom_parameters).toEqual({
+      thinking: { level: "off" },
     });
   });
 

@@ -13,6 +13,7 @@ import {
 } from "@/lib/modelUtils";
 import {
   COMPOSED_PROVIDER_TYPE,
+  GeminiThinkingLevel,
   LLMAnthropicConfigsType,
   LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -743,6 +744,23 @@ describe("updateProviderConfig — Gemini thinking level", () => {
     );
 
     expect(next?.thinkingLevel).toBeUndefined();
+  });
+
+  it("fills in the model's default when no level is set, so the shown value is the sent value", () => {
+    const empty: { thinkingLevel?: GeminiThinkingLevel } = {};
+
+    expect(
+      updateProviderConfig(empty, {
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+        provider: GEMINI,
+      })?.thinkingLevel,
+    ).toBe("off");
+    expect(
+      updateProviderConfig(empty, {
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+        provider: GEMINI,
+      })?.thinkingLevel,
+    ).toBe("high");
   });
 
   it("leaves a level the model accepts untouched", () => {
