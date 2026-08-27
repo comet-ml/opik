@@ -37,7 +37,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
-                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC
                         LIMIT 1000
                     )
                 ),

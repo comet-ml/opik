@@ -7,8 +7,8 @@ If you are looking for setup instructions and contribution workflows, start with
 - Local development setup: https://www.comet.com/docs/opik/contributing/guides/local-development
 
 You can also read and edit those docs directly in this repository:
-- `apps/opik-documentation/documentation/fern/docs/contributing/overview.mdx`
-- `apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx`
+- `apps/opik-documentation/documentation/fern/docs-v2/contributing/overview.mdx`
+- `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/local-development.mdx`
 
 Please review the CLA before contributing:
 - https://github.com/comet-ml/opik/blob/main/CLA.md
@@ -22,22 +22,22 @@ Please review the CLA before contributing:
 ## Component-specific guides
 - Backend:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/backend
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/backend.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/backend.mdx`
 - Frontend:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/frontend
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/frontend.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/frontend.mdx`
 - Python SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/python-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/python-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/python-sdk.mdx`
 - TypeScript SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/typescript-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/typescript-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/typescript-sdk.mdx`
 - Documentation:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/documentation
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/documentation.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/documentation.mdx`
 - Agent Optimizer SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/agent-optimizer-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/agent-optimizer-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/agent-optimizer-sdk.mdx`
 
 ## Fast path
 1. Open or confirm a tracked issue first (`Fixes #...` or `Resolves #...`).
@@ -50,8 +50,19 @@ Please review the CLA before contributing:
 ## GitHub Actions workflows
 Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed workflow files. The pre-commit framework builds the pinned actionlint from source automatically — no manual install needed. Run `make hooks` once per clone to enable it locally.
 
+Workflows are also scanned for **security** issues with [zizmor](https://github.com/zizmorcore/zizmor) (Trail of Bits), which runs as a hook in the same `🐙 Code Quality` workflow (and locally via pre-commit) on changed workflow and composite-action files. actionlint and zizmor solve different problems: actionlint asks *"will this YAML run?"* (syntax, expressions, shellcheck on `run:` blocks); zizmor asks *"if it runs, can it be exploited?"* (template injection, dangerous triggers, excessive `GITHUB_TOKEN` permissions, cache poisoning). The pre-commit framework installs the pinned zizmor automatically — no manual install needed.
+
+- **Severity floor.** The hook runs at `--min-severity high --persona regular --offline`, so it blocks only high-confidence, high-severity findings and never makes network calls (no GitHub API rate limits). Lower-severity findings are surfaced by running zizmor directly (below) but are not PR-blocking.
+- **Rule tuning** lives in [`.github/zizmor.yml`](.github/zizmor.yml) (auto-discovered). The `unpinned-uses` rule (pin every `uses:` to a commit SHA) is currently disabled there pending a separate SHA-pinning migration; re-enabling it is the final step of that follow-up.
+- **Run it locally** against the whole repo: `brew install zizmor` (or `cargo install zizmor`), then `zizmor --offline .github/workflows/`. To reproduce exactly what CI blocks on, add `--min-severity high --persona regular`.
+- **Suppressing a finding** must be explicit and justified — never silent. Use an inline `# zizmor: ignore[<audit-id>]` comment with a short rationale (see the `pull_request_target` exemption in [`.github/workflows/labeler.yml`](.github/workflows/labeler.yml) for the pattern), or a scoped entry in `.github/zizmor.yml`.
+- **Fixing `template-injection`.** Don't interpolate `${{ … }}` directly into a `run:` shell body; hoist the expression into the step's `env:` block and reference it as a shell variable (`"${MY_VAR}"`, quoted). This keeps attacker-influenceable values (branch names, PR titles, usernames) out of the shell's parse phase.
+
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
+
+## SQL query construction (Java backend)
+Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`

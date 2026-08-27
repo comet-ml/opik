@@ -10,6 +10,7 @@ interface TextCellProps {
   autoFocus?: boolean;
   grow?: boolean;
   className?: string;
+  testId?: string;
 }
 
 export const TextCell: React.FC<TextCellProps> = ({
@@ -19,6 +20,7 @@ export const TextCell: React.FC<TextCellProps> = ({
   autoFocus = false,
   grow = false,
   className,
+  testId,
 }) => {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -29,6 +31,7 @@ export const TextCell: React.FC<TextCellProps> = ({
       ref={ref}
       type="text"
       data-filter-cell
+      data-testid={testId}
       variant="unstyled"
       dimension="none"
       value={value}

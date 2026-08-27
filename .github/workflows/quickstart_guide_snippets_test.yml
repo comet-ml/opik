@@ -1,6 +1,7 @@
 name: Quickstart Guide Snippets Tests
 env:
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
   ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
   ALLURE_ENDPOINT: https://comet.testops.cloud/
@@ -27,7 +28,7 @@ jobs:
 
         steps:
             - name: Checkout repo
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                 ref: ${{ github.ref }}
             
@@ -37,7 +38,7 @@ jobs:
                 python-version: 3.12
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@v9.0.0
+              uses: astral-sh/setup-uv@v10.0.1
 
             - name: Install Opik
               run: uv pip install --system opik

@@ -568,8 +568,25 @@ def _evaluate_internal(
     )
 
     eval_metrics = [_create_metric_class(metric)]
-    if use_evaluate_on_dict_items:
-        # TODO(opik-sdk): remove this branch once dict-item evaluation is the default.
+    # The dict-item branch calls opik.evaluate_on_dict_items, which has no optimization_id
+    # parameter, so an optimization-linked evaluation taking it would silently produce no trial
+    # experiment and no experiment items. Beyond losing the run's trial list, num_trials and
+    # best/baseline scores, those two row streams are the backend stall reaper's liveness signal
+    # (OPIK-7459): with them absent, a healthy run stops looking alive as soon as its status stops
+    # changing and gets marked ERROR at runningTimeout. So inside an optimization we always take the
+    # optimization-aware evaluator, and use_evaluate_on_dict_items only governs standalone
+    # evaluation.
+    #
+    # This is reachable today, not just after the TODO below. constants.ENABLE_EVALUATE_ON_DICT_ITEMS
+    # supplies only the DEFAULT (base_optimizer.evaluate_prompt applies it when the argument is None),
+    # so an explicit use_evaluate_on_dict_items=True — a public, documented parameter — reaches here
+    # with the constant still False. For such a caller this is a behaviour change: inside an
+    # optimization they now get trial experiments and experiment items where they previously got
+    # none. The flag flip in the TODO would merely make that the default path.
+    if use_evaluate_on_dict_items and optimization_id is None:
+        # TODO(opik-sdk): remove this branch once dict-item evaluation is the default. Making it the
+        # default for optimization runs additionally requires optimization_id support in
+        # evaluate_on_dict_items, or the trial rows above are lost.
         if _evaluate_on_dict_items is None:
             raise RuntimeError(
                 "opik.evaluate_on_dict_items is not available in this SDK version."

@@ -145,6 +145,19 @@ databaseAnalyticsDataModel:
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
   #   chunks of this size.
   deletionEventsInsertBatchSize: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
+  #  Default: false
+  #  Description: The final sharding-readiness step wraps `traces` as a Distributed table over the `traces_local`
+  #   shard. A Distributed table supports SELECT and INSERT but NOT mutations, so once the wrap is live every trace
+  #   mutation must target the local shard. Leave false at deploy time and while `traces` is still a MergeTree (deletes
+  #   work directly); set true in lockstep with applying the wrap (exchange_and_wrap.sh --with-wrap / --wrap-only). While
+  #   true, TraceDAO routes delete/retention mutations to `traces_local`; reads and inserts stay on the Distributed
+  #   `traces`. Post-wrap, changes to `traces` split by kind: row mutations (DELETE) + MATERIALIZE COLUMN/ADD INDEX/
+  #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
+  #   both `traces_local` and `traces`, else reads can't see the column (code 47).
+  #   This value is asserted against the live topology by the `clickhouse-traces-topology` readiness check below: set it
+  #   wrong in either direction and the backend fails readiness at startup with a message naming the flag and the
+  #   observed engine, rather than serving traffic whose trace deletes are guaranteed to fail.
+  tracesDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED:-false}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -223,6 +236,27 @@ health:
     # Toggle-gated (databaseAnalytics.coldStorageDiskHealthCheckEnabled). Off by default so deployments without tier
     # storage are unaffected. When on, a node that can't reach the cold_s3 S3 disk must be pulled from rotation.
     - name: clickhouse-cold-storage-disk
+      critical: true
+      type: ready
+    # Fail-fast assertion that databaseAnalyticsDataModel.tracesDistributedWrapEnabled matches the actual `traces`
+    # topology: flag on -> `traces` is Distributed and `traces_local` exists; flag off -> `traces` is any engine of the
+    # MergeTree family that takes mutations directly - the check matches on the `MergeTree` suffix, so MergeTree,
+    # ReplicatedMergeTree and ClickHouse Cloud's SharedMergeTree variants all satisfy it. Not toggle-gated on
+    # purpose — flag off over a MergeTree `traces` is the default
+    # everywhere, so only a genuine misconfiguration trips it, and either mismatch direction breaks trace deletes
+    # (code 36/48 one way, 60 the other) with no symptom until the first delete. Critical so such an install is pulled
+    # from rotation instead of serving traffic it cannot mutate; re-evaluated continuously, so it clears itself once
+    # the operator brings flag and topology back in step. Note that `critical: true` also gates /is-alive/ping, which
+    # ignores `type` (IsAliveResource filters on isCritical alone) - so a mismatch reports the server as down to SDKs,
+    # exactly as the `clickhouse`, `db`, `redis` and `mysql` ready checks above already do. That is intended here: the
+    # install is misconfigured and needs an operator, and buffering beats accepting traffic it cannot fully serve.
+    # Scope is the node that answers: `system.tables` is node-local and the probe does not fan out with
+    # clusterAllReplicas, which needs REMOTE + CLUSTER grants the app user isn't guaranteed to hold and would take
+    # every pod out of rotation whenever a single replica is unreachable. So a divergence confined to some replicas
+    # (an ON CLUSTER DDL still propagating, or one that failed on a host) degrades into sporadic unhealthy reports
+    # rather than a fleet-wide outage; the cluster-wide "did this DDL reach every replica" gate lives in the cutover's
+    # exchange_and_wrap.sh / finalize.sh, and the self-host troubleshooting page carries the query for operators.
+    - name: clickhouse-traces-topology
       critical: true
       type: ready
     - name: mysql
@@ -1071,20 +1105,46 @@ optimizationStalledReaper:
   # Description: Interval between reaper job executions
   jobInterval: ${OPTIMIZATION_STALLED_REAPER_JOB_INTERVAL:-5m}
   # Default: 5m
-  # Description: A run stuck in INITIALIZED longer than this is marked ERROR (the worker should call
-  #   mark_running within seconds; kept above normal queue latency to tolerate a backlog)
+  # Description: A run stuck in INITIALIZED with no activity for longer than this is marked ERROR (the
+  #   worker should call mark_running within seconds; kept above normal queue latency to tolerate a
+  #   backlog). A run that never left INITIALIZED but IS writing trials/items is spared by the same
+  #   progress signal runningTimeout uses, on the runningTimeout window — a failed mark_running callback
+  #   must not kill a run that is actually evaluating.
   initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-5m}
-  # Default: 8h
-  # Description: A run stuck in RUNNING longer than this is marked ERROR. MUST exceed the worker's max
-  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 6h = 21600s) plus a buffer, since the row
-  #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
-  #   the worker timeout, raise this too or healthy long runs will be reaped.
-  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
+  # Default: 1h
+  # Description: A non-terminal run showing no activity for longer than this is marked ERROR. Activity is
+  #   liveness derived from run progress — the newest of last_updated_at, the latest trial experiment's
+  #   created_at, and the latest experiment item's created_at — so a healthy multi-hour run is never
+  #   reaped while it keeps evaluating items, and this does NOT need to exceed the worker's execution
+  #   timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h). It MUST stay above the longest legitimate gap between
+  #   progress signals, or a slow-but-alive run gets reaped mid-flight. The widest such gap is NOT
+  #   between two items but at the very start of a run: between mark_running and the first trial
+  #   experiment the worker fetches and samples the dataset (up to OPTSTUDIO_DATASET_SAMPLES items) and,
+  #   for GEPA, builds the baseline — with nothing written meanwhile. 1h is sized for that head start,
+  #   not for the steady-state item cadence.
+  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-1h}
+  # Default: 24h
+  # Description: Absolute ceiling for a non-terminal run (INITIALIZED or RUNNING) measured from when the
+  #   run was created, reaped even if trial/item writes are still arriving (zombie-worker backstop;
+  #   preserves the "a run can never stay stuck indefinitely" guarantee, including for a run whose
+  #   mark_running callback never landed). Deliberately measured from created_at rather than last_updated_at:
+  #   any write to the row refreshes the latter, so a metadata PATCH or an SDK re-upsert would postpone the
+  #   backstop forever. created_at is preserved across re-upserts, so no client write can move it.
+  #   MUST exceed the worker's execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h) plus a buffer — both are
+  #   measured from the same origin — and must not be below runningTimeout.
+  #   UPGRADE NOTE (breaking): runningTimeout used to be valid anywhere in [6h, 7d], so a deployment that
+  #   raised OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT above 24h will now FAIL TO BOOT against this
+  #   default. That is intentional — above the ceiling the activity window is unreachable, because the
+  #   ceiling always fires first — but such deployments must either lower runningTimeout (progress-based
+  #   liveness means it no longer has to cover a whole run) or raise this ceiling to match.
+  runningHardTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_HARD_TIMEOUT:-24h}
   # Default: 7d
-  # Description: Added to max(initializedTimeout, runningTimeout) to size the last_updated_at floor of the
-  #   reaper's scan. Pure reaper-downtime insurance (a run that stalled just before the reaper went down is
-  #   still caught on recovery if it was down less than this); not needed to find fresh stalls. Keep it only
-  #   as large as the longest expected reaper outage — a shorter margin also tightens skip-index pruning.
+  # Description: Added to max(initializedTimeout, runningTimeout, runningHardTimeout) to size the
+  #   last_updated_at floor of the reaper's scan. Pure reaper-downtime insurance (a run that stalled just
+  #   before the reaper went down is still caught on recovery if it was down less than this); not needed to
+  #   find fresh stalls. Keep it only as large as the longest expected reaper outage — a shorter margin also
+  #   tightens skip-index pruning. Folding runningHardTimeout into the maximum is what makes the floor safe:
+  #   since lookback >= runningHardTimeout, a run not yet past the ceiling is always younger than the floor.
   lookbackMargin: ${OPTIMIZATION_STALLED_REAPER_LOOKBACK_MARGIN:-7d}
   # Default: 4m
   # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent
@@ -1094,6 +1154,16 @@ optimizationStalledReaper:
   # Default: 100
   # Description: Maximum number of stalled runs reconciled per cycle (a large backlog drains over several cycles)
   batchSize: ${OPTIMIZATION_STALLED_REAPER_BATCH_SIZE:-100}
+  # Default: 10
+  # Description: Multiple of batchSize bounding the candidate set the query's two liveness probes fan out
+  #   from. Unbounded, that set is every non-terminal studio run whose row has not changed in runningTimeout
+  #   — and since last_updated_at only advances on a status change, that includes every HEALTHY in-flight run
+  #   older than the timeout, so probe cost would scale with fleet size rather than with configuration. It is
+  #   a multiple rather than batchSize itself because the ordering puts the stalest first and a healthy long
+  #   run sorts alongside a dead one: at exactly batchSize, live runs could crowd dead ones out of every
+  #   pass. Raise it to widen the query's reach at proportionally higher probe cost; a value near 1
+  #   reintroduces that starvation risk.
+  candidateScanFactor: ${OPTIMIZATION_STALLED_REAPER_CANDIDATE_SCAN_FACTOR:-10}
 
 # Environment CRUD configuration
 environment:
@@ -1143,6 +1213,31 @@ partitionMetrics:
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
 
 # LLM providers client configuration
+# Configuration for dynamic token auth on custom LLM providers (auth_config recipes)
+llmProviderTokenAuth:
+  # Default: 0.25
+  # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
+  refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
+  # Default: 10s
+  # Description: Timeout for the token fetch call to the configured auth service
+  fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
+  # Default: 15s
+  # Description: Lease time for the cross-pod single-flight lock around a token fetch
+  lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
+  # Default: 1000000
+  # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
+  maxResponseChars: ${LLM_PROVIDER_TOKEN_AUTH_MAX_RESPONSE_CHARS:-1000000}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: requires https and resolves the host before connecting, refusing loopback,
+  #     link-local (including the cloud metadata endpoint 169.254.169.254), RFC 1918 private
+  #     ranges, IPv6 unique-local (fc00::/7), multicast, wildcard, and unresolvable hosts
+  #   - relaxed: no destination restrictions, for deployments whose auth service is internal
+  # Description: SSRF guard applied to the customer-supplied token URL before each fetch. This
+  # strict default protects cloud; note that the docker-compose and Helm distributions ship
+  # 'relaxed' explicitly, so self-hosted installs are NOT covered by this default
+  destinationGuard: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-strict}
+
 llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
@@ -1195,6 +1290,17 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
+    # Default: GRPC
+    # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
+    transport: ${LLM_PROVIDER_VERTEXAI_TRANSPORT:-GRPC}
+    # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the host from
+    # the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
+    # multi-region locations need their host set explicitly. Single-region locations are not listed and keep the SDK
+    # default. Required: these hosts exist only here, the application defines no fallback for them.
+    multiRegionApiEndpoints:
+      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-aiplatform.googleapis.com}
+      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-aiplatform.eu.rep.googleapis.com}
+      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-aiplatform.us.rep.googleapis.com}
 
 # Configuration for cache manager
 cacheManager:
@@ -1213,12 +1319,6 @@ cacheManager:
     # The estimate scans all of the project's spans, so cache misses are expensive by design.
     # Renamed from the orphaned workspace_metadata entry, which no code referenced.
     project_metadata: ${CACHE_MANAGER_PROJECT_METADATA_DURATION:-PT1H}
-    # Default: PT5M
-    # Description: Cache TTL for workspace version determination results, applied per workspace
-    # Scope: Per workspace (cache key includes workspace ID)
-    # Overrides: Overrides defaultDuration for the workspace_version cache group
-    # Operational impact: Lower values increase DB query frequency on workspace load; higher values delay version transitions after entity changes
-    workspace_version: ${CACHE_MANAGER_WORKSPACE_VERSION_DURATION:-PT5M}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
     # Default: PT30M
     # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
@@ -1426,30 +1526,6 @@ serviceToggles:
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
   #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
   onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
-  # Default: "" (empty, no allowlisted workspaces)
-  # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
-  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
-  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
-  # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
-  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
-  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
-  v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
-  # Default: "" (empty, no allowlisted workspaces)
-  # Description: Comma-separated list of workspace IDs that should always receive V1 navigation.
-  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
-  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
-  # Priority: Second — overridden by v2WorkspaceAllowlist; overrides forceWorkspaceVersion and all subsequent determination logic.
-  # Use case: customer-driven V1 stickiness — pin specific workspaces to legacy navigation without affecting the rest of the deployment.
-  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
-  v1WorkspaceAllowlist: ${TOGGLE_V1_WORKSPACE_ALLOWLIST:-""}
-  # Default: version_2
-  # Description: Forces ALL workspaces to a specific navigation version.
-  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
-  # Scope: Global — applies to all workspaces regardless of their entity state.
-  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
-  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
-  # Operational impact: Default is "version_2". Override to "disabled" (entity-based determination) or "version_1" if global enforcement is needed.
-  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_2"}
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
@@ -1793,170 +1869,6 @@ datasetVersioning:
   # on the mutable 'latest' pointer (OPIK-7264). Raise for slower/busier deployments where
   # the critical section may exceed the lease.
   lockLease: ${DATASET_VERSIONING_LOCK_LEASE:-60s}
-
-# Experiment Project Migration configuration
-# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
-# Runs as a recurring job, processing workspaces in batches.
-experimentProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: ${EXPERIMENT_PROJECT_MIGRATION_ENABLED:-false}
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: ${EXPERIMENT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
-  # Number of experiments to update per ClickHouse INSERT batch
-  experimentBatchSize: ${EXPERIMENT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
-  # Interval between recurring job runs
-  interval: ${EXPERIMENT_PROJECT_MIGRATION_INTERVAL:-30s}
-  # Delay before first run after app startup
-  startupDelay: ${EXPERIMENT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
-  # Distributed lock timeout — prevents overlap across replicas.
-  # Intentionally shorter than jobTimeout: the lock covers typical cycle duration (minutes) and
-  # prevents redundant scheduling across replicas. Cycles that exceed lockTimeout tolerate replica
-  # overlap because the migration is idempotent (WHERE project_id = '' skips already-migrated rows).
-  lockTimeout: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
-  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
-  # lock doesn't block this fire — the next scheduled tick will try again.
-  lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
-  # Per-cycle timeout — safety net for stuck cycles, not normal completion
-  jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
-  schedulerThreadCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
-
-datasetProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: ${DATASET_PROJECT_MIGRATION_ENABLED:-false}
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: ${DATASET_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
-  # Number of datasets to update per MySQL batch
-  datasetBatchSize: ${DATASET_PROJECT_MIGRATION_BATCH_SIZE:-1000}
-  # Interval between recurring job runs
-  interval: ${DATASET_PROJECT_MIGRATION_INTERVAL:-30s}
-  # Delay before first run after app startup
-  startupDelay: ${DATASET_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
-  # Distributed lock timeout — prevents overlap across replicas.
-  lockTimeout: ${DATASET_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
-  # Max time to wait for the distributed lock when another replica holds it.
-  lockWaitTime: ${DATASET_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
-  # Per-cycle timeout — safety net for stuck cycles, not normal completion
-  jobTimeout: ${DATASET_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  schedulerThreadCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
-  schedulerQueuedTaskCap: ${DATASET_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
-  schedulerThreadTtl: ${DATASET_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
-
-# Optimization Project Migration configuration (D3)
-# Assigns project_id to orphan optimizations in ClickHouse. Inference is experiments-primary (Path
-# A) with a dataset fallback (Path B), so this job depends on D1 (experiments) and D2 (datasets)
-# being complete in production. The dependency ordering is enforced by the deployment runbook,
-# not by code.
-optimizationProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: ${OPTIMIZATION_PROJECT_MIGRATION_ENABLED:-false}
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: ${OPTIMIZATION_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
-  # Number of optimizations to update per ClickHouse INSERT batch
-  optimizationBatchSize: ${OPTIMIZATION_PROJECT_MIGRATION_BATCH_SIZE:-1000}
-  # Interval between recurring job runs
-  interval: ${OPTIMIZATION_PROJECT_MIGRATION_INTERVAL:-30s}
-  # Delay before first run after app startup
-  startupDelay: ${OPTIMIZATION_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
-  # Distributed lock timeout — prevents overlap across replicas.
-  lockTimeout: ${OPTIMIZATION_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
-  # Max time to wait for the distributed lock when another replica holds it.
-  lockWaitTime: ${OPTIMIZATION_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
-  # Per-cycle timeout — safety net for stuck cycles, not normal completion
-  jobTimeout: ${OPTIMIZATION_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  schedulerThreadCap: ${OPTIMIZATION_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
-  schedulerQueuedTaskCap: ${OPTIMIZATION_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
-  schedulerThreadTtl: ${OPTIMIZATION_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
-
-# Prompt Project Migration configuration (D4)
-# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Mirrors
-# experimentProjectMigration. Operational prerequisite (enforced via the rollout runbook, not in
-# code): D1 (OPIK-6184) and OPIK-6579 must be fully shipped to this environment first because the
-# only inference signal is experiment.project_id.
-promptProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: ${PROMPT_PROJECT_MIGRATION_ENABLED:-false}
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: ${PROMPT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
-  # Number of prompts to update per MySQL UPDATE batch
-  promptBatchSize: ${PROMPT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
-  # Interval between recurring job runs
-  interval: ${PROMPT_PROJECT_MIGRATION_INTERVAL:-30s}
-  # Delay before first run after app startup
-  startupDelay: ${PROMPT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
-  # Distributed lock timeout — prevents overlap across replicas. Intentionally shorter than
-  # jobTimeout: the WHERE project_id IS NULL predicate makes the cycle idempotent so replica
-  # overlap after lock expiry is safe.
-  lockTimeout: ${PROMPT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
-  # Max time to wait for the distributed lock when another replica holds it
-  lockWaitTime: ${PROMPT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
-  # Per-cycle timeout — safety net for stuck cycles, not normal completion
-  jobTimeout: ${PROMPT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  schedulerThreadCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
-  schedulerQueuedTaskCap: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the idle window.
-  schedulerThreadTtl: ${PROMPT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
-
-automationRuleProjectMigration:
-  # Master switch — set to true to activate the recurring Quartz job.
-  enabled: ${AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED:-false}
-  # Max workspaces processed per cycle (global, across all replicas via distributed lock).
-  workspacesPerRun: ${AUTOMATION_RULE_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
-  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions.
-  maxRulesPerCycle: ${AUTOMATION_RULE_PROJECT_MIGRATION_MAX_RULES_PER_CYCLE:-100}
-  # How often the Quartz job fires.
-  interval: ${AUTOMATION_RULE_PROJECT_MIGRATION_INTERVAL:-30s}
-  # Delay after application start before the first cycle runs.
-  startupDelay: ${AUTOMATION_RULE_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
-  # Redis distributed lock held by the winning replica — must be shorter than jobTimeout.
-  lockTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
-  # How long to wait trying to acquire the lock before giving up (non-blocking skip).
-  lockWaitTime: ${AUTOMATION_RULE_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
-  # Hard timeout for the entire cycle — safety net if processing stalls.
-  jobTimeout: ${AUTOMATION_RULE_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
-  # Dedicated bounded-elastic scheduler — isolates migration from the shared reactive chain.
-  schedulerThreadCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-2}
-  schedulerQueuedTaskCap: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
-  schedulerThreadTtl: ${AUTOMATION_RULE_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
-
-# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
-# Runs as a recurring job, processing workspaces in batches.
-alertProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: ${ALERT_PROJECT_MIGRATION_ENABLED:-false}
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: ${ALERT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-100}
-  # Number of orphan alerts to process per workspace per cycle
-  alertBatchSize: ${ALERT_PROJECT_MIGRATION_ALERT_BATCH_SIZE:-100}
-  # Interval between recurring job runs
-  interval: ${ALERT_PROJECT_MIGRATION_INTERVAL:-30s}
-  # Delay before first run after app startup
-  startupDelay: ${ALERT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
-  # Distributed lock timeout — prevents overlap across replicas.
-  lockTimeout: ${ALERT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
-  # Max time to wait for the distributed lock when another replica holds it.
-  lockWaitTime: ${ALERT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
-  # Per-cycle timeout — safety net for stuck cycles, not normal completion
-  jobTimeout: ${ALERT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  schedulerThreadCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
-  schedulerQueuedTaskCap: ${ALERT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
-  schedulerThreadTtl: ${ALERT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
-
-# Shared configuration for V1 → V2 entity project migration jobs
-# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
-migration:
-  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
-  excludedWorkspaceIds: ${MIGRATION_EXCLUDED_WORKSPACE_IDS:-}
 
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}

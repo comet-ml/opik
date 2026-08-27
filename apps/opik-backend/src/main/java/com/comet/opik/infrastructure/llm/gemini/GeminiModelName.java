@@ -39,6 +39,7 @@ public enum GeminiModelName implements StructuredOutputSupported {
     GEMINI_3_5_FLASH("gemini-3.5-flash", false),
     GEMINI_3_5_FLASH_LITE("gemini-3.5-flash-lite", false),
     GEMINI_3_6_FLASH("gemini-3.6-flash", false),
+    GEMINI_3_7_FLASH("gemini-3.7-flash", false),
     GEMINI_OMNI_FLASH_PREVIEW("gemini-omni-flash-preview", false),
     GEMINI_PRO_VISION("gemini-pro-vision", false),
     GEMMA_4_26B_A4B_IT("gemma-4-26b-a4b-it", false),
@@ -46,7 +47,8 @@ public enum GeminiModelName implements StructuredOutputSupported {
     LYRIA_3_CLIP_PREVIEW("lyria-3-clip-preview", false),
     LYRIA_3_PRO_PREVIEW("lyria-3-pro-preview", false),
     NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", false),
-    TEXT_EMBEDDING("text-embedding-004", false);
+    TEXT_EMBEDDING("text-embedding-004", false),
+    GEMINI_3_5_TRANSCRIBE("gemini-3.5-transcribe", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find GeminiModelName with value '{}'";
 

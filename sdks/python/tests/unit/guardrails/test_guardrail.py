@@ -5,6 +5,7 @@ import opik
 import opik.exceptions as exceptions
 from opik.guardrails import Guardrail, schemas
 from opik.guardrails.guards import guard as guard_module
+from opik.message_processing.messages import GuardrailBatchMessage
 
 
 class _FailingLocalGuard(guard_module.Guard):
@@ -93,3 +94,47 @@ def test_guardrail_validate__passing_guard__span_records_passed_output(fake_back
     output = _guardrail_span_output(fake_backend)
     assert output["guardrail_result"] == "passed"
     assert output["error"] is None
+
+
+def _recorded_guardrail_batches(guardrail, monkeypatch):
+    """Collect the guardrail batches this guardrail hands to the streamer."""
+    batches = []
+    original_put = guardrail._client._streamer.put
+
+    def put(message):
+        if isinstance(message, GuardrailBatchMessage):
+            batches.append(message)
+        return original_put(message)
+
+    monkeypatch.setattr(guardrail._client._streamer, "put", put)
+
+    return batches
+
+
+def test_guardrail_validate__no_guards__no_guardrail_batch_sent(
+    fake_backend, monkeypatch
+):
+    # The backend rejects an empty guardrail batch, so sending one would report data loss
+    # for a guardrail that simply had nothing to check.
+    guardrail = Guardrail(guards=[])
+    batches = _recorded_guardrail_batches(guardrail, monkeypatch)
+
+    result = guardrail.validate("some text")
+
+    assert result.validation_passed is True
+    assert result.validations == []
+    assert batches == []
+
+
+def test_guardrail_validate__guard_produced_results__guardrail_batch_sent(
+    fake_backend, monkeypatch
+):
+    guardrail = Guardrail(guards=[_PassingLocalGuard()])
+    batches = _recorded_guardrail_batches(guardrail, monkeypatch)
+
+    guardrail.validate("some text")
+
+    assert len(batches) == 1
+    assert [item.name for item in batches[0].batch] == [
+        schemas.ValidationType.LLM_JUDGE
+    ]

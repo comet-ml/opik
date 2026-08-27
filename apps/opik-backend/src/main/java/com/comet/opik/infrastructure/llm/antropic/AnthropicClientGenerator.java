@@ -2,8 +2,10 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
@@ -22,7 +24,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder();
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::url)
+                .map(AnthropicClientConfig::url)
                 .filter(StringUtils::isNotEmpty)
                 .ifPresent(anthropicClientBuilder::baseUrl);
 
@@ -31,7 +33,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::version)
+                .map(AnthropicClientConfig::version)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(anthropicClientBuilder::version);
         Optional.ofNullable(llmProviderClientConfig.getLogRequests())
@@ -58,7 +60,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 

@@ -4,6 +4,13 @@ Run it alongside the cutover so the delta-insert has fresh rows to catch. These 
 `created_at` is the current week; a share of them are logged as updates to an already-seen trace (a second `end()` with
 new content) to exercise the version-bump path the delta relies on.
 
+`--in-progress-ratio` leaves a share of them UNENDED (no `end_time`, no `ttft`). That is the only way to reproduce the
+pre-swap window's sentinel caveat: while `traceColumnsNonNullable=true` and `traces` is still the Nullable original, an
+absent value is written as the epoch/NaN sentinel instead of NULL, and the original's MATERIALIZED `duration` — which
+guards only `end_time IS NOT NULL` — turns that into a large NEGATIVE duration that a stage B/C rollback makes live again
+(see the runbook's "The `traceColumnsNonNullable` flip"). Without this option every trace is ended, so a rehearsal
+produces ZERO affected rows and the caveat plus its rollback repair go untested.
+
 Prerequisites: `OPIK_URL_OVERRIDE` pointing at the local install. Run `python live_traffic.py --help` for options.
 """
 
@@ -34,13 +41,17 @@ def _text(n: int) -> str:
 @click.option("--tps", default=5.0, help="Target traces per second.")
 @click.option("--duration", default=120, help="How long to run, in seconds (0 = until Ctrl-C).")
 @click.option("--update-ratio", default=0.2, help="Fraction of ticks that update a prior trace instead of creating one.")
-def main(project, tps, duration, update_ratio):
+@click.option("--in-progress-ratio", default=0.0,
+              help="Fraction of created traces left UNENDED (no end_time/ttft), reproducing the pre-swap window's "
+                   "epoch/NaN sentinel + negative-duration caveat. 0 disables. Try 0.15 when rehearsing the cutover.")
+def main(project, tps, duration, update_ratio, in_progress_ratio):
     signal.signal(signal.SIGINT, _handle_sigint)
     client = make_opik_client()
     interval = 1.0 / tps if tps > 0 else 0.0
 
     created = 0
     updated = 0
+    in_progress = 0
     recent_ids: list[str] = []
     started = time.time()
     LOGGER.info("live traffic: project='%s' tps=%.2f duration=%ss (Ctrl-C to stop)", project, tps, duration or "∞")
@@ -54,17 +65,23 @@ def main(project, tps, duration, update_ratio):
             client.trace(id=trace_id, project_name=project, output={"update": _text(120)}).end()
             updated += 1
         else:
+            leave_in_progress = in_progress_ratio > 0 and random.random() < in_progress_ratio
             trace = client.trace(
-                name="live-trace",
+                name="live-trace-in-progress" if leave_in_progress else "live-trace",
                 project_name=project,
                 start_time=utcnow(),
                 input={"prompt": _text(160)},
-                output={"completion": _text(160)},
+                **({} if leave_in_progress else {"output": {"completion": _text(160)}}),
             )
-            trace.end()
-            recent_ids.append(trace.id)
-            if len(recent_ids) > 500:
-                recent_ids.pop(0)
+            if leave_in_progress:
+                # Deliberately NOT ended: no end_time and no ttft, so the write carries an absent value. Do not add it
+                # to recent_ids either — an update would end it and defeat the point.
+                in_progress += 1
+            else:
+                trace.end()
+                recent_ids.append(trace.id)
+                if len(recent_ids) > 500:
+                    recent_ids.pop(0)
             created += 1
 
         if (created + updated) % 50 == 0:
@@ -75,8 +92,11 @@ def main(project, tps, duration, update_ratio):
 
     client.flush()
     elapsed = time.time() - started
-    LOGGER.info("done: created=%d updated=%d in %.1fs (%.2f traces/s effective)",
-                created, updated, elapsed, (created + updated) / elapsed if elapsed else 0)
+    LOGGER.info("done: created=%d (of which %d left in-progress) updated=%d in %.1fs (%.2f traces/s effective)",
+                created, in_progress, updated, elapsed, (created + updated) / elapsed if elapsed else 0)
+    if in_progress_ratio > 0 and in_progress == 0:
+        LOGGER.warning("in-progress-ratio was set but every trace was ended — the pre-swap sentinel / negative-duration "
+                       "caveat is UNEXERCISED. Raise --in-progress-ratio or --duration.")
 
 
 if __name__ == "__main__":

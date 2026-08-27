@@ -1,4 +1,8 @@
+import datetime
+import json
 from typing import Dict, Any
+
+import pytest
 
 import opik
 from opik.api_objects.experiment import experiment_item
@@ -377,3 +381,114 @@ def test__experiment_scores__happy_path(
     assert min_score.value <= avg_score.value <= max_score.value, (
         f"Score ordering should be min <= avg <= max, got {min_score.value} <= {avg_score.value} <= {max_score.value}"
     )
+
+
+def test__batch_upload_items__happy_path(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """Upload experiment items with their traces, spans and scores in one call."""
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
+            },
+            {
+                "input": {"question": "What is the capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+        ]
+    )
+
+    dataset_items = dataset.get_items()
+    assert len(dataset_items) == 2
+
+    experiment = opik_client.create_experiment(
+        dataset_name=dataset_name,
+        name=experiment_name,
+        project_name=PROJECT_NAME,
+    )
+
+    start_time = datetime.datetime.now(tz=datetime.timezone.utc)
+    answers = {
+        "What is the capital of Ukraine?": "Kyiv",
+        "What is the capital of Poland?": "Warsaw",
+    }
+
+    experiment.batch_upload_items(
+        [
+            opik.ExperimentItemBulkRecord(
+                dataset_item_id=dataset_item["id"],
+                trace=opik.ExperimentItemBulkTrace(
+                    name="bulk-uploaded-trace",
+                    project_name=PROJECT_NAME,
+                    start_time=start_time,
+                    end_time=start_time + datetime.timedelta(seconds=1),
+                    input=dataset_item["input"],
+                    output={"output": answers[dataset_item["input"]["question"]]},
+                ),
+                spans=[
+                    opik.ExperimentItemBulkSpan(
+                        name="bulk-uploaded-span",
+                        type="llm",
+                        start_time=start_time,
+                        end_time=start_time + datetime.timedelta(seconds=1),
+                        input=dataset_item["input"],
+                        output={"output": answers[dataset_item["input"]["question"]]},
+                    )
+                ],
+                feedback_scores=[
+                    {"name": "equals_scoring_function", "value": 1.0, "reason": "ok"}
+                ],
+            )
+            for dataset_item in dataset_items
+        ],
+        project_name=PROJECT_NAME,
+    )
+
+    verifiers.verify_experiment_items_completed(
+        opik_client=opik_client,
+        experiment_id=experiment.id,
+        expected_completed_dataset_item_ids={
+            dataset_item["id"] for dataset_item in dataset_items
+        },
+    )
+
+    experiment_items = experiment.get_items()
+    assert len(experiment_items) == 2
+    for uploaded_item in experiment_items:
+        assert uploaded_item.evaluation_task_output is not None
+        assert uploaded_item.evaluation_task_output["output"] in answers.values()
+        assert [score["name"] for score in uploaded_item.feedback_scores] == [
+            "equals_scoring_function"
+        ]
+
+
+def test__batch_upload_items__output_passed_as_string__raises_validation_error(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """The SDK rejects a stringified output before it reaches the backend."""
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert([{"input": {"question": "What is the capital of Ukraine?"}}])
+    dataset_items = dataset.get_items()
+
+    experiment = opik_client.create_experiment(
+        dataset_name=dataset_name,
+        name=experiment_name,
+        project_name=PROJECT_NAME,
+    )
+
+    with pytest.raises(opik.exceptions.ValidationError):
+        experiment.batch_upload_items(
+            [
+                opik.ExperimentItemBulkRecord(
+                    dataset_item_id=dataset_items[0]["id"],
+                    trace=opik.ExperimentItemBulkTrace(
+                        start_time=datetime.datetime.now(tz=datetime.timezone.utc),
+                        output=json.dumps({"output": "Kyiv"}),
+                    ),
+                )
+            ],
+            project_name=PROJECT_NAME,
+        )

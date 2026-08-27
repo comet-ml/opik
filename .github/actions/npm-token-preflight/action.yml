@@ -1,6 +1,11 @@
 ---
 name: NPM Token Preflight
 description: |
+  UNUSED by npm publishing since the move to trusted publishing (OIDC) — see
+  DND-1562. Retained as the documented token-preflight pattern referenced by
+  publish_helm_chart.yaml and publish_cursor_extension.yml, whose registries
+  still authenticate with long-lived tokens.
+
   Validate NPM_TOKEN before publish: confirms the token authenticates against
   the registry and is authorized to publish the named package. Fails fast with
   an actionable message so we never reach `npm publish` with a bad token.

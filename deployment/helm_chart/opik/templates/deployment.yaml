@@ -47,7 +47,7 @@ spec:
       initContainers:
       {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef) (not $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
         - name: ca-cert-injection
-          image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
+          image: "{{ default $.Values.registry $value.image.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
           securityContext:
             {{- toYaml $value.securityContext | nindent 12 }}
@@ -151,7 +151,7 @@ spec:
       {{- end }}
       {{- if and (eq $key "backend") $value.run_migration }}
         - name: backend-migrations
-          image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
+          image: "{{ default $.Values.registry $value.image.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
           securityContext:
             {{- toYaml $value.securityContext | nindent 12 }}
@@ -184,7 +184,7 @@ spec:
         - name: {{ include "opik.name" $ }}-{{ $key | lower }}
           securityContext:
             {{- toYaml $value.securityContext | nindent 12 }}
-          image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
+          image: "{{ default $.Values.registry $value.image.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
           {{- with $value.ports }}
           ports:

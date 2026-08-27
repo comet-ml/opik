@@ -34,7 +34,7 @@ jobs:
         - name: Install Helm
           # azure/setup-helm v4.3.1 pinned to commit SHA 1a275c3b69536ee54be43f2070a358922e12c8d4
           # Source: https://github.com/Azure/setup-helm/releases/tag/v4.3.1
-          uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+          uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
           with:
             version: v3.19.4
 
@@ -51,7 +51,7 @@ jobs:
             echo "Version validated: $VERSION"
 
         - name: Checkout
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
           with:
             ref: ${{inputs.version}}
             fetch-tags: true
@@ -59,7 +59,7 @@ jobs:
             fetch-depth: 0
 
         - name: Checkout GH Pages branch
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
           with:
             path: 'dest'
             ref: 'gh-pages'

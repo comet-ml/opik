@@ -2,10 +2,12 @@
 -- The gate test TracesLocalV2CutoverTest reimplements this statement inline; keep the two in step (see its Javadoc).
 --
 -- Re-applies the deletes that fired on the successor since cutover_start onto the restored original `traces`, so they do
--- not resurrect. Two branches, like the forward replay in 000002: events with a project match the full key; events from
--- the product's workspace-scoped delete fallback (project_id = '') match (workspace_id, id). Shared by stages B and C
--- (run right after the swap/promote), never on its own. If the set is ever large, bound it with
--- AND toMonday(id_at) = toDate('<week>') and loop the weeks.
+-- not resurrect. Single FULL-KEY branch, like the forward replay in 000002: since OPIK-7483 every delete carries its
+-- project_id (no project-less path), so the replay matches (workspace_id, project_id, id); the post-cutover deletes it
+-- replays come from the live successor, which routes through that same delete path. Shared by stages B and C
+-- (run right after the swap/promote), never on its own. If the set is ever large, bound it by a created_at week and
+-- loop the weeks (NOT toMonday(id_at), which wraps far-future/epoch ids — OPIK-7456; the restored original `traces` is
+-- not weekly-partitioned by it anyway).
 --
 -- Deliberately NO resurrection guard (the `AND ... NOT IN traces` arm the forward replay in 000002 carries). Do NOT add
 -- one here: rollback abandons all post-cutover writes on the successor (they are being discarded) while still honoring
@@ -23,16 +25,6 @@ WHERE (workspace_id, project_id, id) IN (
       AND event_time >= toDateTime64('${CUTOVER_START}', 6)
       AND project_id != ''
       AND length(project_id) = 36
-      AND length(deleted_id) = 36
-)
-OR (workspace_id, id) IN (
-    SELECT
-        workspace_id,
-        toFixedString(deleted_id, 36)
-    FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
-    WHERE source_table = 'traces'
-      AND event_time >= toDateTime64('${CUTOVER_START}', 6)
-      AND project_id = ''
       AND length(deleted_id) = 36
 )
 -- lightweight_deletes_sync = 2: wait for the mutation on every replica so the restored `traces` is consistent

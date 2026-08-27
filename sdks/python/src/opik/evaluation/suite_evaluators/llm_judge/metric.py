@@ -13,7 +13,7 @@ import tenacity
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result
-from opik.exceptions import LLMJudgeParseError
+from opik.exceptions import EmptyLLMResponseError, LLMJudgeParseError
 
 from opik.evaluation.suite_evaluators import base
 from . import config as llm_judge_config
@@ -22,8 +22,10 @@ from . import strategy_selector as _strategy_selector
 
 LOGGER = logging.getLogger(__name__)
 
+# An empty provider response is as transient as a malformed parse. Permanent
+# BaseLLMError failures (auth, invalid request) must not be retried.
 _RETRY_POLICY = tenacity.retry(
-    retry=tenacity.retry_if_exception_type(LLMJudgeParseError),
+    retry=tenacity.retry_if_exception_type((LLMJudgeParseError, EmptyLLMResponseError)),
     stop=tenacity.stop_after_attempt(3),
     before_sleep=tenacity.before_sleep_log(LOGGER, logging.WARNING),
     reraise=True,

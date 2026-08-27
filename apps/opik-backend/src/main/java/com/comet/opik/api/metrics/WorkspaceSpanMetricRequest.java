@@ -34,7 +34,7 @@ public record WorkspaceSpanMetricRequest(
         MetricType metricType,
         TimeInterval interval,
         @Valid BreakdownConfig breakdown,
-        List<SpanFilter> filters,
+        List<@NotNull @Valid SpanFilter> filters,
         @NotNull Instant intervalStart,
         Instant intervalEnd) {
 

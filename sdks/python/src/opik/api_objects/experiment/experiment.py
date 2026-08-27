@@ -1,19 +1,52 @@
 import functools
 import logging
+from concurrent import futures
 from typing import List, Optional, TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
-from . import experiment_item, experiments_client
-from .. import constants, helpers
+from . import bulk_converters, bulk_item, experiment_item, experiments_client
+from .. import constants, helpers, rest_helpers
 from ...api_objects.prompt import base_prompt
+from ... import exceptions
 
 if TYPE_CHECKING:
     from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _raise_on_oversized_items(
+    rest_items: List[
+        rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView
+    ],
+) -> None:
+    """Reject items that cannot fit in a request on their own.
+
+    ``split_into_batches`` puts an oversized item in a batch by itself rather
+    than dropping it, which would send a request the backend is guaranteed to
+    reject with a 422. Failing here names the offending item instead.
+
+    The bound is inclusive, matching ``split_into_batches``: an item measuring
+    exactly the limit already fills a batch on its own, leaving no room for the
+    request envelope.
+    """
+    failure_reasons = [
+        f"items[{index}] is {size_MB:.1f}MB, which is at or above the "
+        f"{constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB}MB per-request limit"
+        for index, size_MB in (
+            (index, sequence_splitter.get_payload_size_MB(item))
+            for index, item in enumerate(rest_items)
+        )
+        if size_MB >= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
+    ]
+
+    if failure_reasons:
+        raise exceptions.ValidationError(
+            prefix="batch_upload_items", failure_reasons=failure_reasons
+        )
 
 
 class Experiment:
@@ -120,6 +153,145 @@ class Experiment:
                 messages.CreateExperimentItemsBatchMessage(batch=batch)
             )
             self._streamer.put(create_experiment_items_batch_message)
+
+    def _bulk_upload_batch_with_retry(
+        self,
+        batch: List[rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        project_name: Optional[str],
+    ) -> None:
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: self._rest_client.experiments.experiment_items_bulk(
+                experiment_id=self.id,
+                experiment_name=self.name,
+                dataset_name=self.dataset_name,
+                project_name=project_name,
+                items=batch,
+            ),
+            operation_name="experiment_items_bulk",
+        )
+        LOGGER.debug(
+            "Successfully sent experiment items bulk batch of size %d", len(batch)
+        )
+
+    def batch_upload_items(
+        self,
+        items: List[bulk_item.ExperimentItemBulkRecord],
+        project_name: Optional[str] = None,
+        num_threads: int = 1,
+    ) -> None:
+        """
+        Upload experiment items together with their traces, spans and feedback scores.
+
+        Unlike :meth:`insert`, which only links already-existing traces to dataset
+        items, this method creates the traces and spans as part of the same request.
+
+        Items are validated up front, split into batches that respect the backend's
+        1000-item and 4MB-per-request limits, and sent with automatic retry on rate
+        limiting (HTTP 429).
+
+        If a batch fails, the exception propagates and the remaining batches are
+        not sent, leaving the experiment partially populated. Rate-limit retries
+        re-send the identical payload, so they never duplicate anything. Calling
+        this method again, however, mints new ids for any trace or span left
+        without one, which would duplicate whatever the first call did manage to
+        write — set ``id`` on the traces and spans you pass in if you intend to
+        retry a failed upload.
+
+        Args:
+            items: The experiment items to upload. Each item must provide exactly
+                one of ``evaluate_task_result`` or ``trace``.
+            project_name: Project for traces auto-created from items that provide
+                ``evaluate_task_result``. Defaults to the experiment's project;
+                blank is treated as unset. When set, every item-level
+                ``trace.project_name`` must match it.
+            num_threads: Number of batches to upload concurrently. Defaults to 1
+                (sequential). Raising it trades ordering and a higher chance of
+                being rate limited for throughput. Capped at the number of
+                batches and at
+                ``constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS``.
+
+        Returns:
+            None
+
+        Raises:
+            opik.exceptions.ValidationError: If any item fails validation, if a
+                single item is too large to fit in one request, or if
+                ``num_threads`` is less than 1.
+        """
+        if num_threads < 1:
+            raise exceptions.ValidationError(
+                prefix="batch_upload_items",
+                failure_reasons=[f"num_threads must be at least 1, got {num_threads}"],
+            )
+
+        if not items:
+            return
+
+        resolved_project_name = (
+            project_name if project_name is not None else self._project_name
+        )
+        # The backend annotates project_name with @Pattern(NULL_OR_NOT_BLANK), so a
+        # blank string is rejected outright rather than falling back to the default
+        # project. Treat it as unset, which is what the caller meant.
+        if resolved_project_name is not None and not resolved_project_name.strip():
+            resolved_project_name = None
+
+        bulk_converters.validate_records(items, project_name=resolved_project_name)
+
+        rest_items = [bulk_converters.to_rest_record(item) for item in items]
+
+        _raise_on_oversized_items(rest_items)
+
+        batches = sequence_splitter.split_into_batches(
+            rest_items,
+            max_payload_size_MB=constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB,
+            max_length=constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE,
+        )
+
+        LOGGER.debug(
+            "Uploading %d experiment items in %d batch(es) using %d thread(s)",
+            len(rest_items),
+            len(batches),
+            num_threads,
+        )
+
+        if num_threads == 1:
+            for batch in batches:
+                self._bulk_upload_batch_with_retry(
+                    batch, project_name=resolved_project_name
+                )
+            return
+
+        # Deliberately not a `with` block: ThreadPoolExecutor.__exit__ always
+        # calls shutdown(wait=True), which would re-join batches we just chose
+        # not to wait for and park the caller behind a batch stuck in the
+        # rate-limit retry loop.
+        # More workers than batches is pure waste, and an unbounded caller-supplied
+        # value would spawn a thread per batch.
+        worker_count = min(
+            num_threads, len(batches), constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS
+        )
+        pool = futures.ThreadPoolExecutor(
+            max_workers=worker_count, thread_name_prefix="opik_experiment_items_bulk"
+        )
+        submitted = [
+            pool.submit(
+                self._bulk_upload_batch_with_retry,
+                batch,
+                project_name=resolved_project_name,
+            )
+            for batch in batches
+        ]
+        try:
+            for future in futures.as_completed(submitted):
+                future.result()
+        except BaseException:
+            # Fail fast: drop batches that have not started and return without
+            # joining the ones already in flight.
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        else:
+            pool.shutdown(wait=True)
 
     def get_items(
         self,

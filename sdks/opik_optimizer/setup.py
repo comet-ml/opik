@@ -28,7 +28,20 @@ setup(
         #   affects 1.81.16-1.83.6, fixed in 1.83.7).
         #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6",
+        # - Cap Python 3.10 at <1.97: litellm declares requires-python >=3.10 but ships 3.11+
+        #   typing, and every recent break has been 3.10-only with a distinct root cause:
+        #     1.97.*     Message model unconstructible -- the nested forward reference
+        #                ChatCompletionReasoningSummaryTextBlock never resolves, so every
+        #                completion() raises PydanticUserError.
+        #                https://github.com/BerriAI/litellm/issues/36384
+        #     1.98.0rc1  ImportError: cannot import name 'NotRequired' from 'typing'
+        #                typing.NotRequired does not exist on 3.10 (added in 3.11);
+        #                litellm should import it from typing_extensions.
+        #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
+        #   The cap is the standing guard; 3.11+ deliberately stays uncapped. Lift it once
+        #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
         "opik>=1.7.17",
         "optuna",
         "pandas",

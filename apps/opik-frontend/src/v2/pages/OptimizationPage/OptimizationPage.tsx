@@ -22,6 +22,7 @@ import EmptyRunWarningPanel from "./EmptyRunWarningPanel";
 import {
   EMPTY_RUN_CAUSE,
   computeEmptyRunCause,
+  findActiveTrialCandidate,
 } from "./optimizationOverviewHelpers";
 import TrialSidebar from "./TrialSidebar/TrialSidebar";
 import TrialSidebarContent from "./TrialSidebar/TrialSidebarContent";
@@ -152,13 +153,14 @@ const OptimizationPage: React.FC = () => {
     [candidates, isTestSuite, isInProgress, inProgressInfo],
   );
 
-  // The candidate behind the open sidebar; matched by trial number with an
-  // experiment-ids fallback for deep links minted before numbering.
+  // The candidate behind the open sidebar — see findActiveTrialCandidate for
+  // why experiment ids are trusted over the URL's trial number.
   const activeTrialCandidate = useMemo(
     () =>
-      candidates.find((c) => c.trialNumber === trialSidebar.trialNumber) ??
-      candidates.find((c) =>
-        c.experimentIds.some((id) => trialSidebar.experimentIds.includes(id)),
+      findActiveTrialCandidate(
+        candidates,
+        trialSidebar.experimentIds,
+        trialSidebar.trialNumber,
       ),
     [candidates, trialSidebar.trialNumber, trialSidebar.experimentIds],
   );
@@ -259,6 +261,7 @@ const OptimizationPage: React.FC = () => {
                 optimizationLastUpdatedAt={optimization?.last_updated_at}
                 emptyRunCause={emptyRunCause}
                 scoringHealth={optimization?.metadata?.scoring_health}
+                totalOptimizationCost={optimization?.total_optimization_cost}
                 isInProgress={
                   !!optimization?.status &&
                   IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
@@ -361,6 +364,7 @@ const OptimizationPage: React.FC = () => {
         open={trialSidebar.open}
         onClose={trialSidebar.close}
         trialNumber={trialSidebar.trialNumber}
+        isBaseline={activeTrialCandidate?.trialNumber === null}
         trialExperiments={trialExperiments}
       >
         <TrialSidebarContent

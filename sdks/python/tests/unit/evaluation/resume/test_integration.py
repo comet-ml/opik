@@ -2,6 +2,7 @@ import json
 from unittest import mock
 
 from opik.evaluation.resume import integration, state
+from opik.evaluation.types import ErrorTolerance
 from opik.evaluation.samplers import base_dataset_sampler
 
 
@@ -32,6 +33,7 @@ class TestResumeStateForEvaluate:
             nb_samples=10,
             dataset_sampler=None,
             dataset_item_ids=None,
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
 
         blob = _blob(result)
@@ -51,6 +53,7 @@ class TestResumeStateForEvaluate:
             nb_samples=None,
             dataset_sampler=_IdentitySampler(),
             dataset_item_ids=None,
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
 
         assert _blob(result)["requires_local_checkpoint"] is True
@@ -64,6 +67,7 @@ class TestResumeStateForEvaluate:
             nb_samples=None,
             dataset_sampler=None,
             dataset_item_ids=["a", "b"],
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
 
         assert _blob(result)["requires_local_checkpoint"] is True
@@ -77,6 +81,7 @@ class TestResumeStateForEvaluate:
             nb_samples=None,
             dataset_sampler=None,
             dataset_item_ids=None,
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
 
         blob = _blob(result)

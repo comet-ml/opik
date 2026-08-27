@@ -10,6 +10,7 @@ import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -29,13 +30,17 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +56,8 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -498,5 +505,202 @@ class DatasetsResourceCreateFromTracesTest {
         assertThat(item.data()).doesNotContainKey("feedback_scores");
         assertThat(item.data()).doesNotContainKey("comments");
         assertThat(item.data()).doesNotContainKey("usage");
+    }
+
+    /**
+     * Span deduplication in {@code TraceDAO.SELECT_BY_IDS}, which this endpoint reaches through
+     * {@code TraceEnrichmentService} (OPIK-7676). Both span reads in that query used to be
+     * {@code FROM spans FINAL}; they were replaced with an explicit dedup on the logical span key,
+     * {@code (workspace_id, project_id, id)}, ordered by the table's sort key so ClickHouse can still read
+     * in order.
+     * <p>
+     * That key is deliberately narrower than the sort key
+     * ({@code workspace_id, project_id, trace_id, parent_span_id, id}), so the query does not reproduce
+     * {@code FINAL} in every case: a span id stored under two different parents is aggregated once here and
+     * twice by {@code FINAL}. A span id is meant to be unique within a project, and rows that disagree on
+     * the rest of the sort key are a data-structure artifact being addressed under the hyperscale work.
+     * <p>
+     * {@code spans} is a ReplacingMergeTree and the aggregated columns are mutable, so the enriched
+     * {@code usage} — {@code sumMap(usage)} over the deduplicated spans — is the observable for both cases
+     * below: a version updated in place must not be summed with its predecessor, and a version stored under
+     * a second parent must not be summed either.
+     * <p>
+     * Both tests draw the two versions' usage from disjoint non-zero ranges. That is the one constraint the
+     * values carry: a summed aggregate has to be distinguishable from either version alone, which fails if
+     * the versions can collide or be zero.
+     */
+    @Nested
+    @DisplayName("Span dedup in trace aggregates:")
+    class SpanDedupInTraceAggregates {
+
+        private static final String USAGE_KEY = "completion_tokens";
+
+        /**
+         * Updating a span re-inserts a full row under the same id, and leaving {@code parent_span_id}
+         * untouched keeps both versions on the same sort key. Dedup must therefore collapse them to the
+         * latest: a query without it would sum both versions instead.
+         */
+        @Test
+        @DisplayName("Success - a span updated in place is aggregated once")
+        void createDatasetItemsFromTraces__whenSpanUpdatedInPlace__aggregatesLatestVersionOnly() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace(projectName, apiKey, workspaceName);
+
+            int usageBeforeUpdate = RandomUtils.secure().randomInt(1, 100);
+            int usageAfterUpdate = RandomUtils.secure().randomInt(100, 200);
+
+            var spanId = createSpan(GENERATOR.generate(), projectName, trace.id(), null,
+                    Map.of(USAGE_KEY, usageBeforeUpdate), apiKey, workspaceName);
+
+            spanResourceClient.updateSpan(spanId, SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .usage(Map.of(USAGE_KEY, usageAfterUpdate))
+                    .build(), apiKey, workspaceName);
+
+            assertThat(aggregatedUsage(datasetId, trace.id(), apiKey, workspaceName))
+                    .isEqualTo(Map.of(USAGE_KEY, (long) usageAfterUpdate));
+        }
+
+        /**
+         * The batch endpoint inserts rows verbatim, so re-sending a span id under a different parent stores
+         * a second row that differs from the first on {@code parent_span_id} — a sort-key column. Both rows
+         * are then distinct versions as far as the table is concerned, and {@code FINAL} would keep them
+         * both, counting one logical span twice.
+         * <p>
+         * This query deliberately does not do that. It deduplicates on
+         * {@code (workspace_id, project_id, id)}, so a span id resolves to a single row within a project and
+         * is aggregated once. That is a conscious divergence from {@code FINAL}: a span id is meant to be
+         * unique within a project, and rows that disagree on the rest of the sort key are a data-structure
+         * artifact being addressed separately under the hyperscale work, not a state the read path should
+         * preserve and double-count.
+         * <p>
+         * Note that two versions of one span id are not supposed to disagree on {@code trace_id} or
+         * {@code parent_span_id} in the first place — those identify the span, they are not per-version
+         * state. An update carries the parent forward untouched and {@code SpanService} rejects a changed
+         * parent with a 409; the batch endpoint is the one path that does not validate it, a deliberate
+         * trade for ingestion throughput. The pair of rows below is therefore corrupt data rather than a
+         * legitimate version history.
+         * <p>
+         * Which row survives is fully determined. Both the current layout and the post-cutover one assume
+         * {@code (workspace_id, project_id, id)} is unique, and that is what the dedup groups on, so these
+         * two rows are treated as two versions of a single span and {@code last_updated_at} picks between
+         * them: the latest write wins. {@code parent_span_id} is still part of the table's physical sort
+         * key and only leaves at the cutover — what changed here is that the query no longer sorts on it,
+         * which is what stops it from overriding recency.
+         * <p>
+         * The test has to pin {@code last_updated_at} to exercise that. It is on the write view, so the
+         * value the client sends is the value stored, and podam would otherwise give each manufactured
+         * span an independent random instant — leaving the assertion undetermined, though not the
+         * behaviour.
+         * <p>
+         * Two batch calls rather than one batch of two spans, because a single batch deduplicates by id
+         * before insert.
+         */
+        @Test
+        @DisplayName("Success - a span re-sent under a different parent is still aggregated once")
+        void createDatasetItemsFromTraces__whenSpanReSentWithDifferentParent__isAggregatedOnce() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace(projectName, apiKey, workspaceName);
+
+            var spanId = GENERATOR.generate();
+
+            int firstUsage = RandomUtils.secure().randomInt(1, 100);
+            int secondUsage = RandomUtils.secure().randomInt(100, 200);
+
+            // The stale row is written under the greater parent_span_id on purpose: that is the row the
+            // old five-column sort tuple would have picked, so this fails if that tiebreaker returns.
+            var parents = Stream.of(GENERATOR.generate(), GENERATOR.generate())
+                    .sorted(Comparator.comparing(UUID::toString))
+                    .toList();
+            var lowerParent = parents.getFirst();
+            var higherParent = parents.getLast();
+
+            // Pin last_updated_at too: it is what selects the surviving version, and podam would
+            // otherwise give each of these two spans an independent random instant.
+            var staleWrittenAt = Instant.now().minusSeconds(60);
+            var freshWrittenAt = staleWrittenAt.plusSeconds(30);
+
+            spanResourceClient.batchCreateSpans(List.of(
+                    buildSpan(spanId, projectName, trace.id(), higherParent,
+                            Map.of(USAGE_KEY, firstUsage))
+                            .toBuilder().lastUpdatedAt(staleWrittenAt).build()),
+                    apiKey, workspaceName);
+
+            spanResourceClient.batchCreateSpans(List.of(
+                    buildSpan(spanId, projectName, trace.id(), lowerParent,
+                            Map.of(USAGE_KEY, secondUsage))
+                            .toBuilder().lastUpdatedAt(freshWrittenAt).build()),
+                    apiKey, workspaceName);
+
+            // One version, not the sum — the span is counted once despite being stored twice, and the
+            // version that counts is the latest write, not the one with the greater parent.
+            assertThat(aggregatedUsage(datasetId, trace.id(), apiKey, workspaceName))
+                    .isEqualTo(Map.of(USAGE_KEY, (long) secondUsage));
+        }
+
+        private Trace createTrace(String projectName, String apiKey, String workspaceName) {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            return trace;
+        }
+
+        private UUID createSpan(UUID spanId, String projectName, UUID traceId, UUID parentSpanId,
+                Map<String, Integer> usage, String apiKey, String workspaceName) {
+            return spanResourceClient.createSpan(buildSpan(spanId, projectName, traceId, parentSpanId, usage),
+                    apiKey, workspaceName);
+        }
+
+        private Span buildSpan(UUID spanId, String projectName, UUID traceId, UUID parentSpanId,
+                Map<String, Integer> usage) {
+            return factory.manufacturePojo(Span.class).toBuilder()
+                    .id(spanId)
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(parentSpanId)
+                    .usage(usage)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+        }
+
+        private Map<String, Long> aggregatedUsage(UUID datasetId, UUID traceId, String apiKey, String workspaceName) {
+            var request = CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(traceId))
+                    .enrichmentOptions(TraceEnrichmentOptions.builder().includeUsage(true).build())
+                    .build();
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+
+            var items = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName).content();
+
+            assertThat(items).hasSize(1);
+
+            return JsonUtils.getMapper().convertValue(items.getFirst().data().get("usage"),
+                    new TypeReference<Map<String, Long>>() {
+                    });
+        }
     }
 }

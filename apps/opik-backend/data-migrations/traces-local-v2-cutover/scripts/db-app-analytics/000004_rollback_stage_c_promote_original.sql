@@ -20,6 +20,10 @@
 --
 -- rollback.sh runs the reverse-replay (000004_rollback_reverse_replay.sql) right after this so deletes since
 -- cutover_start do not resurrect, and asserts the post-wrap topology (traces = Distributed) before running it.
+--
+-- BEFORE backends resume: set databaseAnalyticsDataModel.tracesDistributedWrapEnabled=false (OPIK-7455). This stage
+-- makes `traces` a MergeTree again and parks `traces_local`, so a still-true flag would send TraceDAO mutations at the
+-- missing `traces_local`. It is the inverse of the flip that enabled the wrap.
 
 -- 1. Gapless promote: rotate all three names atomically.
 SET log_comment = 'traces_local_v2_rollback:stage_c';

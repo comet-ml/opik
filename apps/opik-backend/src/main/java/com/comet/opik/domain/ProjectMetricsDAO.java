@@ -40,6 +40,8 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
+import static com.comet.opik.domain.SpanMetricsQueries.SPAN_FILTERED_PREFIX;
+import static com.comet.opik.domain.SpanMetricsQueries.TOKEN_USAGE_NAMES;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -303,10 +305,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) AS t
             )
             """;
-
-    // Shared with WorkspaceMetricsDAO via SpanMetricsQueries; per-project aggregation fixes a single project_id.
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
-            .spanFilteredPrefix("project_id = :project_id");
 
     private static final String THREAD_FILTERED_PREFIX = """
             WITH trace_threads_final AS (
@@ -1181,22 +1179,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = """
-            SELECT DISTINCT name
-            FROM (
-                SELECT
-                    usage
-                FROM spans final
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-            )
-            ARRAY JOIN
-                mapKeys(usage) AS name,
-                mapValues(usage) AS value
-            WHERE value > 0
-            SETTINGS log_comment = '<log_comment>';
-            """;
-
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -1678,9 +1660,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             }
 
             var statement = connection.createStatement(template.render())
-                    .bind("project_id", projectId)
                     .bind("uuid_from_time", request.uuidFromTime().toString())
                     .bind("workspace_id", workspaceId);
+
+            // Same hazard as OPIK-5678 above, and it cuts both ways: R2DBC raises
+            // NoSuchElementException for any bind whose parameter the rendered SQL does not declare.
+            // The span-based queries embed SpanMetricsQueries' shared CTE, which binds the project as
+            // a set (`IN :project_ids`, a set of one here); every other query in this class uses the
+            // scalar `:project_id` from its trace/thread prefix. Neither placeholder appears in both,
+            // so each bind has to be gated on the metric type rather than applied unconditionally.
+            if (SPAN_TIME_METRICS.contains(request.metricType())) {
+                statement.bind("project_ids", new UUID[]{projectId});
+            } else {
+                statement.bind("project_id", projectId);
+            }
 
             // Bind uuid_to_time only if present
             if (request.uuidToTime() != null) {
@@ -1812,11 +1805,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
         return template.nonTransaction(connection -> {
-            var stTemplate = getSTWithLogComment(GET_PROJECT_TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
+            var stTemplate = getSTWithLogComment(TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
                     workspaceId, "", projectId.toString());
 
             var statement = connection.createStatement(stTemplate.render())
-                    .bind("project_id", projectId)
+                    // Per-project aggregation binds a set of one; the shared query takes the IN form.
+                    .bind("project_ids", new UUID[]{projectId})
                     .bind("workspace_id", workspaceId);
 
             InstrumentAsyncUtils.Segment segment = startSegment("getProjectTokenUsageNames", "Clickhouse", "get");

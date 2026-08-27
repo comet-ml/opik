@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.google.inject.servlet.RequestScoped;
@@ -48,7 +47,6 @@ public class RequestContext {
     private List<Quota> quotas;
     private Visibility visibility;
     private String workspaceFallbackMessage;
-    private OpikVersion opikVersion;
 
     public void setWorkspaceFallbackFor(String entityType, String entityName) {
         this.workspaceFallbackMessage = WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted(entityType, entityName);

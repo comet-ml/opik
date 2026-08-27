@@ -12,6 +12,7 @@ import { OptimizationsPage } from '../page-objects/optimizations.page';
 import { AnnotationQueuesPage } from '../page-objects/annotation-queues.page';
 import { OnlineEvaluationPage } from '../page-objects/online-evaluation.page';
 import { AlertsPage } from '../page-objects/alerts.page';
+import { ConfigurationPage } from '../page-objects/configuration.page';
 import { screenshot } from './utils/screenshot';
 
 test.setTimeout(300000);
@@ -114,5 +115,19 @@ test.describe('Visual Comparison - Empty States', () => {
     await alertsPage.goto(projectId);
     await alertsPage.waitForEmpty();
     await screenshot(page, 'E12-alerts-empty');
+  });
+
+  test('E13: Configuration - Environments empty state', { tag: ['@vcap:configuration.config-environments-empty'] }, async ({ page }) => {
+    const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
+    await configurationPage.goto('environments', projectId, projectName());
+    await configurationPage.waitForEnvironmentsEmpty();
+    await screenshot(page, 'E13-config-environments-empty');
+  });
+
+  test('E14: Configuration - AI providers empty state', { tag: ['@vcap:configuration.config-ai-providers-empty'] }, async ({ page }) => {
+    const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
+    await configurationPage.goto('ai-provider', projectId, projectName());
+    await configurationPage.waitForAiProvidersEmpty();
+    await screenshot(page, 'E14-config-ai-providers-empty');
   });
 });

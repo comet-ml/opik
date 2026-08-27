@@ -231,3 +231,30 @@ export const getOptimizationRefetchInterval = (
   status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status)
     ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
     : false;
+
+/**
+ * The candidate an open trial sidebar is showing, resolved from its URL params.
+ *
+ * Experiment ids win over `trialNumber`. Ids are stable identities and the
+ * `trials` param is what opens the sidebar at all, so they are always present
+ * and always right; a trial number is neither. This view stopped counting the
+ * baseline as Trial #1 (OPIK-7589), so a link minted before that change carries
+ * a number one higher than it means — trusting `trialNumber` first would make
+ * `trials=[baselineId]&trialNumber=1` open the first candidate while the URL
+ * names the baseline. Preferring ids resolves those links correctly rather than
+ * off-by-one, and changes nothing for current links, where the two agree.
+ *
+ * `trialNumber` remains the fallback, for a candidate whose experiments are not
+ * in the loaded page of results.
+ */
+export const findActiveTrialCandidate = (
+  candidates: AggregatedCandidate[],
+  experimentIds: string[],
+  trialNumber: number | null | undefined,
+): AggregatedCandidate | undefined =>
+  candidates.find((c) =>
+    c.experimentIds.some((id) => experimentIds.includes(id)),
+  ) ??
+  (trialNumber != null
+    ? candidates.find((c) => c.trialNumber === trialNumber)
+    : undefined);

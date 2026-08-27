@@ -14,8 +14,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -23,9 +21,12 @@ import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -84,7 +85,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code Distributed} wrapper reading transparently on one shard, newest-version-wins for concurrent upserts, and it
  * measures the replay wall time so the runbook can size it against the ingestion buffer window. Finally it proves the
  * cutover is reversible: the post-wrap rollback drops the wrapper, promotes the parked old data back to {@code traces},
- * and reverse-replays so a post-cutover delete does not resurrect.
+ * and reverse-replays so a post-cutover delete does not resurrect — and, separately, that the wrap alone can be
+ * reversed ({@code --unwrap-only}) leaving the partitioned successor and its post-cutover writes live, with no parked
+ * original required and the wrap re-appliable afterwards.
  *
  * <p><b>Dedicated, non-reused containers</b> are required because the cutover ends in a destructive {@code EXCHANGE} +
  * {@code RENAME} of the live {@code traces} table, which must never touch a container shared with other suites. Runs
@@ -103,6 +106,26 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code exchange_and_wrap.sh}'s replication-settle gate, {@code finalize.sh}'s empty-live refusal — are exercised by the
  * OPIK-6901 staging dry-run, not by this test (which runs the SQL those scripts wrap, directly). This test asserts the
  * logic is correct when invoked; the staging rehearsal asserts the scripts invoke it safely.
+ *
+ * <p><b>On the {@code SETTINGS} these statements carry.</b> They hardcode {@code max_insert_block_size = 100000}
+ * and {@code max_partitions_per_insert_block = 2000}, and omit {@code max_insert_threads} — while
+ * {@code backfill.sh} / {@code delta_replay.sh} make all three configurable. The split is deliberate and follows
+ * what each setting can do:
+ *
+ * <ul>
+ * <li>{@code max_partitions_per_insert_block} is <b>mirrored because it is a correctness gate, not pacing</b>: a
+ * value below the number of partitions a block spans aborts the INSERT outright ({@code TOO_MANY_PARTS}), which is
+ * exactly the failure the runbook's far-future section exists for. It is pinned at the drivers' own default.</li>
+ * <li>{@code max_insert_threads} is <b>omitted because it is pacing</b>, and because omitting it is meaningful
+ * here in the same way it is in the drivers: an absent key inherits whatever the server sets, so this gate asserts
+ * the SQL's logic rather than an operator's tuning choice.</li>
+ * <li>{@code max_insert_block_size} is fixed only to keep CI memory predictable.</li>
+ * </ul>
+ *
+ * <p>The standing gap this implies: because the mirrored values are hardcoded rather than read from the scripts,
+ * this gate cannot catch a driver configured with an invalid value — that belongs to the staging dry-run. A future
+ * setting that changes RESULTS rather than pacing must be mirrored here; {@code 000002}'s header asks that the SQL
+ * and this test be kept in step, and pacing settings are the documented exception to that.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -134,6 +157,13 @@ class TracesLocalV2CutoverTest {
 
     private static final String[] FIDELITY_SOURCES = {"sdk", "experiment", "playground", "optimization", "evaluator"};
     private static final String[] FIDELITY_ENVIRONMENTS = {"production", "staging", "dev", ""};
+
+    /**
+     * Where {@link #unwrapNeedsNoParkedOriginalAndTheWrapCanBeReapplied()} parks the original while it simulates a
+     * finalized estate. Test-only, and deliberately not one of the cutover's own names, so the reset can tell it apart
+     * from any state the migration itself produces.
+     */
+    private static final String PARKED_BACKUP = "traces_pre_cutover_backup_test_parked";
 
     /**
      * The stored (non-materialized) columns the cutover copies, one per line. Both INSERT clauses are built from this
@@ -236,6 +266,12 @@ class TracesLocalV2CutoverTest {
      */
     @BeforeEach
     void resetTables() {
+        // 0. Test-only: the un-wrap suite parks the original aside to simulate a finalized estate. Hand it back first, so
+        //    a test that failed mid-way cannot leave later tests without the original schema to rebuild the baseline from.
+        if (!tableExists("traces_pre_cutover_backup") && tableExists(PARKED_BACKUP)) {
+            execute("RENAME TABLE " + PARKED_BACKUP + " TO traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
+            });
+        }
         // 1. Wrap: `traces` is a Distributed wrapper holding no data of its own — drop it, leaving the successor under
         //    traces_local and the original under traces_pre_cutover_backup (the same shape as a partial wrap).
         if (isDistributed("traces")) {
@@ -286,11 +322,17 @@ class TracesLocalV2CutoverTest {
         });
         execute("DROP TABLE IF EXISTS traces_post_rollback_backup ON CLUSTER '{cluster}' SYNC", _ -> {
         });
-        execute("TRUNCATE TABLE IF EXISTS traces", _ -> {
+        execute("DROP TABLE IF EXISTS " + PARKED_BACKUP + " ON CLUSTER '{cluster}' SYNC", _ -> {
         });
-        execute("TRUNCATE TABLE IF EXISTS traces_local_v2", _ -> {
+        // ON CLUSTER like every other statement in this reset (and like stage A's truncate), not bare: on a
+        // ReplicatedMergeTree a plain TRUNCATE need only be applied by the local replica before the client returns,
+        // whereas ON CLUSTER waits for the distributed DDL task — a real barrier before the test body inserts. Without
+        // one, the emptying can still be settling while a test writes, which is the shape of a rare empty-table flake.
+        execute("TRUNCATE TABLE IF EXISTS traces ON CLUSTER '{cluster}'", _ -> {
         });
-        execute("TRUNCATE TABLE IF EXISTS deletion_events_local", _ -> {
+        execute("TRUNCATE TABLE IF EXISTS traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        });
+        execute("TRUNCATE TABLE IF EXISTS deletion_events_local ON CLUSTER '{cluster}'", _ -> {
         });
     }
 
@@ -304,9 +346,6 @@ class TracesLocalV2CutoverTest {
         var preExistingDeleted = mintIds(PRE_EXISTING_DELETED_PER_WEEK);
         var retentionDeleted = mintIds(RETENTION_DELETED_PER_WEEK);
         var userDeleted = mintIds(USER_DELETED_PER_WEEK);
-        // Deletes the delete-by-ids path could not resolve to a project — captured in the bridge with an empty
-        // project_id. The replay must still remove them (matched by (workspace_id, id)) or they leak across the swap.
-        var unresolvedDeleted = mintIds(USER_DELETED_PER_WEEK);
         // One id reused across two projects: deleted in projectId, must survive in otherProjectId (full-key replay).
         var reusedInstant = weekInstant(0, 1);
         var reusedId = ID_GENERATOR.generateId(reusedInstant);
@@ -319,7 +358,6 @@ class TracesLocalV2CutoverTest {
         allSeeded.addAll(preExistingDeleted);
         allSeeded.addAll(retentionDeleted);
         allSeeded.addAll(userDeleted);
-        allSeeded.addAll(unresolvedDeleted);
         seedTraces(allSeeded, workspaceId, projectId);
         seedTraces(reused, workspaceId, projectId);
         seedTraces(reused, workspaceId, otherProjectId);
@@ -355,9 +393,6 @@ class TracesLocalV2CutoverTest {
         // User-shape: single-id deletes.
         recordDeletionEvents(idStrings(userDeleted), workspaceId, projectId.toString(), "user_request");
         lightweightDelete(idStrings(userDeleted), workspaceId);
-        // Unresolved-project deletes: captured with an empty project_id (delete-by-ids couldn't resolve the project).
-        recordDeletionEvents(idStrings(unresolvedDeleted), workspaceId, "", "user_request");
-        lightweightDelete(idStrings(unresolvedDeleted), workspaceId);
         // Reused-id delete scoped to projectId only — the copy under otherProjectId must survive.
         recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, projectId.toString(), "user_request");
         lightweightDeleteScoped(Set.of(reusedId.toString()), workspaceId, projectId);
@@ -376,8 +411,7 @@ class TracesLocalV2CutoverTest {
 
         // Negative control — before replay, the during-backfill deletes have leaked onto the destination: still fully
         // alive there, because the delta-insert cannot see a lightweight delete. This is what the bridge exists to fix.
-        // Includes the unresolved (empty-project) deletes, which only the replay's (workspace_id, id) branch catches.
-        var leakedIds = union(union(idStrings(retentionDeleted), idStrings(userDeleted)), idStrings(unresolvedDeleted));
+        var leakedIds = union(idStrings(retentionDeleted), idStrings(userDeleted));
         assertThat(liveCount("traces_local_v2", leakedIds, workspaceId))
                 .as("negative control: without replay, during-backfill deletes leak across the copy")
                 .isEqualTo(leakedIds.size());
@@ -445,9 +479,6 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(userDeleted), workspaceId))
                 .as("user-shape deletions do not leak across the EXCHANGE")
                 .isZero();
-        assertThat(liveCount("traces", idStrings(unresolvedDeleted), workspaceId))
-                .as("unresolved (empty-project) deletions do not leak across the EXCHANGE")
-                .isZero();
 
         // Full-key replay: the reused id is gone under the deleted project but alive under the other project.
         assertThat(liveCountScoped("traces", Set.of(reusedId.toString()), workspaceId, projectId))
@@ -474,14 +505,15 @@ class TracesLocalV2CutoverTest {
                 .as("reused id still readable under the other project through the Distributed wrapper")
                 .isEqualTo(1L);
 
-        // Rollback (Stage C) — the wrap is reversible without resurrecting post-cutover deletes. A sharding-aware app
-        // deletes on the local table, so simulate a post-wrap delete on `traces_local` and record it in the bridge with
-        // an empty project (the unresolved case), then roll back: drop the Distributed wrapper, promote the parked old
-        // data back to `traces`, and reverse-replay from cutover_start.
+        // Rollback (Stage C) — the wrap is reversible without resurrecting post-cutover deletes. Post-wrap the app's
+        // delete DAO targets `traces_local` (OPIK-7455) and carries the full key (OPIK-7483), so simulate a post-wrap
+        // delete on `traces_local` recorded in the bridge with its project, then roll back: drop the Distributed
+        // wrapper, promote the parked old data back to `traces`, and reverse-replay from cutover_start.
         var postWrapDeleted = Set.of(survivors.getFirst().id().toString());
-        recordDeletionEvents(postWrapDeleted, workspaceId, "", "user_request");
-        execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND id IN :ids",
-                statement -> statement.bind("workspace_id", workspaceId).bind("ids", postWrapDeleted));
+        recordDeletionEvents(postWrapDeleted, workspaceId, projectId.toString(), "user_request");
+        execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN :ids",
+                statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString())
+                        .bind("ids", postWrapDeleted));
         rollbackAfterWrap(cutoverStart);
 
         assertThat(isDistributed("traces"))
@@ -512,6 +544,49 @@ class TracesLocalV2CutoverTest {
         assertThat(tableExists("traces_local"))
                 .as("no leftover sharding table after rollback")
                 .isFalse();
+    }
+
+    /**
+     * A far-future row survives the cutover with a matching fidelity fingerprint across the {@code id_at} type change.
+     * The source {@code traces.id_at} is a 32-bit {@code DateTime} that wraps a ~2201 UUIDv7 id to ~2065, while the
+     * successor's {@code DateTime64} reads it back as the honest 2201; {@code derivedFingerprint} casts both to
+     * {@code toDateTime} so the comparison is on the same instant regardless of width. Present-day rows exercise that
+     * cast as a no-op, so only a far-future row exercises the wrap — where the successor's honest 2201 must collapse to
+     * the same value the 32-bit source stores, or the fingerprint would falsely report infidelity. Seeds a far-future-id
+     * row into the {@code 'seed-fidelity'} cohort and pins that it is copied, partitions into its own honest ~2201 week,
+     * and leaves the source/destination derived fingerprint identical.
+     */
+    @Test
+    void farFutureRowSurvivesCutoverWithMatchingFingerprint() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        // Present-day all-column cohort, plus one far-future-id row in the same cohort: a real created_at drives the
+        // backfill slice, while the id minted ~2201 drives the destination id_at partition.
+        seedFidelityCohort(workspaceId, projectId);
+        var farFutureInstant = Instant.parse("2201-06-01T00:00:00Z");
+        var farFutureId = ID_GENERATOR.generateId(farFutureInstant);
+        insertRows(List.of(CategorizedId.builder().id(farFutureId).createdAt(weekInstant(0, 1)).build()),
+                workspaceId, projectId, "seed-fidelity", CategorizedId::createdAt);
+
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+
+        assertThat(liveCount("traces_local_v2", Set.of(farFutureId.toString()), workspaceId))
+                .as("far-future-id row is copied by the created_at-sliced backfill")
+                .isEqualTo(1L);
+        // Exact honest Monday (YYYYMMDD) computed in Java from the mint instant — asserting the precise week, not just
+        // the 2201 year, catches an off-by-week regression through the copy, matching the direct-insert tests' bar.
+        var expectedMonday = farFutureInstant.atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .format(DateTimeFormatter.BASIC_ISO_DATE);
+        assertThat(destinationPartitionId(farFutureId, workspaceId))
+                .as("copied far-future row lands in its own honest ~2201 weekly partition, not a wrapped ~2065")
+                .isEqualTo(expectedMonday);
+        assertThat(derivedFingerprint("traces_local_v2", workspaceId))
+                .as("derived fingerprint matches across the id_at type change even with a far-future row present")
+                .isEqualTo(derivedFingerprint("traces", workspaceId));
     }
 
     /**
@@ -546,8 +621,8 @@ class TracesLocalV2CutoverTest {
     /**
      * Rollback stage B (000004_rollback_stage_b + reverse_replay): aborting after the EXCHANGE but before the wrap swaps
      * the tables back and reverse-replays, so a delete that landed on the successor after cutover_start does not
-     * resurrect on the restored original. Exercises the reverse-replay's FULL-KEY branch (the comprehensive test covers
-     * the empty-project branch in stage C), and pins reverse-replay idempotence — the contract {@code --reverse-replay-only}
+     * resurrect on the restored original. Exercises the reverse-replay's full-key branch (the only branch since
+     * OPIK-7483), and pins reverse-replay idempotence — the contract {@code --reverse-replay-only}
      * relies on for re-applying an interrupted rollback replay.
      */
     @Test
@@ -634,6 +709,92 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * The reverse-replay postcondition gate: {@code 0} means every delete the bridge recorded since {@code cutover_start}
+     * is masked on the restored {@code traces}, and any other number is an incomplete rollback serving rows users
+     * deleted. The statement is reimplemented inline like the rest of this class
+     * (see {@link #verifyReplayPostcondition}).
+     *
+     * <p>Each phase pins one way the gate can lie:
+     * <ul>
+     *   <li><b>a resurrected id → 1</b>, however many physical rows back it. The gate reads without {@code FINAL}
+     *   across every replica, so an updated trace has several versions and each row comes back once per replica —
+     *   counting rows would inflate an operator's damage estimate mid-rollback. The phase seeds a second version, but
+     *   asserts only the answer: pinning the multiplicity would need background merges frozen, which these tests do not
+     *   do, and the per-replica multiplicity is not reproducible on a single-replica container at all.</li>
+     *   <li><b>two bridge events for one id → still 1.</b> A trace can be re-recorded (retry, re-delete), so the
+     *   event count is not the id count either.</li>
+     *   <li><b>masked → 0</b>, the passing case after a real replay, and the only result that ends a rollback.</li>
+     *   <li><b>bridged under one project, alive under another → 0.</b> Ids are client-supplied and reusable across
+     *   projects; a gate matching on {@code id} alone would report a live row the replay was never asked to touch.</li>
+     *   <li><b>bridged before {@code cutover_start} → 0.</b> A trace deleted and recreated before the cutover is
+     *   legitimately live while still carrying a bridge event; without the window filter the gate would call that a
+     *   failed rollback and send the operator chasing a delete the replay was never asked to re-apply.</li>
+     * </ul>
+     */
+    @Test
+    void reverseReplayPostconditionGateCountsDistinctResurrectedIdsInTheReplaysWindowAndFullKey() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var otherProjectId = ID_GENERATOR.generateId();
+
+        // Exact-count ids throughout (mintIds is per-week), so every expected number below is self-evident.
+        // Deleted, bridged, then recreated — all BEFORE the cutover line. It is legitimately live, and its bridge event
+        // is outside the replay's window, so the gate must not mistake it for a resurrection the replay missed.
+        var preWindow = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(preWindow, workspaceId, projectId);
+        recordDeletionEvents(idStrings(preWindow), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(idStrings(preWindow), workspaceId, projectId);
+        insertRows(preWindow, workspaceId, projectId, "recreated", _ -> Instant.now());
+
+        var cutoverStart = nowMicros();
+
+        assertThat(liveCount("traces", idStrings(preWindow), workspaceId))
+                .as("negative control: the pre-window row is live again after being recreated")
+                .isEqualTo(1);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("a live row bridged before cutover_start is outside the replay's window, so the gate reports 0")
+                .isZero();
+
+        // A post-cutover delete the replay did NOT mask, given a second version so rows outnumber ids while it lasts.
+        // Nothing asserts on that multiplicity — a background merge may collapse it at any moment.
+        var resurrected = mintIdsAt(1, weekInstant(1, 1));
+        seedTraces(resurrected, workspaceId, projectId);
+        insertRows(resurrected, workspaceId, projectId, "updated", _ -> Instant.now());
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
+
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("one resurrected id counts once, whether or not its two versions have merged")
+                .isEqualTo(1);
+
+        // A second bridge event for the same id must not double it either. Deterministic, unlike the versions above:
+        // it would fail a gate that joined the bridge instead of matching against it as a set.
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("two bridge events for one id count once, not per event")
+                .isEqualTo(1);
+
+        // The passing case: the replay masks it, the gate clears.
+        reverseReplay(cutoverStart);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("after the replay masks the bridged delete, the gate reports 0")
+                .isZero();
+
+        // Full-key scope: id reused across projects, bridged and masked in one, alive in the other.
+        var reused = mintIdsAt(1, weekInstant(2, 1));
+        seedTraces(reused, workspaceId, projectId);
+        seedTraces(reused, workspaceId, otherProjectId);
+        recordDeletionEvents(idStrings(reused), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(idStrings(reused), workspaceId, projectId);
+
+        assertThat(liveCount("traces", idStrings(reused), workspaceId))
+                .as("negative control: the reused id is still live under the other project")
+                .isEqualTo(1);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("a live row under a project the bridge never named is not a resurrection")
+                .isZero();
+    }
+
+    /**
      * rollback.sh refuses a wrong-stage run by reading two signals off the live {@code traces} — its engine and its
      * {@code end_time} nullability — and aborting unless they match the requested stage (the guard that stops a stage-A
      * {@code TRUNCATE} from destroying the parked original once the EXCHANGE has run). This drives the DB through the
@@ -684,6 +845,273 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * Un-wrap (000004_rollback_unwrap): reversing the {@code Distributed} wrap alone leaves the partitioned successor
+     * live. This is the property that separates it from stage C, which reverses the whole cutover — so the assertions
+     * that matter are the ones that would FAIL under stage C: post-cutover writes are still served, and the parked
+     * original is still parked (un-wrap consumes nothing, so stage B/C remain available afterwards).
+     *
+     * <p>It also pins that no data moves: the successor's fidelity fingerprint read <i>through the wrapper</i> before the
+     * un-wrap equals the one read off {@code traces} directly after it. The rename is metadata-only, and that is what
+     * makes this cheap enough to be the default response to a wrap-only fault.
+     *
+     * <p>And it pins why no reverse-replay is needed: a delete applied post-wrap stays deleted afterwards for the trivial
+     * reason that the same table stays live — nothing is promoted, so there is no frozen copy for it to resurrect from.
+     */
+    @Test
+    void unwrapReversesTheWrapKeepingTheSuccessorAndItsPostCutoverWrites() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
+
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        exchangeTables();
+        wrapInDistributed();
+
+        // Written through the Distributed wrapper, i.e. after the cutover — exactly the rows a stage B/C promote makes
+        // non-live. Un-wrap must keep them served.
+        var postCutover = mintIds(3);
+        seedTraces(postCutover, workspaceId, projectId);
+        // Deleted post-wrap on the shard, which is where OPIK-7455 points the delete DAO once the wrap is live.
+        var postWrapDeleted = Set.of(survivors.getFirst().id().toString());
+        recordDeletionEvents(postWrapDeleted, workspaceId, projectId.toString(), "user_request");
+        execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN :ids",
+                statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString())
+                        .bind("ids", postWrapDeleted));
+
+        var throughWrapper = fingerprint("traces", Shape.NEW, workspaceId);
+
+        // The signals rollback.sh's --unwrap-only guard reads before it will act: `traces` wrapped, and `traces_local`
+        // holding the SUCCESSOR schema. The second is what stops the guard promoting an original that some earlier manual
+        // step left under that name, which would revert the schema with none of stage B/C's flag reverts or repair.
+        assertThat(isDistributed("traces"))
+                .as("guard input: the wrap is applied")
+                .isTrue();
+        assertThat(columnType("traces_local", "end_time"))
+                .as("guard input: traces_local is the successor, so promoting it cannot silently revert the schema")
+                .doesNotStartWith("Nullable");
+
+        unwrap();
+
+        assertThat(isDistributed("traces"))
+                .as("un-wrap removes the Distributed wrapper")
+                .isFalse();
+        assertThat(columnType("traces", "end_time"))
+                .as("the live table is still the SUCCESSOR, not the original: un-wrap reverses sharding, not the cutover")
+                .doesNotStartWith("Nullable");
+        assertThat(tableExists("traces_local"))
+                .as("the successor shard was promoted back into `traces`, so the sharding name is free")
+                .isFalse();
+        assertThat(tableExists("traces_dist_old"))
+                .as("the data-less ex-wrapper is dropped, leaving no temp name behind")
+                .isFalse();
+
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("un-wrap moves no data: the successor reads identically before (through the wrapper) and after")
+                .isEqualTo(throughWrapper);
+        assertThat(liveCount("traces", idStrings(postCutover), workspaceId))
+                .as("post-cutover writes stay LIVE — the property stage B/C cannot preserve")
+                .isEqualTo(postCutover.size());
+        assertThat(liveCount("traces", postWrapDeleted, workspaceId))
+                .as("a post-wrap delete stays deleted: the same table stays live, so there is nothing to resurrect from")
+                .isZero();
+        assertThat(liveCount("traces", idStrings(survivors.subList(1, survivors.size())), workspaceId))
+                .as("every other survivor is intact")
+                .isEqualTo(survivors.size() - 1);
+
+        assertThat(tableExists("traces_pre_cutover_backup"))
+                .as("the parked original is untouched, so stage B/C are still available after an un-wrap")
+                .isTrue();
+        assertThat(columnType("traces_pre_cutover_backup", "end_time"))
+                .as("and it still holds the ORIGINAL schema — un-wrap consumed no backup")
+                .startsWith("Nullable");
+    }
+
+    /**
+     * The runbook's "Retrying the cutover after a stage B/C rollback — without re-backfilling" procedure. It rests on one
+     * physical claim: {@code traces_post_rollback_backup} IS the object Liquibase created as {@code traces_local_v2} (a
+     * ReplicatedMergeTree's replica path is fixed at CREATE and survives renames), so renaming it back yields a usable
+     * shadow and the retry needs only a delta, not a second full backfill. That claim is what this pins — the procedure
+     * is deliberately manual, but an operator will follow it under pressure, so the mechanism it depends on should not be
+     * taken on trust.
+     *
+     * <p>It also pins the two consequences the runbook has to warn about, because both look like faults if unexpected:
+     * the reused shadow is a <b>superset</b> of the restored original by exactly the post-cutover writes the rollback
+     * discarded, so a fidelity compare legitimately differs there; and after the retry's {@code EXCHANGE} those rows are
+     * <b>live again</b>.
+     */
+    @Test
+    void rollbackBackupIsReusableAsTheShadowForARetryWithoutRebackfilling() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        deltaInsert(backfillStart);
+
+        // Walk the chain the reuse claim depends on, so a failure localizes itself instead of only showing a wrong end
+        // state: the first backfill populated the shadow...
+        assertThat(liveCount("traces_local_v2", idStrings(survivors), workspaceId))
+                .as("the first backfill populated the shadow")
+                .isEqualTo(survivors.size());
+
+        var cutoverStart = nowMicros();
+        exchangeTables();
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("...and the EXCHANGE made that copy live")
+                .isEqualTo(survivors.size());
+        // Accepted by the successor after cutover_start, so the stage-B promote makes it non-live. It is the row whose
+        // fate the runbook has to be explicit about on a retry.
+        var postCutover = mintIds(3);
+        seedTraces(postCutover, workspaceId, projectId);
+
+        // Fingerprint the shadow while it is still live. Row counts alone would accept a parked copy holding the right ids
+        // with mangled or missing field values, which is not a reusable shadow — and reuse is the whole claim here.
+        var parkedCopy = fingerprint("traces", Shape.NEW, workspaceId);
+
+        rollbackExchangeBack(cutoverStart);
+        // ...and the rollback parked that same copy rather than discarding it. This is the assertion the whole procedure
+        // rests on: if the parked backup were empty (or recycled), reuse would be a re-backfill wearing a rename.
+        assertThat(liveCount("traces_post_rollback_backup", idStrings(survivors), workspaceId))
+                .as("...and the rollback parked that copy intact, which is what makes it reusable")
+                .isEqualTo(survivors.size());
+        assertThat(liveCount("traces", idStrings(postCutover), workspaceId))
+                .as("baseline: the promote made the post-cutover writes non-live on the restored original")
+                .isZero();
+
+        // The documented reuse: hand the parked successor back to the shadow name. No re-backfill.
+        execute("RENAME TABLE traces_post_rollback_backup TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        });
+
+        assertThat(liveCount("traces_local_v2", idStrings(survivors), workspaceId))
+                .as("the reused shadow still holds everything the first backfill copied — this is the point of reusing it")
+                .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces_local_v2", Shape.NEW, workspaceId))
+                .as("and holds it unchanged: the rollback parked the copy field-for-field, so the rename yields a shadow "
+                        + "the delta can resume onto rather than one that has to be rebuilt")
+                .isEqualTo(parkedCopy);
+
+        // Resume the normal forward flow from the ORIGINAL anchor, as the runbook prescribes.
+        deltaInsert(backfillStart);
+
+        // Fidelity: equal on the rows both sides have, and the shadow differs ONLY by the revived post-cutover writes.
+        // A fidelity compare bounded to sealed history matches; an unbounded one legitimately reports these rows.
+        assertThat(liveCount("traces_local_v2", idStrings(survivors), workspaceId))
+                .as("survivors reconcile after the delta")
+                .isEqualTo(survivors.size());
+        assertThat(liveCount("traces_local_v2", idStrings(postCutover), workspaceId))
+                .as("the reused shadow is a SUPERSET: it still carries the writes the rollback discarded")
+                .isEqualTo(postCutover.size());
+        assertThat(liveCount("traces", idStrings(postCutover), workspaceId))
+                .as("...which the restored original does not have — hence the expected one-sided difference")
+                .isZero();
+
+        exchangeTables();
+
+        assertThat(columnType("traces", "end_time"))
+                .as("the retry's EXCHANGE lands the successor schema, from a shadow that was never re-backfilled")
+                .doesNotStartWith("Nullable");
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("every originally-copied row is live after the retry")
+                .isEqualTo(survivors.size());
+        assertThat(liveCount("traces", idStrings(postCutover), workspaceId))
+                .as("and the discarded post-cutover writes are LIVE AGAIN — the caveat the runbook must state")
+                .isEqualTo(postCutover.size());
+    }
+
+    /**
+     * The two properties that make un-wrap worth having as its own mode.
+     *
+     * <p><b>It needs no parked original.</b> Stages B and C both require {@code traces_pre_cutover_backup}, which
+     * {@code finalize.sh} drops when it commits the cutover. Since the documented order is wrap → soak → finalize,
+     * post-wrap-and-post-finalize is the expected steady state — and there, un-wrap is the only wrap recovery left.
+     *
+     * <p><b>The wrap becomes a switch.</b> wrap → un-wrap → wrap → un-wrap round-trips with the data intact, so a
+     * suspected wrap fault can be backed out and re-applied once understood, rather than being a one-way door.
+     *
+     * <p>The finalized estate is simulated by renaming the parked original aside rather than dropping it: absence of the
+     * name is the whole of what the guards read, and keeping the rows lets {@code @BeforeEach} restore the suite's
+     * baseline afterwards (a real DROP would strip the only copy of the original schema for every later test).
+     *
+     * <p><b>The re-wrap here is the wrap SQL, not the driver</b> ({@link #wrapInDistributed()}), so "re-appliable" is a
+     * statement about the DDL, not about {@code exchange_and_wrap.sh --wrap-only} — which deliberately refuses while the
+     * parked original is missing, i.e. in exactly the finalized state this test simulates. That asymmetry is documented
+     * in the runbook and printed by {@code rollback.sh}; asserting it belongs to the driver scope this suite excludes.
+     */
+    @Test
+    void unwrapNeedsNoParkedOriginalAndTheWrapCanBeReapplied() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
+
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        exchangeTables();
+        wrapInDistributed();
+
+        execute("RENAME TABLE traces_pre_cutover_backup TO " + PARKED_BACKUP + " ON CLUSTER '{cluster}'", _ -> {
+        });
+        assertThat(tableExists("traces_pre_cutover_backup"))
+                .as("finalized estate: the parked original is gone, so stage B/C have nothing to restore")
+                .isFalse();
+
+        // Read through the wrapper before the first reversal, then re-read at every transition below. Each rename is
+        // metadata-only, so "the data survives" is a claim about content and not just about row counts holding steady.
+        var beforeRoundTrip = fingerprint("traces", Shape.NEW, workspaceId);
+
+        unwrap();
+
+        assertThat(isDistributed("traces"))
+                .as("un-wrap succeeds with no parked original — the recovery stage B/C cannot offer here")
+                .isFalse();
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("the successor's rows are all still live after un-wrapping a finalized estate")
+                .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("un-wrapping a finalized estate moved no data")
+                .isEqualTo(beforeRoundTrip);
+
+        // Re-apply, then reverse again: the wrap is a switch, not a one-way door.
+        wrapInDistributed();
+        assertThat(isDistributed("traces"))
+                .as("the wrap can be re-applied after an un-wrap")
+                .isTrue();
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("re-wrapped rows still read through the wrapper")
+                .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("and read identically through it")
+                .isEqualTo(beforeRoundTrip);
+
+        unwrap();
+        assertThat(isDistributed("traces"))
+                .as("and reversed again — wrap/un-wrap round-trips")
+                .isFalse();
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("data survives a full wrap/un-wrap round-trip")
+                .isEqualTo(survivors.size());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("field-for-field, across wrap -> un-wrap -> wrap -> un-wrap")
+                .isEqualTo(beforeRoundTrip);
+
+        // Hand the original back so the reset can rebuild the canonical baseline. The reset also recovers this name on
+        // its own, so an assertion failure above cannot cascade into later tests.
+        execute("RENAME TABLE " + PARKED_BACKUP + " TO traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
+        });
+    }
+
+    /**
      * A trace deleted and then re-created/updated under the SAME id during the window is bridged as deleted but is live
      * again on the source (ids are client-supplied; the newer insert wins under FINAL). The replay's resurrection guard
      * must keep it on the destination — deleting it by key would drop a row that is live on the source (silent data
@@ -694,17 +1122,13 @@ class TracesLocalV2CutoverTest {
      * convergence, so a second replay must not change the result — in particular it must not eventually drop the
      * resurrected (live-on-source) rows.
      *
-     * <p>Parameterized over the bridge capture shape so <b>both</b> replay branches carry the guard: a delete captured
-     * WITH its project exercises the full-key branch, one captured with an empty project (the workspace-scoped delete
-     * fallback) exercises the {@code (workspace_id, id)} branch. Both branches must spare a resurrected id.
+     * <p>The full-key replay branch carries the guard: a delete captured WITH its project (the only shape since
+     * OPIK-7483) must spare a resurrected id.
      */
-    @ParameterizedTest(name = "resurrection guard holds on the {0}-project replay branch")
-    @ValueSource(booleans = {true, false})
-    void deleteThenResurrectSurvivesTheReplay(boolean resolvedProject) {
+    @Test
+    void deleteThenResurrectSurvivesTheReplay() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
-        // Capture shape selects the replay branch: the resolved project (full key) or an empty project (workspace-scoped).
-        var captureProject = resolvedProject ? projectId.toString() : "";
         var survivors = mintIds(SURVIVORS_PER_WEEK);
         var resurrected = mintIds(3); // deleted then re-created under the same id
         var stayDeleted = mintIds(3); // deleted and NOT re-created
@@ -720,9 +1144,9 @@ class TracesLocalV2CutoverTest {
         // During the window: delete both cohorts (bridged), then re-create the resurrected cohort under the same ids
         // with a fresh last_updated_at — the newer version wins under FINAL, so they are live again on the source (caught
         // by the delta's last_updated_at arm since their created_at stays historical).
-        recordDeletionEvents(idStrings(resurrected), workspaceId, captureProject, "user_request");
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
         lightweightDelete(idStrings(resurrected), workspaceId);
-        recordDeletionEvents(idStrings(stayDeleted), workspaceId, captureProject, "user_request");
+        recordDeletionEvents(idStrings(stayDeleted), workspaceId, projectId.toString(), "user_request");
         lightweightDelete(idStrings(stayDeleted), workspaceId);
         // Recreate with a server-clock last_updated_at (a later now64(6), so >= backfillStart) — NOT the JVM clock,
         // whose skew vs the container could put it below backfillStart and make the delta miss the resurrection path.
@@ -744,55 +1168,6 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces_local_v2", idStrings(survivors), workspaceId))
                 .as("untouched survivors are intact")
                 .isEqualTo(survivors.size());
-    }
-
-    /**
-     * The workspace-scoped ({@code project_id = ''}) replay branch must SPARE a live row that shares an {@code id} with
-     * another project. A delete-by-ids fallback that cannot resolve a project is bridged with an empty project and
-     * replayed on the {@code (workspace_id, id)} key; its resurrection guard keys only on {@code (workspace_id, id)}, so
-     * this proves it does not over-delete a cross-project live copy. Complements the single-project
-     * {@link #deleteThenResurrectSurvivesTheReplay} and the full-key reused-id case in
-     * {@link #bufferedCutoverPreservesEveryDeletionAcrossExchange}.
-     */
-    @Test
-    void workspaceScopedReplaySparesLiveCrossProjectRow() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectA = ID_GENERATOR.generateId();
-        var projectB = ID_GENERATOR.generateId();
-        var reusedInstant = weekInstant(0, 1);
-        var reusedId = ID_GENERATOR.generateId(reusedInstant);
-        var reused = List.of(CategorizedId.builder().id(reusedId).createdAt(reusedInstant).build());
-        // Same id in two projects — ids are not globally unique.
-        seedTraces(reused, workspaceId, projectA);
-        seedTraces(reused, workspaceId, projectB);
-
-        var backfillStart = nowMicros();
-        for (int week = 0; week < SEED_WEEKS; week++) {
-            backfillWeek(week);
-        }
-
-        // Workspace-scoped delete: bridged with an empty project_id (the delete-by-ids fallback). The source LWD is
-        // workspace-scoped, so it removes the id from BOTH projects; then resurrect it in projectB only (a newer version
-        // wins under FINAL), so it is live again on the source in B and caught by the delta's last_updated_at arm.
-        recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, "", "user_request");
-        lightweightDelete(Set.of(reusedId.toString()), workspaceId);
-        // Server-clock last_updated_at (a later now64(6), so >= backfillStart) — NOT the JVM clock, whose skew vs the
-        // container could put it below backfillStart and make the delta's last_updated_at arm miss the resurrection.
-        var resurrectedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
-        insertRows(reused, workspaceId, projectB, "resurrected", _ -> resurrectedAt);
-
-        deltaInsert(backfillStart);
-        replayDeletions(backfillStart);
-        replayDeletions(backfillStart); // idempotent
-
-        assertThat(liveCountScoped("traces_local_v2", Set.of(reusedId.toString()), workspaceId, projectB))
-                .as("workspace-scoped replay spares the live projectB copy that shares an id with projectA")
-                .isEqualTo(1L);
-        // Known residual (OPIK-7483; the 000005 fingerprint flags it as an extra destination row, ok=0): because the id
-        // is live in B, the (workspace_id, id) guard skips the whole id, so the stale projectA copy is not removed here.
-        assertThat(liveCountScoped("traces_local_v2", Set.of(reusedId.toString()), workspaceId, projectA))
-                .as("documented residual: the stale other-project copy remains until OPIK-7483")
-                .isEqualTo(1L);
     }
 
     /**
@@ -921,7 +1296,7 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:week_lo, 9, 'UTC')
                   AND created_at < toDateTime64(:week_hi, 9, 'UTC')
-                SETTINGS max_insert_block_size = 100000
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("week_lo", weekLo).bind("week_hi", weekHi));
     }
@@ -941,19 +1316,18 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:backfill_start, 6)
                    OR last_updated_at >= toDateTime64(:backfill_start, 6)
-                SETTINGS max_insert_block_size = 100000
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("backfill_start", backfillStart));
     }
 
     /**
      * Reads the bridge for the cutover window and removes the captured deletes from the destination in a single
-     * mutation (mirrors 000002). Two branches, because the delete-by-ids path does not always resolve a trace's project:
-     * events WITH a project match the full key {@code (workspace_id, project_id, id)} (exact; a reused id in another
-     * project is untouched); events captured WITHOUT a project match {@code (workspace_id, id)} — otherwise those
-     * deletions silently leak across the swap. Each branch also requires the id is NOT currently live on the source
-     * (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns the wall time so the runbook can
-     * size it against the buffer window.
+     * mutation (mirrors 000002). Single full-key branch: since OPIK-7483 every trace delete carries its project_id, so
+     * events match the full key {@code (workspace_id, project_id, id)} (exact; a reused id in another project is
+     * untouched) — without this replay those deletions silently leak across the swap. The branch also requires the id is
+     * NOT currently live on the source (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns
+     * the wall time so the runbook can size it against the buffer window.
      */
     private long replayDeletions(String backfillStart) {
         var start = System.nanoTime();
@@ -980,31 +1354,6 @@ class TracesLocalV2CutoverTest {
                         SELECT
                             workspace_id,
                             project_id,
-                            id
-                        FROM traces
-                        WHERE id IN (
-                            SELECT toFixedString(deleted_id, 36)
-                            FROM deletion_events_local
-                            WHERE source_table = 'traces'
-                              AND event_time >= toDateTime64(:backfill_start, 6)
-                              AND length(deleted_id) = 36
-                        )
-                    )
-                )
-                OR (
-                    (workspace_id, id) IN (
-                        SELECT
-                            workspace_id,
-                            toFixedString(deleted_id, 36)
-                        FROM deletion_events_local
-                        WHERE source_table = 'traces'
-                          AND event_time >= toDateTime64(:backfill_start, 6)
-                          AND project_id = ''
-                          AND length(deleted_id) = 36
-                    )
-                    AND (workspace_id, id) NOT IN (
-                        SELECT
-                            workspace_id,
                             id
                         FROM traces
                         WHERE id IN (
@@ -1101,11 +1450,30 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * Un-wrap (000004_rollback_unwrap): reverse the {@code Distributed} wrap and stop. A single atomic multi-target
+     * {@code RENAME} rotates the data-less wrapper out to a temp name and promotes {@code traces_local} into the name it
+     * frees, so {@code traces} is never absent on a node; the ex-wrapper is then dropped under {@code traces_dist_old},
+     * a name only the wrapper ever held. Deliberately no promote and no reverse-replay — the successor stays live, so
+     * nothing is abandoned and no bridged delete needs re-applying. It is stage C's rename minus the middle clause.
+     */
+    private void unwrap() {
+        execute("""
+                RENAME TABLE
+                    traces TO traces_dist_old,
+                    traces_local TO traces
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
+        });
+        execute("DROP TABLE IF EXISTS traces_dist_old ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
+    }
+
+    /**
      * The shared reverse-replay (000004_rollback_reverse_replay): re-apply the deletes captured since
-     * {@code cutoverStart} onto the restored original, so they do not resurrect. Two branches — full key for events with
-     * a project, {@code (workspace_id, id)} for the workspace-scoped (empty-project) fallback. Unlike the forward replay
-     * it carries NO resurrection guard by design: rollback abandons post-cutover writes while honoring post-cutover
-     * deletes, so a bridged id is masked unconditionally (a guard would undo the user's delete). See the .sql header.
+     * {@code cutoverStart} onto the restored original, so they do not resurrect. Single full-key branch — since OPIK-7483
+     * every delete carries its project_id, so the replay matches {@code (workspace_id, project_id, id)}. Unlike the
+     * forward replay it carries NO resurrection guard by design: rollback abandons post-cutover writes while honoring
+     * post-cutover deletes, so a bridged id is masked unconditionally (a guard would undo the user's delete). See the .sql header.
      */
     private void reverseReplay(String cutoverStart) {
         execute("""
@@ -1120,16 +1488,6 @@ class TracesLocalV2CutoverTest {
                       AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id != ''
                       AND length(project_id) = 36
-                      AND length(deleted_id) = 36
-                )
-                OR (workspace_id, id) IN (
-                    SELECT
-                        workspace_id,
-                        toFixedString(deleted_id, 36)
-                    FROM deletion_events_local
-                    WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6)
-                      AND project_id = ''
                       AND length(deleted_id) = 36
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
@@ -1293,9 +1651,8 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Batch INSERT into the bridge, mirroring {@code DeletionEventDAO}'s write shape. {@code projectId} is a string so a
-     * caller can pass {@code ""} to reproduce an unresolved delete (the delete-by-ids path records an empty project when
-     * it cannot resolve a trace's project).
+     * Batch INSERT into the bridge, mirroring {@code DeletionEventDAO}'s write shape. {@code projectId} is the real
+     * owning project of each deleted trace — since OPIK-7483 every trace delete carries it (no project-less events).
      */
     private void recordDeletionEvents(Set<String> ids, String workspaceId, String projectId, String reason) {
         var idList = List.copyOf(ids);
@@ -1328,6 +1685,42 @@ class TracesLocalV2CutoverTest {
         });
     }
 
+    /**
+     * The reverse-replay postcondition, mirroring {@code 000004_rollback_verify_replay.sql} — same key, same
+     * {@code toFixedString(36)} casts, same window and length guards, same aggregate, and the same database
+     * qualification on both tables. Kept in step with that file; its {@code log_comment} is the one omission, being
+     * observability rather than semantics, as elsewhere in this class.
+     *
+     * <p>The qualification is deliberate, not boilerplate: this is the only statement in the runbook that reads through
+     * {@code clusterAllReplicas}, so qualifying both the outer table and the {@code IN} subquery keeps it correct
+     * regardless of the connecting session's default database. A single-node container cannot show that.
+     */
+    private long verifyReplayPostcondition(String cutoverStart) {
+        var sql = """
+                SELECT uniqExact(workspace_id, project_id, id) AS resurrected
+                FROM clusterAllReplicas('{cluster}', %s.traces)
+                WHERE (workspace_id, project_id, id) IN (
+                    SELECT
+                        workspace_id,
+                        toFixedString(project_id, 36),
+                        toFixedString(deleted_id, 36)
+                    FROM %s.deletion_events_local
+                    WHERE source_table = 'traces'
+                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND project_id != ''
+                      AND length(project_id) = 36
+                      AND length(deleted_id) = 36
+                )
+                """.formatted(DATABASE_NAME, DATABASE_NAME);
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("cutover_start", cutoverStart)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
+                .block();
+    }
+
     // --- query helpers -------------------------------------------------------------------------------------------
 
     /** Distinct live (mask-honored) ids from {@code table} within {@code ids} — collapses ReplacingMergeTree versions. */
@@ -1348,6 +1741,24 @@ class TracesLocalV2CutoverTest {
                                 .bind("ids", ids)
                                 .execute())
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class)))))
+                .block();
+    }
+
+    private String destinationPartitionId(UUID id, String workspaceId) {
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement("""
+                                SELECT _partition_id AS partition_id
+                                FROM traces_local_v2
+                                WHERE workspace_id = :workspace_id
+                                  AND id = :id
+                                LIMIT 1
+                                """)
+                                .bind("workspace_id", workspaceId)
+                                .bind("id", id.toString())
+                                .execute())
+                        .flatMap(result -> Mono
+                                .from(result.map((row, ignored) -> row.get("partition_id", String.class)))))
                 .block();
     }
 
@@ -1439,8 +1850,10 @@ class TracesLocalV2CutoverTest {
      * (count, checksum) over the DETERMINISTIC derived columns of the fidelity cohort — {@code id_at} (the partition
      * key), the three {@code *_length}s, {@code truncated_input} / {@code truncated_output} and {@code output_keys}.
      * Each is the same MATERIALIZED expression over faithfully-copied base columns on both tables, so equal fingerprints
-     * prove the successor's expressions did not drift from the source's. {@code duration} is checked separately
-     * ({@link #durationMismatches}) because its value legitimately differs by up to the ns-to-us truncation.
+     * prove the successor's expressions did not drift from the source's. {@code id_at} is wrapped in {@code toDateTime}
+     * because the source's {@code id_at} is a 32-bit {@code DateTime} while the successor's is a {@code DateTime64}: both
+     * are second precision, so the cast only unifies the column type — a raw cross-type hash would differ even for
+     * identical instants.
      */
     private Fingerprint derivedFingerprint(String table, String workspaceId) {
         var sql = """
@@ -1448,7 +1861,7 @@ class TracesLocalV2CutoverTest {
                     count() AS c,
                     sum(cityHash64(
                         id,
-                        id_at,
+                        toDateTime(id_at),
                         input_length,
                         output_length,
                         metadata_length,

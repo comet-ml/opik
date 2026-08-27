@@ -118,6 +118,17 @@ databaseAnalyticsDataModel:
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
   #   chunks of this size.
   deletionEventsInsertBatchSize: 1000
+  #  Default: false
+  #  Description: The final sharding-readiness step wraps `traces` as a Distributed table over the `traces_local`
+  #   shard. A Distributed table supports SELECT and INSERT but NOT mutations, so once the wrap is live every trace
+  #   mutation must target the local shard. Leave false at deploy time and while `traces` is still a MergeTree (deletes
+  #   work directly); set true in lockstep with applying the wrap (exchange_and_wrap.sh --with-wrap / --wrap-only). While
+  #   true, TraceDAO routes delete/retention mutations to `traces_local`; reads and inserts stay on the Distributed
+  #   `traces`. Post-wrap, changes to `traces` split by kind: row mutations (DELETE) + MATERIALIZE COLUMN/ADD INDEX/
+  #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
+  #   both `traces_local` and `traces`, else reads can't see the column (code 47).
+  tracesDistributedWrapEnabled: false
+  #  Default: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -194,6 +205,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-cold-storage-disk
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-traces-topology
       critical: true
       type: ready
       initialState: false
@@ -544,6 +560,10 @@ datasetExport:
   cleanupLockWaitTime: 1s
   cleanupBatchSize: 100
 
+# Dynamic token auth for custom LLM providers: tests hit localhost token endpoints over http
+llmProviderTokenAuth:
+  destinationGuard: "relaxed"
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s
@@ -570,6 +590,21 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  # Configuration for Vertex AI client
+  vertexAIClient:
+    # Default: https://www.googleapis.com/auth/cloud-platform
+    # Description: Vertex AI SCOPE API URL
+    scope: https://www.googleapis.com/auth/cloud-platform
+    # Default: GRPC
+    # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
+    transport: GRPC
+    # Description: API endpoint per multi-region location, keyed by lower-case location. Single-region locations are
+    # not listed and keep the host the SDK derives from the location itself. Required: these hosts exist only here,
+    # the application defines no fallback for them.
+    multiRegionApiEndpoints:
+      global: aiplatform.googleapis.com
+      eu: aiplatform.eu.rep.googleapis.com
+      us: aiplatform.us.rep.googleapis.com
 
 # Configuration for cache manager
 cacheManager:
@@ -803,22 +838,6 @@ serviceToggles:
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
-  # Default: "" (empty, no allowlisted workspaces)
-  # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
-  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
-  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
-  # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
-  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
-  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
-  v2WorkspaceAllowlist: ""
-  # Default: version_2
-  # Description: Forces ALL workspaces to a specific navigation version.
-  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
-  # Scope: Global — applies to all workspaces regardless of their entity state.
-  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
-  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
-  # Operational impact: Default is "version_2". Override to "disabled" (entity-based determination) or "version_1" if global enforcement is needed.
-  forceWorkspaceVersion: "version_2"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
@@ -935,157 +954,12 @@ datasetVersioning:
     maxBackoff: 500ms
   lockLease: 60s
 
-# Experiment Project Migration configuration
-# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
-# Runs as a recurring job, processing workspaces in batches.
-experimentProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: false
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: 20
-  # Number of experiments to update per ClickHouse INSERT batch
-  experimentBatchSize: 1000
-  # Interval between recurring job runs
-  interval: 5s
-  # Delay before first run after app startup
-  startupDelay: 5s
-  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
-  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
-  lockTimeout: 5s
-  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
-  # lock doesn't block this fire — the next scheduled tick will try again.
-  lockWaitTime: 100ms
-  # Per-cycle timeout — short for tests so hangs fail fast
-  jobTimeout: 30s
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
-  schedulerThreadCap: 2
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: 50
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: 10s
-
-# Dataset Project Migration configuration
-# Assigns project_id to orphan datasets (V1 → V2 workspace migration).
-# Runs as a recurring job, processing workspaces in batches.
-datasetProjectMigration:
-  # Master switch — disabled in tests by default
-  enabled: false
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: 20
-  # Number of datasets to update per MySQL UPDATE batch
-  datasetBatchSize: 1000
-  # Interval between recurring job runs
-  interval: 5s
-  # Delay before first run after app startup — gives tests time to seed preconditions
-  # (workspaces, datasets, experiments, traces) before the first cycle fires
-  startupDelay: 5s
-  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
-  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
-  lockTimeout: 5s
-  # Max time to wait for the distributed lock when another replica holds it
-  lockWaitTime: 100ms
-  # Per-cycle timeout — short for tests so hangs fail fast
-  jobTimeout: 30s
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
-  schedulerThreadCap: 2
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: 50
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: 10s
-
-# Optimization Project Migration configuration (D3)
-# Assigns project_id to orphan optimizations in ClickHouse via experiments-primary + dataset
-# fallback inference. Disabled by default in tests — each test opts in via CustomConfig.
-optimizationProjectMigration:
-  enabled: false
-  workspacesPerRun: 20
-  optimizationBatchSize: 1000
-  interval: 5s
-  startupDelay: 5s
-  lockTimeout: 5s
-  lockWaitTime: 100ms
-  jobTimeout: 30s
-  schedulerThreadCap: 2
-  schedulerQueuedTaskCap: 50
-  schedulerThreadTtl: 10s
-
-# Prompt Project Migration configuration (D4)
-# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Runs as a recurring job.
-promptProjectMigration:
-  # Master switch — disabled in tests by default; tests opt in via CustomConfig overrides.
-  enabled: false
-  workspacesPerRun: 20
-  promptBatchSize: 1000
-  interval: 5s
-  # Non-zero so the first scheduled fire lands after the JobTest's initial seed + prime.
-  # ServiceTest disables the job entirely and drives the cycle directly via runMigrationCycle().
-  startupDelay: 5s
-  lockTimeout: 5s
-  lockWaitTime: 100ms
-  jobTimeout: 30s
-  schedulerThreadCap: 2
-  schedulerQueuedTaskCap: 50
-  schedulerThreadTtl: 10s
-
-automationRuleProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: false
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: 20
-  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions
-  maxRulesPerCycle: 100
-  # Interval between recurring job runs
-  interval: 5s
-  # Delay before first run after app startup
-  startupDelay: 5s
-  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
-  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
-  lockTimeout: 5s
-  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
-  # lock doesn't block this fire — the next scheduled tick will try again.
-  lockWaitTime: 100ms
-  # Per-cycle timeout — short for tests so hangs fail fast
-  jobTimeout: 30s
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; minimum 2 required by reactor.
-  schedulerThreadCap: 2
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: 50
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: 10s
-
-# Alert Project Migration configuration
-# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
-alertProjectMigration:
-  enabled: false
-  workspacesPerRun: 20
-  alertBatchSize: 100
-  interval: 5s
-  startupDelay: 5s
-  lockTimeout: 5s
-  lockWaitTime: 100ms
-  jobTimeout: 30s
-  schedulerThreadCap: 2
-  schedulerQueuedTaskCap: 50
-  schedulerThreadTtl: 10s
-
 partitionMetrics:
   enabled: false
   # Poll interval (default 5 min). Min 30s, max 1h.
   interval: 5m
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: traces,spans
-
-# Shared configuration for V1 → V2 entity project migration jobs
-# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
-migration:
-  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
-  excludedWorkspaceIds:
 
 # Job timeout configuration
 jobTimeout:
@@ -1193,9 +1067,11 @@ optimizationStalledReaper:
   jobInterval: 5m
   initializedTimeout: 15m
   runningTimeout: 26h
+  runningHardTimeout: 48h
   lookbackMargin: 7d
   lockDuration: 4m
   batchSize: 100
+  candidateScanFactor: 10
 
 # Environment CRUD configuration
 environment:

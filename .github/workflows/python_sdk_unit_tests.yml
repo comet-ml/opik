@@ -22,6 +22,7 @@ concurrency:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 jobs:
   UnitTests:
     name: Python SDK Unit Tests ${{matrix.python_version}}
@@ -39,7 +40,7 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Print environment variables
         run: env
@@ -58,7 +59,7 @@ jobs:
           python-version: ${{ matrix.python_version }}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Install opik
         run: uv pip install --system .

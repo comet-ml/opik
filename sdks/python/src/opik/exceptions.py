@@ -184,6 +184,11 @@ class GuardrailValidationError(GuardrailValidationFailed):
         return self.message
 
 
+class GuardrailPolicyError(OpikException):
+    """Raised when a guardrail policy stored in the workspace cannot be turned into a
+    runtime guard, for example when it holds a guard type this SDK version does not know."""
+
+
 class GuardrailTrainingError(OpikException):
     """Raised when training a custom guardrail fails or does not complete in time."""
 
@@ -221,6 +226,13 @@ class BaseLLMError(OpikException):
 
     def __str__(self) -> str:
         return f"LLM infrastructure error: {self.message}"
+
+
+class EmptyLLMResponseError(BaseLLMError):
+    """The provider returned no content and no tool calls.
+
+    Transient: retrying the same request usually succeeds.
+    """
 
 
 class SearchTimeoutError(OpikException):

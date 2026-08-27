@@ -1,14 +1,27 @@
 import type { Page, Locator } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
+
+/** Escape a literal so it can be embedded in a RegExp. Trial labels are plain
+ *  today ("Baseline", "Trial #3"), but a POM helper that takes arbitrary text
+ *  should not change meaning if that text ever grows a metacharacter. */
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export interface StudioRunConfig {
   /** Name of a dataset already associated with the project (shown in the picker). */
   datasetName: string;
   /** User-message prompt content; keep the dataset variable, e.g. `{{text}}`. */
   prompt: string;
+  /**
+   * System-message content — the instruction the optimizer rewrites. Required
+   * because the form seeds a system card and rejects submit while it is empty;
+   * see `setSystemPrompt`.
+   */
+  systemPrompt: string;
   /** Model display name as shown in the picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
   /** Equals-metric reference key — the dataset field holding the gold label. */
@@ -51,7 +64,12 @@ export class OptimizationStudioPage {
   /** Assert the form's core sections render with the expected defaults. */
   async assertFormRenders(opts: { optimizer?: string; metric?: string } = {}): Promise<void> {
     return test.step('Assert the studio form renders its sections', async () => {
-      await expect(this.promptEditor()).toBeVisible();
+      // A new run seeds two message cards — instructions in the system message
+      // (the only role the run makes optimizable) and template variables in the
+      // user message. Assert both, so a regression back to a single seeded card
+      // fails here rather than surfacing as a stuck submit later.
+      await expect(this.promptEditor('system')).toBeVisible();
+      await expect(this.promptEditor('user')).toBeVisible();
       await expect(this.modelCombobox()).toBeVisible();
       await expect(this.datasetPickerButton()).toBeVisible();
       await expect(
@@ -78,11 +96,28 @@ export class OptimizationStudioPage {
 
   async setUserPrompt(content: string): Promise<void> {
     return test.step('Type the user-message prompt', async () => {
-      const editor = this.promptEditor();
-      await editor.click();
-      await editor.fill(content);
-      await expect(editor).toContainText(content);
+      await this.fillMessage('user', content);
     });
+  }
+
+  /**
+   * Fill the system message. The form seeds an empty system card alongside the
+   * user one and its schema requires every message to be non-empty, so a run
+   * that leaves this blank never submits — the Optimize button goes enabled
+   * (its disabled gate doesn't cover message content) but validation rejects
+   * the submit, so the panel simply stays open.
+   */
+  async setSystemPrompt(content: string): Promise<void> {
+    return test.step('Type the system-message prompt', async () => {
+      await this.fillMessage('system', content);
+    });
+  }
+
+  private async fillMessage(role: 'system' | 'user', content: string): Promise<void> {
+    const editor = this.promptEditor(role);
+    await editor.click();
+    await editor.fill(content);
+    await expect(editor).toContainText(content);
   }
 
   async selectModel(displayName: string): Promise<void> {
@@ -94,9 +129,17 @@ export class OptimizationStudioPage {
         await this.modelCombobox().click();
         await expect(search).toBeVisible({ timeout: 2_000 });
       }).toPass({ timeout: 15_000 });
-      await search.fill(displayName);
-      await this.page.getByRole('option', { name: displayName }).click();
-      await expect(this.modelCombobox()).toContainText(displayName);
+
+      // The option list remounts when the model/provider-key queries resolve, so
+      // an option can detach between resolving and being clicked. Re-filter and
+      // re-click until the combobox reflects the selection.
+      await expect(async () => {
+        await search.fill(displayName);
+        const option = this.page.getByRole('option', { name: displayName });
+        await expect(option.first()).toBeVisible({ timeout: 2_000 });
+        await option.first().click({ timeout: 2_000 });
+        await expect(this.modelCombobox()).toContainText(displayName, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
     });
   }
 
@@ -122,7 +165,22 @@ export class OptimizationStudioPage {
     return test.step('Start the optimization run', async () => {
       await expect(this.optimizeButton()).toBeEnabled();
       await this.optimizeButton().click();
-      await this.page.waitForURL(/\/optimizations\/[0-9a-f-]+$/);
+      // The button's disabled gate doesn't cover message content, so an empty
+      // message card lets the click through and validation silently rejects the
+      // submit — the panel just stays open. Surface that as the actual cause
+      // instead of an unexplained navigation timeout.
+      try {
+        await this.page.waitForURL(/\/optimizations\/[0-9a-f-]+$/);
+      } catch (error) {
+        const validationError = this.newRunPanel().getByText('Message is required').first();
+        if (await validationError.isVisible().catch(() => false)) {
+          throw new Error(
+            'Submit was rejected: a message card is empty ("Message is required"). ' +
+              'The form seeds system + user messages and requires content in both.',
+          );
+        }
+        throw error;
+      }
       const match = this.page.url().match(/\/optimizations\/([0-9a-f-]+)$/);
       if (!match) {
         throw new Error(`Could not extract optimization id from URL: ${this.page.url()}`);
@@ -135,6 +193,7 @@ export class OptimizationStudioPage {
   async configureAndStart(config: StudioRunConfig): Promise<string> {
     return test.step('Configure and start an optimization run', async () => {
       await this.selectDataset(config.datasetName);
+      await this.setSystemPrompt(config.systemPrompt);
       await this.setUserPrompt(config.prompt);
       await this.selectModel(config.modelDisplayName);
       if (config.optimizer && config.optimizer !== 'GEPA optimizer') {
@@ -191,6 +250,62 @@ export class OptimizationStudioPage {
   }
 
   /**
+   * Open a trial row by the label its "Trial" column renders — "Baseline" for
+   * the run's step-0 candidate, "Trial #N" for the numbered ones. Addressed by
+   * label rather than row index because the table's sort order is a product
+   * decision this POM should not encode.
+   *
+   * Returns the trial side panel's locator so callers can scope to it.
+   */
+  async openTrialByLabel(label: string): Promise<Locator> {
+    return test.step(`Open trial "${label}"`, async () => {
+      // Match the Trial cell EXACTLY, and identify that cell by COLUMN rather
+      // than by position. Two failure modes to avoid:
+      //   * a substring match over the row's text makes "Trial #1" also select
+      //     "Trial #10", and collides with the label appearing in another cell;
+      //   * a positional match (`td:first-child`) inspects the wrong cell once a
+      //     user reorders columns — the Trial column is offered in the column
+      //     selector and is not pinned, so it does move.
+      // `DataTable` stamps each cell `data-cell-id="<rowId>_<columnId>"`, and the
+      // Trial column's id is `COLUMN_NAME_ID` ("name"), so a `_name` suffix
+      // match follows the column wherever it sits. `TrialNumberCell` renders the
+      // label as that cell's full text, so the anchored match is exact.
+      const row = this.trialsTable()
+        .locator('tbody tr[data-row-id]')
+        .filter({
+          has: this.page.locator('td[data-cell-id$="_name"]').filter({
+            hasText: new RegExp(`^\\s*${escapeForRegExp(label)}\\s*$`),
+          }),
+        });
+      await expect(row, `exactly one trial row labelled "${label}"`).toHaveCount(1);
+      await row.click();
+      const panel = this.trialSidebar();
+      await expect(panel, `trial side panel for "${label}"`).toBeVisible();
+      return panel;
+    });
+  }
+
+  /**
+   * Click "Logs" in the open trial side panel and hand back the shared logs
+   * overlay. It is a clickable `Tag`, not a button, so it is addressed by text
+   * within the panel rather than by role.
+   */
+  async openTrialLogs(): Promise<TraceLogsSidebarPage> {
+    return test.step('Open the trial\'s Logs overlay', async () => {
+      await this.trialSidebar().getByText('Logs', { exact: true }).first().click();
+      const overlay = new TraceLogsSidebarPage(this.page);
+      await overlay.waitForReady();
+      return overlay;
+    });
+  }
+
+  /** The trial side panel. `ResizableSidePanel` renders its `panelId` as a
+   *  data-testid, which is the one purpose-built hook on it. */
+  private trialSidebar(): Locator {
+    return this.page.locator('[data-testid="optimization-trial-sidebar"]');
+  }
+
+  /**
    * Assert the run's configuration shows the given algorithm + metric. These
    * render as pills in the detail page's header, which sits outside the tab
    * structure — so scope to `main`, not to the Overview tabpanel.
@@ -212,8 +327,18 @@ export class OptimizationStudioPage {
     return this.page.locator('[data-testid="new-optimization-run-sidebar"]');
   }
 
-  private promptEditor(): Locator {
-    return this.page.locator('[data-testid="playground-message-editor"] .cm-content');
+  /**
+   * The message editor for a given role. The form seeds one card per message
+   * (system + user), and each card renders its own `playground-message-editor`,
+   * so an unscoped testid matches every editor on the page. Scope to the panel
+   * and to the card's `data-role` — the row testid plus `data-role` is the
+   * stable per-message hook, and the same pattern is used by the prompts POMs.
+   */
+  private promptEditor(role: 'system' | 'user'): Locator {
+    return this.newRunPanel()
+      .locator(`[data-testid="playground-message-row"][data-role="${role}"]`)
+      .getByTestId('playground-message-editor')
+      .locator('.cm-content');
   }
 
   private optimizeButton(): Locator {

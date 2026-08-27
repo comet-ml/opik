@@ -3,6 +3,11 @@ name: "Release"
 run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
+  # NOTE: a direct dispatch of this workflow cannot publish the npm packages —
+  # npm's trusted publisher is registered against the *entry-point* workflow,
+  # which for releases is release-wrapper-release-n-deploy.yml. A direct run
+  # still tags and builds, so the npm jobs will fail the OIDC identity check
+  # after the tag has been pushed. Release through the wrapper.
   workflow_dispatch:
     inputs:
       reuse_existing_tag:
@@ -30,7 +35,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set version
         id: version
@@ -44,7 +49,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Create git tag
         env:
@@ -104,6 +109,14 @@ jobs:
     needs:
       - set-version
       - create-git-tag
+    # `id-token: write` is required here, not just in the called workflow — and
+    # also on whatever dispatches THIS workflow, since permissions only ever
+    # narrow down the call chain. The entry point in practice is
+    # `release-wrapper-release-n-deploy.yml`, which is what npm has registered as
+    # the trusted publisher. See DND-1565.
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/typescript_sdk_publish.yml
     secrets: inherit
     with:
@@ -115,6 +128,9 @@ jobs:
     needs:
       - set-version
       - create-git-tag
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/typescript_sdk_integration_publish.yml
     secrets: inherit
     with:
@@ -143,13 +159,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{needs.set-version.outputs.version}}
           generate_release_notes: true
 
       - name: Delete Release Draft
-        uses: hugo19941994/delete-draft-releases@v1.0.0
+        uses: hugo19941994/delete-draft-releases@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -164,14 +180,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Setup Node.js for TypeScript version update
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
@@ -212,7 +228,7 @@ jobs:
       # Same action + inputs as update_helm_readme.yaml, keeping CI and the
       # local pre-commit hook in agreement.
       - name: Regenerate Helm chart README
-        uses: losisin/helm-docs-github-action@v1
+        uses: losisin/helm-docs-github-action@v2
         with:
           chart-search-root: deployment/helm_chart/opik
           git-push: false
