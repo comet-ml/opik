@@ -1,4 +1,4 @@
-import { test as baseTest } from './grouped-dataset.fixture';
+import { test as baseTest } from './export-comparison.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 
 export interface TokenUsageSpanSeed {
@@ -136,4 +136,4 @@ export const test = baseTest.extend<TokenUsageSpansFixtures>({
   },
 });
 
-export { expect } from './grouped-dataset.fixture';
+export { expect } from './export-comparison.fixture';

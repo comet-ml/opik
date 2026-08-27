@@ -1,5 +1,38 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+
+/**
+ * The grid state the compare Results tab reads out of the URL: page size, the
+ * toolbar search term and the sort. Each is a query param (`size` falls back to
+ * localStorage, then to the deployment default), so setting it in the URL is the
+ * same state a click on the control writes.
+ *
+ * `page` is deliberately absent. It is a query param too, but the pagination
+ * control resets it to 1 whenever `(page - 1) * size > total`, which is true on
+ * the first render of any deep link because `total` is still 0 while the first
+ * fetch is in flight. Use `goToNextPage()` to reach a later page.
+ */
+export interface CompareGridState {
+  size?: number;
+  search?: string;
+  /** `columnId` is the table's own id, e.g. `feedback_scores_accuracy`. */
+  sorting?: { columnId: string; direction: 'asc' | 'desc' };
+}
+
+/** A file the compare grid's export button produced. */
+export interface CompareExport {
+  /** The downloaded file's contents. */
+  body: string;
+  /** The suggested filename the app attached to the download. */
+  filename: string;
+  /**
+   * The comparison-items request the export fired to fetch the rows it wrote.
+   * This is the query OPIK-8123 was about: before the fix it carried neither
+   * the grid's `search` nor its `sorting`.
+   */
+  requestParams: URLSearchParams;
+}
 
 /**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
@@ -19,15 +52,28 @@ export class CompareExperimentsPage {
     private readonly experimentIds: string[],
   ) {}
 
-  private compareUrl(tab: 'items' | 'config' | 'scores'): string {
+  private compareUrl(tab: 'items' | 'config' | 'scores', state: CompareGridState = {}): string {
     const env = loadEnvConfig();
     const experiments = encodeURIComponent(JSON.stringify(this.experimentIds));
-    return `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/experiments/${this.datasetId}/compare?experiments=${experiments}&tab=${tab}`;
+    const url = new URL(
+      `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/experiments/${this.datasetId}/compare?experiments=${experiments}&tab=${tab}`,
+    );
+    if (state.size !== undefined) url.searchParams.set('size', String(state.size));
+    if (state.search !== undefined) url.searchParams.set('search', state.search);
+    if (state.sorting) {
+      url.searchParams.set(
+        'sorting',
+        JSON.stringify([
+          { id: state.sorting.columnId, desc: state.sorting.direction === 'desc' },
+        ]),
+      );
+    }
+    return url.toString();
   }
 
-  async gotoResults(): Promise<void> {
+  async gotoResults(state: CompareGridState = {}): Promise<void> {
     await test.step('open the compare Results tab', async () => {
-      await this.page.goto(this.compareUrl('items'));
+      await this.page.goto(this.compareUrl('items', state));
     });
   }
 
@@ -205,6 +251,74 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * Page the grid forward by one.
+   *
+   * The grid keeps showing the previous page's rows while the next page loads
+   * (react-query `keepPreviousData`), so this waits for the top row to actually
+   * change rather than for "a row" to be present.
+   */
+  async goToNextPage(): Promise<void> {
+    await test.step('page the grid forward', async () => {
+      const [firstRowId] = await this.itemRowOrder();
+      const next = this.nextPageButton;
+      await expect(next, 'next-page button').toHaveCount(1);
+      await next.click();
+      await expect(this.itemRows.first(), 'the grid moved off the previous page')
+        .not.toHaveAttribute('data-row-id', firstRowId);
+    });
+  }
+
+  /**
+   * Tick the select checkbox of each named row.
+   *
+   * Rows are addressed by `data-row-id` — the dataset item id — never by
+   * position, because the select column is pinned but every other column's
+   * order is user-configurable and persisted.
+   */
+  async selectRows(datasetItemIds: string[]): Promise<void> {
+    await test.step(`select ${datasetItemIds.length} row(s)`, async () => {
+      for (const itemId of datasetItemIds) {
+        const row = this.itemRow(itemId);
+        await expect(row, `row for item ${itemId}`).toHaveCount(1);
+        const checkbox = row.getByRole('checkbox', { name: 'Select row' });
+        await checkbox.check();
+        await expect(checkbox, `row ${itemId} selected`).toBeChecked();
+      }
+    });
+  }
+
+  /**
+   * Export the current selection and return the downloaded file together with
+   * the request the export made to fetch its rows.
+   *
+   * The request is captured, not inferred: the grid and the export share one
+   * react-query key, so `refetch()` always goes to the network and there is
+   * exactly one comparison-items call per export.
+   */
+  async exportSelection(format: 'CSV' | 'JSON'): Promise<CompareExport> {
+    return test.step(`export the selection as ${format}`, async () => {
+      const trigger = this.exportMenuTrigger;
+      await expect(trigger, 'export button in the compare toolbar').toHaveCount(1);
+      await trigger.click();
+
+      const requestPromise = this.page.waitForRequest(
+        (request) =>
+          request.method() === 'GET' && request.url().includes('/items/experiments/items'),
+      );
+      const downloadPromise = this.page.waitForEvent('download');
+      await this.page.getByRole('menuitem', { name: `Export as ${format}`, exact: true }).click();
+      const [request, download] = await Promise.all([requestPromise, downloadPromise]);
+
+      const path = await download.path();
+      return {
+        body: await readFile(path, 'utf-8'),
+        filename: download.suggestedFilename(),
+        requestParams: new URL(request.url()).searchParams,
+      };
+    });
+  }
+
   /** Dataset-item ids in current row order, top to bottom. */
   async itemRowOrder(): Promise<string[]> {
     return test.step('read the current row order', async () => {
@@ -226,6 +340,38 @@ export class CompareExperimentsPage {
 
   private get itemRows(): Locator {
     return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  private itemRow(datasetItemId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${datasetItemId}"]`);
+  }
+
+  /**
+   * The toolbar's export dropdown trigger.
+   *
+   * `ExportToButton` renders an icon-only button with no accessible name and no
+   * `data-testid`, so there is nothing role- or label-based to select on; the
+   * icon is the only thing that distinguishes it from the other three
+   * `aria-haspopup="menu"` buttons beside it. A `data-testid` on that shared
+   * component would be the right fix, but this spec has to run against an
+   * already-deployed build, which cannot carry an attribute added here. Callers
+   * assert `toHaveCount(1)` before clicking so an ambiguous match fails loudly.
+   */
+  /**
+   * The pagination control's next-page button — icon-only, with the same
+   * missing-accessible-name problem as the export trigger above, and the same
+   * reason for not fixing it in the front end from here.
+   */
+  private get nextPageButton(): Locator {
+    return this.page.locator('button').filter({
+      has: this.page.locator('svg.lucide-chevron-right'),
+    });
+  }
+
+  private get exportMenuTrigger(): Locator {
+    return this.page
+      .locator('button[aria-haspopup="menu"]')
+      .filter({ has: this.page.locator('svg.lucide-download') });
   }
 
   /**

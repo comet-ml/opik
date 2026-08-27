@@ -89,6 +89,16 @@ export {
 export type { GroupedDatasetRef, GroupedDatasetFixtures } from './grouped-dataset.fixture';
 export { GROUP_COLUMN, TARGET_GROUP } from './grouped-dataset.fixture';
 export type {
+  ExportComparisonRef,
+  ExportComparisonExperimentRef,
+  ExportComparisonFixtures,
+} from './export-comparison.fixture';
+export {
+  EXPORT_PAGE_SIZE,
+  EXPORT_SCORE_NAME,
+  EXPORT_SEARCH_TERM,
+} from './export-comparison.fixture';
+export type {
   TokenUsageSpanSeed,
   TokenUsageSpansRef,
   TokenUsageSpansFixtures,

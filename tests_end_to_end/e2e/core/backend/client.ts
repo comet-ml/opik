@@ -608,8 +608,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     },
 
-    async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
-      const page = await opik.api.datasets.getDatasetItems(datasetId);
+    /**
+     * One page of a dataset's items.
+     *
+     * The endpoint pages at ten by default, so a caller seeding more than that
+     * has to say how many it wants — otherwise the read comes back quietly
+     * short and every id map built from it is missing rows.
+     */
+    async getDatasetItems(
+      datasetId: string,
+      opts: { size?: number } = {},
+    ): Promise<DatasetItemRef[]> {
+      const page = await opik.api.datasets.getDatasetItems(datasetId, {
+        ...(opts.size === undefined ? {} : { size: opts.size }),
+      });
       const content = page.content ?? [];
       return content.map((item) => ({
         id: String(item.id),
@@ -760,11 +772,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * Ids only, and in order: this read exists to assert *which* rows come back
      * and in *what* order, never their content. The `sorting` field travels
      * verbatim, so `output.<key>` exercises the dynamic-key binding directly.
+     *
+     * `search` is here because this is also the endpoint the grid's export
+     * refetch calls: a fixture that needs to prove a searched selection really
+     * does sit outside the unsearched window has to be able to ask for both.
      */
     async listCompareItemIds(args: {
       datasetId: string;
       experimentIds: string[];
       sorting?: BackendSort[];
+      search?: string;
       size?: number;
     }): Promise<string[]> {
       const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
@@ -773,6 +790,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         page: 1,
         truncate: true,
         ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+        ...(args.search ? { search: args.search } : {}),
       });
       return (page.content ?? []).map((item) => String(item.id));
     },
@@ -1329,6 +1347,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
       }
       return args.id;
+    },
+
+    /**
+     * `PUT /v1/private/traces/feedback-scores` — one batch of human-authored
+     * scores across many traces.
+     *
+     * Seeding scores directly rather than running an evaluator is what lets a
+     * fixture choose the exact per-item values a score-sorted grid must order
+     * by; `Equals` only ever yields 0 or 1, which cannot express a total order
+     * over more than two rows.
+     */
+    async scoreTraces(
+      scores: Array<{ traceId: string; projectName: string; name: string; value: number }>,
+    ): Promise<void> {
+      await opik.api.traces.scoreBatchOfTraces({
+        scores: scores.map((score) => ({
+          id: score.traceId,
+          projectName: score.projectName,
+          name: score.name,
+          value: score.value,
+          source: 'sdk',
+        })),
+      });
     },
 
     /**

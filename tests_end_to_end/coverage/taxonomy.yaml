@@ -563,6 +563,7 @@ areas:
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
       - experiments/experiment-delete.spec.ts
+      - experiments/experiments-compare-export.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -573,7 +574,7 @@ areas:
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
-      export-comparison:       { covered: false }
+      export-comparison:       { covered: true,  tier: t2-cuj }
       delete-experiment:       { covered: true,  tier: t2-cuj }
 
     visual:
