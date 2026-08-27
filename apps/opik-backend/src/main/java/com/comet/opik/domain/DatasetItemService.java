@@ -132,18 +132,15 @@ public interface DatasetItemService {
      *   <li>If batchGroupId is null: Mutates the latest version by appending items (backwards compatibility)</li>
      *   <li>If batchGroupId is provided: Creates a new version with batch grouping (multiple batches can share the same version)</li>
      *   <li>If no versions exist, creates the first version regardless of batchGroupId</li>
-     *   <li>Returns the DatasetVersion (newly created or mutated)</li>
      * </ul>
-     * When versioning is disabled (legacy mode):
-     * <ul>
-     *   <li>Saves items to the legacy dataset_items table</li>
-     *   <li>Returns empty Mono</li>
-     * </ul>
+     * When versioning is disabled (legacy mode), saves items to the legacy dataset_items table.
      *
      * @param batch the batch of items to save (must include datasetId or datasetName, may include batchGroupId)
-     * @return Mono emitting the DatasetVersion when versioning is enabled, or empty when disabled
+     * @return Mono completing when the batch is persisted. No version is emitted: appending to an existing version
+     *         has nothing to read back, and the only caller discards the value, so the type says so rather than
+     *         promising a value that arrives on some paths and not others.
      */
-    Mono<DatasetVersion> save(DatasetItemBatch batch);
+    Mono<Void> save(DatasetItemBatch batch);
 
 }
 
@@ -1610,12 +1607,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
+    public Mono<Void> save(@NonNull DatasetItemBatch batch) {
 
         if (!featureFlags.isDatasetVersioningEnabled()) {
             // Legacy: save to legacy table
             log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
-            return verifyDatasetExistsAndSave(batch).then(Mono.empty());
+            return verifyDatasetExistsAndSave(batch).then();
         }
 
         return getDatasetId(batch)
@@ -1636,7 +1633,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
                             batchGroupId);
                     return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
-                })));
+                })))
+                .then();
     }
 
     /**
@@ -1749,8 +1747,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Updates version counts after deleting items from an existing version.
      * <p>
-     * Unlike the insert path this saves no round-trip: both callers fetch the version for their own purposes
-     * regardless. What it buys is that the arithmetic no longer depends on that snapshot still being current.
+     * Expressing the update as a delta removed the last reason either caller had to read the version first, so
+     * both now skip that round-trip entirely and the arithmetic no longer depends on a snapshot staying current.
      *
      * @param versionId The version ID to update
      * @param workspaceId The workspace ID
@@ -2152,14 +2150,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }
 
         return Mono.defer(() -> {
-            // Get current version to update counts
-            DatasetVersion currentVersion = versionService.getVersionById(workspaceId, datasetId, versionId);
-
-            log.info(
-                    "deleteItemsFromExistingVersion: currentVersion itemsTotal='{}', itemsDeleted='{}', versionId='{}'",
-                    currentVersion.itemsTotal(), currentVersion.itemsDeleted(), versionId);
-
-            log.info("deleteItemsFromExistingVersion: attempting to remove '{}' items", ids.size());
+            // The counters are applied as a delta, so no pre-delete snapshot of the version is read here:
+            // fetching one would be a synchronous MySQL round-trip per batch purely to enrich a log line.
+            log.info("deleteItemsFromExistingVersion: attempting to remove '{}' items from version '{}'",
+                    ids.size(), versionId);
 
             // Remove items from the version
             return versionDao.removeItemsFromVersion(datasetId, versionId, ids, workspaceId)
@@ -2175,8 +2169,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
                             updateVersionCountsForDelete(versionId, workspaceId, deletedCount.intValue(), userName);
-                            log.info("Deleted '{}' items from version '{}', new total '{}'",
-                                    deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
+                            log.info("Deleted '{}' items from version '{}'", deletedCount, versionId);
                             return null;
                         }).subscribeOn(Schedulers.boundedElastic());
                     })
@@ -2197,12 +2190,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 versionId, datasetId);
 
         return Mono.defer(() -> {
-            // Get current version to update counts
-            DatasetVersion currentVersion = versionService.getVersionById(workspaceId, datasetId, versionId);
-
-            log.info(
-                    "deleteItemsFromExistingVersionByFilters: currentVersion itemsTotal='{}', itemsDeleted='{}', versionId='{}'",
-                    currentVersion.itemsTotal(), currentVersion.itemsDeleted(), versionId);
+            // Counters are applied as a delta, so no pre-delete version snapshot is read here -- see
+            // deleteItemsFromExistingVersion for why.
 
             // Remove items matching filters from the version
             return versionDao.removeItemsFromVersionByFilters(datasetId, versionId, filters, workspaceId)
@@ -2219,8 +2208,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
                             updateVersionCountsForDelete(versionId, workspaceId, deletedCount.intValue(), userName);
-                            log.info("Deleted '{}' items from version '{}', new total '{}'",
-                                    deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
+                            log.info("Deleted '{}' items from version '{}'", deletedCount, versionId);
                             return null;
                         }).subscribeOn(Schedulers.boundedElastic());
                     })
@@ -2331,7 +2319,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
      * @param userName the username
-     * @return Mono emitting the dataset version
+     * @return Mono emitting the newly created version when this batch mints one, or completing empty when the
+     *         batch appends to a version an earlier batch in the same group already created
      */
     private Mono<DatasetVersion> handleGroupedInsertion(UUID batchGroupId, DatasetItemBatch batch,
             UUID datasetId, String workspaceId, String userName) {

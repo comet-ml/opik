@@ -33,6 +33,14 @@ import java.util.UUID;
 @RegisterConstructorMapper(DatasetVersion.class)
 public interface DatasetVersionDAO {
 
+    /**
+     * Sentinel written by Liquibase migration {@code 000046} for versions whose {@code items_total} has not been
+     * backfilled yet. {@link #findVersionsNeedingItemsTotalMigration} selects on it, and {@link #incrementCounts}
+     * refuses to do arithmetic on it — adding a delta to {@code -1} would both corrupt the counter and hide the row
+     * from the backfill forever.
+     */
+    int ITEMS_TOTAL_NOT_MIGRATED = -1;
+
     @SqlUpdate("""
             INSERT INTO dataset_versions (
                 id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
@@ -541,7 +549,19 @@ public interface DatasetVersionDAO {
 
     /**
      * Applies signed deltas to the version counters in a single statement, so the arithmetic happens in the database
-     * rather than as a read-modify-write in the application. Correct under concurrent callers without an external lock.
+     * rather than as a read-modify-write in the application.
+     * <p>
+     * Concurrent <em>delta</em> writers compose without an external lock. The guarantee does not extend to the
+     * absolute writers in this interface ({@link #updateItemsTotal}, {@link #batchUpdateItemsTotal}, both driven by
+     * the items-total backfill), which still write a value derived from an earlier read and can overwrite an
+     * increment that landed in between. Those are gated on the not-migrated sentinel so a row an increment has
+     * already touched is skipped rather than clobbered.
+     * <p>
+     * Rows still holding {@link #ITEMS_TOTAL_NOT_MIGRATED} are excluded: adding a delta to the sentinel would
+     * corrupt the counter and also hide the row from the backfill, which selects on that exact value. Such a row
+     * reports zero affected rows, same as a missing or cross-workspace version. The predicate is the NULL-safe
+     * {@code <=>} rather than {@code <>} so a NULL counter — which the COALESCE above exists to repair — is still
+     * incremented instead of being skipped by three-valued logic.
      */
     @SqlUpdate("""
             UPDATE dataset_versions
@@ -553,6 +573,7 @@ public interface DatasetVersionDAO {
                 last_updated_by = :last_updated_by
             WHERE id = :version_id
               AND workspace_id = :workspace_id
+              AND NOT (items_total <=> :items_total_not_migrated)
             """)
     int incrementCounts(@Bind("version_id") UUID versionId,
             @Bind("items_total_delta") int itemsTotalDelta,
@@ -560,7 +581,20 @@ public interface DatasetVersionDAO {
             @Bind("items_modified_delta") int itemsModifiedDelta,
             @Bind("items_deleted_delta") int itemsDeletedDelta,
             @Bind("workspace_id") String workspaceId,
-            @Bind("last_updated_by") String lastUpdatedBy);
+            @Bind("last_updated_by") String lastUpdatedBy,
+            @Bind("items_total_not_migrated") int itemsTotalNotMigrated);
+
+    /**
+     * Applies the deltas, supplying the not-migrated sentinel so callers cannot forget the guard.
+     *
+     * @return affected rows: {@code 0} when the version is missing, belongs to another workspace, or still holds
+     *         {@link #ITEMS_TOTAL_NOT_MIGRATED}
+     */
+    default int incrementCounts(UUID versionId, int itemsTotalDelta, int itemsAddedDelta, int itemsModifiedDelta,
+            int itemsDeletedDelta, String workspaceId, String lastUpdatedBy) {
+        return incrementCounts(versionId, itemsTotalDelta, itemsAddedDelta, itemsModifiedDelta, itemsDeletedDelta,
+                workspaceId, lastUpdatedBy, ITEMS_TOTAL_NOT_MIGRATED);
+    }
 
     @SqlUpdate("""
             INSERT INTO dataset_versions (
@@ -595,20 +629,41 @@ public interface DatasetVersionDAO {
             @Bind("version_id") UUID versionId,
             @Bind("workspace_id") String workspaceId);
 
+    /**
+     * Backfills {@code items_total} for a version that has not been migrated yet.
+     * <p>
+     * The value is absolute and derived from a ClickHouse count taken earlier, so it is gated on the row still
+     * holding {@link #ITEMS_TOTAL_NOT_MIGRATED}: if an API write incremented the counter between that count and
+     * this update, the row is skipped rather than overwritten with a stale total.
+     *
+     * @return affected rows: {@code 0} when the version no longer holds the sentinel
+     */
     @SqlUpdate("""
             UPDATE dataset_versions
             SET items_total = :items_total,
                 last_updated_at = NOW()
             WHERE workspace_id = :workspace_id
               AND id = :version_id
+              AND items_total = :items_total_not_migrated
             """)
-    void updateItemsTotal(@Bind("workspace_id") String workspaceId,
+    int updateItemsTotal(@Bind("workspace_id") String workspaceId,
             @Bind("version_id") UUID versionId,
-            @Bind("items_total") long itemsTotal);
+            @Bind("items_total") long itemsTotal,
+            @Bind("items_total_not_migrated") int itemsTotalNotMigrated);
+
+    /**
+     * Backfills {@code items_total}, supplying the not-migrated sentinel so callers cannot forget the guard.
+     */
+    default int updateItemsTotal(String workspaceId, UUID versionId, long itemsTotal) {
+        return updateItemsTotal(workspaceId, versionId, itemsTotal, ITEMS_TOTAL_NOT_MIGRATED);
+    }
 
     /**
      * Batch update items_total for multiple dataset versions.
      * Uses JDBI's @SqlBatch to execute multiple updates efficiently in a single batch.
+     * <p>
+     * Gated on the not-migrated sentinel for the same reason as {@link #updateItemsTotal}: these totals come from
+     * a ClickHouse count taken before the write, and must not clobber an increment that landed in between.
      *
      * @param workspaceIds list of workspace IDs (must match versionIds order and size)
      * @param versionIds list of version IDs to update
@@ -620,10 +675,19 @@ public interface DatasetVersionDAO {
                 last_updated_at = NOW()
             WHERE workspace_id = :workspace_id
               AND id = :version_id
+              AND items_total = :items_total_not_migrated
             """)
     void batchUpdateItemsTotal(@Bind("workspace_id") List<String> workspaceIds,
             @Bind("version_id") List<UUID> versionIds,
-            @Bind("items_total") List<Long> itemsTotals);
+            @Bind("items_total") List<Long> itemsTotals,
+            @Bind("items_total_not_migrated") int itemsTotalNotMigrated);
+
+    /**
+     * Batch backfill, supplying the not-migrated sentinel so callers cannot forget the guard.
+     */
+    default void batchUpdateItemsTotal(List<String> workspaceIds, List<UUID> versionIds, List<Long> itemsTotals) {
+        batchUpdateItemsTotal(workspaceIds, versionIds, itemsTotals, ITEMS_TOTAL_NOT_MIGRATED);
+    }
 
     /**
      * Finds dataset versions that need items_total migration using cursor-based pagination.

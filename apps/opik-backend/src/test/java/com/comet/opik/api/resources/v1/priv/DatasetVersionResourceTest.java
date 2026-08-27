@@ -1660,6 +1660,10 @@ class DatasetVersionResourceTest {
             assertThat(latestVersion.id()).isEqualTo(version1.id()); // Same version ID
             assertThat(latestVersion.versionName()).isEqualTo("v1");
             assertThat(latestVersion.itemsTotal()).isEqualTo(4); // 5 - 1 = 4
+            // A delete moves total and deleted only; the added/modified counters from v1 stay put.
+            assertThat(latestVersion.itemsDeleted()).isEqualTo(1);
+            assertThat(latestVersion.itemsAdded()).isEqualTo(version1.itemsAdded());
+            assertThat(latestVersion.itemsModified()).isEqualTo(version1.itemsModified());
 
             // Verify only 4 items remain in the latest version
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
@@ -3823,6 +3827,9 @@ class DatasetVersionResourceTest {
             var version = getLatestVersion(datasetId);
             assertThat(version.itemsTotal()).isEqualTo(6);
             assertThat(version.itemsAdded()).isEqualTo(6);
+            // Appends of brand-new items move total and added only; nothing here is an update or a delete.
+            assertThat(version.itemsModified()).isZero();
+            assertThat(version.itemsDeleted()).isZero();
             assertThat(version.versionName()).isEqualTo("v1");
 
             // Verify items can be fetched
@@ -5484,30 +5491,6 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: multi-batch append via batch_group_id accumulates the full counter triple")
-        void insertItems__whenAppendingViaBatchGroupId__thenCountersAccumulate() {
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchGroupId = UUID.randomUUID();
-
-            // First batch creates the version; the next two append into it via the batch_group_id path.
-            for (int i = 0; i < 3; i++) {
-                datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
-                        .datasetId(datasetId)
-                        .batchGroupId(batchGroupId)
-                        .items(generateDatasetItems(2))
-                        .build(), TEST_WORKSPACE, API_KEY);
-            }
-
-            assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).content()).hasSize(1);
-
-            var version = getLatestVersion(datasetId);
-            assertThat(version.itemsTotal()).isEqualTo(6);
-            assertThat(version.itemsAdded()).isEqualTo(6);
-            assertThat(version.itemsModified()).isZero();
-            assertThat(version.itemsDeleted()).isZero();
-        }
-
-        @Test
         @DisplayName("Success: concurrent increments are exact without the per-dataset lock")
         void incrementCounts__whenConcurrentWritersBypassTheLock__thenCountersAreExact() {
             var datasetId = createDataset(UUID.randomUUID().toString());
@@ -5546,29 +5529,6 @@ class DatasetVersionResourceTest {
             assertThat(version.itemsTotal()).isEqualTo(1 + expectedIncrements);
             assertThat(version.itemsAdded()).isEqualTo(1 + expectedIncrements);
             assertThat(version.itemsModified()).isEqualTo(2 * expectedIncrements);
-        }
-
-        @Test
-        @DisplayName("Success: negative deltas on the delete path decrement total and raise deleted")
-        void incrementCounts__whenNegativeDelta__thenTotalDecrements() {
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 5);
-
-            var seed = getLatestVersion(datasetId);
-            var itemToDelete = datasetResourceClient.getDatasetItems(
-                    datasetId, 1, 10, seed.versionHash(), API_KEY, TEST_WORKSPACE).content().getFirst();
-
-            datasetResourceClient.deleteDatasetItems(DatasetItemsDelete.builder()
-                    .itemIds(Set.of(itemToDelete.datasetItemId()))
-                    .build(), TEST_WORKSPACE, API_KEY);
-
-            var updated = getLatestVersion(datasetId);
-            assertThat(updated.id()).isEqualTo(seed.id());
-            assertThat(updated.itemsTotal()).isEqualTo(4);
-            assertThat(updated.itemsDeleted()).isEqualTo(1);
-            // The delete path leaves added/modified untouched.
-            assertThat(updated.itemsAdded()).isEqualTo(seed.itemsAdded());
-            assertThat(updated.itemsModified()).isEqualTo(seed.itemsModified());
         }
 
         @Test
@@ -5621,6 +5581,69 @@ class DatasetVersionResourceTest {
 
             assertThat(updated).isZero();
             assertThat(getLatestVersion(datasetId).itemsTotal()).isEqualTo(seed.itemsTotal());
+        }
+
+        @Test
+        @DisplayName("Success: a version left at the not-migrated sentinel is never incremented")
+        void incrementCounts__whenVersionHoldsNotMigratedSentinel__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Liquibase 000046 leaves pre-versioning datasets at items_total = -1 until the backfill runs, and
+            // findVersionsNeedingItemsTotalMigration selects on exactly that value. Adding a delta would both
+            // corrupt the counter and hide the row from the backfill forever, so the increment must skip it.
+            int sentinelled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(sentinelled).isOne();
+
+            assertThat(incrementCounts(versionId, 5, 5, 0, 0)).isZero();
+
+            // Still exactly the sentinel: untouched, so the backfill will still find it.
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
+        }
+
+        @Test
+        @DisplayName("Error: insert whose version is left at the sentinel surfaces 404, not a silent success")
+        void insertItems__whenCountUpdateMatchesNoRow__thenNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Reaching the `updated == 0` guard through the public API needs a version that still resolves as
+            // "latest" (so the insert appends rather than minting a new version) but that the count UPDATE
+            // refuses to match. The not-migrated sentinel is exactly that state: an un-backfilled version being
+            // written to before the migration job has reached it.
+            mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+
+            try (var response = datasetResourceClient.callCreateDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(1))
+                    .build(), TEST_WORKSPACE, API_KEY)) {
+
+                // Surfacing this beats the alternatives: silently dropping the counter update, or corrupting the
+                // sentinel so the backfill never reconciles the row.
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
         }
     }
 
