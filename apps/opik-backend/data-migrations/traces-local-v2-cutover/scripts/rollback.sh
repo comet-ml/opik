@@ -12,6 +12,12 @@
 # is abandoned, no reverse-replay is needed, and no sentinel repair follows. Unlike stages B/C it does not need the
 # parked original, so it is the only wrap recovery left once finalize.sh has dropped it. It undoes SHARDING only: if the
 # successor itself is suspect, use stage B/C instead. See 000004_rollback_unwrap.sql.
+# Or --sentinel-repair-only: after a stage B/C promote, restore NULL on the rows written into the still-Nullable
+# original while traceColumnsNonNullable was true (they read back as an epoch/NaN sentinel, and its MATERIALIZED
+# duration computed a large negative from them). Kept separate from the stages rather than appended to them because the
+# flag revert must land on every backend FIRST — otherwise in-flight writes keep minting sentinels behind the repair —
+# and rolling out config is outside these DB-facing scripts. Skips the mutation when there is nothing to repair, so it
+# is safe to run speculatively. See 000004_rollback_sentinel_repair.sql.
 # Or --reverse-replay-only: re-apply just the reverse deletion replay against the current live `traces`. Use it when a
 # stage B/C run's promote succeeded but its reverse-replay was interrupted — the promote leaves `traces` in the restored
 # canonical shape, so re-running the stage is (correctly) rejected by the topology guard, which would otherwise strand
@@ -51,6 +57,14 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --sentinel-repair-only    repair ONLY the epoch/NaN sentinels on the restored original (no promote, no replay, no
+#                             rename). Requires --confirm-flag-reverted. Mutually exclusive with --stage,
+#                             --reverse-replay-only and --unwrap-only.
+#   --confirm-flag-reverted   REQUIRED with --sentinel-repair-only, and accepted by no other mode. Asserts
+#                             databaseAnalyticsDataModel.traceColumnsNonNullable=false is live on EVERY backend
+#                             instance. The scripts cannot read backend config, and a repair run while any instance
+#                             still has it true is not merely incomplete: that instance keeps writing fresh sentinels
+#                             behind the mutation, so the counts can clear and then regress.
 #   --unwrap-only             reverse ONLY the Distributed wrap (no promote, no reverse-replay). Requires
 #                             --confirm-maintenance. Mutually exclusive with --stage and --reverse-replay-only.
 #   --confirm-maintenance     REQUIRED with --unwrap-only. The un-wrap is gapless per node (atomic rotate), but renaming
@@ -75,7 +89,10 @@ CONFIRM_RETENTION_PAUSED=0
 ACCEPT_WRITE_LOSS=0
 REVERSE_REPLAY_ONLY=0
 UNWRAP_ONLY=0
+SENTINEL_REPAIR_ONLY=0
 CONFIRM_MAINTENANCE=0
+CONFIRM_FLAG_REVERTED=0
+SENTINEL_CHECK_FAILED=0  # set by the sentinel postcondition; decides the exit code without cutting the guidance short
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -86,7 +103,9 @@ while [[ $# -gt 0 ]]; do
         --accept-post-cutover-write-loss) ACCEPT_WRITE_LOSS=1; shift ;;
         --reverse-replay-only) REVERSE_REPLAY_ONLY=1; shift ;;
         --unwrap-only) UNWRAP_ONLY=1; shift ;;
+        --sentinel-repair-only) SENTINEL_REPAIR_ONLY=1; shift ;;
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
+        --confirm-flag-reverted) CONFIRM_FLAG_REVERTED=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -99,17 +118,48 @@ done
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
-# Exactly one mode: --stage A|B|C, --reverse-replay-only, or --unwrap-only.
-if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY > 1 )); then
-    echo "ERROR: --reverse-replay-only and --unwrap-only are mutually exclusive." >&2; exit 2
+# Exactly one mode: --stage A|B|C, --reverse-replay-only, --unwrap-only, or --sentinel-repair-only.
+if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY + SENTINEL_REPAIR_ONLY > 1 )); then
+    echo "ERROR: --reverse-replay-only, --unwrap-only and --sentinel-repair-only are mutually exclusive." >&2; exit 2
 fi
-if [[ "$REVERSE_REPLAY_ONLY" == "1" || "$UNWRAP_ONLY" == "1" ]]; then
-    [[ -z "$STAGE" ]] || { echo "ERROR: --stage cannot be combined with --reverse-replay-only / --unwrap-only." >&2; exit 2; }
+if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY + SENTINEL_REPAIR_ONLY == 1 )); then
+    [[ -z "$STAGE" ]] || { echo "ERROR: --stage cannot be combined with --reverse-replay-only / --unwrap-only / --sentinel-repair-only." >&2; exit 2; }
 else
     case "$STAGE" in
         A|B|C) ;;
-        *) echo "ERROR: --stage must be A, B or C (or pass --reverse-replay-only / --unwrap-only)" >&2; exit 2 ;;
+        *) echo "ERROR: --stage must be A, B or C (or pass --reverse-replay-only / --unwrap-only / --sentinel-repair-only)" >&2; exit 2 ;;
     esac
+fi
+# --confirm-flag-reverted asserts a precondition only the sentinel repair has. Reject it elsewhere rather than ignoring
+# it: silently accepting it would let an operator believe a stage B/C run had taken the flag state into account, when
+# stages B/C in fact run BEFORE the revert and print it as their own next step.
+if [[ "$CONFIRM_FLAG_REVERTED" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
+    echo "ERROR: --confirm-flag-reverted belongs to --sentinel-repair-only and to no other mode. Stages B/C run BEFORE" >&2
+    echo "       traceColumnsNonNullable is reverted — reverting it is the next step they print — so asserting it here" >&2
+    echo "       would assert the opposite of the sequence. Run the stage, land the revert, then re-run with" >&2
+    echo "       --sentinel-repair-only --confirm-flag-reverted." >&2
+    exit 2
+fi
+# Reject the promote/replay/maintenance flags under --sentinel-repair-only rather than ignoring them, for the same reason
+# --unwrap-only does: each asserts a precondition for something the repair does not do. It promotes nothing, replays
+# nothing, and renames nothing — it is one mutation on the already-live table, so there is no cross-node rename skew for
+# --confirm-maintenance to gate and no window for retention to interfere with.
+if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
+    if [[ -n "$CUTOVER_START" || "$ACCEPT_WRITE_LOSS" == "1" || "$CONFIRM_RETENTION_PAUSED" == "1" || "$CONFIRM_MAINTENANCE" == "1" ]]; then
+        echo "ERROR: --sentinel-repair-only takes none of --cutover-start / --accept-post-cutover-write-loss /" >&2
+        echo "       --confirm-retention-paused / --confirm-maintenance. It repairs column values on the table that is" >&2
+        echo "       ALREADY live: nothing is promoted, no delete is replayed, and no table is renamed, so there is" >&2
+        echo "       neither a rollback window to bound nor a rename skew to quiesce reads for." >&2
+        exit 2
+    fi
+    if [[ "$CONFIRM_FLAG_REVERTED" != "1" ]]; then
+        echo "ERROR: --sentinel-repair-only requires --confirm-flag-reverted. Set" >&2
+        echo "       databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance" >&2
+        echo "       first. Repairing while any instance still has it true does not just leave rows behind: that" >&2
+        echo "       instance keeps writing fresh sentinels, so the counts can clear and then regress, and the run" >&2
+        echo "       reports a success that is already stale. Re-run with the flag once the revert is live everywhere." >&2
+        exit 2
+    fi
 fi
 # Reject the promote/replay flags under --unwrap-only rather than ignoring them. Each asserts a precondition for
 # something the un-wrap does not do, so accepting one would quietly confirm a wrong mental model of the operation —
@@ -279,6 +329,16 @@ verify_replay_postcondition() {
     return 1
 }
 
+# Same sourcing contract as run_file (versioned .sql, one placeholder here — it takes no cutover window). Returns the
+# three counts as one tab-separated line so the driver gates on them, instead of leaving numbers on a screen to read.
+sentinel_counts() {
+    local file="$SQL_DIR/000004_rollback_verify_sentinels.sql" sql
+    [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
+    sql="$(cat "$file")"
+    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --query "$sql"
+}
+
 run_file() {
     local file="$SQL_DIR/$1" sql
     [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
@@ -396,6 +456,86 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
     exit "$REPLAY_CHECK_FAILED"
 fi
 
+# Sentinel-repair mode: restore NULL on the rows the flag wrote into the still-Nullable original, and recompute their
+# duration as a side effect (see 000004_rollback_sentinel_repair.sql). Guarded on the SAME post-promote shape as
+# --reverse-replay-only, and for a related reason: the two signals it would otherwise run on are ambiguous.
+#   - Against the live SUCCESSOR the epoch/NaN values are not damage at all, they ARE the schema's encoding of "absent",
+#     so repairing them is meaningless; the columns are non-Nullable there, so the statement errors out with a type
+#     failure rather than a refusal, which reads like a bug in the script instead of a wrong target.
+#   - Against a pre-cutover original that never went through a cutover, an epoch end_time is whatever a client actually
+#     sent. Requiring traces_post_rollback_backup is what distinguishes the two: only a completed promote creates it.
+# Consequence, deliberate: after finalize.sh has recycled that backup this mode refuses. The repair belongs BEFORE
+# finalize (the runbook orders it that way, and finalize is what makes the rollback irreversible), so a refusal there is
+# the correct answer rather than a gap.
+if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
+    sentinel_engine="$(traces_engine traces)"
+    [[ -n "$sentinel_engine" ]] || { echo "ERROR: no 'traces' table found in database '$DATABASE'." >&2; exit 1; }
+    [[ "$sentinel_engine" != "Distributed" ]] || {
+        echo "ERROR: 'traces' is Distributed, so the wrap is still applied and the repair would target a routing" >&2
+        echo "       definition that holds no rows. Roll the wrap back first with --stage C." >&2
+        exit 1
+    }
+    if [[ "$(traces_endtime_type traces)" != Nullable* || -z "$(traces_engine traces_post_rollback_backup)" ]]; then
+        echo "ERROR: --sentinel-repair-only requires the post-rollback state — 'traces' = the restored ORIGINAL" >&2
+        echo "       (Nullable end_time) with the successor parked as 'traces_post_rollback_backup'. On the live" >&2
+        echo "       successor the epoch/NaN values are the schema's own encoding of an absent value, not damage; on an" >&2
+        echo "       original that never went through a cutover an epoch end_time is what a client actually sent. Only a" >&2
+        echo "       completed promote creates the parked successor, which is what tells those apart. If finalize.sh has" >&2
+        echo "       already recycled it, this refusal is by design: the repair belongs before finalize, so resolve that" >&2
+        echo "       ordering deliberately rather than working around the guard." >&2
+        exit 1
+    fi
+    echo "NOTE: repairing epoch/NaN sentinels on the restored original. Nothing is promoted, replayed or renamed — this" >&2
+    echo "      is one mutation on the table that is already live, and it recomputes 'duration' from the restored NULL." >&2
+
+    # Read first: it sizes the work, and a clean table skips the mutation entirely (so the mode is safe to run
+    # speculatively). Empty or non-numeric output is a dead client, not a clean table — never let that read as success.
+    if ! sentinel_before="$(sentinel_counts)"; then sentinel_before=""; fi
+    read -r before_end_time before_ttft before_negative <<< "$sentinel_before"
+    if ! [[ "$before_end_time" =~ ^[0-9]+$ && "$before_ttft" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: the sentinel counts could not be read, so it is unknown whether there is anything to repair." >&2
+        echo "       Treat this as unverified, not as clean. Fix connectivity and re-run — no mutation was issued." >&2
+        exit 1
+    fi
+    echo "Sentinels before repair: end_time=$before_end_time ttft=$before_ttft (of those, serving a negative duration: $before_negative)"
+    if (( before_end_time == 0 && before_ttft == 0 )); then
+        echo "Nothing to repair: no row on any replica carries an epoch end_time or a NaN ttft. No mutation issued."
+        exit 0
+    fi
+
+    if ! run_file 000004_rollback_sentinel_repair.sql; then
+        echo >&2
+        echo "ERROR: the sentinel repair did not complete. If ClickHouse reported ACCESS_DENIED, this is the expected" >&2
+        echo "       failure for a user scoped to the rollback grant set: it holds ALTER UPDATE(_row_exists) — all the" >&2
+        echo "       reverse replay needs — and this statement needs ALTER UPDATE(end_time) AND ALTER UPDATE(ttft) on" >&2
+        echo "       'traces'. It carries both commands in one mutation, so a missing grant on either applies neither;" >&2
+        echo "       nothing is half-repaired. Grant the two columns (or run as a more privileged user) and re-run — the" >&2
+        echo "       repair is idempotent, and revoke them again afterwards." >&2
+        exit 1
+    fi
+
+    if ! sentinel_after="$(sentinel_counts)"; then sentinel_after=""; fi
+    read -r after_end_time after_ttft after_negative <<< "$sentinel_after"
+    if ! [[ "$after_end_time" =~ ^[0-9]+$ && "$after_ttft" =~ ^[0-9]+$ ]]; then
+        echo "WARNING: sentinel postcondition COULD NOT BE EVALUATED — the counts came back unreadable. The mutation" >&2
+        echo "         reported success, but treat the repair as unverified: re-run this mode to re-read the counts." >&2
+        SENTINEL_CHECK_FAILED=1
+    elif (( after_end_time == 0 && after_ttft == 0 )); then
+        echo "Sentinel postcondition OK: end_time=0 ttft=0 on every replica."
+        echo "Repaired $before_end_time end_time and $before_ttft ttft value(s); 'duration' recomputed from the restored NULL."
+        echo "A residual count of negative durations elsewhere in the table is EXPECTED and is not this repair's business:"
+        echo "rows whose end_time genuinely precedes start_time are a pre-existing source artifact and stay negative."
+    else
+        echo "WARNING: sentinel postcondition FAILED — end_time=$after_end_time ttft=$after_ttft still present after the" >&2
+        echo "         mutation reported success. The likeliest cause is a backend instance still running with" >&2
+        echo "         traceColumnsNonNullable=true and minting fresh sentinels behind the repair; --confirm-flag-reverted" >&2
+        echo "         asserts that is not so, but cannot check it. Confirm the revert is live on EVERY instance, then" >&2
+        echo "         re-run this mode (idempotent)." >&2
+        SENTINEL_CHECK_FAILED=1
+    fi
+    exit "$SENTINEL_CHECK_FAILED"
+fi
+
 assert_topology
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
@@ -471,20 +611,15 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "     DB-facing scripts by design; see the runbook, \"The only manual actions are not SQL\".)"
     echo "     Until that lands, absent end_time/ttft read back as the epoch/NaN sentinel instead of NULL."
     echo "  2. Repair the epoch/NaN sentinels written into the still-Nullable original while the flag was true. The"
-    echo "     original stores an absent value as NULL, so those rows now read as 'ended at 1970' / 'ttft 0-ish', and"
-    echo "     its MATERIALIZED duration expression — which guards only 'end_time IS NOT NULL', not the sentinel —"
-    echo "     computed a large NEGATIVE duration that the promote made live again. Count, then restore NULL (a"
-    echo "     MATERIALIZE COLUMN alone would NOT fix it: it re-evaluates the same expression on the same sentinel):"
-    echo "       clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"SELECT countIf(end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS sentinel_end_time, countIf(isNaN(ttft)) AS sentinel_ttft, countIf(duration < 0) AS negative_duration_total, countIf(duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS negative_from_sentinel FROM $DATABASE.traces\""
-    echo "       clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"ALTER TABLE $DATABASE.traces ON CLUSTER '{cluster}' UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9) SETTINGS mutations_sync = 2\""
-    echo "       clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"ALTER TABLE $DATABASE.traces ON CLUSTER '{cluster}' UPDATE ttft = NULL WHERE isNaN(ttft) SETTINGS mutations_sync = 2\""
-    echo "     The mutation rewrites the affected parts and recomputes 'duration' from the restored NULL. Success is"
-    echo "     'sentinel_end_time' and 'sentinel_ttft' reaching 0 — NOT 'negative_duration_total': rows whose end_time"
-    echo "     genuinely precedes start_time are a pre-existing source artifact this repair does not address, and they"
-    echo "     stay negative. Do step 1 FIRST, or in-flight writes keep minting more sentinels."
-    echo "     NOTE: these two statements need ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces'. A user scoped to"
-    echo "     the rollback grant set has only ALTER UPDATE(_row_exists) — all the reverse replay needs — and will get"
-    echo "     ACCESS_DENIED here, so run the repair as a more privileged user or add those two column grants."
+    echo "     original stores an absent value as NULL, so those rows now read as 'ended at 1970' / 'ttft NaN', and its"
+    echo "     MATERIALIZED duration expression — which guards only 'end_time IS NOT NULL', not the sentinel — computed"
+    echo "     a large NEGATIVE duration that the promote made live again. Once step 1 is live on EVERY instance (do it"
+    echo "     first, or in-flight writes keep minting sentinels behind the repair):"
+    echo "       ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --sentinel-repair-only --confirm-flag-reverted"
+    echo "     It counts first and skips the mutation if there is nothing to repair, restores NULL (a MATERIALIZE COLUMN"
+    echo "     would NOT: it re-evaluates the same expression on the same sentinel), and asserts the counts reached 0."
+    echo "     It needs ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces', which the rollback grant set does not"
+    echo "     carry — the mode explains the ACCESS_DENIED if you hit it."
     echo
     echo "LAST, and only once every step above has landed: finalize.sh recycles traces_post_rollback_backup into an"
     echo "empty traces_local_v2. That is the irreversible step — it destroys the only copy of the post-cutover writes"
