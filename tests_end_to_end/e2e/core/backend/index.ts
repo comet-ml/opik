@@ -2,6 +2,7 @@ export {
   makeBackendClient,
   type BackendClient,
   type ProjectRef,
+  type DashboardRef,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,

@@ -22,6 +22,12 @@ export interface ProjectRef {
   name: string;
 }
 
+export interface DashboardRef {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -417,6 +423,40 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
   };
 
   return {
+    /**
+     * Seeds a dashboard through the SDK's dashboards client.
+     *
+     * `config` carries the minimum shape the create operation validates — the
+     * specs using this filter the list and never render a widget.
+     */
+    async createDashboard(args: {
+      name: string;
+      description: string;
+    }): Promise<DashboardRef> {
+      const created = await opik.api.dashboards.createDashboard({
+        name: args.name,
+        description: args.description,
+        config: {
+          version: 1,
+          layout: { type: 'grid', columns: 24, rowHeight: 10 },
+          widgets: [],
+        },
+      });
+      const id = (created as { id?: unknown } | null)?.id;
+      if (typeof id !== 'string') {
+        throw new Error(`createDashboard(${args.name}) returned no id`);
+      }
+      return { id, name: args.name, description: args.description };
+    },
+
+    async deleteDashboard(id: string): Promise<void> {
+      try {
+        await opik.api.dashboards.deleteDashboard(id);
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
+      }
+    },
+
     async createProject(name: string, description?: string): Promise<void> {
       await opik.api.projects.createProject({
         name,
