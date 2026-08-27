@@ -51,7 +51,7 @@ interface SpanSeed {
  * come out 70 / 35 / 94 / 75: a query that bucketed wrongly — or dropped the
  * bucket entirely and summed the window — cannot land on those four numbers by
  * accident, whereas four equal days would forgive it. Across providers, the
- * split is 174 / 100, so a breakdown that ignored its group expression would
+ * split is 195 / 79, so a breakdown that ignored its group expression would
  * report the grand total instead of either.
  *
  * `ageDays` is never 0. A span stamped "now" is a coin flip against the
