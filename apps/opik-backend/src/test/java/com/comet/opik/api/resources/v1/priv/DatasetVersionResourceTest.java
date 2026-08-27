@@ -3796,21 +3796,14 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             // The SDK's parallel upload sends every batch under one batch_group_id. The batch that
-            // arrives first CREATES the version, and that path derives itemsTotal from insertItems,
-            // which returns items.size() -- the raw list length, deliberately not a DB row count
-            // (ClickHouse async inserts report 0 before commit). A stable id repeated inside that
-            // first batch is therefore counted twice, while ClickHouse collapses it to one row.
+            // arrives first CREATES the version, and that path derives itemsTotal from insertItems.
+            // That used to return items.size() -- the raw list length, deliberately not a DB row count
+            // (ClickHouse async inserts report 0 before commit) -- so a stable id repeated inside the
+            // first batch was counted twice while ClickHouse collapsed it to one row. It now counts
+            // distinct dataset_item_ids, which is what this test pins.
             var duplicatedId = TestIdGeneratorFactory.create().generateId();
             var distinctId = TestIdGeneratorFactory.create().generateId();
 
-            // The repeated id wins with its LAST submitted content: ClickHouse keeps one row per
-            // dataset_item_id and reads take the newest, so "second" survives and "first" does not.
-            var winningDuplicate = DatasetItem.builder()
-                    .id(duplicatedId)
-                    .datasetItemId(duplicatedId)
-                    .source(DatasetItemSource.SDK)
-                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
-                    .build();
             var distinctItem = DatasetItem.builder()
                     .id(distinctId)
                     .datasetItemId(distinctId)
@@ -3824,7 +3817,11 @@ class DatasetVersionResourceTest {
                             .source(DatasetItemSource.SDK)
                             .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
                             .build(),
-                    winningDuplicate,
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                            .build(),
                     distinctItem);
 
             datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
@@ -3834,15 +3831,23 @@ class DatasetVersionResourceTest {
                     .build(), TEST_WORKSPACE, API_KEY);
 
             var version = getLatestVersion(datasetId);
-
-            // Assert on the rows themselves, not just how many: a bug that kept the wrong revision
-            // of the duplicate, or dropped the distinct item and kept both duplicates, would leave
-            // the count at 2 and slip through a size-only check.
             var stored = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Which revision of the repeated id survives is deliberately NOT asserted: every row in a
+            // batch is written with the same now64(9), and the read dedupes with
+            // `ORDER BY dataset_item_id DESC, last_updated_at DESC LIMIT 1 BY dataset_item_id` -- no
+            // tie-breaker, so either payload may win. Pinning "second" would be asserting an accident.
+            // What is guaranteed, and what the fix is about: exactly one row per distinct id, and a
+            // counter that agrees with it.
+            assertThat(stored).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(duplicatedId, distinctId);
             assertThat(stored)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyInAnyOrder(winningDuplicate, distinctItem);
+                    .filteredOn(item -> distinctId.equals(item.id()))
+                    .singleElement()
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .isEqualTo(distinctItem);
 
             // items_total must agree with what is actually stored.
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
