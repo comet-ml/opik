@@ -791,6 +791,25 @@ areas:
       config-ai-providers-empty:   { covered: true,  state: empty, note: "'No AI providers yet'" }
       config-workspace-prefs:      { covered: true,  state: default }
 
+  workspace-roles:
+    label: Workspace roles
+    nav_group: Workspace
+    routes: ["/$workspaceName/configuration"]
+    spec_dir: workspace-roles
+    # Permission enforcement is cross-cutting by nature (it gates screens and
+    # CRUD controls across every other area), but the taxonomy requires exactly
+    # one @area: per spec. This area owns "does the role gate the right thing",
+    # not the underlying feature behaviour itself — that stays with its own area.
+    specs:
+      - workspace-roles/workspace-roles-permissions.spec.ts
+    capabilities:
+      role-assign-via-ui:          { covered: true, tier: t3-nightly, note: "Members tab role Select round-trips to the API-reported permission set" }
+      manage-role-full-access:     { covered: true, tier: t3-nightly, note: "Manage: full create/edit/delete across resources, workspace settings, AI providers, invite users" }
+      write-role-resource-crud:    { covered: true, tier: t3-nightly, note: "Write: resource CRUD allowed; workspace settings/AI providers/invite users denied" }
+      annotate-role-restricted:    { covered: true, tier: t3-nightly, note: "Annotate: create/delete controls hidden; annotation queues remain accessible" }
+      read-role-view-only:         { covered: true, tier: t3-nightly, note: "Read: no create/delete controls anywhere; annotation queues remain accessible" }
+      permission-api-cross-check:  { covered: true, tier: t3-nightly, note: "getUserPermissions() response asserted against the UI-enforced access per role" }
+
   onboarding:
     label: Get started
     nav_group: Onboarding

@@ -17,11 +17,10 @@ export interface DashboardCleanupFixtures {
 /**
  * Teardown for dashboards a test creates.
  *
- * Needed because nothing else removes them: a dashboard belongs to the
- * workspace rather than to a project, so no project delete cascades to it, and
- * `global-teardown`'s run-prefix sweep covers experiments, datasets and
- * projects only. Left alone they accumulate on every shared environment the
- * suite runs against.
+ * A dashboard belongs to the workspace rather than to a project, so no project
+ * delete cascades to it. `global-teardown`'s run-prefix sweep is a backstop for
+ * whatever a run leaves behind; this deletes per-test instead, which keeps one
+ * spec's dashboards out of the next spec's list assertions.
  *
  * Best-effort: a failed delete warns rather than throws, so cleanup cannot mask
  * the assertion failure that explains the run.

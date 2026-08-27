@@ -388,11 +388,11 @@ function toMetricSeries(json: unknown): MetricSeries[] {
   }));
 }
 
-export function makeBackendClient(apiKey: string | null = null) {
+export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
     apiKey: apiKey ?? env.apiKey ?? undefined,
-    workspaceName: env.workspace,
+    workspaceName: workspaceName ?? env.workspace,
     apiUrl: env.apiBaseUrl,
   });
 
@@ -549,6 +549,91 @@ export function makeBackendClient(apiKey: string | null = null) {
       return content
         .filter((p) => typeof p.name === 'string' && p.name.startsWith(prefix))
         .map((p) => ({ id: String(p.id), name: p.name as string }));
+    },
+
+    // ---- Sweep support for entity types outside the experiment/dataset/
+    // project trio above — used by global-setup's orphan sweep and
+    // global-teardown to clean up dashboards/queues/prompts/eval-rules/
+    // alerts/optimizations seeded by the workspace-role permission suite,
+    // which (unlike experiments/datasets) don't reuse an existing sweep path.
+
+    async listDashboardsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.dashboards.findDashboards({ name: prefix, size: 500, page }), 500);
+      return content
+        .filter((d) => typeof d.name === 'string' && d.name.startsWith(prefix))
+        .map((d) => ({ id: String(d.id), name: d.name as string }));
+    },
+
+    async deleteDashboardsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.dashboards.deleteDashboardsBatch({ ids });
+    },
+
+    async listAnnotationQueuesWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.annotationQueues.findAnnotationQueues({ name: prefix, size: 500, page }), 500);
+      return content
+        .filter((q) => typeof q.name === 'string' && q.name.startsWith(prefix))
+        .map((q) => ({ id: String(q.id), name: q.name as string }));
+    },
+
+    async deleteAnnotationQueuesBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.annotationQueues.deleteAnnotationQueueBatch({ ids });
+    },
+
+    async listPromptsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.prompts.getPrompts({ name: prefix, size: 500, page }), 500);
+      return content
+        .filter((p) => typeof p.name === 'string' && p.name.startsWith(prefix))
+        .map((p) => ({ id: String(p.id), name: p.name as string }));
+    },
+
+    async deletePromptsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.prompts.deletePromptsBatch({ ids });
+    },
+
+    // `projectId` is optional here — an eval rule created against the
+    // workspace-role suite's anchor project doesn't need it re-supplied to
+    // be deleted by id, and rules don't cascade with their project's own
+    // deletion (see automationRulesCleanup fixture's doc comment).
+    async listAutomationRuleEvaluatorsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.automationRuleEvaluators.findEvaluators({ name: prefix, size: 500, page }), 500);
+      return content
+        .filter((r) => typeof r.name === 'string' && r.name.startsWith(prefix))
+        .map((r) => ({ id: String(r.id), name: r.name as string }));
+    },
+
+    async deleteAutomationRuleEvaluatorsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({ body: { ids } });
+    },
+
+    // findAlerts has no name filter — filtered client-side like the rest, and
+    // paginated through every alert in the workspace (not just `cuj-`-
+    // prefixed ones), since there's no server-side filter to shrink the set.
+    async listAlertsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.alerts.findAlerts({ size: 500, page }), 500);
+      return content
+        .filter((a) => typeof a.name === 'string' && a.name.startsWith(prefix))
+        .map((a) => ({ id: String(a.id), name: a.name as string }));
+    },
+
+    async deleteAlertsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.alerts.deleteAlertBatch({ ids });
+    },
+
+    async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.optimizations.findOptimizations({ name: prefix, size: 500, page }), 500);
+      return content
+        .filter((o) => typeof o.name === 'string' && o.name.startsWith(prefix))
+        .map((o) => ({ id: String(o.id), name: o.name as string }));
+    },
+
+    async deleteOptimizationsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.optimizations.deleteOptimizationsById({ ids });
     },
 
     async listDatasetsWithPrefix(prefix: string): Promise<DatasetRef[]> {
@@ -877,9 +962,9 @@ export function makeBackendClient(apiKey: string | null = null) {
     /**
      * `DELETE /v1/private/dashboards/{id}`.
      *
-     * Dashboards are not swept by `global-teardown` (it knows about
-     * experiments, datasets and projects only) and they do not hang off a
-     * project, so a spec that builds one has to remove it itself.
+     * A dashboard does not hang off a project, so no project delete reaches
+     * it. `global-teardown` does sweep dashboards by run prefix, but only at
+     * the end of the run — a spec that builds one deletes it per-test.
      */
     async deleteDashboard(id: string): Promise<void> {
       const headers = workspaceHeaders();
@@ -1699,6 +1784,28 @@ export function makeBackendClient(apiKey: string | null = null) {
       }
     },
   };
+}
+
+/**
+ * Fetches every page of a `{ content, size, total }`-shaped listing — a
+ * single `size: 500` request silently drops anything past the 500th match,
+ * which orphan/teardown sweeps must not do (`listAlertsWithPrefix` especially:
+ * it has no server-side name filter, so its page holds every alert in the
+ * workspace, not just `cuj-`-prefixed ones).
+ */
+async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<{ content?: T[]; total?: number }>,
+  pageSize: number,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let page = 1; ; page++) {
+    const res = await fetchPage(page);
+    const content = res.content ?? [];
+    all.push(...content);
+    if (content.length < pageSize || (res.total !== undefined && all.length >= res.total)) {
+      return all;
+    }
+  }
 }
 
 function isNotFoundError(err: unknown): boolean {
