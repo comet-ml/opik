@@ -105,7 +105,6 @@ type UseGroupedExperimentsListResponse = {
   isPending: boolean;
   isPlaceholderData: boolean;
   isFetching: boolean;
-  isError: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
 
@@ -381,7 +380,6 @@ export default function useGroupedExperimentsList(
     isPending: isGroupsPending,
     isPlaceholderData: isGroupsPlaceholderData,
     isFetching: isGroupsFetching,
-    isError: isGroupsError,
     refetch: refetchGroups,
   } = useExperimentsGroups(
     {
@@ -421,7 +419,6 @@ export default function useGroupedExperimentsList(
   const {
     data: datasetsData,
     isPending: isDatasetsPending,
-    isError: isDatasetsError,
     refetch: refetchDatasets,
   } = useDatasetsList(
     {
@@ -442,7 +439,6 @@ export default function useGroupedExperimentsList(
   const {
     data: projectsData,
     isPending: isProjectsPending,
-    isError: isProjectsError,
     refetch: refetchProjects,
   } = useProjectsList(
     {
@@ -458,7 +454,7 @@ export default function useGroupedExperimentsList(
     },
   );
 
-  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useExperimentsList(
       {
         workspaceName: params.workspaceName,
@@ -750,13 +746,6 @@ export default function useGroupedExperimentsList(
     isGroupsFetching ||
     Object.values(experimentsResponses).some((r) => r.isFetching);
 
-  // Mirrors groupedIsPending: the datasets/projects queries only run when
-  // grouping by that field, so only their errors count in that mode.
-  const groupedIsError =
-    isGroupsError ||
-    (isGroupingByDataset && isDatasetsError) ||
-    (isGroupingByProject && isProjectsError);
-
   // For grouped mode, check if any query is showing placeholder data
   const groupedIsPlaceholderData =
     isGroupsPlaceholderData ||
@@ -767,7 +756,6 @@ export default function useGroupedExperimentsList(
     isPending: hasGroups ? groupedIsPending : isPending,
     isPlaceholderData: hasGroups ? groupedIsPlaceholderData : isPlaceholderData,
     isFetching: hasGroups ? groupedIsFetching : isFetching,
-    isError: hasGroups ? groupedIsError : isError,
     refetch: hasGroups ? groupedRefetch : refetch,
   };
 }

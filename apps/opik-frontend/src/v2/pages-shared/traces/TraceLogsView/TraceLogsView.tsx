@@ -84,7 +84,6 @@ import TableScrollContainer from "@/shared/DataTable/TableScrollContainer";
 import ScrollTableWrapper from "@/shared/DataTable/ScrollTableWrapper";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
-import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -630,7 +629,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     return exclude;
   }, [selectedColumns]);
 
-  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useTracesList(
       {
         projectId,
@@ -707,7 +706,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   );
 
   const showEmptyState =
-    !isTableLoading && !isError && noData && rows.length === 0 && page === 1;
+    !isTableLoading && noData && rows.length === 0 && page === 1;
 
   const metadataPaths = useMemo(() => {
     const allPaths = rows.reduce<string[]>((acc, row) => {
@@ -1137,17 +1136,11 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
         noData={
-          isError ? (
-            <DataTableLoadingError onRetry={refetch} />
-          ) : (
-            <DataTableNoMatchingData
-              onClearFilters={
-                search || chipFilters.length > 0
-                  ? handleClearFilters
-                  : undefined
-              }
-            />
-          )
+          <DataTableNoMatchingData
+            onClearFilters={
+              search || chipFilters.length > 0 ? handleClearFilters : undefined
+            }
+          />
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
         TableBody={DataTableVirtualBody}

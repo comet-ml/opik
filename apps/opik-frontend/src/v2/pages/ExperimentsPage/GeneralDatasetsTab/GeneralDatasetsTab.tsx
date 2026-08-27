@@ -23,7 +23,6 @@ import isObject from "lodash/isObject";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
-import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
@@ -379,7 +378,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
-  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useGroupedExperimentsList({
       workspaceName,
       projectId: activeProjectId ?? undefined,
@@ -741,15 +740,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={
-          isError ? (
-            <DataTableLoadingError onRetry={refetch} />
-          ) : (
-            <DataTableNoMatchingData
-              onClearFilters={
-                search || filters.length > 0 ? handleClearFilters : undefined
-              }
-            />
-          )
+          <DataTableNoMatchingData
+            onClearFilters={
+              search || filters.length > 0 ? handleClearFilters : undefined
+            }
+          />
         }
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}

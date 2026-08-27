@@ -11,7 +11,6 @@ import {
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
-import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { COLUMN_DATASET_ID, COLUMN_TYPE } from "@/types/shared";
 import { Filter } from "@/types/filters";
@@ -201,7 +200,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     isPending,
     isPlaceholderData,
     isFetching,
-    isError,
     refetch,
     pageSize,
   } = useOptimizationsView({
@@ -215,15 +213,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
     pollWhileInProgress: true,
   });
 
-  const { isEmpty: isExistenceEmpty, isPending: isExistencePending } =
-    useOptimizationsExistence({
-      workspaceName,
-      projectId: activeProjectId ?? undefined,
-    });
-
-  // A zero-count existence probe can succeed while the list request itself
-  // fails; showing onboarding then hides the failure behind "no runs yet".
-  const isEmpty = isExistenceEmpty && !isError;
+  const { isEmpty, isPending: isExistencePending } = useOptimizationsExistence({
+    workspaceName,
+    projectId: activeProjectId ?? undefined,
+  });
 
   // The objective-score column used to be a mutually-exclusive pair ("Pass rate"
   // for test-suite runs, "Accuracy" for dataset runs), and this list dropped
@@ -365,17 +358,13 @@ const OptimizationsPage: React.FunctionComponent = () => {
                 setRowSelection,
               }}
               noData={
-                isError ? (
-                  <DataTableLoadingError onRetry={refetch} />
-                ) : (
-                  <DataTableNoMatchingData
-                    onClearFilters={
-                      search || filters.length > 0
-                        ? handleClearFilters
-                        : undefined
-                    }
-                  />
-                )
+                <DataTableNoMatchingData
+                  onClearFilters={
+                    search || filters.length > 0
+                      ? handleClearFilters
+                      : undefined
+                  }
+                />
               }
               showSkeleton={isTableLoading}
               showLoadingOverlay={

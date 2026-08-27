@@ -24,8 +24,6 @@ type UseProjectWithStatisticsResponse = {
   isPending: boolean;
   isPlaceholderData: boolean;
   isFetching: boolean;
-  isError: boolean;
-  refetch: () => Promise<unknown>;
 };
 
 export default function useProjectWithStatisticsList(
@@ -39,8 +37,6 @@ export default function useProjectWithStatisticsList(
     isPending,
     isPlaceholderData,
     isFetching,
-    isError,
-    refetch,
   } = useProjectsList(projectsParams, {
     ...config,
     placeholderData: keepPreviousData,
@@ -92,7 +88,5 @@ export default function useProjectWithStatisticsList(
     isPending,
     isPlaceholderData,
     isFetching,
-    isError,
-    refetch,
   } as UseProjectWithStatisticsResponse;
 }

@@ -12,7 +12,6 @@ import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
-import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -126,7 +125,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching } =
     useFeedbackDefinitionsList(
       {
         workspaceName,
@@ -254,9 +253,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          isError ? (
-            <DataTableLoadingError onRetry={refetch} />
-          ) : noData ? (
+          noData ? (
             <DataTableEmptyContent
               title="No feedback definitions yet"
               description="Create a feedback definition to start evaluating your agent."
