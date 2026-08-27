@@ -1085,14 +1085,26 @@ export function makeBackendClient(apiKey: string | null = null) {
      * point of the thread-prefilter tests is to drive a *specific* field and
      * operator (an EQUAL on `id` takes a different backend branch than a
      * CONTAINS), so the caller must own that choice.
+     *
+     * `search` is the free-text term the Threads view's search box sends — a
+     * separate query parameter from `filters`, matched server-side against the
+     * thread id and its message text. Passed through verbatim, whitespace and
+     * case included, so a caller can assert what the *server* does with a
+     * padded term rather than what the client happened to send.
      */
     async listThreads(
-      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+      args: {
+        projectId: string;
+        filters?: BackendFilter[];
+        search?: string;
+        size?: number;
+      } & ReadWindow,
     ): Promise<{ total: number; threads: ThreadRowRef[] }> {
       const page = await opik.api.traces.getTraceThreads({
         projectId: args.projectId,
         size: args.size ?? 100,
         page: 1,
+        ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
@@ -1175,15 +1187,27 @@ export function makeBackendClient(apiKey: string | null = null) {
      * Trace ids visible for a project under `filters` and an optional window —
      * `GET /v1/private/traces`. Returned as ids only: these tests assert *which*
      * traces a scoped view is entitled to, never their content.
+     *
+     * `search` is the free-text term the Logs search box sends — a separate
+     * query parameter from `filters`, matched server-side against the trace's
+     * id, name, input, output, metadata, error and tags. Passed through
+     * verbatim, whitespace and case included, so a caller can assert what the
+     * *server* does with a padded term rather than what the client sent.
      */
     async listTraceIds(
-      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+      args: {
+        projectId: string;
+        filters?: BackendFilter[];
+        search?: string;
+        size?: number;
+      } & ReadWindow,
     ): Promise<string[]> {
       const page = await opik.api.traces.getTracesByProject({
         projectId: args.projectId,
         size: args.size ?? 200,
         page: 1,
         truncate: true,
+        ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),

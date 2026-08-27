@@ -1,3 +1,4 @@
+import * as fs from 'node:fs/promises';
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
@@ -251,6 +252,124 @@ export class LogsPage {
     });
   }
 
+  // --- Free-text search ---
+
+  /**
+   * The "Search by anything" box in the filter toolbar. Shared by the Traces
+   * and Threads tabs (both render `SearchInput` as the FilterChipBar prefix),
+   * and only one tab is mounted at a time, so this resolves the active tab's
+   * box.
+   *
+   * Note this lives in the filter toolbar, which the selection action bar
+   * *replaces* once any row is ticked — so a caller must search before
+   * selecting, not after.
+   */
+  get searchInput(): Locator {
+    return this.page.getByTestId('search-input');
+  }
+
+  /**
+   * Type a term into the search box and wait for the table to settle.
+   *
+   * The term is filled verbatim — padding included — because that is the whole
+   * point at these call sites: the client is expected to trim before querying,
+   * so a helper that trimmed for the caller would test itself rather than the
+   * app. `fill()` replaces any previous term, so repeated calls do not compound.
+   *
+   * The input debounces for 300ms before the query fires, so callers assert on
+   * row state afterwards rather than this method promising freshness.
+   */
+  async search(term: string): Promise<void> {
+    return test.step(`Search for ${JSON.stringify(term)}`, async () => {
+      const input = this.searchInput;
+      await expect(input).toHaveCount(1);
+      await input.fill(term);
+      await expect(input).toHaveValue(term);
+    });
+  }
+
+  // --- Selection action bar + export ---
+
+  /**
+   * The bar that replaces the filter toolbar once rows are ticked. Located by
+   * its own "Selected: N" text: it carries no testid, and the export/delete
+   * controls inside it are icon-only.
+   */
+  get selectionActionBar(): Locator {
+    return this.page.locator('div').filter({ hasText: /^Selected: \d+/ }).last();
+  }
+
+  /**
+   * Clear the selection via the bar's "Deselect all", and wait for the filter
+   * toolbar to come back. Callers that need the search box again must do this
+   * first — the bar replaces that toolbar, so the box is off screen while any
+   * row is ticked.
+   */
+  async deselectAll(): Promise<void> {
+    return test.step('Deselect all rows', async () => {
+      await this.page.getByRole('button', { name: 'Deselect all' }).click();
+      await expect(this.searchInput).toBeVisible();
+    });
+  }
+
+  /** Assert the selection bar reports exactly `count` selected rows. */
+  async expectSelectedCount(count: number): Promise<void> {
+    return test.step(`Expect ${count} row(s) selected`, async () => {
+      await expect(this.page.getByText(`Selected: ${count}`, { exact: true })).toBeVisible();
+    });
+  }
+
+  /**
+   * The Export trigger in the selection action bar.
+   *
+   * Selected on the lucide icon class, which conventions.md rates a last
+   * resort — deliberately, and this is the exception it describes. The button
+   * is icon-only: `ExportToButton` renders a bare `<Download/>` inside a
+   * `TooltipWrapper`, so its "Export" label lives in a hover tooltip portal and
+   * never lands on the element as an accessible name, and unlike its sibling
+   * `traces-bulk-delete-button` it carries no `data-testid`.
+   *
+   * The fix is to add `data-testid="export-to-button"` to
+   * `apps/opik-frontend/src/shared/ExportToButton/ExportToButton.tsx` and
+   * switch this to `getByTestId`. That is not done in the same change here
+   * only because these specs were verified against a prebuilt deployment whose
+   * frontend could not be rebuilt in the same run, so a brand-new testid could
+   * not have been exercised before merge — see the PR description.
+   *
+   * Callers go through `exportSelectedAs`, which asserts this resolves to
+   * exactly one element so an ambiguous match fails loudly.
+   */
+  get exportButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-download)');
+  }
+
+  /**
+   * Export the current selection and return the downloaded file's contents.
+   *
+   * Both menu items funnel through one `getData()` in `ExportToButton`, which
+   * re-fetches the rows from the server under the *current* search term and
+   * then intersects them with the selected ids. That is why this is worth
+   * driving through the UI: a search term the client failed to normalise
+   * narrows the re-fetch, the intersection comes back short, and the user gets
+   * a file quietly missing rows the table was showing.
+   */
+  async exportSelectedAs(format: 'CSV' | 'JSON'): Promise<string> {
+    return test.step(`Export the selection as ${format}`, async () => {
+      await expect(this.exportButton).toHaveCount(1);
+      await this.exportButton.click();
+
+      const item = this.page.getByRole('menuitem', { name: `Export as ${format}` });
+      await expect(item).toHaveCount(1);
+
+      const downloadPromise = this.page.waitForEvent('download');
+      await item.click();
+      const download = await downloadPromise;
+
+      const path = await download.path();
+      return fs.readFile(path, 'utf-8');
+    });
+  }
+
   // --- Filter chips ---
 
   /**
@@ -483,6 +602,18 @@ export class LogsPage {
   /** The "Last message" cell text for a thread. */
   threadLastMessageCell(threadId: string): Locator {
     return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_last_message"]`);
+  }
+
+  /**
+   * Tick the selection checkbox on a thread's row. Mechanically identical to
+   * selectTrace — the shared DataTable stamps `data-row-id` on both — but named
+   * for the entity so a threads spec does not read as if it were selecting
+   * traces.
+   */
+  async selectThread(threadId: string): Promise<void> {
+    return test.step(`Select thread ${threadId}`, async () => {
+      await this.threadRow(threadId).getByRole('checkbox', { name: 'Select row' }).click();
+    });
   }
 
   /** Open a thread's detail panel by id, returning the conversation panel POM. */

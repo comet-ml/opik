@@ -1,4 +1,4 @@
-export { test, expect } from './bystander.fixture';
+export { test, expect } from './export-search.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -94,4 +94,16 @@ export type {
   TokenUsageSpansFixtures,
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  ExportSearchTraceRef,
+  ExportSearchThreadRef,
+  ExportSearchFixtures,
+} from './export-search.fixture';
+export {
+  EXPORT_SEARCH_TOKEN,
+  EXPORT_SEARCH_THREAD_TOKEN,
+  EXPORT_SELECTION_SIZE,
+  TRACE_INPUT_COLUMN,
+  THREAD_FIRST_MESSAGE_COLUMN,
+} from './export-search.fixture';
 export type { ProjectRef } from '../core/backend';

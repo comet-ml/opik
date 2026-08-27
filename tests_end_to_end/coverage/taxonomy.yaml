@@ -248,6 +248,7 @@ areas:
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
+      - trace-explore/trace-export-search.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -269,7 +270,7 @@ areas:
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
-      export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
+      export-traces:          { covered: true,  tier: t2-cuj, note: "EXPORT_ENABLED flag; covers the CSV + JSON menu items and export-under-search, not the column-config surface that decides which columns land in the file" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
     visual:
@@ -318,13 +319,14 @@ areas:
       - trace-explore/thread-logging-smoke.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-evaluation.spec.ts
+      - trace-explore/thread-export-search.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
       open-thread-panel:       { covered: true,  tier: t1-smoke }
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
-      thread-actions-panel:    { covered: false }
+      thread-actions-panel:    { covered: true,  tier: t2-cuj, note: "covers select + export (CSV/JSON) from the panel; its Manage tags / Evaluate / Delete actions are still uncovered" }
       thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics" }
 
     visual:
