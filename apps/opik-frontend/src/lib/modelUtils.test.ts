@@ -575,6 +575,90 @@ describe("Gemini thinking level", () => {
     ).toBe(true);
   });
 
+  it("covers the newer Flash models on both providers", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+    ]) {
+      expect(supportsGeminiThinkingLevel(model)).toBe(true);
+      expect(supportsVertexAIThinkingLevel(model)).toBe(false);
+    }
+
+    for (const model of [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+    ]) {
+      expect(supportsVertexAIThinkingLevel(model)).toBe(true);
+      expect(supportsGeminiThinkingLevel(model)).toBe(false);
+    }
+  });
+
+  // Per Google's support table; the sets genuinely differ per model.
+  it("offers each model only the levels it documents", () => {
+    const values = (m: PROVIDER_MODEL_TYPE) =>
+      getThinkingLevelOptions(m).map((o) => o.value);
+
+    // 3.7 Flash has no "minimal".
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    expect(values(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    // 3.6/3.5 Flash have all four.
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH)).toEqual([
+      "minimal",
+      "low",
+      "medium",
+      "high",
+    ]);
+    // 3.1 Flash Lite has only minimal and high.
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE)).toEqual([
+      "minimal",
+      "high",
+    ]);
+    // Gemini 3 Pro: low and high only.
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toEqual(["low", "high"]);
+  });
+
+  it("preselects each model's own documented default", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toBe(
+      "medium",
+    );
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH),
+    ).toBe("medium");
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE),
+    ).toBe("minimal");
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE),
+    ).toBe("minimal");
+  });
+
+  it("only ever preselects a level the model actually offers", () => {
+    for (const model of Object.values(PROVIDER_MODEL_TYPE)) {
+      const options = getThinkingLevelOptions(model);
+      if (options.length === 0) continue;
+
+      expect(
+        options.map((o) => o.value),
+        `default for ${model} must be offered`,
+      ).toContain(getDefaultThinkingLevel(model));
+    }
+  });
+
   it("is not offered for models without thinking support", () => {
     expect(supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GPT_4O)).toBe(false);
     expect(getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GPT_4O)).toEqual([]);

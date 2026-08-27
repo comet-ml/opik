@@ -12,7 +12,6 @@ import {
 } from "@/types/automations";
 import {
   AnthropicThinkingEffort,
-  GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
 } from "@/types/providers";
@@ -307,55 +306,6 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
-
-// Thinking level options for Gemini 3 Pro models (low, high)
-export const THINKING_LEVEL_OPTIONS_PRO: Array<{
-  label: string;
-  value: "low" | "high";
-}> = [
-  { label: "Low", value: "low" },
-  { label: "High (Default)", value: "high" },
-];
-
-// Thinking level options for Gemini 3 Flash models (all 4 levels)
-// Flash supports: minimal, low, medium, high
-export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
-  label: string;
-  value: "minimal" | "low" | "medium" | "high";
-}> = [
-  { label: "Minimal", value: "minimal" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-];
-
-// Thinking level options for Gemini 2.5 Flash and Flash Lite. "Off" is offered because 2.5 Flash Lite
-// ships with thinking disabled, so turning it off again has to stay expressible once a level is being sent.
-export const THINKING_LEVEL_OPTIONS_2_5_FLASH: Array<{
-  label: string;
-  value: GeminiThinkingLevel;
-}> = [
-  { label: "Off", value: "off" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High", value: "high" },
-];
-
-// Gemini 2.5 Pro cannot disable thinking — its minimum budget is non-zero and a zero budget is
-// rejected — so it gets the same levels without "off".
-export const THINKING_LEVEL_OPTIONS_2_5_PRO: Array<{
-  label: string;
-  value: GeminiThinkingLevel;
-}> = [
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High", value: "high" },
-];
-
-// Legacy export for backwards compatibility.
-// Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
-/** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
-export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

@@ -11,10 +11,6 @@ import {
   DEFAULT_ANTHROPIC_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
   REASONING_MODELS,
-  THINKING_LEVEL_OPTIONS_2_5_FLASH,
-  THINKING_LEVEL_OPTIONS_2_5_PRO,
-  THINKING_LEVEL_OPTIONS_FLASH,
-  THINKING_LEVEL_OPTIONS_PRO,
 } from "@/constants/llm";
 import {
   getProviderFromModel,
@@ -82,113 +78,169 @@ export const getDefaultTemperatureForModel = (
   return isReasoningModel(model) ? 1 : 0;
 };
 
-// Gemini 2.5 models take thinking through the same level control as Gemini 3. Flash and Flash Lite
-// can disable it — 2.5 Flash Lite ships that way, so the customer-visible case is turning it on and
-// turning it back off has to stay reachable — but 2.5 Pro cannot, so the two get different options.
-const GEMINI_2_5_FLASH_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
-  PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
-  PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
-  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+// Which thinking levels each Gemini model accepts, per Google's own support table
+// (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
+// has no "minimal", 3.1 Flash Lite has only "minimal" and "high" — and sending a level a model does
+// not accept is rejected upstream, so this cannot be collapsed into one list per family.
+//
+// Keep both provider spellings of a model on the same row: the level support is a property of the
+// underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
+// the automated `sync provider model definitions` PRs, which cannot know about this table — so a
+// newly synced thinking model shows no control until it is added here.
+const MINIMAL_TO_HIGH: readonly GeminiThinkingLevel[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
 ];
+const LOW_TO_HIGH: readonly GeminiThinkingLevel[] = ["low", "medium", "high"];
 
-const GEMINI_2_5_PRO_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
-  PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
-  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
-];
+const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
+  PROVIDER_MODEL_TYPE,
+  readonly GeminiThinkingLevel[]
+> = new Map([
+  // Gemini 3.x
+  [PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH],
+  // 3.1 Flash Lite is the odd one out: minimal and high only, no low/medium.
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["minimal", "high"]],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW, ["minimal", "high"]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE, ["minimal", "high"]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+    ["minimal", "high"],
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, ["low", "high"]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"]],
+  // Gemini 2.5. Flash Lite is the only model Google ships with thinking off, so it is the only one
+  // offered an explicit "off" — see getDefaultThinkingLevel.
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, ["off", ...LOW_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+    ["off", ...LOW_TO_HIGH],
+  ],
+]);
 
-const GEMINI_2_5_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
-  PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
-  PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
-  PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-];
+const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
 
-const VERTEX_AI_2_5_THINKING_MODELS: readonly PROVIDER_MODEL_TYPE[] = [
-  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
-  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
-  PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
-];
+// Which of the two providers a model id belongs to is encoded in the id itself (Vertex ids are
+// namespaced `vertex_ai/...`). Deliberately not getProviderFromModel: that resolves through the
+// runtime model registry, so it depends on fetched state and returns a fallback provider before
+// the registry loads — a gate on it would flicker with load order.
+const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
+  typeof model === "string" && model.startsWith("vertex_ai/");
 
 /**
  * Checks if a Gemini model supports thinking level parameter
- * Gemini 3 Pro/Flash plus the Gemini 2.5 family
  *
  * @param model - The model type to check
  * @returns true if the model supports thinking level, false otherwise
  */
 export const supportsGeminiThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
-  return (
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO ||
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO ||
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH ||
-    GEMINI_2_5_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE)
-  );
-};
+): boolean =>
+  !isVertexModel(model) &&
+  THINKING_LEVELS_BY_MODEL.has(model as PROVIDER_MODEL_TYPE);
 
 /**
  * Checks if a Vertex AI model supports thinking level parameter
- * Vertex AI Gemini 3 Pro plus the Vertex Gemini 2.5 family
  *
  * @param model - The model type to check
  * @returns true if the model supports thinking level, false otherwise
  */
 export const supportsVertexAIThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
-  return (
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO ||
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO ||
-    VERTEX_AI_2_5_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE)
-  );
-};
+): boolean =>
+  isVertexModel(model) &&
+  THINKING_LEVELS_BY_MODEL.has(model as PROVIDER_MODEL_TYPE);
 
 /**
- * The thinking levels a model accepts. Gemini families differ — Pro has no minimal, Flash has all
- * four, and 2.5 Flash adds "off" — and sending a level a model does not accept is rejected.
+ * The thinking levels a model accepts, as select options. Empty for models without thinking.
  */
 export const getThinkingLevelOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
-): Array<{ label: string; value: GeminiThinkingLevel }> => {
-  if (GEMINI_2_5_PRO_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE)) {
-    return THINKING_LEVEL_OPTIONS_2_5_PRO;
-  }
+): Array<{ label: string; value: GeminiThinkingLevel }> =>
+  (THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? []).map(
+    (value) => ({ label: THINKING_LEVEL_LABELS[value], value }),
+  );
 
-  if (GEMINI_2_5_FLASH_THINKING_MODELS.includes(model as PROVIDER_MODEL_TYPE)) {
-    return THINKING_LEVEL_OPTIONS_2_5_FLASH;
-  }
-
-  if (model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH) {
-    return THINKING_LEVEL_OPTIONS_FLASH;
-  }
-
-  if (
-    supportsGeminiThinkingLevel(model) ||
-    supportsVertexAIThinkingLevel(model)
-  ) {
-    return THINKING_LEVEL_OPTIONS_PRO;
-  }
-
-  return [];
-};
+// Each model's own default thinking level, from the same Google support table. Preselecting the
+// documented default keeps the control from silently changing a model's behaviour just by being
+// shown: 2.5 Flash Lite ships with thinking off, 3.7/3.6/3.5 Flash default to medium, and
+// 3.5 Flash Lite to minimal — none of which is "high". Models absent here default to "high",
+// which is what the 2.5 Pro/Flash and Gemini 3 Pro rows document.
+const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
+  PROVIDER_MODEL_TYPE,
+  GeminiThinkingLevel
+> = new Map([
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, "off" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+    "off" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, "medium" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+    "medium" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH, "medium" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+    "medium" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, "medium" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+    "medium" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+    "minimal" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+    "minimal" as GeminiThinkingLevel,
+  ],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+    "minimal" as GeminiThinkingLevel,
+  ],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+    "minimal" as GeminiThinkingLevel,
+  ],
+]);
 
 /**
- * The level to preselect. Flash Lite is the exception: Google ships it with thinking disabled, so
- * defaulting it to anything else would silently turn thinking on for a model that had it off.
+ * The level to preselect: the model's own documented default, so showing the control does not
+ * change how the model behaves.
  */
 export const getDefaultThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): GeminiThinkingLevel => {
-  if (
-    model === PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE ||
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17
-  ) {
-    return "off";
-  }
-
-  return "high";
-};
+): GeminiThinkingLevel =>
+  DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   adaptive: "Adaptive",
