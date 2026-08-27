@@ -64,7 +64,8 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         Optional.ofNullable(modelParameters.temperature()).ifPresent(modelBuilder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(modelBuilder::seed);
 
-        GeminiThinkingConfigMapper.toThinkingConfig(GeminiThinkingParams.from(modelParameters.customParameters()))
+        GeminiThinkingConfigMapper
+                .toThinkingConfig(modelParameters.name(), GeminiThinkingParams.from(modelParameters.customParameters()))
                 .ifPresent(modelBuilder::thinkingConfig);
 
         GoogleAiGeminiChatModel geminiModel = modelBuilder.build();

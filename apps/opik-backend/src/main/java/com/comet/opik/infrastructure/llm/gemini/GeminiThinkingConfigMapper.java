@@ -14,29 +14,32 @@ class GeminiThinkingConfigMapper {
     }
 
     /**
-     * Builds the Google AI Studio thinking config, which takes the level directly rather than the budget Vertex needs.
+     * Builds the Google AI Studio thinking config for a model.
      * <p>
-     * A level of {@code off} is expressed as a zero budget instead: the API has no "off" level, and zero is how Gemini
-     * 2.5 Flash Lite already represents thinking being disabled. That budget comes from
-     * {@link GeminiThinkingParams#budgetForLevel()} so an explicit {@code budget_tokens} wins over the level here
-     * exactly as it does on Vertex, rather than the two providers resolving the same parameters differently.
+     * {@code thinking_level} is Gemini 3+ only — "If you use the thinking_level parameter with a model earlier than
+     * Gemini 3, the model returns an error" — so on 2.5 a level is translated into the budget it maps to, the same
+     * translation Vertex needs at every version. A level of {@code off} is always a zero budget: there is no "off"
+     * level to send, and zero is how Gemini 2.5 Flash Lite already represents thinking being disabled.
+     * <p>
+     * {@code thinking_level} and the legacy {@code thinking_budget} are mutually exclusive — sending both returns a
+     * 400 — so exactly one is ever set.
      */
-    static Optional<GeminiThinkingConfig> toThinkingConfig(GeminiThinkingParams params) {
+    static Optional<GeminiThinkingConfig> toThinkingConfig(String model, GeminiThinkingParams params) {
         if (params.isAbsent()) {
             return Optional.empty();
         }
 
         var builder = GeminiThinkingConfig.builder();
+        boolean levelOnTheWire = params.level() != null
+                && params.level() != Level.OFF
+                && GeminiThinkingParams.modelAcceptsLevel(model);
 
-        // thinking_level and the legacy thinking_budget are mutually exclusive: sending both returns a
-        // 400 from Google, so exactly one is set. The level wins where there is one, since Google
-        // recommends it over the budget; a bare budget is still forwarded for backward compatibility.
-        if (params.level() == Level.OFF) {
-            builder.thinkingBudget(params.budgetForLevel());
-        } else if (params.level() != null) {
+        if (levelOnTheWire) {
             builder.thinkingLevel(params.level().wireValue());
         } else {
-            Optional.ofNullable(params.budgetTokens()).ifPresent(builder::thinkingBudget);
+            // budgetForLevel() resolves an explicit budget first, then the level's budget, so `off` lands on 0 and a
+            // 2.5 level lands on its mapped budget.
+            Optional.ofNullable(params.budgetForLevel()).ifPresent(builder::thinkingBudget);
         }
 
         Optional.ofNullable(params.includeThoughts()).ifPresent(builder::includeThoughts);
@@ -47,7 +50,7 @@ class GeminiThinkingConfigMapper {
     /**
      * Playground entry point, used from the MapStruct mapper where custom parameters are a plain map.
      */
-    static GeminiThinkingConfig fromCustomParameters(Map<String, Object> customParameters) {
-        return toThinkingConfig(GeminiThinkingParams.from(customParameters)).orElse(null);
+    static GeminiThinkingConfig fromCustomParameters(String model, Map<String, Object> customParameters) {
+        return toThinkingConfig(model, GeminiThinkingParams.from(customParameters)).orElse(null);
     }
 }

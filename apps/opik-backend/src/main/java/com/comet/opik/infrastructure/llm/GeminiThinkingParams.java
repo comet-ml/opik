@@ -7,19 +7,26 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Gemini thinking configuration decoded from {@code custom_parameters.thinking}, shared by the Google AI Studio and
  * Vertex AI providers.
  * <p>
- * The two providers do not expose the same knobs. AI Studio accepts a thinking <em>level</em> alongside a numeric
- * budget, while the Vertex {@code GenerationConfig.ThinkingConfig} protobuf only carries {@code thinking_budget} and
- * {@code include_thoughts}. A level therefore has to be translated into a budget for Vertex, which is what
- * {@link #budgetForLevel()} is for.
+ * A level reaches the wire as a level only on AI Studio with Gemini 3 or later. Everything else takes the budget it
+ * translates to, which is what {@link #budgetForLevel()} is for:
+ * <ul>
+ * <li>Vertex, at any version — its {@code GenerationConfig.ThinkingConfig} protobuf carries only
+ * {@code thinking_budget} and {@code include_thoughts}, with no level field at all.</li>
+ * <li>Gemini 2.5 on either provider — {@code thinking_level} is Gemini 3+ only and earlier models reject it
+ * outright, so 2.5 is level-driven in the UI but budget-driven on the wire.</li>
+ * </ul>
  */
 public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean includeThoughts) {
 
     public static final GeminiThinkingParams ABSENT = new GeminiThinkingParams(null, null, null);
+
+    private static final Pattern GEMINI_MAJOR_VERSION = Pattern.compile("gemini-(\\d+)");
 
     /**
      * Thinking levels accepted by the Google AI Studio API, with the budget each one maps to on Vertex.
@@ -50,6 +57,26 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
                     .filter(level -> level.name().equalsIgnoreCase(value))
                     .findFirst();
         }
+    }
+
+    /**
+     * Whether a model takes {@code thinking_level} rather than the legacy {@code thinking_budget}.
+     * <p>
+     * Only Gemini 3 and later do: "If you use the thinking_level parameter with a model earlier than Gemini 3, the
+     * model returns an error." Gemini 2.5 is level-capable in the product sense — the UI offers levels for it — but on
+     * the wire a level has to be translated into a budget, exactly as it is for Vertex.
+     * <p>
+     * Matched on the model id rather than an allowlist so a newly synced Gemini 3+ model is not silently treated as
+     * 2.5. Ids look like {@code gemini-3.7-flash} or {@code vertex_ai/gemini-2.5-pro}, so the major version is the
+     * digits after the last {@code gemini-}.
+     */
+    public static boolean modelAcceptsLevel(String model) {
+        if (StringUtils.isBlank(model)) {
+            return false;
+        }
+
+        var matcher = GEMINI_MAJOR_VERSION.matcher(model);
+        return matcher.find() && Integer.parseInt(matcher.group(1)) >= 3;
     }
 
     public boolean isAbsent() {
