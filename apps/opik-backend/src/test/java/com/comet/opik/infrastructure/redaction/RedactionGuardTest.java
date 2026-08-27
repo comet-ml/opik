@@ -23,7 +23,7 @@ class RedactionGuardTest {
     void theRefusalNamesTheResponseAndThePermission() {
         assertThatThrownBy(() -> RedactionGuard.rejectUnmaskable(true, "Attachment download"))
                 .hasMessageContaining("Attachment download")
-                .hasMessageContaining("trace_original_data_view");
+                .hasMessageContaining("original_data_view");
     }
 
     @Test

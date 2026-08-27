@@ -119,7 +119,7 @@ class ReadTimeRedactionDisabledResourceTest {
 
         // The platform returns the caller's permissions on the auth call itself, so that is what decides.
         AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), ADMIN_API_KEY, WORKSPACE_NAME,
-                WORKSPACE_ID, USER, List.of(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
+                WORKSPACE_ID, USER, List.of(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
         AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), MEMBER_API_KEY, WORKSPACE_NAME,
                 WORKSPACE_ID, USER, List.of());
     }

@@ -766,7 +766,7 @@ class RemoteAuthServiceTest {
         // And the granted permission reaches the context, so the assertion covers the decision and not just
         // the call: an endpoint answered but parsed wrong would still leave the caller unprivileged.
         assertThat(requestContext.getPermissions())
-                .containsExactly(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue());
+                .containsExactly(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue());
     }
 
     static Stream<Arguments> permissionsAreResolvedOnEveryPath_whenRedactionIsEnabled() {
@@ -836,7 +836,7 @@ class RemoteAuthServiceTest {
                 .userName("user")
                 .workspaceName("workspace")
                 .permissions(List.of(new WorkspaceUserPermissions.Permission(
-                        WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue(), "true")))
+                        WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue(), "true")))
                 .build();
         Stream.of("/opik/workspace-permissions", "/opik/workspace-permissions-session",
                 "/opik/workspace-permissions-by-username")

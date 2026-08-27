@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
  * written against the plain text.</li>
  * </ul>
  * These are all authenticated and workspace-scoped already; that is a different question. The permission this
- * gates on is {@code trace_original_data_view}, which an authenticated member in good standing may lack, and who
+ * gates on is {@code original_data_view}, which an authenticated member in good standing may lack, and who
  * would receive masked content from the JSON API for the same data.
  * <p>
  * So refusing is the honest answer rather than an omission: withholding is the point of the feature, and a
@@ -48,10 +48,10 @@ public class RedactionGuard {
         }
 
         log.info("Refusing '{}': the response cannot be masked and the caller lacks '{}'", what,
-                WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue());
+                WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue());
 
         throw new ForbiddenException(
                 "%s returns stored content that cannot be masked. The '%s' permission is required to read it."
-                        .formatted(what, WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
+                        .formatted(what, WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
     }
 }

@@ -400,6 +400,17 @@ cors:
   # Description: Whether or not to allow cross site scripting
   enabled: false
 
+# Read-time redaction configuration
+redaction:
+  # Default: false
+  # Description: Master switch. Off here so the suite exercises the shipped default; the tests that need it on
+  # override redaction.enabled and redaction.rules per application, which is what keeps this file honest about
+  # the keys existing.
+  enabled: false
+  # Default: [] - valid only while enabled=false, since an empty set with enabled=true fails startup.
+  # Description: JSON array of {"regex", "replace"} applied to every string in a response.
+  rules: '[]'
+
 # Encryption related configuration
 encryption:
   # Default: GiTHubiLoVeYouAA

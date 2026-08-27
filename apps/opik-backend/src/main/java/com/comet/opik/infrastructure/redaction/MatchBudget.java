@@ -82,6 +82,11 @@ record MatchBudget(long limit) {
     /**
      * Deliberately not a {@code String}: the matcher's fast paths are String-specific, and going through
      * {@code charAt} is what makes the accounting possible at all.
+     * <p>
+     * Mutable and <em>not</em> thread-safe. It does not need to be: {@code RedactionRules.apply} builds a
+     * budget per rule per value and {@link #wrap} a counter per {@code RedactionRule.apply}, so an instance
+     * never leaves the single call that created it. Made safe by confinement rather than by an atomic
+     * deliberately - {@code charAt} is the hot path here, once per character per rule.
      */
     private static final class Counted implements CharSequence {
 

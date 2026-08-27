@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.redaction.RedactionRules;
 import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Throwables;
 import com.google.inject.OutOfScopeException;
 import com.google.inject.ProvisionException;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -86,13 +87,13 @@ public class Streamer {
         }
     }
 
+    /**
+     * Guava rather than a hand-rolled walk: {@code getCausalChain} detects a cycle and throws instead of
+     * spinning, and a cause chain that references itself is reachable through wrapping.
+     */
     private static boolean isOutsideRequestScope(ProvisionException exception) {
-        for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
-            if (cause instanceof OutOfScopeException) {
-                return true;
-            }
-        }
-        return false;
+        return Throwables.getCausalChain(exception).stream()
+                .anyMatch(OutOfScopeException.class::isInstance);
     }
 
     private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {

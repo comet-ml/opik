@@ -276,7 +276,7 @@ public class AuthCredentialsCacheServiceTest {
         String workspaceName = getRandomId();
 
         // Without this round-trip the permissions are lost on every cache hit, so a caller holding
-        // trace_original_data_view would be treated as unpermitted for the length of the cache TTL.
+        // original_data_view would be treated as unpermitted for the length of the cache TTL.
         cacheService.cache(apiKey, workspaceName, List.of(),
                 CacheService.AuthCredentials.builder()
                         .userName(getRandomId()).workspaceId(getRandomId())
@@ -293,8 +293,8 @@ public class AuthCredentialsCacheServiceTest {
         return Stream.of(
                 arguments(named("null permissions", null)),
                 arguments(named("no permissions", List.of())),
-                arguments(named("the original-data permission", List.of("trace_original_data_view"))),
+                arguments(named("the original-data permission", List.of("original_data_view"))),
                 arguments(named("several permissions",
-                        List.of("trace_original_data_view", "project_data_view", "dataset_view"))));
+                        List.of("original_data_view", "project_data_view", "dataset_view"))));
     }
 }

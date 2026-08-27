@@ -1845,9 +1845,11 @@ agentConfig:
 redaction:
   # Default: false
   # Description: Master switch. Also gates the workspace settings that expose this in the UI.
-  # REQUIRES AUTHENTICATION. The exemption is the trace_original_data_view workspace permission, which arrives on
-  # the authentication call and from nowhere else, so with authentication.enabled=false no caller can hold it and
-  # every response is masked for everybody with no way to grant an exemption. The backend logs that at startup.
+  # REQUIRES AUTHENTICATION. The exemption is the original_data_view workspace permission, read from the
+  # platform's workspace permissions API and from nowhere else, so with authentication.enabled=false no caller can
+  # hold it and every response is masked for everybody with no way to grant an exemption. The backend logs that at
+  # startup. Redaction is opt-in per caller: the permission is granted to every default role that can read data,
+  # so enabling this masks nothing until an admin revokes it for someone.
   # This is why there is no self-hosted guide for the feature: on a deployment without the platform's
   # authentication there is nothing to configure per caller.
   enabled: ${OPIK_REDACTION_ENABLED:-false}
@@ -1870,7 +1872,7 @@ redaction:
   # stored. Rewriting keys is not the fix: two keys collapsing to the same replacement produce a document with
   # duplicate keys, and the parser that reads it keeps only one of them - valid JSON that has silently lost data.
   # Keys are structure; the place to keep identifiers out of them is the instrumentation that writes them.
-  # The permission is read from the cached authentication result, so granting or revoking trace_original_data_view
+  # The permission is resolved alongside the cached credentials, so granting or revoking original_data_view
   # takes effect within authentication.apiKeyResolutionCacheTTLInSec (default 5s) rather than immediately.
   # Revocation is the direction that matters: for those few seconds a caller who has just lost it still reads
   # originals.
@@ -1890,7 +1892,7 @@ redaction:
   # may come out - four times, or 64 KB, whichever is larger. The second only binds on a rule whose replacement
   # is longer than the text it matches, applied to a value full of such matches; that combination would otherwise
   # let a caller's payload and the replacement multiply into a response many times the size of either.
-  # trace_original_data_view is a workspace-scoped grant, so only a member of the workspace can hold it. That
+  # original_data_view is a workspace-scoped grant, so only a member of the workspace can hold it. That
   # settles what a public project shows: a viewer who is not a member is never a holder, so with this enabled the
   # public view is redacted, always. A member who holds it reads originals on public and private projects alike.
   # The mechanism follows from where permissions are set - the public fallback in RemoteAuthService.authenticate

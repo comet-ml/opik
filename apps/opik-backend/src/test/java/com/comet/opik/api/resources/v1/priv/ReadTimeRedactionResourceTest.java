@@ -150,14 +150,14 @@ class ReadTimeRedactionResourceTest {
 
         // The platform returns the caller's permissions on the auth call itself, so that is what decides.
         AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), ADMIN_API_KEY, WORKSPACE_NAME,
-                WORKSPACE_ID, USER, List.of(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
+                WORKSPACE_ID, USER, List.of(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
         AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), MEMBER_API_KEY, WORKSPACE_NAME,
                 WORKSPACE_ID, USER, List.of());
 
         // The same two callers over a session cookie, which authenticates through a different endpoint.
         AuthTestUtils.mockSessionCookieTargetWorkspaceWithPermissions(wireMock.server(), ADMIN_SESSION_TOKEN,
                 WORKSPACE_NAME, WORKSPACE_ID, USER,
-                List.of(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
+                List.of(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
         AuthTestUtils.mockSessionCookieTargetWorkspaceWithPermissions(wireMock.server(), MEMBER_SESSION_TOKEN,
                 WORKSPACE_NAME, WORKSPACE_ID, USER, List.of());
     }

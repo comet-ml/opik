@@ -36,7 +36,7 @@ class RedactionServiceTest {
         var enabled = service(true, ONE_RULE);
 
         assertThat(enabled.shouldRedactFor(
-                Set.of(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()))).isFalse();
+                Set.of(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()))).isFalse();
         assertThat(enabled.shouldRedactFor(Set.of("some_other_permission"))).isTrue();
     }
 

@@ -71,6 +71,6 @@ public class RedactionService {
     public boolean shouldRedactFor(Set<String> permissions) {
         return isEnabled()
                 && (permissions == null
-                        || !permissions.contains(WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue()));
+                        || !permissions.contains(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
     }
 }
