@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.langchain4j.OpikGeminiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.google.common.base.Preconditions;
@@ -62,6 +63,9 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(modelBuilder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(modelBuilder::seed);
+
+        GeminiThinkingConfigMapper.toThinkingConfig(GeminiThinkingParams.from(modelParameters.customParameters()))
+                .ifPresent(modelBuilder::thinkingConfig);
 
         GoogleAiGeminiChatModel geminiModel = modelBuilder.build();
 

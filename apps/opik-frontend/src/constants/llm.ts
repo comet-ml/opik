@@ -12,6 +12,7 @@ import {
 } from "@/types/automations";
 import {
   AnthropicThinkingEffort,
+  GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
 } from "@/types/providers";
@@ -326,6 +327,29 @@ export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
   { label: "Low", value: "low" },
   { label: "Medium", value: "medium" },
   { label: "High (Default)", value: "high" },
+];
+
+// Thinking level options for Gemini 2.5 Flash and Flash Lite. "Off" is offered because 2.5 Flash Lite
+// ships with thinking disabled, so turning it off again has to stay expressible once a level is being sent.
+export const THINKING_LEVEL_OPTIONS_2_5_FLASH: Array<{
+  label: string;
+  value: GeminiThinkingLevel;
+}> = [
+  { label: "Off", value: "off" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+];
+
+// Gemini 2.5 Pro cannot disable thinking — its minimum budget is non-zero and a zero budget is
+// rejected — so it gets the same levels without "off".
+export const THINKING_LEVEL_OPTIONS_2_5_PRO: Array<{
+  label: string;
+  value: GeminiThinkingLevel;
+}> = [
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
 ];
 
 // Legacy export for backwards compatibility.

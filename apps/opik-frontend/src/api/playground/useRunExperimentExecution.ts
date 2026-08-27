@@ -47,6 +47,7 @@ const runExperimentExecution = async ({
       configs: sanitizeConfigForRequest(
         prompt.model,
         prompt.configs as Record<string, unknown>,
+        { foldThinkingLevel: true },
       ),
       prompt_versions: promptVersions,
     };

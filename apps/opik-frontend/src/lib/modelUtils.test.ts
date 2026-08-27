@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
+  getThinkingLevelOptions,
   sanitizeConfigForRequest,
+  supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
   supportsSamplingParams,
+  supportsVertexAIThinkingLevel,
   updateProviderConfig,
 } from "@/lib/modelUtils";
 import {
@@ -532,5 +536,222 @@ describe("sanitizeConfigForRequest", () => {
       topP: 0.9,
     });
     expect(result.topP).toBe(0.9);
+  });
+});
+
+describe("Gemini thinking level", () => {
+  it("is supported by the Gemini 2.5 family, including Flash Lite", () => {
+    expect(
+      supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE),
+    ).toBe(true);
+    expect(
+      supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO),
+    ).toBe(true);
+    expect(
+      supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH),
+    ).toBe(true);
+  });
+
+  it("is supported by the Vertex Gemini 2.5 family", () => {
+    expect(
+      supportsVertexAIThinkingLevel(
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      ),
+    ).toBe(true);
+    expect(
+      supportsVertexAIThinkingLevel(
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the Gemini 3 models supported", () => {
+    expect(supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toBe(
+      true,
+    );
+    expect(
+      supportsVertexAIThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO),
+    ).toBe(true);
+  });
+
+  it("is not offered for models without thinking support", () => {
+    expect(supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GPT_4O)).toBe(false);
+    expect(getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GPT_4O)).toEqual([]);
+  });
+
+  it("offers an off option for the 2.5 family so thinking can be disabled again", () => {
+    const values = getThinkingLevelOptions(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+    ).map((o) => o.value);
+
+    expect(values).toContain("off");
+  });
+
+  it("does not offer off for Gemini 3, which cannot disable thinking", () => {
+    const values = getThinkingLevelOptions(
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+    ).map((o) => o.value);
+
+    expect(values).not.toContain("off");
+  });
+
+  it("does not offer off for 2.5 Pro, which cannot disable thinking either", () => {
+    expect(
+      getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO).map(
+        (o) => o.value,
+      ),
+    ).toEqual(["low", "medium", "high"]);
+    expect(
+      getThinkingLevelOptions(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO).map(
+        (o) => o.value,
+      ),
+    ).not.toContain("off");
+  });
+
+  it("defaults Flash Lite to off, matching Google's own default", () => {
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE),
+    ).toBe("off");
+    expect(
+      getDefaultThinkingLevel(
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      ),
+    ).toBe("off");
+  });
+
+  it("defaults other thinking models to high", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO)).toBe(
+      "high",
+    );
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toBe(
+      "high",
+    );
+  });
+});
+
+describe("sanitizeConfigForRequest — Gemini thinking", () => {
+  it("nests the level under custom_parameters, since flat fields are dropped by the backend", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      { thinkingLevel: "low" },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toEqual({ thinking: { level: "low" } });
+  });
+
+  it("does the same for Vertex models", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      { thinkingLevel: "high" },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.custom_parameters).toEqual({ thinking: { level: "high" } });
+  });
+
+  it("forwards an off level so thinking can be turned back off", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      { thinkingLevel: "off" },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.custom_parameters).toEqual({ thinking: { level: "off" } });
+  });
+
+  it("preserves unrelated custom parameters", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      { thinkingLevel: "medium", custom_parameters: { foo: "bar" } },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.custom_parameters).toEqual({
+      foo: "bar",
+      thinking: { level: "medium" },
+    });
+  });
+
+  it("drops a level the model does not accept rather than sending it", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      { thinkingLevel: "off" },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toBeUndefined();
+  });
+
+  it("drops the level for models without thinking support", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      { thinkingLevel: "high" },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toBeUndefined();
+  });
+
+  it("merges the level into an existing thinking block, keeping its other fields", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      {
+        thinkingLevel: "low",
+        custom_parameters: {
+          thinking: { budget_tokens: 4096, include_thoughts: true },
+        },
+      },
+      { foldThinkingLevel: true },
+    );
+
+    expect(result.custom_parameters).toEqual({
+      thinking: { budget_tokens: 4096, include_thoughts: true, level: "low" },
+    });
+  });
+
+  it("does not fold into custom_parameters unless the caller opts in", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      { thinkingLevel: "off" },
+    );
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toBeUndefined();
+  });
+});
+
+describe("updateProviderConfig — Gemini thinking level", () => {
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  it("coerces a level the new model does not accept to that model's default", () => {
+    const next = updateProviderConfig(
+      { thinkingLevel: "off" as const },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
+    );
+
+    expect(next?.thinkingLevel).toBe("high");
+  });
+
+  it("drops the level for a model without thinking support", () => {
+    const next = updateProviderConfig(
+      { thinkingLevel: "high" as const },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, provider: GEMINI },
+    );
+
+    expect(next?.thinkingLevel).toBeUndefined();
+  });
+
+  it("leaves a level the model accepts untouched", () => {
+    const config = { thinkingLevel: "off" as const };
+    const next = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      provider: GEMINI,
+    });
+
+    expect(next).toBe(config);
   });
 });
