@@ -33,7 +33,7 @@ public class RemoteWorkspacePermissionsService implements WorkspacePermissionsSe
 
     @Override
     public WorkspaceUserPermissions getPermissions(@NonNull String apiKey, @NonNull String workspaceName) {
-        log.info("Requesting workspace permissions for workspace '{}'", workspaceName);
+        log.debug("Requesting workspace permissions for workspace '{}'", workspaceName);
 
         try (var response = client.target(URI.create(reactServiceUrl.url()))
                 .path("opik")
@@ -50,7 +50,7 @@ public class RemoteWorkspacePermissionsService implements WorkspacePermissionsSe
     @Override
     public WorkspaceUserPermissions getPermissionsBySession(@NonNull String sessionToken,
             @NonNull String workspaceName) {
-        log.info("Requesting workspace permissions for workspace '{}' on the session path", workspaceName);
+        log.debug("Requesting workspace permissions for workspace '{}' on the session path", workspaceName);
 
         try (var response = permissionsRequest("workspace-permissions-session")
                 .cookie(RequestContext.SESSION_COOKIE, sessionToken)
@@ -63,7 +63,7 @@ public class RemoteWorkspacePermissionsService implements WorkspacePermissionsSe
     @Override
     public WorkspaceUserPermissions getPermissionsByUsername(@NonNull String userName,
             @NonNull String workspaceName) {
-        log.info("Requesting workspace permissions for workspace '{}' on the OAuth path", workspaceName);
+        log.debug("Requesting workspace permissions for workspace '{}' on the OAuth path", workspaceName);
 
         try (var response = permissionsRequest("workspace-permissions-by-username")
                 .header(OAUTH_USERNAME_HEADER, userName)

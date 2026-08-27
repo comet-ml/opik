@@ -30,7 +30,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             @NonNull Provider<RequestContext> requestContext,
             @NonNull RedissonReactiveClient redissonClient,
             @NonNull Client client,
-            @NonNull RedactionService redactionService) {
+            @NonNull RedactionService redactionService,
+            @NonNull WorkspacePermissionsService workspacePermissionsService) {
 
         if (!config.isEnabled()) {
             if (redactionService.isEnabled()) {
@@ -60,8 +61,7 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
         return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
-                new RemoteWorkspacePermissionsService(client, config.getReactService()),
-                redactionService.isEnabled());
+                workspacePermissionsService, redactionService.isEnabled());
     }
 
     @Provides
