@@ -333,7 +333,9 @@ authentication:
   #   for the full 30s and returns a 500 to the user. Set to 0s to inherit the shared timeout.
   #   Does NOT apply to listEligibleWorkspaces, which has a documented large-payload case.
   #   NOTE: this bounds a single attempt, not the whole operation -- see requestMaxRetries for
-  #   the end-to-end budget.
+  #   the end-to-end budget. It is an override rather than a clamp: it wins over
+  #   jerseyClient.timeout in both directions, so lowering jerseyClient.timeout alone does not cap
+  #   the auth hop -- lower this value too.
   requestTimeout: ${AUTH_REQUEST_TIMEOUT:-3s}
   # Default: 1
   # Description: Maximum retry attempts for a failed auth request. Uses RetryUtils.handleHttpErrors,

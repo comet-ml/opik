@@ -747,7 +747,7 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testAuthRetry__whenTransportFailsThenRecovers__thenRetriedAndAuthSucceeds()
+    void authRetry__whenTransportFailsThenRecovers__thenRetriedAndAuthSucceeds()
             throws JsonProcessingException {
         var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
         var scenario = "transient-transport-failure";
@@ -771,7 +771,7 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testAuthRetry__whenTransportKeepsFailing__thenAttemptsAreBoundedByMaxRetries() {
+    void authRetry__whenTransportKeepsFailing__thenAttemptsAreBoundedByMaxRetries() {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
 
@@ -787,7 +787,7 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testAuthRetry__whenRetriesDisabled__thenSingleAttempt() {
+    void authRetry__whenRetriesDisabled__thenSingleAttempt() {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
 
@@ -803,11 +803,17 @@ class RemoteAuthServiceTest {
     /**
      * The production failure this PR targets: React accepts the connection but never responds.
      * Without the per-call timeout the request would hang for the shared jerseyClient timeout (30s)
-     * before returning a 500. Asserting elapsed time proves the per-call override is what fires,
-     * since the stub delay sits between the two timeouts.
+     * before returning a 500.
+     * <p>
+     * The stub delay (2s) sits between the per-call timeout (200ms) and the shared client timeout
+     * (30s), which is what makes this a real regression test: if the {@code READ_TIMEOUT} override
+     * stopped applying, the call would <em>succeed</em> after 2s instead of failing, so the
+     * exception assertion alone catches it. The elapsed-time bound is a deliberately loose backstop
+     * against the 30s path only -- it is not measuring the 200ms timeout, so ordinary CI jitter
+     * cannot trip it.
      */
     @Test
-    void testAuthTimeout__whenReactStallsBeyondRequestTimeout__thenFailsFastAndRetries() {
+    void authTimeout__whenReactStallsBeyondRequestTimeout__thenFailsFastAndRetries() {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(okJson("{}").withFixedDelay(2_000)));
 
@@ -821,9 +827,41 @@ class RemoteAuthServiceTest {
         var elapsed = java.time.Duration.ofNanos(System.nanoTime() - startedAt);
 
         assertThat(authRequestCount()).isEqualTo(2);
-        // Two 200ms attempts plus backoff -- far below both the 2s stub delay and the 30s shared
-        // client timeout, either of which would blow this bound if the override stopped applying.
-        assertThat(elapsed).isLessThan(java.time.Duration.ofSeconds(2));
+        // Two attempts on the 30s shared timeout would be ~60s; anything under 15s proves the
+        // per-call override is the timeout that fired, with ~37x headroom over the expected ~0.4s.
+        assertThat(elapsed).isLessThan(java.time.Duration.ofSeconds(15));
+    }
+
+    /**
+     * Bounds retry amplification on the unauthenticated path. {@code authenticate} falls back to
+     * {@code getWorkspaceId} for public endpoints, and both call sites retry, so the concern is
+     * that one inbound request could multiply into (attempts x 2) calls against a React service
+     * that is already failing.
+     * <p>
+     * It cannot: the fallback is behind {@code catch (ClientErrorException)}, and a transport
+     * failure raises {@code ProcessingException}, which is not a {@code ClientErrorException}. So
+     * on the exact failure mode where amplification would matter, the fallback is unreachable and
+     * the request stays bounded by {@code requestMaxRetries + 1}. This test fails if that catch is
+     * ever widened to {@code RuntimeException} or {@code Exception}.
+     */
+    @Test
+    void authRetry__whenTransportFailsOnPublicEndpoint__thenFallbackNotAttempted() {
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
+        // Would serve the public fallback if it were ever reached.
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/opik/workspaces"))
+                .willReturn(okJson("{\"id\":\"" + UUID.randomUUID() + "\"}")));
+
+        var service = authServiceWith(TEST_AUTH_TIMEOUT, 2);
+
+        assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
+                "apiKey-" + UUID.randomUUID()))
+                .isInstanceOf(ProcessingException.class);
+
+        // 3 = 1 initial + 2 retries on the single auth call. Not 6, which is what a second
+        // retrying call site would cost.
+        assertThat(authRequestCount()).isEqualTo(3);
+        assertThat(WIRE_MOCK.server().getAllServeEvents()).hasSize(3);
     }
 
     /**
@@ -832,7 +870,7 @@ class RemoteAuthServiceTest {
      * surface on the first attempt rather than multiplying load on an already-struggling service.
      */
     @Test
-    void testAuthRetry__whenReactReturnsServerError__thenNotRetried() {
+    void authRetry__whenReactReturnsServerError__thenNotRetried() {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withStatus(HttpStatus.SC_SERVICE_UNAVAILABLE)));
 

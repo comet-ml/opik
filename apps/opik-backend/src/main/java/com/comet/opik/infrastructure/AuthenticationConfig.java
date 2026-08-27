@@ -44,8 +44,12 @@ public class AuthenticationConfig {
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
-    // Must not exceed the shared jerseyClient timeout (30s) -- a larger value would be inert,
-    // since the shared client would time out first.
+    // Bounded by the shipped jerseyClient.timeout (30s). Note this is an override, not a clamp:
+    // ClientProperties.READ_TIMEOUT wins over the client's configured timeout in both directions,
+    // so lowering jerseyClient.timeout below this value does NOT cap the auth hop -- this setting
+    // has to be lowered too. The ceiling is a literal rather than a cross-object constraint
+    // because jerseyClient is bound on a different configuration class; if that default ever
+    // changes, this bound must change with it.
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
     private Duration requestTimeout = Duration.seconds(3);
 
