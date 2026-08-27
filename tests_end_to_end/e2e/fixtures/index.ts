@@ -1,4 +1,4 @@
-export { test, expect } from './bystander.fixture';
+export { test, expect } from './quick-filter-attributes.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -94,4 +94,10 @@ export type {
   TokenUsageSpansFixtures,
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  QuickFilterSpanRef,
+  QuickFilterTraceRef,
+  QuickFilterAttributesRef,
+  QuickFilterAttributesFixtures,
+} from './quick-filter-attributes.fixture';
 export type { ProjectRef } from '../core/backend';

@@ -5,6 +5,18 @@ import { ThreadPanelPage } from './thread-panel.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
+/**
+ * One row of a Logs view's filter state as it is written into the URL, with the
+ * client-generated `id` dropped (see LogsPage.readFilterRows).
+ */
+export interface LogsFilterRow {
+  field: string;
+  type?: string;
+  operator: string;
+  key?: string;
+  value: string;
+}
+
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
 const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
@@ -86,6 +98,25 @@ export class LogsPage {
       const env = loadEnvConfig();
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?trace=${traceId}`;
       await this.page.goto(url);
+      return new TracePanelPage(this.page, traceId);
+    });
+  }
+
+  /**
+   * Open a trace's panel by clicking its row, rather than by navigating to
+   * `?trace=<id>` the way `openTraceById` does.
+   *
+   * The distinction matters whenever the test's subject lives in the URL: the
+   * quick-filter handoff writes `spans_filters` into the query string of the
+   * view it is *not* on, and a `page.goto()` rebuilt from projectId alone would
+   * drop it. Clicking mutates the existing URL, which is also what a user does.
+   */
+  async openTraceRow(traceId: string): Promise<TracePanelPage> {
+    return test.step(`Open trace ${traceId} from its row`, async () => {
+      const row = this.traceRow(traceId);
+      await row.waitFor({ state: 'visible' });
+      await row.click();
+      await this.page.waitForURL((url) => url.searchParams.get('trace') === traceId);
       return new TracePanelPage(this.page, traceId);
     });
   }
@@ -414,6 +445,112 @@ export class LogsPage {
     return test.step('Clear all filters', async () => {
       await this.clearAllFiltersButton.click();
       await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Logs type toggle (Threads / Traces / Spans) ---
+
+  /** The Threads/Traces/Spans tab toggle for "Traces". */
+  get tracesTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Traces' });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Spans". */
+  get spansTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /**
+   * Switch the table to Spans/Traces/Threads and wait for `logsType` to settle.
+   *
+   * The toggle sits behind the details panel's modal overlay (the panel marks
+   * the rest of the page `aria-hidden`), so close the panel before calling this.
+   */
+  async switchLogsType(logsType: 'traces' | 'spans' | 'threads'): Promise<void> {
+    return test.step(`Switch the Logs table to ${logsType}`, async () => {
+      const tab = { traces: this.tracesTab, spans: this.spansTab, threads: this.threadsTab }[
+        logsType
+      ];
+      await tab.click();
+      await this.page.waitForURL((url) => url.searchParams.get('logsType') === logsType);
+    });
+  }
+
+  /** The `logsType` the URL currently selects. Absent means the default, Traces. */
+  currentLogsType(): string {
+    return new URL(this.page.url()).searchParams.get('logsType') ?? 'traces';
+  }
+
+  /** The `page` query parameter as a number, or null when it isn't set. */
+  currentPageParam(): number | null {
+    const raw = new URL(this.page.url()).searchParams.get('page');
+    return raw === null ? null : Number(raw);
+  }
+
+  /**
+   * The filter rows a Logs view is carrying in the URL (`traces_filters` /
+   * `spans_filters`), or **null** when the parameter is absent entirely.
+   *
+   * Null and `[]` are deliberately distinct: "the origin view's filters were
+   * never touched" is a different fact from "they were written as empty", and
+   * collapsing the two would let an overwrite pass.
+   *
+   * Each row's client-generated `id` is dropped — it is a fresh nonce per click
+   * and nothing user-visible depends on it.
+   */
+  readFilterRows(view: 'traces' | 'spans'): LogsFilterRow[] | null {
+    const raw = new URL(this.page.url()).searchParams.get(`${view}_filters`);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw) as Array<LogsFilterRow & { id?: string }>;
+    return parsed.map(({ id: _id, ...row }) => row);
+  }
+
+  /**
+   * The number shown in the count metrics card while the Spans tab is active.
+   * The Spans view reuses the Traces view's count-card testid, so this is the
+   * same read as `countTraces()` — named separately so a spec says which
+   * entity it means.
+   */
+  async countSpans(): Promise<number> {
+    return test.step('Read span count', async () => {
+      const valueEl = this.page.getByTestId('metrics-card-count-value');
+      await valueEl.waitFor({ state: 'visible' });
+      const text = (await valueEl.textContent()) ?? '';
+      const digits = text.replace(/\D/g, '');
+      return digits ? Number(digits) : 0;
+    });
+  }
+
+  /** Wait for the Spans table to be ready, gated on a specific span's row. */
+  async waitForSpansReady(spanId: string): Promise<void> {
+    return test.step(`Wait for the Spans table to show span ${spanId}`, async () => {
+      await this.spanRow(spanId).waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Rows of the Spans table. The Spans view reuses the shared DataTable, so a
+   * row's `data-row-id` is the span id — the same hook `traceRow` keys on.
+   */
+  get spanRows(): Locator {
+    return this.page.locator('tr[data-row-id]');
+  }
+
+  /** A span row, keyed by span id. */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  /** The span ids currently rendered in the Spans table, in table order. */
+  async readSpanIdsInOrder(): Promise<string[]> {
+    return test.step('Read span IDs in table order', async () => {
+      await this.spanRows.first().waitFor({ state: 'visible' });
+      const ids: string[] = [];
+      for (const row of await this.spanRows.all()) {
+        const id = await row.getAttribute('data-row-id');
+        if (id) ids.push(id);
+      }
+      return ids;
     });
   }
 
