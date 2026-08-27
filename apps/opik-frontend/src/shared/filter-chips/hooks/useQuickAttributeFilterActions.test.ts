@@ -10,6 +10,8 @@ import {
   ChipValueMap,
   QueryBuilderChipValue,
 } from "@/shared/filter-chips/types";
+import { COLUMN_TYPE } from "@/types/shared";
+import { Filter } from "@/types/filters";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 vi.mock("@/lib/analytics/tracking", async (importOriginal) => {
@@ -25,6 +27,8 @@ describe("resolveQuickFilterTarget", () => {
   it("targets the metadata chip with the path as-is", () => {
     expect(resolveQuickFilterTarget("metadata", TRACES, "git.branch")).toEqual({
       chipId: "metadata",
+      field: "metadata",
+      columnType: COLUMN_TYPE.dictionary,
       key: "git.branch",
     });
   });
@@ -32,12 +36,19 @@ describe("resolveQuickFilterTarget", () => {
   it("prefixes input/output paths and targets the custom chip", () => {
     expect(
       resolveQuickFilterTarget("input", SPANS, "messages[0].content"),
-    ).toEqual({ chipId: "custom", key: "input.messages[0].content" });
+    ).toEqual({
+      chipId: "custom",
+      field: "custom",
+      columnType: COLUMN_TYPE.dictionary,
+      key: "input.messages[0].content",
+    });
   });
 
   it("routes a span's root provider to the dedicated provider field", () => {
     expect(resolveQuickFilterTarget("metadata", SPANS, "provider")).toEqual({
       chipId: "provider",
+      field: "provider",
+      columnType: COLUMN_TYPE.string,
     });
   });
 
@@ -68,7 +79,11 @@ describe("stringifyFilterValue", () => {
 
 describe("useQuickAttributeFilterActions", () => {
   const TABLE_ID = "logs.test";
-  const setup = (type = SPANS, values = {}) => {
+  const setup = (
+    type = SPANS,
+    values = {},
+    handoff?: (chipId: string, row: Filter) => void,
+  ) => {
     const applyValue = vi.fn();
     const pinChip = vi.fn();
     const { result } = renderHook(() =>
@@ -78,9 +93,22 @@ describe("useQuickAttributeFilterActions", () => {
         values,
         applyValue,
         pinChip,
+        handoff,
       }),
     );
     return { result, applyValue, pinChip };
+  };
+
+  // The Logs page passes the destination as `type`; `handoff` is set only when
+  // that destination is not the view on screen.
+  const setupHandoff = (active: boolean, values = {}) => {
+    const apply = vi.fn();
+    const helpers = setup(
+      active ? SPANS : TRACES,
+      values,
+      active ? apply : undefined,
+    );
+    return { ...helpers, apply };
   };
 
   beforeEach(() => vi.mocked(trackEvent).mockClear());
@@ -270,6 +298,47 @@ describe("useQuickAttributeFilterActions", () => {
     });
   });
 
+  describe("hands off to the Traces view (threads page has no local chips)", () => {
+    const setupTracesHandoff = () => {
+      const apply = vi.fn();
+      const { result } = renderHook(() =>
+        useQuickAttributeFilterActions({
+          type: TRACES,
+          tableId: "logs.traces",
+          // The threads table cannot hold these filters, so no local chips.
+          handoff: apply,
+        }),
+      );
+      return { result, apply };
+    };
+
+    it("sends the row to the Traces view and names that destination", () => {
+      const { result, apply } = setupTracesHandoff();
+      expect(result.current.hintText).toBe("Filter traces by this attribute");
+      expect(result.current.appliedText).toBe("Filter applied to Traces");
+
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+      const [chipId, row] = apply.mock.calls[0];
+      expect(chipId).toBe("metadata");
+      expect(row).toMatchObject({ key: "git.branch", value: "main" });
+    });
+
+    it("keeps the trace rules: no provider, no providers aggregate", () => {
+      const { result, apply } = setupTracesHandoff();
+      expect(result.current.canFilter("metadata", "provider")).toBe(false);
+      act(() => result.current.filter("metadata", "provider", "openai"));
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it("is a no-op when neither a handoff nor local chip state exists", () => {
+      const { result } = renderHook(() =>
+        useQuickAttributeFilterActions({ type: TRACES, tableId: "logs.x" }),
+      );
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+      expect(trackEvent).not.toHaveBeenCalled();
+    });
+  });
+
   describe("fires the quick-filter BI event on apply", () => {
     it("captures entity (data_type), section (source), chip and operator", () => {
       const { result } = setup(SPANS);
@@ -327,6 +396,109 @@ describe("useQuickAttributeFilterActions", () => {
       const { result } = setup(TRACES);
       act(() => result.current.filter("metadata", "providers[0]", "openai"));
       expect(trackEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("hands the filter to the Spans view when the panel shows a span", () => {
+    it("resolves span targets that the traces tab alone would reject", () => {
+      const { result } = setupHandoff(true);
+      expect(result.current.canFilter("metadata", "provider")).toBe(true);
+      expect(result.current.canFilter("metadata", "git.branch")).toBe(true);
+    });
+
+    it("still blocks the providers aggregate", () => {
+      const { result, apply } = setupHandoff(true);
+      expect(result.current.canFilter("metadata", "providers[0]")).toBe(false);
+      act(() => result.current.filter("metadata", "providers[0]", "openai"));
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it("sends the row to the Spans view and leaves the trace chips untouched", () => {
+      const { result, apply, applyValue, pinChip } = setupHandoff(true);
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+
+      expect(applyValue).not.toHaveBeenCalled();
+      expect(pinChip).not.toHaveBeenCalled();
+      const [chipId, row] = apply.mock.calls[0];
+      expect(chipId).toBe("metadata");
+      expect(row).toMatchObject({
+        key: "git.branch",
+        operator: "contains",
+        value: "main",
+      });
+    });
+
+    it("reports the event against the destination table", () => {
+      const { result } = setupHandoff(true);
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+
+      expect(trackEvent).toHaveBeenCalledWith(OpikEvent.QUICK_FILTER_APPLIED, {
+        data_type: SPANS,
+        source: "metadata",
+        filter_name: "metadata",
+        operator: "contains",
+        table_id: TABLE_ID,
+      });
+    });
+
+    it("keeps `filter` stable although the caller rebuilds the handoff object", () => {
+      const apply = vi.fn();
+      const applyValue = vi.fn();
+      const pinChip = vi.fn();
+      const { result, rerender } = renderHook(
+        ({ values }: { values: ChipValueMap }) =>
+          useQuickAttributeFilterActions({
+            type: TRACES,
+            tableId: TABLE_ID,
+            values,
+            applyValue,
+            pinChip,
+            handoff: apply,
+          }),
+        { initialProps: { values: {} as ChipValueMap } },
+      );
+
+      const firstFilter = result.current.filter;
+      rerender({ values: { metadata: { rows: [] } } });
+      expect(result.current.filter).toBe(firstFilter);
+    });
+
+    it("names the destination in the labels", () => {
+      expect(setupHandoff(true).result.current.hintText).toBe(
+        "Filter spans by this attribute",
+      );
+      expect(setupHandoff(true).result.current.appliedText).toBe(
+        "Filter applied to Spans",
+      );
+    });
+
+    it("carries the field and column type so the destination needs no chip definitions", () => {
+      const { result, apply } = setupHandoff(true);
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+      expect(apply.mock.calls[0][1]).toMatchObject({
+        field: "metadata",
+        type: COLUMN_TYPE.dictionary,
+        key: "git.branch",
+        operator: "contains",
+        value: "main",
+      });
+    });
+
+    it("names the table on the spans tab too, without a move to announce", () => {
+      const { result } = setup(SPANS);
+      expect(result.current.hintText).toBe("Filter spans by this attribute");
+      expect(result.current.appliedText).toBe("Filter applied");
+    });
+
+    it("stays on the trace chips while the panel shows the trace itself", () => {
+      const { result, apply, applyValue, pinChip } = setupHandoff(false);
+      expect(result.current.canFilter("metadata", "provider")).toBe(false);
+      expect(result.current.hintText).toBe("Filter traces by this attribute");
+
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+      expect(apply).not.toHaveBeenCalled();
+      expect(applyValue).toHaveBeenCalled();
+      expect(pinChip).toHaveBeenCalledWith("metadata");
     });
   });
 });

@@ -59,11 +59,15 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
-import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
 import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
+import useLogsQuickAttributeFilter, {
+  SPANS_VIEW,
+  TRACES_VIEW,
+} from "@/v2/pages/LogsPage/useLogsQuickAttributeFilter";
 import { ChipDefinition } from "@/shared/filter-chips/types";
 import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import {
+  SPAN_DEFAULT_PINNED_CHIPS,
   TRACE_DEFAULT_PINNED_CHIPS,
   buildSharedDynamicChips,
   buildTraceChipDefinitions,
@@ -524,8 +528,6 @@ const SPAN_CHIP_ORDER: string[] = [
   "custom",
 ];
 
-const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
-
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
@@ -751,7 +753,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ? TRACE_DEFAULT_PINNED_CHIPS
       : SPAN_DEFAULT_PINNED_CHIPS;
   const tableId =
-    type === TRACE_DATA_TYPE.traces ? "logs.traces" : "logs.spans";
+    type === TRACE_DATA_TYPE.traces ? TRACES_VIEW.tableId : SPANS_VIEW.tableId;
   const filtersUrlKey = `${type}_filters`;
 
   const {
@@ -783,9 +785,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
-  const quickAttributeFilterApi = useQuickAttributeFilterActions({
-    type,
-    tableId,
+  const quickAttributeFilterApi = useLogsQuickAttributeFilter({
+    logsType,
+    spanId,
+    onLogsTypeChange,
     values: chipValues,
     applyValue: applyChipValue,
     pinChip,
