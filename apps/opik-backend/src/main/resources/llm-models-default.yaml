@@ -180,6 +180,8 @@ gemini:
     label: "Gemini 3.5 Flash"
   - id: "gemini-3.5-flash-lite"
     label: "Gemini 3.5 Flash Lite"
+  - id: "gemini-3.5-transcribe"
+    label: "Gemini 3.5 Transcribe"
   - id: "gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
@@ -402,6 +404,7 @@ openrouter:
     label: "anthropic/claude-opus-4.8:batch"
   - id: "anthropic/claude-opus-5"
     label: "anthropic/claude-opus-5"
+    structuredOutput: true
   - id: "anthropic/claude-opus-5-fast"
     label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-opus-5:batch"
@@ -573,6 +576,7 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-pro-0813"
     label: "deepseek/deepseek-v4-pro-0813"
+    structuredOutput: true
   - id: "dots-studio/dots-3-note-preview:free"
     label: "dots-studio/dots-3-note-preview:free"
   - id: "eleutherai/llemma_7b"
@@ -854,10 +858,14 @@ openrouter:
     label: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
+  - id: "minimax/minimax-m2.7:free"
+    label: "minimax/minimax-m2.7:free"
   - id: "minimax/minimax-m3"
     label: "minimax/minimax-m3"
   - id: "minimax/minimax-m3:batch"
     label: "minimax/minimax-m3:batch"
+  - id: "minimax/minimax-m3:free"
+    label: "minimax/minimax-m3:free"
   - id: "mistralai/codestral-2501"
     label: "mistralai/codestral-2501"
     structuredOutput: true
@@ -1506,6 +1514,8 @@ openrouter:
     label: "qwen/qwen3.8-2.4t-a95b"
   - id: "qwen/qwen3.8-27b"
     label: "qwen/qwen3.8-27b"
+  - id: "qwen/qwen3.8-flash"
+    label: "qwen/qwen3.8-flash"
   - id: "qwen/qwen3.8-max"
     label: "qwen/qwen3.8-max"
   - id: "qwen/qwq-32b"
@@ -1689,6 +1699,8 @@ openrouter:
     label: "z-ai/glm-5.2:free"
   - id: "z-ai/glm-5.3"
     label: "z-ai/glm-5.3"
+  - id: "z-ai/glm-5.3-flash"
+    label: "z-ai/glm-5.3-flash"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"

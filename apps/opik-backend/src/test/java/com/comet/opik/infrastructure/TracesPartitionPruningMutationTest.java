@@ -34,7 +34,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,8 +95,10 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * <p>The eras in {@link #deleteClearsEveryEraAndBindsExactlyThosePartitions} are load-bearing, not variety.
  * {@code toMonday} agrees with the {@code Date32} expression across the ordinary calendar and diverges only far-future
  * or at the epoch, so a recent-only batch would accept the very expression migration 000114 was written to escape. The
- * 2200 row also covers the {@code DateTime64} half of what the flag asserts: against a 32-bit {@code id_at} it would be
- * stored under a wrapped recent timestamp, the derived partition would not match, and it would survive.
+ * 2200 row is also the only one whose two {@code id_at} representations differ, so it is what pins the derivation to
+ * the {@code DateTime64} value <em>this</em> table files it under, rather than to the legacy week that is in the set
+ * alongside it. The legacy side of that same pair is pinned by {@code TracesLegacyTablePruningMutationTest}, which
+ * deletes the same shape of row from the legacy table with the same rendered predicate.
  *
  * <p>Two internal touches, on the pattern of {@code TracesDistributedWrapMutationTest}: the EXCHANGE has no public API,
  * so {@link #beforeAll} runs it in raw SQL identical to the swap block of {@code 000003_exchange_and_wrap.sql}; and the
@@ -110,16 +111,15 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * its target table: after the Liquibase migrations the live {@code traces} is still the <em>legacy</em> table — no
  * {@code PARTITION BY} at all and a 32-bit {@code DateTime} {@code id_at} — while the partitioned successor exists only
  * as the empty {@code traces_local_v2}, which no DAO query can reach. Without installing it these tests would run
- * against the one table where this predicate must never be emitted, and would pass while proving nothing: the predicate
- * is harmless against an unpartitioned table for recent ids. Hand-authoring a partitioned {@code traces} in the test
+ * against the unpartitioned legacy table, where the predicate prunes nothing, and would pass while proving nothing. Hand-authoring a partitioned {@code traces} in the test
  * instead would duplicate migration 000114 and reintroduce exactly the drift this suite exists to detect. Both steps are
  * idempotent, so the suite keeps working once the cutover migration lands and they become no-ops — and that is
- * asserted rather than assumed, by {@link PruningEnabled#topologySetupIsANoOpOnceTheEstateProvidesIt}. Two states
+ * asserted rather than assumed, by {@link #topologySetupIsANoOpOnceTheEstateProvidesIt}. Two states
  * are therefore covered: <b>with</b> the swap, which every other test here needs today, and <b>without</b> it,
  * which is what the estate will look like once the migrations create {@code traces_local} partitioned with the
  * {@code Distributed} {@code traces} over it and this suite's {@code EXCHANGE} stops being needed at all.
  *
- * <p><b>Topology: the post-cutover end state, with both schema flags on.</b> The wrap is applied and
+ * <p><b>Topology: the post-cutover end state.</b> The wrap is applied and
  * {@code tracesDistributedWrapEnabled} set, so the DAO's mutations reach the data the way production routes them —
  * {@code DELETE FROM traces_local}, chosen by the configuration switch that governs it, not by a table this suite
  * renamed under the DAO. {@code traces} is the {@code Distributed} wrapper that reads and inserts flow through, which
@@ -127,17 +127,15 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * {@link #distributedTracesRejectsDirectMutation} keeps that claim honest: had the wrap not taken effect,
  * {@code traces} would still be a {@code MergeTree} and every pruned delete here would have run against it.
  *
- * <p>This supersedes an earlier note in this file that both flags on at once was untested and would need its own suite.
- * It does not: the wrap flag is how the DAO is pointed at the data, so enabling it costs two setup statements and
- * covers the combination the fleet actually ends up in. What is no longer covered here is the transient
- * post-EXCHANGE/pre-wrap window — the pruning predicate is identical in both, since {@code traces_local} is the same
- * physical table under a different name, and the flag's own javadoc records that it must hold in that window.
+ * <p>The transient post-EXCHANGE/pre-wrap window is not covered separately, and needs no coverage: the pruning
+ * predicate is identical in both, since {@code traces_local} is the same physical table under a different name.
  *
  * <p>Dedicated, non-reused ClickHouse and ZooKeeper containers are required because the setup destructively renames the
  * live {@code traces} table — the EXCHANGE swaps it, and the wrap then renames it to {@code traces_local} — so a reused
  * container would corrupt other suites and reruns.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class TracesPartitionPruningMutationTest {
 
     private static final String API_KEY = "apiKey-" + UUID.randomUUID();
@@ -300,13 +298,26 @@ class TracesPartitionPruningMutationTest {
      * than identity. The three eras are not interchangeable samples: {@code toMonday} agrees with the {@code Date32}
      * expression across the ordinary calendar and diverges only far-future or at the epoch, so a recent-only batch would
      * accept the very expression migration 000114 was written to escape. The 2199 row is the litellm shape and the one
-     * that makes it bite; it also covers the {@code DateTime64} half of what the flag asserts, since a 32-bit
-     * {@code id_at} would store it under a wrapped recent timestamp and the derived partition would miss it.
+     * that makes it bite; it is also the only era whose two {@code id_at} representations differ, so it is what shows
+     * the derivation naming the {@code DateTime64} week this table files it under — see {@link #LEGACY_WEEK_OF_2200}.
      */
     private static final List<LocalDate> ERA_MONDAYS = List.of(
             LocalDate.of(1996, 2, 5),
             LocalDate.of(2025, 3, 3),
             LocalDate.of(2199, 12, 30));
+
+    /**
+     * The second partition the 2199 era resolves to: the week legacy {@code traces} would file that same id under, since
+     * its 32-bit {@code DateTime} {@code id_at} holds {@code epochSecond % 2^32}. {@code WeeklyPartitions} names it
+     * alongside the honest week so one rendered statement is correct on both schemas, which is what removed the cutover
+     * flag this suite used to A/B — so every exact-set assertion here has to expect it. The value is what ClickHouse
+     * returned for {@code CAST(UUIDv7ToDateTime(...) AS DateTime('UTC'))} on that id: {@code 2063-11-25}, a Wednesday.
+     * <p>
+     * The other two eras are inside the 32-bit range, so their two representations coincide and they contribute one
+     * value each — which is the point of stating this one separately rather than deriving every expectation through
+     * {@code WeeklyPartitions}: the asymmetry is the behaviour under test.
+     */
+    private static final long LEGACY_WEEK_OF_2200 = 20631119L;
 
     /** {@link UUID#randomUUID()} is a v4 by definition: no embedded timestamp to derive a partition from. */
     private static final UUID NON_V7_ID = UUID.randomUUID();
@@ -338,7 +349,7 @@ class TracesPartitionPruningMutationTest {
     /**
      * Runs the topology setup and this suite's own raw reads and seeds straight against the container, with no app in
      * the way — the idiom the sibling partition suites use. It has to be app-independent: the topology must be
-     * installed once, before either nested app boots, and both nested classes then read through the same handle.
+     * installed before the app boots against it.
      * <p>
      * <b>Never use this for anything the DAO executes</b> — see {@link #appTemplate}. It carries none of the production
      * {@code queryParameters}, so a statement the real connection would accept can fail here for reasons production
@@ -372,15 +383,26 @@ class TracesPartitionPruningMutationTest {
     private TransactionTemplateAsync appTemplate;
 
     /**
-     * One app per flag state, identical in every other respect. {@code tracesWeeklyPartitionPruningEnabled} is the only
-     * thing that varies between the two nested classes, which is what lets them be read as an A/B: same schema, same
-     * topology, same fixtures, one flag.
-     * <p>
-     * The other two flags are fixed on, as production runs them post-cutover — the successor's {@code end_time}/
-     * {@code ttft} are non-nullable sentinel columns, and the wrap is what points the DAO's mutations at
-     * {@code traces_local}.
+     * Declared after the instance initialiser above on purpose: field initialisers run in textual order, so the
+     * topology is installed before the app boots against it.
      */
-    private TestDropwizardAppExtension newApp(boolean pruningEnabled) {
+    @RegisterApp
+    private final TestDropwizardAppExtension app = newApp();
+
+    /**
+     * The app, configured as production runs post-cutover: the successor's {@code end_time}/{@code ttft} are
+     * non-nullable sentinel columns, and the wrap is what points the DAO's mutations at {@code traces_local}.
+     * <p>
+     * There is no flag for the pruning itself to set either way. It used to be a third {@code customConfig} and this
+     * suite an A/B across two apps, one per state; {@code WeeklyPartitions} now derives a value per {@code id_at} type
+     * a mutation may meet, so the predicate is emitted unconditionally and the same rendered SQL is correct on both
+     * sides of the EXCHANGE. What that suite's off-side established — that the unbounded fallback still deletes — is
+     * still covered here, by {@link #underivableIdDisablesPruning} and
+     * {@link #pruningReachesThePlannerAndTheFallbackDoesNot}, which reach the fallback through a batch the derivation
+     * rejects rather than through configuration; and {@code TracesLegacyTablePruningMutationTest} covers the same
+     * delete against the legacy table, which is the schema the flag used to stand for.
+     */
+    private TestDropwizardAppExtension newApp() {
         return TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(mysqlContainer.getJdbcUrl())
@@ -390,17 +412,13 @@ class TracesPartitionPruningMutationTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .customConfigs(List.of(
                                 new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
-                                new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true"),
-                                new CustomConfig("databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled",
-                                        String.valueOf(pruningEnabled))))
+                                new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true")))
                         .build());
     }
 
-    /**
-     * Wires the currently-running nested class's app in. Safe on shared outer fields because JUnit runs nested
-     * containers one at a time — this tree configures no parallel execution — so only one app is live at a time.
-     */
-    private void bindApp(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
+    /** Wires the app's clients and connection handle in, once it has booted against the topology installed above. */
+    @BeforeAll
+    void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -428,16 +446,6 @@ class TracesPartitionPruningMutationTest {
      */
     private static long partitionNameOf(LocalDate monday) {
         return monday.getYear() * 10000L + monday.getMonthValue() * 100L + monday.getDayOfMonth();
-    }
-
-    /**
-     * The partition a single id resolves to. Derived through {@code WeeklyPartitions} on purpose: this suite is about
-     * the predicate reaching ClickHouse, and the derivation's own expected values are pinned against real ClickHouse
-     * output in {@code WeeklyPartitionsTest}, so restating them here would only duplicate that. Where the expectation
-     * needs to be readable on its own — the era batch — the partitions are stated as literals instead.
-     */
-    private static long partitionOf(UUID id) {
-        return WeeklyPartitions.of(List.of(id)).orElseThrow().iterator().next();
     }
 
     /**
@@ -538,8 +546,8 @@ class TracesPartitionPruningMutationTest {
      * <p>
      * The EXCHANGE (000003 exchange block): puts the successor under {@code traces} and the original under
      * {@code traces_local_v2}, then a RENAME parks the original as {@code traces_pre_cutover_backup}. The wrap is
-     * deliberately not applied — it is a separate, deferrable step, and the flag under test must hold on its own between
-     * the two (which is why it is not the wrap flag). Kept identical to the cutover SQL by eye, as
+     * deliberately not applied here — it is a separate, deferrable step, and the pruning has to hold on its own in the
+     * window between the two. Kept identical to the cutover SQL by eye, as
      * {@code TracesLocalV2CutoverTest.exchangeTables} and the wrap suite do.
      */
     private void ensurePartitionedSuccessorUnderTraces() {
@@ -758,363 +766,294 @@ class TracesPartitionPruningMutationTest {
             @JsonProperty("Initial Parts") int total) {
     }
 
-    /**
-     * The flag <b>on</b>: the pruning this change exists to add. Every assertion here would also hold with the feature
-     * deleted <em>except</em> the ones about the emitted SQL and the planner — which is exactly why those exist, and why
-     * {@link PruningDisabled} runs the same fixtures with the flag off. Read as a pair, the two classes pin the flag as
-     * the cause: remove the pruning and this class fails; remove the flag <em>gate</em> and the other one does.
-     */
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @ExtendWith(DropwizardAppExtensionProvider.class)
-    class PruningEnabled {
-
-        @RegisterApp
-        private final TestDropwizardAppExtension app = newApp(true);
-
-        @BeforeAll
-        void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
-            bindApp(clientSupport, traceDAO, appTemplate);
-        }
-
-        @Test
-        @DisplayName("traces is a mutation-rejecting Distributed wrapper, so these deletes ran on traces_local")
-        void distributedTracesRejectsDirectMutation() {
-            // Keeps the both-flags claim from being vacuous. If the wrap had not taken effect, `traces` would still be a
-            // MergeTree, every pruned delete in this suite would have run against it, and nothing here would say so.
-            // Asserting the specific rejection - not merely that something threw - is what proves `traces` is Distributed,
-            // so a green delete could only have reached `traces_local`.
-            assertThatThrownBy(() -> execute("DELETE FROM traces WHERE workspace_id = :workspace_id",
-                    statement -> statement.bind("workspace_id", WORKSPACE_ID)))
-                    .hasMessageContaining("DELETE query is not supported for table");
-        }
-
-        @Test
-        @DisplayName("an all-UUIDv7 delete prunes to the batch's own partitions and removes the target row")
-        void allUuidV7DeletePrunesAndRemovesTheTargetRow() {
-            var target = newTrace().build();
-            // Same project, so one read shows both: the pruned delete must take the target and leave this one.
-            var bystander = newTrace().projectName(target.projectName()).build();
-            traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
-            traceResourceClient.createTrace(bystander, API_KEY, WORKSPACE_NAME);
-            assertThat(traceIdsOf(target.projectName())).contains(target.id(), bystander.id());
-
-            // The live user path, end to end.
-            traceResourceClient.deleteTrace(target.id(), WORKSPACE_NAME, API_KEY);
-
-            assertThat(traceIdsOf(target.projectName()))
-                    .as("only the target row is gone")
-                    .doesNotContain(target.id())
-                    .contains(bystander.id());
-            var sql = lastTraceDeleteSql(target.id());
-            assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
-            assertThat(boundPartitionsOf(sql))
-                    .as("bounded to exactly the target's own partition, nothing wider")
-                    .containsExactly(partitionOf(target.id()));
-        }
-
-        @Test
-        @DisplayName("the DAO's own delete clears every era and binds exactly those partitions")
-        void deleteClearsEveryEraAndBindsExactlyThosePartitions() {
-            // The three-way agreement - the migration's PARTITION BY as installed, the DAO's predicate, and
-            // WeeklyPartitions.of - asserted through the DAO's own delete rather than by re-evaluating the expression in
-            // test SQL. If the predicate resolved to any partition other than the one ClickHouse filed a row under, the
-            // mutation would select the wrong parts and that row would SURVIVE. So "every row is gone" IS the agreement.
-            //
-            // Ids are minted from the named Mondays rather than written out, so both sides of the assertion are the same
-            // arithmetic a reader can check, and every era in one batch is also the multi-value Long[] bind. Seeded raw and
-            // in a minted project: the ingestion window is 24h, so no endpoint can create a 1996 or 2199 row, and the
-            // project id is a real UUIDv7 straight from IdGenerator - which is how the sibling partition suites get one.
-            var projectId = ID_GENERATOR.generateId();
-            var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
-            ids.forEach(id -> insertRawTrace(projectId, id));
-            assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
-                    .as("every era is seeded").containsOnly("1");
-
-            delete(ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
-
-            assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
-                    .as("every era's row is gone, so the predicate named the partition each was actually filed under")
-                    .containsOnly("0");
-            var sql = lastTraceDeleteSql(ids.getFirst());
-            assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
-            assertThat(boundPartitionsOf(sql))
-                    .as("exactly the partitions the batch resolves to, not a range across two centuries")
-                    .containsExactlyInAnyOrderElementsOf(ERA_MONDAYS.stream()
-                            .map(TracesPartitionPruningMutationTest::partitionNameOf)
-                            .collect(Collectors.toUnmodifiableSet()));
-        }
-
-        @Test
-        @DisplayName("the planner actually prunes, and the fallback provably does not")
-        void pruningReachesThePlannerAndTheFallbackDoesNot() {
-            // Correctness and pruning are different claims, and this is the only test that makes the second one. Deletes
-            // were already correct before OPIK-6901 - what the change buys is parts touched (3,928/3,928 -> 5/3,928 on
-            // prod-test), so a suite that cannot see pruning stop does not test what this change exists to do.
-            //
-            // The regression it guards is specific: a migration rewrites the partition expression to something semantically
-            // identical but textually different, the planner stops recognising the DAO's predicate as the partition key,
-            // pruning silently stops - and values still agree, so every row is still deleted and every other assertion in
-            // this suite stays green. That is the property the removed AST pin covered; this asks the planner directly
-            // instead of inferring it from text.
-            //
-            // EXPLAIN does not accept a mutation, so the WHERE clause is lifted verbatim out of the DAO's own emitted
-            // DELETE and put behind a SELECT - predicate and bound partition values included. Only the verb changes; the
-            // statement being explained is still the DAO's. Same instrument and record shape as
-            // TracesLocalV2PartitioningTest.
-            // One row per era, so the table holds several partitions for the planner to prune between.
-            var projectId = ID_GENERATOR.generateId();
-            var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
-            ids.forEach(id -> insertRawTrace(projectId, id));
-
-            // Bounded: one derivable id, so the predicate names a single one of those partitions.
-            delete(Set.of(Pair.of(projectId, ids.getFirst())));
-            var bounded = partsSelectedBy(lastTraceDeleteSql(ids.getFirst()))
-                    .orElseThrow(() -> new AssertionError(
-                            "EXPLAIN reported no partition index for the bounded delete"));
-
-            // Unbounded: a non-v7 id in the batch, so no predicate at all. Its partner is a different era, so the query_log
-            // lookup finds this statement rather than the one above.
-            var partner = ids.get(1);
-            delete(Set.of(Pair.of(projectId, partner), Pair.of(projectId, NON_V7_ID)));
-            var unbounded = partsSelectedBy(lastTraceDeleteSql(partner));
-
-            assertThat(bounded.selected())
-                    .as("the bounded delete selects fewer parts than the table holds: %s", bounded)
-                    .isLessThan(bounded.total());
-            // Shown to discriminate, or it proves nothing - the same trap as `.contains(partition)` and
-            // `doesNotContain("toDayOfWeek")`. The fallback must not prune: either the planner reports no partition index at
-            // all, because nothing filters on the key, or it reports every part still selected.
-            assertThat(unbounded.map(parts -> parts.selected() == parts.total()).orElse(true))
-                    .as("the fallback prunes nothing: %s", unbounded)
-                    .isTrue();
-        }
-
-        @Test
-        @DisplayName("the topology setup is a no-op once the estate provides it - the path it takes post-cutover")
-        void topologySetupIsANoOpOnceTheEstateProvidesIt() {
-            // Today this suite installs the topology itself, so both setup steps take their INSTALL path and their
-            // early returns are dead code. Once the cutover migration lands, the migrations will provide
-            // `traces_local` partitioned with the Distributed `traces` over it: the EXCHANGE and the wrap are no
-            // longer needed, and that early return becomes the ONLY path either step takes. Nothing would exercise it
-            // until the day it becomes load-bearing, which is the wrong day to find out it was wrong.
-            //
-            // Re-running the setup against the topology it already installed IS that shape - `traces_local` exists and
-            // `traces` is Distributed over it, which is what the migration will hand us. So this covers the second of
-            // the two states: with the swap (every other test here) and without it (this one).
-            // A row that already exists BEFORE the setup runs, created through the ingestion path so the check reads it
-            // back the way production does. Metadata on its own cannot see data loss: a table recreated from the same
-            // DDL reports the same engine_full and partition_key while being empty, so a step that rebuilt the topology
-            // rather than skipping it would satisfy every metadata assertion here. The surviving row is the assertion
-            // that distinguishes "skipped" from "rebuilt", and reading it through the wrapper also shows routing is
-            // intact rather than merely that the wrapper exists.
-            var existing = newTrace().build();
-            traceResourceClient.createTrace(existing, API_KEY, WORKSPACE_NAME);
-            assertThat(traceIdsOf(existing.projectName()))
-                    .as("the pre-existing row is readable before the setup re-runs")
-                    .contains(existing.id());
-
-            // Not a tautology either: if either step failed to early-return it would THROW, not quietly repeat itself.
-            // The EXCHANGE needs `traces_local_v2`, which the install renamed to `traces_pre_cutover_backup`; and the
-            // wrap ends in a RENAME onto `traces_local`, which by now exists. So a non-idempotent step fails loudly.
-            var tracesEngineBefore = queryOneString(TABLE_ENGINE_FULL, _ -> {
-            });
-            var localPartitionKeyBefore = partitionKeyOf("traces_local");
-
-            ensurePartitionedSuccessorUnderTraces();
-            ensureDistributedWrap();
-
-            assertThat(traceIdsOf(existing.projectName()))
-                    .as("the row that existed before the setup is still there, and still routed through the wrapper")
-                    .contains(existing.id());
-            assertThat(queryOneString(TABLE_ENGINE_FULL, _ -> {
-            }))
-                    .as("re-running the setup left the Distributed wrapper untouched")
-                    .isEqualTo(tracesEngineBefore);
-            assertThat(partitionKeyOf("traces_local"))
-                    .as("and left the partitioned table's key untouched")
-                    .isEqualTo(localPartitionKeyBefore);
-
-            // Not just survivable - still testing what it claims. A pruned delete on the untouched topology, so a
-            // no-op setup cannot quietly leave the suite asserting against something that is no longer partitioned.
-            var projectId = ID_GENERATOR.generateId();
-            var id = idInWeekOf(ERA_MONDAYS.getFirst());
-            insertRawTrace(projectId, id);
-
-            delete(Set.of(Pair.of(projectId, id)));
-
-            assertThat(liveRowCount(projectId, id))
-                    .as("the row is still deleted after a no-op setup")
-                    .isEqualTo("0");
-            assertThat(lastTraceDeleteSql(id))
-                    .as("and the delete is still pruned")
-                    .contains(PARTITION_PREDICATE);
-        }
-
-        @Test
-        @DisplayName("a request spanning two chunks prunes each chunk on its own")
-        void requestSpanningTwoChunksPrunesEachChunkIndependently() {
-            // The DAO chunks a request at ANALYTICS_DELETE_BATCH_SIZE and derives partitions PER CHUNK, inside the
-            // concatMap - so "all-or-nothing" is a per-statement guarantee, not a per-request one. Every other test
-            // here passes a handful of pairs, which is one chunk, so none of them can see that.
-            //
-            // The non-v7 id goes in the FIRST chunk and the derivable ids in the second, which is the only arrangement
-            // that can actually discriminate. Chunks are sized [BATCH_SIZE, remainder], so the first is always full and
-            // never inspectable: query_log truncates at log_queries_cut_to_length (100,000 bytes here) and a
-            // 10,000-pair statement inlines to ~762 KiB, so its tail - where the predicate sits - is not recorded.
-            // Only the remainder chunk is small enough to read back, so the assertion that matters has to live there.
-            //
-            // That makes the test bite on the refactor it exists to catch. Hoisting weeklyPartitionsFor out of the
-            // lambda, so the whole request is derived once, would let the non-v7 id in chunk one strip pruning from
-            // chunk two as well - and chunk two's predicate is exactly what is asserted below. Removing the pruning
-            // outright fails the same assertion. With the arrangement reversed, both regressions passed.
-            var projectId = ID_GENERATOR.generateId();
-            var firstChunkRow = idInWeekOf(ERA_MONDAYS.getFirst());
-            var secondChunkRow = idInWeekOf(ERA_MONDAYS.getLast());
-            insertRawTrace(projectId, firstChunkRow);
-            insertRawTrace(projectId, secondChunkRow);
-
-            // Chunk one: a real row, the non-v7 id, and filler up to exactly ANALYTICS_DELETE_BATCH_SIZE. Filler ids
-            // match no row - a delete does not need its ids to exist, and the chunk boundary is what is under test.
-            var ordered = new ArrayList<UUID>();
-            ordered.add(firstChunkRow);
-            ordered.add(NON_V7_ID);
-            while (ordered.size() < ANALYTICS_DELETE_BATCH_SIZE) {
-                ordered.add(idInWeekOf(ERA_MONDAYS.getFirst()));
-            }
-            // Chunk two: the remainder, all derivable, in two different weeks so the bound set is exact rather than
-            // trivially a single value.
-            var secondChunkCompanion = idInWeekOf(ERA_MONDAYS.get(1));
-            ordered.add(secondChunkRow);
-            ordered.add(secondChunkCompanion);
-
-            delete(ordered.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toCollection(
-                    LinkedHashSet::new)));
-
-            assertThat(liveRowCount(projectId, firstChunkRow))
-                    .as("the row in the chunk that fell back to unbounded is deleted")
-                    .isEqualTo("0");
-            assertThat(liveRowCount(projectId, secondChunkRow))
-                    .as("and so is the row in the chunk that pruned")
-                    .isEqualTo("0");
-
-            // The full chunk's statement is only checked to exist - that is what shows the request was split at all.
-            // Nothing about its text can be asserted, for the truncation reason above.
-            deleteSqlForChunkOf(ANALYTICS_DELETE_BATCH_SIZE);
-
-            var secondChunkSql = deleteSqlForChunkOf(2);
-            assertThat(secondChunkSql)
-                    .as("the all-derivable chunk prunes even though an earlier chunk could not")
-                    .contains(PARTITION_PREDICATE);
-            assertThat(boundPartitionsOf(secondChunkSql))
-                    .as("bounded to exactly its own two weeks")
-                    .containsExactlyInAnyOrder(partitionNameOf(ERA_MONDAYS.getLast()),
-                            partitionNameOf(ERA_MONDAYS.get(1)));
-        }
-
-        @ParameterizedTest
-        @MethodSource
-        @DisplayName("an id with no derivable partition disables pruning for the batch, and the delete still lands")
-        void underivableIdDisablesPruning(String cause, UUID underivableId) {
-            // The fallback that preserves the pre-OPIK-6901 guarantee, as the original javadoc stated it: a row whose id_at
-            // cannot be trusted is STILL DELETED. That is a claim about the underivable row ITSELF, so it gets a real row
-            // here - seeded raw, since ingestion rejects both id shapes by design. Passing it as an id matching nothing
-            // would let an implementation that quietly drops underivable ids from the batch pass, which is the very bug the
-            // all-or-nothing rule exists to prevent.
-            var target = newTrace().build();
-            traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
-            var projectId = projectIdOf(target);
-            insertRawTrace(projectId, underivableId);
-            assertThat(liveRowCount(projectId, underivableId))
-                    .as("the %s row is seeded before the delete", cause).isEqualTo("1");
-
-            delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, underivableId)));
-
-            assertThat(liveRowCount(projectId, underivableId))
-                    .as("the %s row is itself deleted, not skipped", cause)
-                    .isEqualTo("0");
-            assertThat(traceIdsOf(target.projectName()))
-                    .as("and the derivable row batched alongside the %s id goes too", cause)
-                    .doesNotContain(target.id());
-
-            // Asserted as the absence of ANY id_at predicate, not just of this PR's expression. A regression that narrowed
-            // the mutation with toMonday(id_at), an id_at range, or any other partition predicate would skip exactly the
-            // rows this fallback exists to reach, and rejecting one function name would not see it. The unbounded template
-            // mentions id_at nowhere at all, so that is the whole check.
-            var sql = lastTraceDeleteSql(target.id());
-            assertThat(sql)
-                    .as("the unbounded form for a %s batch carries no id_at predicate of any kind", cause)
-                    .doesNotContain("id_at");
-            assertThat(EMITTED_IN_CLAUSE.matcher(sql).find())
-                    .as("and no partition IN clause: %s", sql)
-                    .isFalse();
-        }
-
-        private static Stream<Arguments> underivableIdDisablesPruning() {
-            return Stream.of(
-                    arguments("non-v7", NON_V7_ID),
-                    arguments("beyond-2299", OUT_OF_RANGE_ID));
-        }
+    @Test
+    @DisplayName("traces is a mutation-rejecting Distributed wrapper, so these deletes ran on traces_local")
+    void distributedTracesRejectsDirectMutation() {
+        // Keeps the topology claim from being vacuous. If the wrap had not taken effect, `traces` would still be a
+        // MergeTree, every pruned delete in this suite would have run against it, and nothing here would say so.
+        // Asserting the specific rejection - not merely that something threw - is what proves `traces` is Distributed,
+        // so a green delete could only have reached `traces_local`.
+        assertThatThrownBy(() -> execute("DELETE FROM traces WHERE workspace_id = :workspace_id",
+                statement -> statement.bind("workspace_id", WORKSPACE_ID)))
+                .hasMessageContaining("DELETE query is not supported for table");
     }
 
-    /**
-     * The flag <b>off</b>, against the <b>same</b> post-cutover topology and the same fixtures — so the only difference
-     * from {@link PruningEnabled} is the flag itself. That is what makes the pair a control rather than two unrelated
-     * suites: the sibling {@code TracesPruningDisabledMutationTest} also runs with pruning off, but against the legacy
-     * table, so it varies the schema at the same time and cannot attribute anything to the flag alone.
-     * <p>
-     * Both assertions here are the inverse of one in {@link PruningEnabled}, on identical data: no partition predicate
-     * is emitted, and the planner selects every part. Delete the flag gate so pruning always happens and these fail;
-     * delete the pruning and the other class fails. Correctness is unaffected either way, which is the point — the rows
-     * go away in both, so only these assertions can tell the two states apart.
-     */
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @ExtendWith(DropwizardAppExtensionProvider.class)
-    class PruningDisabled {
+    @Test
+    @DisplayName("an all-UUIDv7 delete prunes to the batch's own partitions and removes the target row")
+    void allUuidV7DeletePrunesAndRemovesTheTargetRow() {
+        var target = newTrace().build();
+        // Same project, so one read shows both: the pruned delete must take the target and leave this one.
+        var bystander = newTrace().projectName(target.projectName()).build();
+        traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
+        traceResourceClient.createTrace(bystander, API_KEY, WORKSPACE_NAME);
+        assertThat(traceIdsOf(target.projectName())).contains(target.id(), bystander.id());
 
-        @RegisterApp
-        private final TestDropwizardAppExtension app = newApp(false);
+        // The live user path, end to end.
+        traceResourceClient.deleteTrace(target.id(), WORKSPACE_NAME, API_KEY);
 
-        @BeforeAll
-        void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
-            bindApp(clientSupport, traceDAO, appTemplate);
+        assertThat(traceIdsOf(target.projectName()))
+                .as("only the target row is gone")
+                .doesNotContain(target.id())
+                .contains(bystander.id());
+        var sql = lastTraceDeleteSql(target.id());
+        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
+        // Asserted as the SIZE, not as a value read back from WeeklyPartitions: the DAO derives its set from the same
+        // method, so an expectation taken from it would move with any regression and pass regardless. The value itself
+        // is already pinned two independent ways - the row above had to go away, which it only does if the predicate
+        // named the partition ClickHouse filed it under, and deleteClearsEveryEraAndBindsExactlyThosePartitions states
+        // its expectations as literals. What is left to say here is the property those cannot: an id the endpoint just
+        // minted is inside the 32-bit range, where the two id_at types agree, so it must widen the set to nothing.
+        assertThat(boundPartitionsOf(sql))
+                .as("bounded to one partition, not two: a recent id_at is a week both id_at types agree on")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("the DAO's own delete clears every era and binds exactly those partitions")
+    void deleteClearsEveryEraAndBindsExactlyThosePartitions() {
+        // The three-way agreement - the migration's PARTITION BY as installed, the DAO's predicate, and
+        // WeeklyPartitions.of - asserted through the DAO's own delete rather than by re-evaluating the expression in
+        // test SQL. If the predicate resolved to any partition other than the one ClickHouse filed a row under, the
+        // mutation would select the wrong parts and that row would SURVIVE. So "every row is gone" IS the agreement.
+        //
+        // Ids are minted from the named Mondays rather than written out, so both sides of the assertion are the same
+        // arithmetic a reader can check, and every era in one batch is also the multi-value Long[] bind. Seeded raw and
+        // in a minted project: the ingestion window is 24h, so no endpoint can create a 1996 or 2199 row, and the
+        // project id is a real UUIDv7 straight from IdGenerator - which is how the sibling partition suites get one.
+        var projectId = ID_GENERATOR.generateId();
+        var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
+        ids.forEach(id -> insertRawTrace(projectId, id));
+        assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
+                .as("every era is seeded").containsOnly("1");
+
+        delete(ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
+
+        assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
+                .as("every era's row is gone, so the predicate named the partition each was actually filed under")
+                .containsOnly("0");
+        var sql = lastTraceDeleteSql(ids.getFirst());
+        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
+        // Four values for three eras: 1996 and 2025 are inside the 32-bit range and name one week each, and the 2199
+        // id names its legacy week too. Still an exact set, and still not a range across two centuries - which is the
+        // property under test; the extra value is the batch's own second representation, not a widening of its span.
+        assertThat(boundPartitionsOf(sql))
+                .as("exactly the partitions the batch resolves to, not a range across two centuries")
+                .containsExactlyInAnyOrder(
+                        partitionNameOf(ERA_MONDAYS.get(0)),
+                        partitionNameOf(ERA_MONDAYS.get(1)),
+                        partitionNameOf(ERA_MONDAYS.get(2)),
+                        LEGACY_WEEK_OF_2200);
+    }
+
+    @Test
+    @DisplayName("the planner actually prunes, and the fallback provably does not")
+    void pruningReachesThePlannerAndTheFallbackDoesNot() {
+        // Correctness and pruning are different claims, and this is the only test that makes the second one. Deletes
+        // were already correct before OPIK-6901 - what the change buys is parts touched (3,928/3,928 -> 5/3,928 on
+        // prod-test), so a suite that cannot see pruning stop does not test what this change exists to do.
+        //
+        // The regression it guards is specific: a migration rewrites the partition expression to something semantically
+        // identical but textually different, the planner stops recognising the DAO's predicate as the partition key,
+        // pruning silently stops - and values still agree, so every row is still deleted and every other assertion in
+        // this suite stays green. That is the property the removed AST pin covered; this asks the planner directly
+        // instead of inferring it from text.
+        //
+        // EXPLAIN does not accept a mutation, so the WHERE clause is lifted verbatim out of the DAO's own emitted
+        // DELETE and put behind a SELECT - predicate and bound partition values included. Only the verb changes; the
+        // statement being explained is still the DAO's. Same instrument and record shape as
+        // TracesLocalV2PartitioningTest.
+        // One row per era, so the table holds several partitions for the planner to prune between.
+        var projectId = ID_GENERATOR.generateId();
+        var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
+        ids.forEach(id -> insertRawTrace(projectId, id));
+
+        // Bounded: one derivable id, so the predicate names a single one of those partitions.
+        delete(Set.of(Pair.of(projectId, ids.getFirst())));
+        var bounded = partsSelectedBy(lastTraceDeleteSql(ids.getFirst()))
+                .orElseThrow(() -> new AssertionError(
+                        "EXPLAIN reported no partition index for the bounded delete"));
+
+        // Unbounded: a non-v7 id in the batch, so no predicate at all. Its partner is a different era, so the query_log
+        // lookup finds this statement rather than the one above.
+        var partner = ids.get(1);
+        delete(Set.of(Pair.of(projectId, partner), Pair.of(projectId, NON_V7_ID)));
+        var unbounded = partsSelectedBy(lastTraceDeleteSql(partner));
+
+        assertThat(bounded.selected())
+                .as("the bounded delete selects fewer parts than the table holds: %s", bounded)
+                .isLessThan(bounded.total());
+        // Shown to discriminate, or it proves nothing - the same trap as `.contains(partition)` and
+        // `doesNotContain("toDayOfWeek")`. The fallback must not prune: either the planner reports no partition index at
+        // all, because nothing filters on the key, or it reports every part still selected.
+        assertThat(unbounded.map(parts -> parts.selected() == parts.total()).orElse(true))
+                .as("the fallback prunes nothing: %s", unbounded)
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("the topology setup is a no-op once the estate provides it - the path it takes post-cutover")
+    void topologySetupIsANoOpOnceTheEstateProvidesIt() {
+        // Today this suite installs the topology itself, so both setup steps take their INSTALL path and their
+        // early returns are dead code. Once the cutover migration lands, the migrations will provide
+        // `traces_local` partitioned with the Distributed `traces` over it: the EXCHANGE and the wrap are no
+        // longer needed, and that early return becomes the ONLY path either step takes. Nothing would exercise it
+        // until the day it becomes load-bearing, which is the wrong day to find out it was wrong.
+        //
+        // Re-running the setup against the topology it already installed IS that shape - `traces_local` exists and
+        // `traces` is Distributed over it, which is what the migration will hand us. So this covers the second of
+        // the two states: with the swap (every other test here) and without it (this one).
+        // A row that already exists BEFORE the setup runs, created through the ingestion path so the check reads it
+        // back the way production does. Metadata on its own cannot see data loss: a table recreated from the same
+        // DDL reports the same engine_full and partition_key while being empty, so a step that rebuilt the topology
+        // rather than skipping it would satisfy every metadata assertion here. The surviving row is the assertion
+        // that distinguishes "skipped" from "rebuilt", and reading it through the wrapper also shows routing is
+        // intact rather than merely that the wrapper exists.
+        var existing = newTrace().build();
+        traceResourceClient.createTrace(existing, API_KEY, WORKSPACE_NAME);
+        assertThat(traceIdsOf(existing.projectName()))
+                .as("the pre-existing row is readable before the setup re-runs")
+                .contains(existing.id());
+
+        // Not a tautology either: if either step failed to early-return it would THROW, not quietly repeat itself.
+        // The EXCHANGE needs `traces_local_v2`, which the install renamed to `traces_pre_cutover_backup`; and the
+        // wrap ends in a RENAME onto `traces_local`, which by now exists. So a non-idempotent step fails loudly.
+        var tracesEngineBefore = queryOneString(TABLE_ENGINE_FULL, _ -> {
+        });
+        var localPartitionKeyBefore = partitionKeyOf("traces_local");
+
+        ensurePartitionedSuccessorUnderTraces();
+        ensureDistributedWrap();
+
+        assertThat(traceIdsOf(existing.projectName()))
+                .as("the row that existed before the setup is still there, and still routed through the wrapper")
+                .contains(existing.id());
+        assertThat(queryOneString(TABLE_ENGINE_FULL, _ -> {
+        }))
+                .as("re-running the setup left the Distributed wrapper untouched")
+                .isEqualTo(tracesEngineBefore);
+        assertThat(partitionKeyOf("traces_local"))
+                .as("and left the partitioned table's key untouched")
+                .isEqualTo(localPartitionKeyBefore);
+
+        // Not just survivable - still testing what it claims. A pruned delete on the untouched topology, so a
+        // no-op setup cannot quietly leave the suite asserting against something that is no longer partitioned.
+        var projectId = ID_GENERATOR.generateId();
+        var id = idInWeekOf(ERA_MONDAYS.getFirst());
+        insertRawTrace(projectId, id);
+
+        delete(Set.of(Pair.of(projectId, id)));
+
+        assertThat(liveRowCount(projectId, id))
+                .as("the row is still deleted after a no-op setup")
+                .isEqualTo("0");
+        assertThat(lastTraceDeleteSql(id))
+                .as("and the delete is still pruned")
+                .contains(PARTITION_PREDICATE);
+    }
+
+    @Test
+    @DisplayName("a request spanning two chunks prunes each chunk on its own")
+    void requestSpanningTwoChunksPrunesEachChunkIndependently() {
+        // The DAO chunks a request at ANALYTICS_DELETE_BATCH_SIZE and derives partitions PER CHUNK, inside the
+        // concatMap - so "all-or-nothing" is a per-statement guarantee, not a per-request one. Every other test
+        // here passes a handful of pairs, which is one chunk, so none of them can see that.
+        //
+        // The non-v7 id goes in the FIRST chunk and the derivable ids in the second, which is the only arrangement
+        // that can actually discriminate. Chunks are sized [BATCH_SIZE, remainder], so the first is always full and
+        // never inspectable: query_log truncates at log_queries_cut_to_length (100,000 bytes here) and a
+        // 10,000-pair statement inlines to ~762 KiB, so its tail - where the predicate sits - is not recorded.
+        // Only the remainder chunk is small enough to read back, so the assertion that matters has to live there.
+        //
+        // That makes the test bite on the refactor it exists to catch. Hoisting weeklyPartitionsFor out of the
+        // lambda, so the whole request is derived once, would let the non-v7 id in chunk one strip pruning from
+        // chunk two as well - and chunk two's predicate is exactly what is asserted below. Removing the pruning
+        // outright fails the same assertion. With the arrangement reversed, both regressions passed.
+        var projectId = ID_GENERATOR.generateId();
+        var firstChunkRow = idInWeekOf(ERA_MONDAYS.getFirst());
+        var secondChunkRow = idInWeekOf(ERA_MONDAYS.getLast());
+        insertRawTrace(projectId, firstChunkRow);
+        insertRawTrace(projectId, secondChunkRow);
+
+        // Chunk one: a real row, the non-v7 id, and filler up to exactly ANALYTICS_DELETE_BATCH_SIZE. Filler ids
+        // match no row - a delete does not need its ids to exist, and the chunk boundary is what is under test.
+        var ordered = new ArrayList<UUID>();
+        ordered.add(firstChunkRow);
+        ordered.add(NON_V7_ID);
+        while (ordered.size() < ANALYTICS_DELETE_BATCH_SIZE) {
+            ordered.add(idInWeekOf(ERA_MONDAYS.getFirst()));
         }
+        // Chunk two: the remainder, all derivable, in two different weeks so the bound set is exact rather than
+        // trivially a single value.
+        var secondChunkCompanion = idInWeekOf(ERA_MONDAYS.get(1));
+        ordered.add(secondChunkRow);
+        ordered.add(secondChunkCompanion);
 
-        @Test
-        @DisplayName("the same batch still clears every era, and emits no partition predicate")
-        void deleteStillClearsEveryEraWithoutPruning() {
-            var projectId = ID_GENERATOR.generateId();
-            var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
-            ids.forEach(id -> insertRawTrace(projectId, id));
+        delete(ordered.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toCollection(
+                LinkedHashSet::new)));
 
-            delete(ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
+        assertThat(liveRowCount(projectId, firstChunkRow))
+                .as("the row in the chunk that fell back to unbounded is deleted")
+                .isEqualTo("0");
+        assertThat(liveRowCount(projectId, secondChunkRow))
+                .as("and so is the row in the chunk that pruned")
+                .isEqualTo("0");
 
-            assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
-                    .as("the delete is still correct with the flag off - that is what makes it an optimisation")
-                    .containsOnly("0");
-            var sql = lastTraceDeleteSql(ids.getFirst());
-            assertThat(sql)
-                    .as("and carries no id_at narrowing of any kind")
-                    .doesNotContain("id_at");
-            assertThat(EMITTED_IN_CLAUSE.matcher(sql).find())
-                    .as("nor a partition IN clause: %s", sql)
-                    .isFalse();
-        }
+        // The full chunk's statement is only checked to exist - that is what shows the request was split at all.
+        // Nothing about its text can be asserted, for the truncation reason above.
+        deleteSqlForChunkOf(ANALYTICS_DELETE_BATCH_SIZE);
 
-        @Test
-        @DisplayName("the planner selects every part - the enabled class's assertion, inverted on the same data")
-        void plannerPrunesNothingWithoutPruning() {
-            var projectId = ID_GENERATOR.generateId();
-            var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
-            ids.forEach(id -> insertRawTrace(projectId, id));
+        var secondChunkSql = deleteSqlForChunkOf(2);
+        assertThat(secondChunkSql)
+                .as("the all-derivable chunk prunes even though an earlier chunk could not")
+                .contains(PARTITION_PREDICATE);
+        assertThat(boundPartitionsOf(secondChunkSql))
+                .as("bounded to exactly its own two weeks, plus the legacy representation of the far-future one")
+                .containsExactlyInAnyOrder(partitionNameOf(ERA_MONDAYS.getLast()),
+                        partitionNameOf(ERA_MONDAYS.get(1)),
+                        LEGACY_WEEK_OF_2200);
+    }
 
-            delete(Set.of(Pair.of(projectId, ids.getFirst())));
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("an id with no derivable partition disables pruning for the batch, and the delete still lands")
+    void underivableIdDisablesPruning(String cause, UUID underivableId) {
+        // The fallback that preserves the pre-OPIK-6901 guarantee, as the original javadoc stated it: a row whose id_at
+        // cannot be trusted is STILL DELETED. That is a claim about the underivable row ITSELF, so it gets a real row
+        // here - seeded raw, since ingestion rejects both id shapes by design. Passing it as an id matching nothing
+        // would let an implementation that quietly drops underivable ids from the batch pass, which is the very bug the
+        // all-or-nothing rule exists to prevent.
+        var target = newTrace().build();
+        traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
+        var projectId = projectIdOf(target);
+        insertRawTrace(projectId, underivableId);
+        assertThat(liveRowCount(projectId, underivableId))
+                .as("the %s row is seeded before the delete", cause).isEqualTo("1");
 
-            var parts = partsSelectedBy(lastTraceDeleteSql(ids.getFirst()));
-            assertThat(parts.map(selected -> selected.selected() == selected.total()).orElse(true))
-                    .as("no partition pruning with the flag off: %s", parts)
-                    .isTrue();
-        }
+        delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, underivableId)));
+
+        assertThat(liveRowCount(projectId, underivableId))
+                .as("the %s row is itself deleted, not skipped", cause)
+                .isEqualTo("0");
+        assertThat(traceIdsOf(target.projectName()))
+                .as("and the derivable row batched alongside the %s id goes too", cause)
+                .doesNotContain(target.id());
+
+        // Asserted as the absence of ANY id_at predicate, not just of this PR's expression. A regression that narrowed
+        // the mutation with toMonday(id_at), an id_at range, or any other partition predicate would skip exactly the
+        // rows this fallback exists to reach, and rejecting one function name would not see it. The unbounded template
+        // mentions id_at nowhere at all, so that is the whole check.
+        var sql = lastTraceDeleteSql(target.id());
+        assertThat(sql)
+                .as("the unbounded form for a %s batch carries no id_at predicate of any kind", cause)
+                .doesNotContain("id_at");
+        assertThat(EMITTED_IN_CLAUSE.matcher(sql).find())
+                .as("and no partition IN clause: %s", sql)
+                .isFalse();
+    }
+
+    private static Stream<Arguments> underivableIdDisablesPruning() {
+        return Stream.of(
+                arguments("non-v7", NON_V7_ID),
+                arguments("beyond-2299", OUT_OF_RANGE_ID));
     }
 }

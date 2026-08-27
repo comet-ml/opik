@@ -389,7 +389,12 @@ Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/e
 
 如果你觉得 Opik 有用，请考虑给我们点个 star！你的支持将帮助我们壮大社区并持续改进产品。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.comet.com/opik/star-history/star-history-dark.svg" />
+    <img alt="Star History Chart" src="https://cdn.comet.com/opik/star-history/star-history-light.svg" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 参与贡献

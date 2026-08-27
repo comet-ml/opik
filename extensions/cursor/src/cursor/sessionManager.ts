@@ -6,8 +6,27 @@ import { SessionInfo } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
 import { executeQuery, executeQueryPaginated } from './sqlite';
+import { orderBubbles } from './bubbleOrder';
+import { buildSpans, buildTurnOutput, DEFAULT_SPAN_OPTIONS, SpanBuildOptions } from './spanBuilder';
 
 import { TraceData } from "../interface";
+
+function readSpanOptions(): SpanBuildOptions | null {
+    const config = vscode.workspace.getConfiguration();
+    if (!config.get<boolean>('opik.detailedSpans.enabled', true)) {
+        return null;
+    }
+    return {
+        maxPayloadChars: config.get<number>(
+            'opik.detailedSpans.maxPayloadChars',
+            DEFAULT_SPAN_OPTIONS.maxPayloadChars
+        ),
+        maxSpansPerTurn: config.get<number>(
+            'opik.detailedSpans.maxSpansPerTurn',
+            DEFAULT_SPAN_OPTIONS.maxSpansPerTurn
+        ),
+    };
+}
 
 /**
  * Convert cursor conversations to Opik traces with per-session tracking.
@@ -104,11 +123,16 @@ function processConversationBubbles(
 
     // First pass: assign sequential timestamps to all bubbles
     const bubblesWithTimestamps = conversation.bubbles.map((bubble: any, index: number) => {
-        // Check if bubble has actual timing information
+        // Modern Cursor bubbles carry no timingInfo or timestamp, only an ISO
+        // createdAt. Without it every timestamp below is fabricated from
+        // conversation.createdAt, which makes trace times and usage attribution
+        // wrong, so createdAt is the primary source here.
+        const createdAtMs = bubble.createdAt ? Date.parse(bubble.createdAt) : NaN;
         const actualTime = bubble.timingInfo?.clientEndTime || 
                           bubble.timingInfo?.clientSettleTime ||
                           bubble.timingInfo?.clientRpcSendTime ||
-                          bubble.timestamp;
+                          bubble.timestamp ||
+                          (Number.isNaN(createdAtMs) ? undefined : createdAtMs);
         
         if (actualTime) {
             currentTimestamp = actualTime;
@@ -181,8 +205,11 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         // Find all composer chats updated between last sync and current sync time
         // This prevents race conditions by using a consistent time window
         // Using > (not >=) to avoid duplicates, and <= (not <) to avoid gaps
+        // Prefix ranges instead of LIKE: LIKE is case-insensitive so SQLite cannot
+        // use the index on key and scans the whole table, including the hundreds of
+        // megabytes of agentKv and bubble rows.
         const composerQuery = `SELECT key, value FROM cursorDiskKV 
-                WHERE key LIKE 'composerData%' 
+                WHERE key >= 'composerData' AND key < 'composerDatb'
                 AND json_extract(value, '$.lastUpdatedAt') > ${lastSyncedAtWithBuffer}
                 AND json_extract(value, '$.lastUpdatedAt') <= ${currentSyncTime}
                 AND (json_extract(value, '$.status') = 'completed' 
@@ -231,7 +258,7 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         // This dramatically reduces data transfer by filtering at the database level
         const bubbleQuery = `
             SELECT key, value FROM cursorDiskKV 
-            WHERE ${composerIds.map((id: string) => `key LIKE 'bubbleId:${id}:%'`).join(' OR ')}
+            WHERE ${composerIds.map((id: string) => `(key >= 'bubbleId:${id}:' AND key < 'bubbleId:${id};')`).join(' OR ')}
         `;
         
         const allBubbleRows = await executeQueryPaginated(dbPath, bubbleQuery, 100);
@@ -295,32 +322,25 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                 // Get bubbles for this composer
                 const bubbles = bubblesByComposer[threadId] || [];
                 
-                // Sort bubbles using fullConversationHeadersOnly order
-                if (composerData.fullConversationHeadersOnly && Array.isArray(composerData.fullConversationHeadersOnly)) {
-                    // Create a map of bubbleId to order index
-                    const orderMap = new Map();
-                    composerData.fullConversationHeadersOnly.forEach((header: any, index: number) => {
-                        if (header.bubbleId) {
-                            orderMap.set(header.bubbleId, index);
-                        }
-                    });
-                    
-                    // Sort bubbles according to the order in fullConversationHeadersOnly
-                    bubbles.sort((a, b) => {
-                        const aOrder = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-                        const bOrder = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-                        return aOrder - bOrder;
-                    });
-                }
-                
+                const orderedBubbles = orderBubbles(bubbles, composerData.fullConversationHeadersOnly);
+
                 // Add conversation
                 conversations.push({
                     chatTitle: composerData.name || `Composer Session ${index + 1}`,
-                    bubbles: bubbles,
+                    bubbles: orderedBubbles,
                     lastSendTime: composerData.lastUpdatedAt || composerData.createdAt,
                     composerId: threadId,
                     createdAt: composerData.createdAt,
-                    bubbleCount: bubbles.length
+                    model: composerData.modelConfig?.modelName,
+                    bubbleCount: orderedBubbles.length,
+                    unifiedMode: composerData.unifiedMode,
+                    isAgentic: composerData.isAgentic,
+                    createdOnBranch: composerData.createdOnBranch,
+                    contextTokensUsed: composerData.contextTokensUsed,
+                    contextTokenLimit: composerData.contextTokenLimit,
+                    filesChangedCount: composerData.filesChangedCount,
+                    totalLinesAdded: composerData.totalLinesAdded,
+                    totalLinesRemoved: composerData.totalLinesRemoved
                 });
             } catch (parseErr) {
                 captureException(parseErr);
@@ -340,6 +360,25 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
  * Find all state.vscdb files in the given globalStorage directories
  */
 
+export function resolveStateDbPath(VSInstallationPath: string): string | null {
+    const globalStoragePaths = findFolder(VSInstallationPath, 'globalStorage');
+
+    if (globalStoragePaths.length > 1) {
+        const error = new Error(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
+        captureException(error);
+        console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`)
+    }
+
+    if (globalStoragePaths.length === 0) {
+        const error = new Error("Could not find global SQLite state DB.");
+        captureException(error);
+        console.warn("Could not find global SQLite state DB.")
+        return null;
+    }
+
+    return path.join(globalStoragePaths[0], 'state.vscdb');
+}
+
 export async function findAndReturnNewTraces(
     context: vscode.ExtensionContext, 
     VSInstallationPath: string, 
@@ -348,26 +387,12 @@ export async function findAndReturnNewTraces(
     currentSyncTime: number
 ) {
     const opikProjectName: string = vscode.workspace.getConfiguration().get('opik.projectName') || 'default';
-    
-    const globalStoragePaths = findFolder(VSInstallationPath, 'globalStorage');
-    
-    if (globalStoragePaths.length > 1) {
-        const error = new Error(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
-        captureException(error);
-        console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`)
-    }
-    
-    if (globalStoragePaths.length === 0) {
-        const error = new Error("Could not find global SQLite state DB.");
-        captureException(error);
-        console.warn("Could not find global SQLite state DB.")
+
+    const stateDbPath = resolveStateDbPath(VSInstallationPath);
+    if (!stateDbPath) {
         return null;
     }
-    
-    // Look for state.vscdb file inside the globalStorage directory
-    const globalStoragePath = globalStoragePaths[0];
-    const stateDbPath = path.join(globalStoragePath, 'state.vscdb');
-    
+
     if (!fs.existsSync(stateDbPath)) {
         const error = new Error(`Could not find global SQLite state DB at path: ${stateDbPath}`);
         captureException(error);
@@ -402,7 +427,7 @@ export async function findAndReturnNewTraces(
 }
 
 // Helper function to group bubbles by conversation turns
-function groupBubblesByType(bubbles: any[]) {
+export function groupBubblesByType(bubbles: any[]) {
     const groups: { userMessages: any[], aiMessages: any[] }[] = [];
     let currentGroup: { userMessages: any[], aiMessages: any[] } | null = null;
 
@@ -449,43 +474,16 @@ function createTraceFromBubbleGroup(
         .filter(content => content.trim())
         .join('\n\n');
     
-    // Extract and clean AI content inline
-    const assistantContent = aiMessages
-        .map(msg => {
-            let content = msg.text || msg.content || msg.rawText || '';
-            // Clean cursor-specific markup
-            return content
-                .replace(/⛢Thought☤[\s\S]*?⛢\/Thought☤/g, '')
-                .replace(/⛢Action☤[\s\S]*?⛢\/Action☤/g, '')
-                .replace(/⛢RawAction☤[\s\S]*?⛢\/RawAction☤/g, '')
-                .trim();
-        })
-        .filter(content => content)
-        .join('\n\n');
-    
-    // Filter out traces without proper input or output
+    // The messages the assistant wrote, with the name of every tool call in
+    // between. A turn that is only tool calls still produces an output.
+    const assistantContent = buildTurnOutput(aiMessages);
+
+    const spanOptions = readSpanOptions();
+    const spans = spanOptions ? buildSpans(group, conversation, spanOptions) : [];
+
     if (!userContent || !assistantContent) {
         return null;
     }
-
-    // Calculate token usage from AI messages
-    let totalPromptTokens = 0;
-    let totalCompletionTokens = 0;
-    let hasTokenCounts = false;
-    
-    aiMessages.forEach(msg => {
-        if (msg.tokenCount && (msg.tokenCount.inputTokens || msg.tokenCount.outputTokens)) {
-            totalPromptTokens += msg.tokenCount.inputTokens || 0;
-            totalCompletionTokens += msg.tokenCount.outputTokens || 0;
-            hasTokenCounts = true;
-        }
-    });
-    
-    const usage = hasTokenCounts ? {
-        prompt_tokens: totalPromptTokens,
-        completion_tokens: totalCompletionTokens,
-        total_tokens: totalPromptTokens + totalCompletionTokens
-    } : undefined;
 
     // Extract timestamp from the resolved timestamps
     const firstUserMessage = userMessages[0];
@@ -494,21 +492,21 @@ function createTraceFromBubbleGroup(
     const startTime = firstUserMessage.resolvedTimestamp || conversation.createdAt || Date.now();
     const endTime = lastAiMessage.resolvedTimestamp || startTime + 1000; // Add 1 second if no end time
 
-    // Create metadata inline
-    const cleanMessages = (messages: any[]) => 
-        messages.map(msg => {
-            const cleanMsg = { ...msg };
-            delete cleanMsg.delegate;
-            return cleanMsg;
-        });
-
+    // The raw bubbles used to be copied here. The child spans now hold that
+    // data in a readable form, and the copy was the largest part of the payload.
     const metadata = {
         conversationTitle: conversation.chatTitle,
         composerId: conversation.composerId,
-        userMessages: cleanMessages(userMessages),
-        aiMessages: cleanMessages(aiMessages),
         totalBubbles: conversation.bubbleCount,
         conversationCreatedAt: conversation.createdAt,
+        mode: conversation.unifiedMode,
+        isAgentic: conversation.isAgentic,
+        createdOnBranch: conversation.createdOnBranch,
+        contextTokensUsed: conversation.contextTokensUsed,
+        contextTokenLimit: conversation.contextTokenLimit,
+        filesChangedCount: conversation.filesChangedCount,
+        totalLinesAdded: conversation.totalLinesAdded,
+        totalLinesRemoved: conversation.totalLinesRemoved,
         gitInfo: gitInfo
     };
 
@@ -535,24 +533,20 @@ function createTraceFromBubbleGroup(
         tags.push("historical");
     }
 
-    const traceData: any = {
+    return {
         name: "cursor-chat",
         project_name: opikProjectName,
         start_time: new Date(startTime).toISOString(),
         end_time: new Date(endTime).toISOString(),
+        turn_start_ms: startTime,
+        model: conversation.model,
         input: { input: userContent },
         output: { output: assistantContent },
         thread_id: conversation.composerId,
         tags: tags,
-        metadata: metadata
+        metadata: metadata,
+        spans: spans
     };
-
-    // Only include usage if we have token counts
-    if (usage) {
-        traceData.usage = usage;
-    }
-
-    return traceData;
 }
 
 /**
