@@ -1,3 +1,4 @@
+import * as fs from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
@@ -202,6 +203,63 @@ export class CompareExperimentsPage {
       );
       await this.page.goto(url.toString());
       await this.itemRows.first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * The full rendered text of one grid cell, addressed by row id and column id
+   * (`data_input`, `output_output`) rather than by position — column order here
+   * is user-configurable and persisted, so an index would read the wrong cell
+   * for anyone who had reordered the grid.
+   *
+   * Unlike `readItemOutput`, this reads the whole cell rather than one
+   * experiment's band, which is what single-experiment mode renders.
+   */
+  async readCellText(datasetItemId: string, columnId: string): Promise<string> {
+    return test.step(`read cell "${columnId}" of item ${datasetItemId}`, async () => {
+      const cell = this.page.locator(`td[data-cell-id="${datasetItemId}_${columnId}"]`);
+      await expect(cell, `cell "${columnId}" of item ${datasetItemId}`).toHaveCount(1);
+      await expect(cell, `cell "${columnId}" of item ${datasetItemId}`).toBeVisible();
+      return ((await cell.textContent()) ?? '').trim();
+    });
+  }
+
+  /** Tick the selection checkbox on one dataset item's row. */
+  async selectItemRow(datasetItemId: string): Promise<void> {
+    await test.step(`select the row for item ${datasetItemId}`, async () => {
+      const row = this.page.locator(`tbody tr[data-row-id="${datasetItemId}"]`);
+      await expect(row, `row for item ${datasetItemId}`).toHaveCount(1);
+      await row.getByRole('checkbox', { name: 'Select row' }).click();
+    });
+  }
+
+  /**
+   * Export the selected rows through the toolbar's Export menu and return the
+   * downloaded file's contents.
+   *
+   * The trigger is an icon-only button with no accessible name and no
+   * `data-testid`, so it is addressed by the icon it renders — its identity, not
+   * its position. A `data-testid` on `ExportToButton` would be the better handle
+   * and is worth adding; it is not added here because this spec has to run
+   * against already-built deployments, where a fresh front-end attribute does
+   * not exist yet. `toHaveCount(1)` guards against the locator widening.
+   */
+  async exportAs(format: 'CSV' | 'JSON'): Promise<string> {
+    return test.step(`export the selected rows as ${format}`, async () => {
+      const trigger = this.page
+        .locator('button[aria-haspopup="menu"]')
+        .filter({ has: this.page.locator('svg.lucide-download') });
+      await expect(trigger, 'the Export menu trigger').toHaveCount(1);
+      await expect(trigger, 'the Export menu trigger is enabled once rows are selected').toBeEnabled();
+
+      const downloadPromise = this.page.waitForEvent('download');
+      await trigger.click();
+      await this.page.getByRole('menuitem', { name: `Export as ${format}` }).click();
+      const download = await downloadPromise;
+
+      const failure = await download.failure();
+      expect(failure, `the ${format} download completed`).toBeNull();
+      return fs.readFile(await download.path(), 'utf8');
     });
   }
 

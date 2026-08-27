@@ -6,6 +6,8 @@ export {
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
   type DatasetVersionRef,
+  type CompareItemRef,
+  type CompareExperimentItemRef,
   type RawApiResult,
   type BackendSort,
   type MetricSeries,

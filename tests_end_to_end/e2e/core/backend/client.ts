@@ -59,6 +59,24 @@ export interface RawApiResult {
   location?: string | null;
 }
 
+/** One experiment's contribution to a row of the experiment-comparison grid. */
+export interface CompareExperimentItemRef {
+  experimentId: string;
+  /**
+   * The linked trace's `output` payload, unflattened. Kept raw because the
+   * endpoint's own type is a union — an object, an array of objects, or a bare
+   * string — and any shaped type here would have to guess which one arrived.
+   */
+  output: unknown;
+}
+
+/** One row of the experiment-comparison grid: a dataset item plus its experiment items. */
+export interface CompareItemRef {
+  id: string;
+  data: Record<string, unknown>;
+  experimentItems: CompareExperimentItemRef[];
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -775,6 +793,38 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
       });
       return (page.content ?? []).map((item) => String(item.id));
+    },
+
+    /**
+     * The experiment-comparison rows themselves — same endpoint as
+     * `listCompareItemIds`, but with `truncate` under the caller's control and
+     * the payloads kept.
+     *
+     * `listCompareItemIds` hard-codes `truncate: true` because it only asserts
+     * order. Here the payload *is* the answer: the grid reads this endpoint
+     * truncated and the export reads it whole, so a caller has to be able to ask
+     * for both and compare them.
+     */
+    async listCompareItems(args: {
+      datasetId: string;
+      experimentIds: string[];
+      truncate: boolean;
+      size?: number;
+    }): Promise<CompareItemRef[]> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        size: args.size ?? 100,
+        page: 1,
+        truncate: args.truncate,
+      });
+      return (page.content ?? []).map((item) => ({
+        id: String(item.id),
+        data: (item.data ?? {}) as Record<string, unknown>,
+        experimentItems: (item.experimentItems ?? []).map((experimentItem) => ({
+          experimentId: String(experimentItem.experimentId),
+          output: experimentItem.output,
+        })),
+      }));
     },
 
     /**

@@ -86,6 +86,17 @@ export {
   JSON_SORT_PREFIXES,
   LABEL_COLUMN,
 } from './json-output-experiment.fixture';
+export type {
+  LongValueLabel,
+  LongValueRowRef,
+  LongValueExperimentRef,
+  LongValueExperimentFixtures,
+} from './long-value-experiment.fixture';
+export {
+  SLIM_STRING_MAX_LENGTH,
+  SLIM_TRUNCATION_SUFFIX,
+  DATASET_TRUNCATION_SIZE,
+} from './long-value-experiment.fixture';
 export type { GroupedDatasetRef, GroupedDatasetFixtures } from './grouped-dataset.fixture';
 export { GROUP_COLUMN, TARGET_GROUP } from './grouped-dataset.fixture';
 export type {
