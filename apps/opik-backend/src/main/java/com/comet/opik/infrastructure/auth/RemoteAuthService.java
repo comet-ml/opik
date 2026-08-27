@@ -225,25 +225,25 @@ class RemoteAuthService implements AuthService {
     @Override
     public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
-        var response = withAuthRetry(() -> withAuthTimeout(client
-                .target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path("auth-by-username")
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .header(OAUTH_USERNAME_HEADER, token.userName()))
-                .post(Entity.json(AuthRequest.builder()
-                        .workspaceName(token.workspaceName())
-                        .path(path)
-                        .requiredPermissions(contextInfo.requiredPermissions())
-                        .build())));
-        try (response) {
-            var authResponse = verifyResponse(response);
-            var credentials = ValidatedAuthCredentials.from(authResponse);
-            setCredentialIntoContext(credentials, token.workspaceName(), null);
-        }
+        var credentials = withAuthRetry(() -> {
+            try (var response = withAuthTimeout(client
+                    .target(URI.create(reactServiceUrl.url()))
+                    .path("opik")
+                    .path("auth-by-username")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON)
+                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                    .acceptEncoding("identity")
+                    .header(OAUTH_USERNAME_HEADER, token.userName()))
+                    .post(Entity.json(AuthRequest.builder()
+                            .workspaceName(token.workspaceName())
+                            .path(path)
+                            .requiredPermissions(contextInfo.requiredPermissions())
+                            .build()))) {
+                return ValidatedAuthCredentials.from(verifyResponse(response));
+            }
+        });
+        setCredentialIntoContext(credentials, token.workspaceName(), null);
     }
 
     @Override
@@ -252,24 +252,25 @@ class RemoteAuthService implements AuthService {
         if (isDefaultWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        var response = withAuthRetry(() -> withAuthTimeout(client
-                .target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path("auth-session")
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .cookie(sessionToken))
-                .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build())));
-        try (response) {
-            var authResponse = verifyResponse(response);
-            return UserWorkspace.builder()
-                    .userName(authResponse.user())
-                    .workspaceId(authResponse.workspaceId())
-                    .workspaceName(authResponse.workspaceName())
-                    .build();
-        }
+        return withAuthRetry(() -> {
+            try (var response = withAuthTimeout(client
+                    .target(URI.create(reactServiceUrl.url()))
+                    .path("opik")
+                    .path("auth-session")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON)
+                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                    .acceptEncoding("identity")
+                    .cookie(sessionToken))
+                    .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
+                var authResponse = verifyResponse(response);
+                return UserWorkspace.builder()
+                        .userName(authResponse.user())
+                        .workspaceId(authResponse.workspaceId())
+                        .workspaceName(authResponse.workspaceName())
+                        .build();
+            }
+        });
     }
 
     private void requireSession(Cookie sessionToken) {
@@ -402,25 +403,25 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        var response = withAuthRetry(() -> withAuthTimeout(client
-                .target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path("auth-session")
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .cookie(sessionToken))
-                .post(Entity.json(AuthRequest.builder()
-                        .workspaceName(workspaceName)
-                        .path(path)
-                        .requiredPermissions(requiredPermissions)
-                        .build())));
-        try (response) {
-            var authResponse = verifyResponse(response);
-            var credentials = ValidatedAuthCredentials.from(authResponse);
-            setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
-        }
+        var credentials = withAuthRetry(() -> {
+            try (var response = withAuthTimeout(client
+                    .target(URI.create(reactServiceUrl.url()))
+                    .path("opik")
+                    .path("auth-session")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON)
+                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                    .acceptEncoding("identity")
+                    .cookie(sessionToken))
+                    .post(Entity.json(AuthRequest.builder()
+                            .workspaceName(workspaceName)
+                            .path(path)
+                            .requiredPermissions(requiredPermissions)
+                            .build()))) {
+                return ValidatedAuthCredentials.from(verifyResponse(response));
+            }
+        });
+        setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
     }
 
     private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path,
@@ -444,25 +445,25 @@ class RemoteAuthService implements AuthService {
                 requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            var response = withAuthRetry(() -> withAuthTimeout(client
-                    .target(URI.create(reactServiceUrl.url()))
-                    .path("opik")
-                    .path("auth")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON)
-                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                    .acceptEncoding("identity")
-                    .header(HttpHeaders.AUTHORIZATION,
-                            apiKey))
-                    .post(Entity.json(AuthRequest.builder()
-                            .workspaceName(workspaceName)
-                            .path(path)
-                            .requiredPermissions(requiredPermissions)
-                            .build())));
-            try (response) {
-                var authResponse = verifyResponse(response);
-                return ValidatedAuthCredentials.from(authResponse);
-            }
+            return withAuthRetry(() -> {
+                try (var response = withAuthTimeout(client
+                        .target(URI.create(reactServiceUrl.url()))
+                        .path("opik")
+                        .path("auth")
+                        .request()
+                        .accept(MediaType.APPLICATION_JSON)
+                        // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                        .acceptEncoding("identity")
+                        .header(HttpHeaders.AUTHORIZATION,
+                                apiKey))
+                        .post(Entity.json(AuthRequest.builder()
+                                .workspaceName(workspaceName)
+                                .path(path)
+                                .requiredPermissions(requiredPermissions)
+                                .build()))) {
+                    return ValidatedAuthCredentials.from(verifyResponse(response));
+                }
+            });
         } else {
             return ValidatedAuthCredentials.from(credentials.get());
         }
@@ -534,18 +535,19 @@ class RemoteAuthService implements AuthService {
      * no large-payload case arguing for an exclusion.
      */
     private String getWorkspaceId(String workspaceName) {
-        var response = withAuthRetry(() -> withAuthTimeout(client
-                .target(URI.create(reactServiceUrl.url()))
-                .path("workspaces")
-                .path("workspace-id")
-                .queryParam("name", workspaceName)
-                .request()
-                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity"))
-                .get());
-        try (response) {
-            return getWorkspaceIdFromResponse(response);
-        }
+        return withAuthRetry(() -> {
+            try (var response = withAuthTimeout(client
+                    .target(URI.create(reactServiceUrl.url()))
+                    .path("workspaces")
+                    .path("workspace-id")
+                    .queryParam("name", workspaceName)
+                    .request()
+                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                    .acceptEncoding("identity"))
+                    .get()) {
+                return getWorkspaceIdFromResponse(response);
+            }
+        });
     }
 
     /**
@@ -573,6 +575,16 @@ class RemoteAuthService implements AuthService {
      * Retries recover sub-second blips. They will not recover a request stalled by a React CPU
      * brownout: those last 1-3 minutes in production, so the retry lands in the same brownout.
      * The timeout is what bounds user-visible latency; this reclaims the transient cases.
+     * <p>
+     * Callers must perform response verification and entity reading <em>inside</em> the supplied
+     * callable, in a try-with-resources, so that a {@code ProcessingException} raised while reading
+     * the body is retried like any other transport failure and every attempt closes its own
+     * response. Returning a bare {@code Response} here and processing it afterwards would place
+     * that work outside the retry boundary and leak a response per attempt.
+     * <p>
+     * Deterministic failures are not retried: {@link RetryUtils#handleHttpErrors} filters on
+     * {@code isRetriableException}, which unwraps {@code ProcessingException} and matches only
+     * transport causes, so request serialization or missing-provider errors propagate immediately.
      */
     private <T> T withAuthRetry(Supplier<T> call) {
         if (requestMaxRetries <= 0) {
