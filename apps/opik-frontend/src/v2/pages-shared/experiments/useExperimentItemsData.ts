@@ -78,6 +78,8 @@ const useExperimentItemsData = ({
       datasetId,
       experimentsIds,
       filters,
+      sorting,
+      search,
       truncate,
       page,
       size,
