@@ -14,6 +14,7 @@ EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT = {
     "original_usage.inputTokens": ANY_BUT_NONE,
     "original_usage.outputTokens": ANY_BUT_NONE,
     "original_usage.totalTokens": ANY_BUT_NONE,
-    # "original_usage.cacheReadInputTokens": ANY_BUT_NONE,
-    # "original_usage.cacheWriteInputTokens": ANY_BUT_NONE,
+    # Cache token counts are deliberately not asserted here: ANY_BUT_NONE matches
+    # 0, so it would pass whether or not they are reported. They are checked
+    # numerically in the prompt caching test instead.
 }

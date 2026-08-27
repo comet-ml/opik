@@ -1,4 +1,6 @@
 import json
+import uuid
+
 import boto3
 import pytest
 
@@ -648,3 +650,67 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
+
+
+def test_bedrock_invoke_model__anthropic___streaming_with_prompt_caching__cache_tokens_logged(
+    fake_backend,
+):
+    """Cache tokens must survive the Claude streaming chunk aggregator.
+
+    The aggregator rebuilds the usage dict from the stream chunks, so a
+    regression there reports cache tokens as 0 without failing anything else
+    (issue #6019).
+    """
+    client = boto3.client("bedrock-runtime", region_name="us-east-2")
+    tracked_client = track_bedrock(client)
+
+    # Cache matching is prefix-based, so a unique first line makes the whole
+    # prefix unique to this run. That keeps call 1 a cache write and call 2 a
+    # cache read even when the CI matrix runs in parallel, or when a previous
+    # run is still inside the 5-minute cache TTL.
+    lines = [f"Run {uuid.uuid4().hex}. Reference material, ignore when answering."]
+    lines += [
+        f"line {i:04d}: the aggregator reconciles partition {i} and emits "
+        f"{i * 7} audit records for downstream evaluation."
+        for i in range(200)
+    ]
+    # Comfortably over the 1024-token minimum per cache checkpoint.
+    cached_prefix = "\n".join(lines)
+
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 20,
+        "system": [
+            {
+                "type": "text",
+                "text": cached_prefix,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
+    }
+
+    for _ in range(2):
+        response = tracked_client.invoke_model_with_response_stream(
+            modelId=ANTHROPIC_MODEL,
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json",
+        )
+        for _ in response["body"]:
+            pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 2
+    cold_usage = fake_backend.trace_trees[0].spans[0].usage
+    warm_usage = fake_backend.trace_trees[1].spans[0].usage
+
+    # Asserted numerically rather than with ANY_BUT_NONE, which matches 0 and so
+    # would pass on the exact value the bug produced.
+    assert cold_usage["original_usage.cacheWriteInputTokens"] > 0, (
+        f"expected a cache write on the cold call, got {cold_usage}"
+    )
+    assert warm_usage["original_usage.cacheReadInputTokens"] > 0, (
+        f"expected a cache read on the warm call, got {warm_usage}"
+    )
