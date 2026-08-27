@@ -5,6 +5,7 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import javax.annotation.Nullable;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -69,7 +70,7 @@ public class HostProviderResolver {
      * @param metadata span metadata (unused here but kept for API symmetry with other resolvers)
      * @return canonical provider name, or the original {@code provider}
      */
-    public static String resolve(String provider, ObjectNode metadata) {
+    public static @Nullable String resolve(@Nullable String provider, ObjectNode metadata) {
         if (StringUtils.isBlank(provider)) {
             return provider;
         }
