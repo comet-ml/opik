@@ -208,11 +208,11 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 >   never becomes ready. During a rolling update that means the *new* pod stays unready and Kubernetes
 >   keeps the *old* one serving — the deployment looks stuck, traffic does not stop. The flip completes
 >   only once the paired DDL lands.
-> - It **re-evaluates live**. Once the DDL lands the check recovers on its own within a probe interval or
->   two; no restart is needed to clear it.
-> - So in either ordering the window is self-announcing and self-healing. Keep it short, but do not
->   respond to a stalled rollout by forcing a restart — that changes nothing, because the disagreement is
->   with the database, not with the pod.
+> - It re-reads the **topology** on every probe but holds the **flag** from startup, so the two orderings
+>   recover differently. **Toggle-first**: the pod already restarted for the flag, so it clears itself
+>   within a probe interval of the DDL landing. **DDL-first**: existing pods keep their old flag and stay
+>   unready until the flag rollout restarts them — there the restart *is* the fix, not a workaround.
+> - Either way the window announces itself. Keep it short.
 
 > **HARD PREREQUISITE for the wrap (step 4, part 2): enable `tracesDistributedWrapEnabled` so trace mutations target `traces_local` first (OPIK-7455).** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
@@ -1104,8 +1104,11 @@ Use stage B/C while the parked original still exists.
 > | un-wrap (`--unwrap-only`) | **DDL first**, then toggle | the mirror image: the gap gives `Code 60` again, which is the cheaper failure |
 > | stage B / C | **DDL first**, then toggle | same reasoning as the un-wrap; the promote must land before the flags describing the new shape |
 >
-> Every gap is **delete-path-only** — reads and inserts never consult the flag — so the choice is only
-> ever *which* error the window produces, never whether reads break.
+> Every **flag-transition** gap is delete-path-only — reads and inserts never consult the flag — so there
+> the only question is which error it produces. The **DDL** interval is not: an `ON CLUSTER` rename is
+> atomic per node, so cross-node skew can route a read at a replica that has already moved and fail it.
+> That window is what `--confirm-maintenance` and read quiescence exist for; this table does not replace
+> them.
 
 > **Multi-replica note (production is multi-replica).** Stages B and C promote via a single `ON CLUSTER` RENAME of the
 > **live** `traces`. It runs synchronously across the shard's replicas — the client blocks until each applies it, or fails
@@ -1149,9 +1152,13 @@ through the replay, not merely across the rename. A failure *between* the two ne
 > overwrite correct data. The driver names `traces` explicitly for this reason; if you retype the query,
 > keep the table name.
 >
-> **Nothing to repair is a valid outcome.** The sentinels this fixes come from writes that landed on the
-> **original** while the flag was `true` — i.e. between the flip and the `EXCHANGE`. If little or no
-> traffic hit that window, the counts are legitimately `0` and there is no mutation to run. Do not force
+> **Two windows put sentinels in the original, not one.** Writes land on it with the flag still `true`
+> between the flip and the `EXCHANGE`, **and again from a stage B/C promote until the flag reverts on
+> every instance** — the promote restores the Nullable original while backends still hold `true`. Count
+> after the restart has landed everywhere, or the second window keeps refilling what you just repaired.
+>
+> **Nothing to repair is still a valid outcome.** If little or no traffic hit either window, the counts
+> are legitimately `0` and there is no mutation to run. Do not force
 > one: an `ALTER … UPDATE` over the whole table is not free, and a `0` count is the success condition, not
 > a sign the query is wrong.
 
