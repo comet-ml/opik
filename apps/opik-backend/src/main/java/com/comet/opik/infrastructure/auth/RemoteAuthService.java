@@ -525,16 +525,25 @@ class RemoteAuthService implements AuthService {
         return ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName);
     }
 
+    /**
+     * Resolves a workspace id by name for the public-endpoint fallback in
+     * {@link #authenticate}. This runs <em>after</em> an auth failure, so without the same timeout
+     * policy a stalled call here would block the request for the full 30s immediately after the
+     * auth call itself had already failed fast - leaving the fallback to dominate user-visible
+     * latency. It is a single-workspace lookup, so unlike {@code listEligibleWorkspaces} there is
+     * no large-payload case arguing for an exclusion.
+     */
     private String getWorkspaceId(String workspaceName) {
-        try (var response = client.target(URI.create(reactServiceUrl.url()))
+        var response = withAuthRetry(() -> withAuthTimeout(client
+                .target(URI.create(reactServiceUrl.url()))
                 .path("workspaces")
                 .path("workspace-id")
                 .queryParam("name", workspaceName)
                 .request()
                 // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                .acceptEncoding("identity")
-                .get()) {
-
+                .acceptEncoding("identity"))
+                .get());
+        try (response) {
             return getWorkspaceIdFromResponse(response);
         }
     }

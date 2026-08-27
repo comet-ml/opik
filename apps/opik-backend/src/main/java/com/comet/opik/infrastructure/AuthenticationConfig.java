@@ -1,10 +1,18 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
+import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import java.util.concurrent.TimeUnit;
 
 @Data
 public class AuthenticationConfig {
@@ -28,8 +36,12 @@ public class AuthenticationConfig {
      * so normal calls never reach it, while a stalled call fails in 3s instead of 30s.
      * Set to 0 to disable the override and inherit the shared client timeout.
      */
-    @Valid @JsonProperty
-    private Duration requestTimeout;
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
+    // Must not exceed the shared jerseyClient timeout (30s) -- a larger value would be inert,
+    // since the shared client would time out first.
+    @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
+    private Duration requestTimeout = Duration.seconds(3);
 
     /**
      * Maximum retry attempts for a failed auth request, using
@@ -42,18 +54,37 @@ public class AuthenticationConfig {
      * Set to 0 to disable retries.
      */
     @Valid @JsonProperty
-    private int requestMaxRetries;
+    @Min(0)
+    // Capped deliberately: each retry re-issues an auth call against a React service that may
+    // already be CPU-starved, and retries cannot recover a multi-minute brownout anyway.
+    @Max(5) private int requestMaxRetries = 1;
 
     /**
      * Minimum backoff between auth request attempts. Deliberately non-zero: an immediate retry
      * adds load to a React service that may already be CPU-starved.
      */
-    @Valid @JsonProperty
-    private Duration requestRetryMinBackoff;
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
+    private Duration requestRetryMinBackoff = Duration.milliseconds(250);
 
     /**
      * Upper bound on the exponential backoff between auth request attempts.
      */
-    @Valid @JsonProperty
-    private Duration requestRetryMaxBackoff;
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
+    private Duration requestRetryMaxBackoff = Duration.seconds(1);
+
+    /**
+     * Cross-field constraint: an exponential backoff whose minimum exceeds its maximum is
+     * contradictory, and Reactor would clamp it silently rather than fail. Validate it at startup
+     * so a bad config is a boot failure with a clear message, not a runtime surprise.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "authentication.requestRetryMinBackoff must not exceed authentication.requestRetryMaxBackoff") public boolean isRetryBackoffRangeValid() {
+        return requestRetryMinBackoff == null
+                || requestRetryMaxBackoff == null
+                || requestRetryMinBackoff.toMilliseconds() <= requestRetryMaxBackoff.toMilliseconds();
+    }
 }
