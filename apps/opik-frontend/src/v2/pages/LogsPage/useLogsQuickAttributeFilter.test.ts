@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { Filter } from "@/types/filters";
 import { LOGS_TYPE } from "@/constants/traces";
+import { QuickFilterEntity } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 vi.mock("@/lib/analytics/tracking", async (importOriginal) => {
@@ -40,19 +41,34 @@ const writtenTo = (key: string): Filter[] => {
   return updater(urlValues[key]) ?? [];
 };
 
-const setup = (logsType: LOGS_TYPE, spanId: string, withLocalChips = true) => {
+// `entity` is what the details panel resolved — the selected span, or the trace
+// when no span is selected or the selected one is not loaded.
+const setup = (
+  logsType: LOGS_TYPE,
+  entity: QuickFilterEntity,
+  withLocalChips = true,
+) => {
   const onLogsTypeChange = vi.fn();
   const applyValue = vi.fn();
   const pinChip = vi.fn();
   const { result } = renderHook(() =>
     useLogsQuickAttributeFilter({
       logsType,
-      spanId,
       onLogsTypeChange,
       ...(withLocalChips ? { values: {}, applyValue, pinChip } : {}),
     }),
   );
-  return { result, onLogsTypeChange, applyValue, pinChip };
+  return {
+    result: {
+      get current() {
+        return result.current(entity);
+      },
+    },
+    factory: result,
+    onLogsTypeChange,
+    applyValue,
+    pinChip,
+  };
 };
 
 describe("useLogsQuickAttributeFilter", () => {
@@ -68,10 +84,26 @@ describe("useLogsQuickAttributeFilter", () => {
     vi.mocked(trackEvent).mock.calls.filter(([event]) => event === name);
 
   describe("the panel's entity picks the destination view", () => {
+    it("serves both entities from one render, so the panel chooses", () => {
+      const { factory } = setup(LOGS_TYPE.traces, "trace");
+
+      expect(factory.current("trace").hintText).toBe(
+        "Filter traces by this attribute",
+      );
+      expect(factory.current("span").hintText).toBe(
+        "Filter spans by this attribute",
+      );
+      // On the Traces tab only the span destination is a move.
+      expect(factory.current("trace").appliedText).toBe("Filter applied");
+      expect(factory.current("span").appliedText).toBe(
+        "Filter applied to Spans",
+      );
+    });
+
     it("threads + trace: writes the Traces view and moves the table there", () => {
       const { result, onLogsTypeChange, applyValue } = setup(
         LOGS_TYPE.threads,
-        "",
+        "trace",
         false,
       );
       expect(result.current.hintText).toBe("Filter traces by this attribute");
@@ -90,7 +122,7 @@ describe("useLogsQuickAttributeFilter", () => {
     it("threads + span: writes the Spans view and moves the table there", () => {
       const { result, onLogsTypeChange } = setup(
         LOGS_TYPE.threads,
-        "span-1",
+        "span",
         false,
       );
       expect(result.current.hintText).toBe("Filter spans by this attribute");
@@ -106,7 +138,7 @@ describe("useLogsQuickAttributeFilter", () => {
     it("traces + span: writes the Spans view, leaving the trace chips alone", () => {
       const { result, onLogsTypeChange, applyValue, pinChip } = setup(
         LOGS_TYPE.traces,
-        "span-1",
+        "span",
       );
       act(() => result.current.filter("metadata", "model", "opus"));
 
@@ -121,7 +153,7 @@ describe("useLogsQuickAttributeFilter", () => {
     it("traces + trace: applies to the mounted chips and does not move", () => {
       const { result, onLogsTypeChange, applyValue, pinChip } = setup(
         LOGS_TYPE.traces,
-        "",
+        "trace",
       );
       expect(result.current.appliedText).toBe("Filter applied");
 
@@ -136,7 +168,7 @@ describe("useLogsQuickAttributeFilter", () => {
     it("spans + span: applies to the mounted chips and does not move", () => {
       const { result, onLogsTypeChange, applyValue } = setup(
         LOGS_TYPE.spans,
-        "span-1",
+        "span",
       );
       expect(result.current.hintText).toBe("Filter spans by this attribute");
 
@@ -148,7 +180,7 @@ describe("useLogsQuickAttributeFilter", () => {
     });
 
     it("keeps span-only targets available on the spans tab", () => {
-      const { result } = setup(LOGS_TYPE.spans, "span-1");
+      const { result } = setup(LOGS_TYPE.spans, "span");
       expect(result.current.canFilter("metadata", "provider")).toBe(true);
       expect(result.current.canFilter("metadata", "providers[0]")).toBe(false);
     });
@@ -167,7 +199,7 @@ describe("useLogsQuickAttributeFilter", () => {
     it("appends without disturbing filters it knows nothing about", () => {
       const foreign = { ...existing, id: "2", field: "some_future_field" };
       urlValues[SPANS_KEY] = [existing, foreign];
-      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      const { result } = setup(LOGS_TYPE.threads, "span", false);
 
       act(() => result.current.filter("metadata", "model", "opus"));
 
@@ -181,7 +213,7 @@ describe("useLogsQuickAttributeFilter", () => {
       urlValues[SPANS_KEY] = [null, existing];
       const { result, onLogsTypeChange } = setup(
         LOGS_TYPE.threads,
-        "span-1",
+        "span",
         false,
       );
 
@@ -198,7 +230,7 @@ describe("useLogsQuickAttributeFilter", () => {
       urlValues[SPANS_KEY] = [existing];
       const { result, onLogsTypeChange } = setup(
         LOGS_TYPE.threads,
-        "span-1",
+        "span",
         false,
       );
 
@@ -212,7 +244,7 @@ describe("useLogsQuickAttributeFilter", () => {
 
   describe("the chip events follow the filter to its destination", () => {
     it("reports FILTER_APPLIED against the destination table", () => {
-      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      const { result } = setup(LOGS_TYPE.threads, "span", false);
       act(() => result.current.filter("metadata", "model", "opus"));
 
       // The mocked setter only records the updater, so run it once.
@@ -232,7 +264,7 @@ describe("useLogsQuickAttributeFilter", () => {
     });
 
     it("reports FILTER_PINNED against the destination table", () => {
-      const { result } = setup(LOGS_TYPE.traces, "span-1");
+      const { result } = setup(LOGS_TYPE.traces, "span");
       act(() => result.current.filter("input", "messages[0].content", "hi"));
 
       expect(eventsNamed(OpikEvent.FILTER_PINNED)).toEqual([
@@ -254,7 +286,7 @@ describe("useLogsQuickAttributeFilter", () => {
           value: "prod",
         } as Filter,
       ];
-      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      const { result } = setup(LOGS_TYPE.threads, "span", false);
       act(() => result.current.filter("metadata", "model", "opus"));
       writtenTo(SPANS_KEY);
 
@@ -275,7 +307,7 @@ describe("useLogsQuickAttributeFilter", () => {
           value: "prod",
         } as Filter,
       ];
-      const { result } = setup(LOGS_TYPE.threads, "span-1", false);
+      const { result } = setup(LOGS_TYPE.threads, "span", false);
       act(() => result.current.filter("metadata", "env", "prod"));
       writtenTo(SPANS_KEY);
 
@@ -285,7 +317,7 @@ describe("useLogsQuickAttributeFilter", () => {
     });
 
     it("leaves the events to the mounted chips when nothing moves", () => {
-      const { result } = setup(LOGS_TYPE.traces, "");
+      const { result } = setup(LOGS_TYPE.traces, "trace");
       act(() => result.current.filter("metadata", "git.branch", "main"));
 
       expect(eventsNamed(OpikEvent.FILTER_APPLIED)).toEqual([]);

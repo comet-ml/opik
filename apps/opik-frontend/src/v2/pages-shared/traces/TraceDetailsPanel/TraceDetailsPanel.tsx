@@ -1,7 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
-import find from "lodash/find";
+import { findSelectedSpan } from "@/v2/pages-shared/traces/TraceDetailsPanel/selectedSpan";
+import {
+  QuickAttributeFilterProvider,
+  useQuickAttributeFilterFactory,
+} from "@/shared/filter-chips/QuickAttributeFilterContext";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
 import useLocalStorageState from "use-local-storage-state";
@@ -24,7 +28,7 @@ import AnnotatePanel from "./AnnotatePanel/AnnotatePanel";
 import AgentGraphHeader from "./AgentGraphHeader";
 import AgentGraphTab from "./TraceDataViewer/AgentGraphTab";
 import NoData from "@/shared/NoData/NoData";
-import { BASE_TRACE_DATA_TYPE, Span } from "@/types/traces";
+import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import useLazySpansList from "@/api/traces/useLazySpansList";
 import {
@@ -199,12 +203,19 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     [setSpanId, traceId],
   );
 
-  const dataToView = useMemo(() => {
-    return spanId
-      ? find(spansData?.content || [], (span: Span) => span.id === spanId) ??
-          trace
-      : trace;
-  }, [spanId, spansData?.content, trace]);
+  // A `spanId` that matches no loaded span falls back to the trace — while the
+  // spans are still loading, and for good if the span is not in this trace.
+  // The quick filter has to follow what is on screen, not the raw `spanId`.
+  const selectedSpan = useMemo(
+    () => findSelectedSpan(spanId, spansData?.content),
+    [spanId, spansData?.content],
+  );
+  const dataToView = selectedSpan ?? trace;
+
+  const quickAttributeFilterFactory = useQuickAttributeFilterFactory();
+  const quickAttributeFilterApi = quickAttributeFilterFactory?.(
+    selectedSpan ? "span" : "trace",
+  );
 
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
@@ -373,15 +384,17 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 {isLoading || !dataToView ? (
                   <TraceDataSkeleton />
                 ) : (
-                  <TraceDataViewer
-                    data={dataToView}
-                    projectId={projectId}
-                    spanId={spanId}
-                    traceId={traceId}
-                    setActiveSection={setActiveSection}
-                    isSpansLazyLoading={isSpansLazyLoading}
-                    search={search}
-                  />
+                  <QuickAttributeFilterProvider value={quickAttributeFilterApi}>
+                    <TraceDataViewer
+                      data={dataToView}
+                      projectId={projectId}
+                      spanId={spanId}
+                      traceId={traceId}
+                      setActiveSection={setActiveSection}
+                      isSpansLazyLoading={isSpansLazyLoading}
+                      search={search}
+                    />
+                  </QuickAttributeFilterProvider>
                 )}
               </div>
             </div>
