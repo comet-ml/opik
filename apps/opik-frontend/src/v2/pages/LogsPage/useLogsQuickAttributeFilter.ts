@@ -63,7 +63,10 @@ const useHandoffWriter = (view: LogsView) => {
   return useCallback(
     (chipId: string, row: Filter) => {
       setRawFilters((prevRaw) => {
-        const existing = Array.isArray(prevRaw) ? prevRaw : [];
+        // `JsonParam` hands back whatever the query string held, so a
+        // hand-edited URL can carry holes. `sanitizeFilters` drops them on
+        // read; drop them here too rather than dereference one.
+        const existing = Array.isArray(prevRaw) ? prevRaw.filter(Boolean) : [];
         const duplicate = existing.some(
           (r) =>
             r.field === row.field &&

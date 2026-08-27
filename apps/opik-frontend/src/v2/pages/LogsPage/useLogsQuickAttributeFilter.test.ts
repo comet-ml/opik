@@ -177,6 +177,23 @@ describe("useLogsQuickAttributeFilter", () => {
       expect(rows[2]).toMatchObject({ key: "model", value: "opus" });
     });
 
+    it("skips holes a hand-edited query string left behind", () => {
+      urlValues[SPANS_KEY] = [null, existing];
+      const { result, onLogsTypeChange } = setup(
+        LOGS_TYPE.threads,
+        "span-1",
+        false,
+      );
+
+      act(() => result.current.filter("metadata", "model", "opus"));
+
+      const rows = writtenTo(SPANS_KEY);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toEqual(existing);
+      expect(rows[1]).toMatchObject({ key: "model", value: "opus" });
+      expect(onLogsTypeChange).toHaveBeenCalledWith(LOGS_TYPE.spans);
+    });
+
     it("does not append a row the destination already has", () => {
       urlValues[SPANS_KEY] = [existing];
       const { result, onLogsTypeChange } = setup(

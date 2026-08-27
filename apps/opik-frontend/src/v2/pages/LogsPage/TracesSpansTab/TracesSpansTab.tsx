@@ -67,8 +67,6 @@ import useLogsQuickAttributeFilter, {
 import { ChipDefinition } from "@/shared/filter-chips/types";
 import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import {
-  SPAN_DEFAULT_PINNED_CHIPS,
-  TRACE_DEFAULT_PINNED_CHIPS,
   buildSharedDynamicChips,
   buildTraceChipDefinitions,
 } from "@/v2/pages-shared/traces/traceChipDefinitions";
@@ -748,13 +746,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     type === TRACE_DATA_TYPE.traces
       ? traceChipDefinitions
       : spanChipDefinitions;
-  const defaultPinned =
-    type === TRACE_DATA_TYPE.traces
-      ? TRACE_DEFAULT_PINNED_CHIPS
-      : SPAN_DEFAULT_PINNED_CHIPS;
-  const tableId =
-    type === TRACE_DATA_TYPE.traces ? TRACES_VIEW.tableId : SPANS_VIEW.tableId;
-  const filtersUrlKey = `${type}_filters`;
+  // One object per view, shared with the quick-filter handoff, so the mounted
+  // tab and a write from the other tab cannot disagree about these keys.
+  const {
+    tableId,
+    urlKey: filtersUrlKey,
+    defaultPinned,
+  } = type === TRACE_DATA_TYPE.traces ? TRACES_VIEW : SPANS_VIEW;
 
   const {
     chipsPinned,
