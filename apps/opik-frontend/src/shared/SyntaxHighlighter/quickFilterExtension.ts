@@ -187,7 +187,7 @@ const quickFilterHoverField = StateField.define<DecorationSet>({
 
 // Inline filter icon rendered at the end of a leaf attribute line: muted at
 // rest, highlighted (with its value) on hover. Clicking applies a filter.
-export class QuickFilterWidget extends WidgetType {
+class QuickFilterWidget extends WidgetType {
   constructor(
     readonly from: number,
     readonly to: number,

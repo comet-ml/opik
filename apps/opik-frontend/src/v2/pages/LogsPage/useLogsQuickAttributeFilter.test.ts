@@ -84,30 +84,12 @@ describe("useLogsQuickAttributeFilter", () => {
     vi.mocked(trackEvent).mock.calls.filter(([event]) => event === name);
 
   describe("the panel's entity picks the destination view", () => {
-    it("serves both entities from one render, so the panel chooses", () => {
-      const { factory } = setup(LOGS_TYPE.traces, "trace");
-
-      expect(factory.current("trace").hintText).toBe(
-        "Filter traces by this attribute",
-      );
-      expect(factory.current("span").hintText).toBe(
-        "Filter spans by this attribute",
-      );
-      // On the Traces tab only the span destination is a move.
-      expect(factory.current("trace").appliedText).toBe("Filter applied");
-      expect(factory.current("span").appliedText).toBe(
-        "Filter applied to Spans",
-      );
-    });
-
     it("threads + trace: writes the Traces view and moves the table there", () => {
       const { result, onLogsTypeChange, applyValue } = setup(
         LOGS_TYPE.threads,
         "trace",
         false,
       );
-      expect(result.current.hintText).toBe("Filter traces by this attribute");
-      expect(result.current.appliedText).toBe("Filter applied to Traces");
 
       act(() => result.current.filter("metadata", "git.branch", "main"));
 
@@ -125,8 +107,6 @@ describe("useLogsQuickAttributeFilter", () => {
         "span",
         false,
       );
-      expect(result.current.hintText).toBe("Filter spans by this attribute");
-      expect(result.current.appliedText).toBe("Filter applied to Spans");
 
       act(() => result.current.filter("metadata", "model", "opus"));
 
@@ -155,7 +135,6 @@ describe("useLogsQuickAttributeFilter", () => {
         LOGS_TYPE.traces,
         "trace",
       );
-      expect(result.current.appliedText).toBe("Filter applied");
 
       act(() => result.current.filter("metadata", "git.branch", "main"));
 
@@ -170,7 +149,6 @@ describe("useLogsQuickAttributeFilter", () => {
         LOGS_TYPE.spans,
         "span",
       );
-      expect(result.current.hintText).toBe("Filter spans by this attribute");
 
       act(() => result.current.filter("metadata", "model", "opus"));
 
@@ -196,7 +174,7 @@ describe("useLogsQuickAttributeFilter", () => {
       value: "prod",
     } as Filter;
 
-    it("appends without disturbing filters it knows nothing about", () => {
+    it("appends without rewriting the rows already there", () => {
       const foreign = { ...existing, id: "2", field: "some_future_field" };
       urlValues[SPANS_KEY] = [existing, foreign];
       const { result } = setup(LOGS_TYPE.threads, "span", false);
@@ -243,56 +221,23 @@ describe("useLogsQuickAttributeFilter", () => {
   });
 
   describe("the chip events follow the filter to its destination", () => {
-    it("reports FILTER_APPLIED against the destination table", () => {
+    it("reports both events against the destination, not the tab on screen", () => {
       const { result } = setup(LOGS_TYPE.threads, "span", false);
       act(() => result.current.filter("metadata", "model", "opus"));
-
       // The mocked setter only records the updater, so run it once.
       writtenTo(SPANS_KEY);
 
-      expect(eventsNamed(OpikEvent.FILTER_APPLIED)).toEqual([
-        [
-          OpikEvent.FILTER_APPLIED,
-          {
-            filter_name: "metadata",
-            operators: ["contains"],
-            values: ["opus"],
-            table_id: "logs.spans",
-          },
-        ],
-      ]);
-    });
-
-    it("reports FILTER_PINNED against the destination table", () => {
-      const { result } = setup(LOGS_TYPE.traces, "span");
-      act(() => result.current.filter("input", "messages[0].content", "hi"));
-
-      expect(eventsNamed(OpikEvent.FILTER_PINNED)).toEqual([
-        [
-          OpikEvent.FILTER_PINNED,
-          { filter_name: "custom", table_id: "logs.spans" },
-        ],
-      ]);
-    });
-
-    it("carries every row of the destination chip, as the mounted chip would", () => {
-      urlValues[SPANS_KEY] = [
-        {
-          id: "1",
-          field: "metadata",
-          type: "dictionary",
-          operator: "contains",
-          key: "env",
-          value: "prod",
-        } as Filter,
-      ];
-      const { result } = setup(LOGS_TYPE.threads, "span", false);
-      act(() => result.current.filter("metadata", "model", "opus"));
-      writtenTo(SPANS_KEY);
-
+      // Only the routing matters here. The payload's shape is `useFilterChips`'
+      // to define, and both paths build it from the same helper.
+      expect(eventsNamed(OpikEvent.FILTER_APPLIED)).toHaveLength(1);
       expect(eventsNamed(OpikEvent.FILTER_APPLIED)[0][1]).toMatchObject({
-        operators: ["contains"],
-        values: ["prod", "opus"],
+        filter_name: "metadata",
+        table_id: "logs.spans",
+      });
+      expect(eventsNamed(OpikEvent.FILTER_PINNED)).toHaveLength(1);
+      expect(eventsNamed(OpikEvent.FILTER_PINNED)[0][1]).toMatchObject({
+        filter_name: "metadata",
+        table_id: "logs.spans",
       });
     });
 

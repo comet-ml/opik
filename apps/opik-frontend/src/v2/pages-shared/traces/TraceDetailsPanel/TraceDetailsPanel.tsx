@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
-import { findSelectedSpan } from "@/v2/pages-shared/traces/TraceDetailsPanel/selectedSpan";
+import { resolveViewedEntity } from "@/v2/pages-shared/traces/TraceDetailsPanel/viewedEntity";
 import {
   QuickAttributeFilterProvider,
   useQuickAttributeFilterFactory,
@@ -206,16 +206,15 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   // A `spanId` that matches no loaded span falls back to the trace — while the
   // spans are still loading, and for good if the span is not in this trace.
   // The quick filter has to follow what is on screen, not the raw `spanId`.
-  const selectedSpan = useMemo(
-    () => findSelectedSpan(spanId, spansData?.content),
-    [spanId, spansData?.content],
+  // One call returns both, so the rendered data and the quick filter's
+  // destination cannot disagree.
+  const { data: dataToView, entity } = useMemo(
+    () => resolveViewedEntity(spanId, spansData?.content, trace),
+    [spanId, spansData?.content, trace],
   );
-  const dataToView = selectedSpan ?? trace;
 
   const quickAttributeFilterFactory = useQuickAttributeFilterFactory();
-  const quickAttributeFilterApi = quickAttributeFilterFactory?.(
-    selectedSpan ? "span" : "trace",
-  );
+  const quickAttributeFilterApi = quickAttributeFilterFactory?.(entity);
 
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
