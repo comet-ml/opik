@@ -55,6 +55,14 @@ Don't register custom matchers. Touch `matchers/register.ts` only if you've iden
 
 When you need to confirm something the UI doesn't surface (e.g. a feedback score landed on a source trace after an async rule), read it back through the suite's SDK client — but prefer a UI assertion whenever the UI shows the fact.
 
+## Hard assertions by default; `expect.soft` only for independent-fact audits
+
+Default to a hard `expect(...)` — it fails the test immediately, so the trace stops exactly where the assumption broke and later steps never run against state the failure invalidated.
+
+Reach for `expect.soft(...)` only when a test is deliberately auditing many independent facts in one pass and a single miss shouldn't hide the rest — e.g. `workspace-roles-permissions.spec.ts` checks dozens of screens/controls per role and wants one full report of everything that's wrong for that role, not 40 serial reruns to find each failure one at a time. That test also runs its 4 role-checks serially in one worker for cost reasons (see its file comment), which is exactly the situation where a hard failure mid-test would abort checks that had nothing to do with the thing that failed.
+
+Don't reach for `expect.soft` by default just because you saw it in a neighbouring spec — most tests assert one thing or a short dependent chain, where a hard `expect` giving up immediately is the more useful failure. And never soft-assert a fact that a later step in the *same* test depends on being true; the soft assertion won't stop execution, so a wrong assumption there surfaces as a confusing secondary failure downstream instead of a clear one at the source.
+
 ## Selector preference
 
 Pick the most stable locator available, in this order:
