@@ -210,27 +210,22 @@ export class PlaygroundPage {
   // handleDatasetChange calls setMetricsOpen(true)), so a test must not click
   // the trigger to open it — that would toggle it shut.
   //
-  // None of the elements below carries a `data-testid`: MetricSelector renders
-  // a Radix Popover whose trigger is a bare <div> (PopoverTrigger asChild) and
-  // whose rows are unlabelled <div>s. They are addressed through their static,
-  // non-i18n text instead. A `data-testid` on the trigger, the rows and the
-  // summary row would be the better handle and is worth adding when this area
-  // is next touched from a build the suite controls.
-
   /**
-   * The metric selector's popover, addressed by the one row it always renders:
-   * the "<n> of <m> selected" summary. Scoping to that keeps this from
-   * resolving to some other Radix dialog that happens to be mounted.
+   * The metric selector's popover, scoped by the summary row it always renders.
+   * Scoping to that keeps this from resolving to some other Radix dialog that
+   * happens to be mounted.
    */
   private metricSelectorPopover(): Locator {
     return this.page
       .getByRole('dialog')
-      .filter({ has: this.page.getByText(/^\d+ of \d+ selected$/) });
+      .filter({ has: this.page.getByTestId('playground-metric-selector-summary') });
   }
 
   /** The popover's "<n> of <m> selected" summary row. */
   metricSelectionSummary(): Locator {
-    return this.metricSelectorPopover().getByText(/^\d+ of \d+ selected$/);
+    return this.metricSelectorPopover().getByTestId(
+      'playground-metric-selector-summary',
+    );
   }
 
   /**
@@ -254,7 +249,9 @@ export class PlaygroundPage {
    */
   async toggleMetric(ruleName: string): Promise<void> {
     return test.step(`toggle metric "${ruleName}"`, async () => {
-      const row = this.metricSelectorPopover().getByText(ruleName, { exact: true });
+      const row = this.metricSelectorPopover()
+        .locator('[data-testid^="playground-metric-selector-row-"]')
+        .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(ruleName)}\\s*$`) });
       // Exactly one row must match, so an ambiguous name fails here rather than
       // silently ticking whichever rule happened to be first.
       await expect(row).toHaveCount(1);

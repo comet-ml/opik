@@ -264,11 +264,16 @@ test.describe('Playground — metric selection on a dataset run', { tag: ['@t2-c
   }) => {
     test.setTimeout(420_000);
 
-    // The upgrade path lands here: a persisted selection of the legacy `null`
-    // maps to "none ticked" (metricSelection.ts), and so does a fresh session.
-    // Both production rules are enabled and at full rate, so the only reason
-    // neither scores is that the run named no rules — which is the half of
-    // OPIK-8059 a user is most likely to notice.
+    // A fresh session starts with nothing ticked (`current ?? []` in
+    // metricSelection.ts), which is the state a user actually lands in. Both
+    // production rules are enabled and at full rate, so the only reason neither
+    // scores is that the run named no rules — the half of OPIK-8059 a user is
+    // most likely to notice.
+    //
+    // This does NOT cover the persisted legacy `null`: the spec never seeds
+    // scoresByDatasetId, so the store is hydrated from its own default rather
+    // than from a stored value. That migration is a store concern and belongs
+    // in the frontend unit tests around metricSelection.ts.
     const rules = await test.step('Seed three rules on the project via the API', async () =>
       seedRules(backendClient, project.id, testNamespace));
 

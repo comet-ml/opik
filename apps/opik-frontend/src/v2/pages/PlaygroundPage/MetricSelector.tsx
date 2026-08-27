@@ -151,6 +151,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       <Popover onOpenChange={openChangeHandler} open={open}>
         <PopoverTrigger asChild>
           <div
+            data-testid="playground-metric-selector-trigger"
             tabIndex={0}
             className={cn(
               "flex h-full w-[120px] cursor-pointer items-center gap-1 px-2 text-xs focus:outline-none",
@@ -205,6 +206,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               filteredRules.map((rule) => (
                 <div
                   key={rule.id}
+                  data-testid={`playground-metric-selector-row-${rule.id}`}
                   className="group flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground"
                   onClick={() => handleSelect(rule.id)}
                 >
@@ -257,7 +259,10 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                       tabIndex={-1}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="comet-body-s truncate tabular-nums">
+                      <div
+                        data-testid="playground-metric-selector-summary"
+                        className="comet-body-s truncate tabular-nums"
+                      >
                         {selectedCount} of {rules.length} selected
                       </div>
                     </div>
