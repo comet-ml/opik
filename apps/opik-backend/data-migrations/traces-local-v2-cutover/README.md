@@ -1067,7 +1067,8 @@ async-insert buffer alone does not cover it: quiesce traffic or take a maintenan
 
 `traceColumnsNonNullable` stays `true`: the live table is still the partitioned, sentinel-schema successor, which is
 precisely what that flag asserts. Only stage B/C revert it, because only they restore the unpartitioned original.
-Partition pruning needs no attention in either direction — it is unconditional and has no flag.
+Partition pruning needs no attention in either direction — it carries no flag at all; see
+"Trace-delete partition pruning needs no flip at all".
 
 **Monitoring reverses with it.** The `opik.clickhouse.partition.*` parts gauges relabel back from `table="traces_local"`
 to `table="traces"`, so restore anything adjusted at wrap time. And if the wrap-time option to point
@@ -1217,8 +1218,9 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    you to set `traceColumnsNonNullable` back to `false`, so it *is* false now; the retry puts the sentinel-schema
    successor back under `traces`, which needs it `true` and needs every backend instance restarted to pick it up (it
    comes from a startup snapshot). Skipping this is silent, not loud: absent `end_time` reads back as `1970-01-01` while
-   writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: partition
-   pruning is unconditional, so the retry's `EXCHANGE` needs no pruning step in either direction.
+   writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: trace-delete
+   partition pruning carries no flag, so the retry's `EXCHANGE` needs no pruning step in either direction — see
+   "Trace-delete partition pruning needs no flip at all".
 5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
    every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
