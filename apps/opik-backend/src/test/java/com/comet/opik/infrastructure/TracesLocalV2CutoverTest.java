@@ -691,6 +691,11 @@ class TracesLocalV2CutoverTest {
         assertThat(columnType("traces_post_rollback_backup", "end_time"))
                 .as("parked backup carries the successor's non-Nullable schema")
                 .doesNotStartWith("Nullable");
+        // Both signals above, plus this one, are what --reverse-replay-only and --sentinel-repair-only assert before
+        // acting: the promote's RENAME consumes the parked original, so it surviving here would mean a half-done rename.
+        assertThat(tableExists("traces_pre_cutover_backup"))
+                .as("the promote's RENAME consumed the parked original, so its name is free after the swap-back")
+                .isFalse();
         assertThat(tableExists("traces_local_v2"))
                 .as("the disposable shadow name is free after rollback (so stage A cannot truncate the backup)")
                 .isFalse();
@@ -859,6 +864,13 @@ class TracesLocalV2CutoverTest {
                 .isEqualTo(9);
 
         repairSentinels();
+
+        // The two commands travel in ONE mutation, which is why the repair costs a single part rewrite rather than two.
+        // Asserted because it is a claim the .sql header makes and nothing else would catch if ClickHouse split them.
+        assertThat(sentinelRepairMutations())
+                .as("both commands ran, and under ONE mutation id — so the repair is a single pass over the parts, which"
+                        + " is the whole reason for combining them")
+                .isEqualTo(new MutationShape(1L, 2L));
 
         assertThat(sentinelCounts())
                 .as("the gate clears: no epoch end_time and no NaN ttft left on any replica")
@@ -1886,6 +1898,30 @@ class TracesLocalV2CutoverTest {
                                 row.get("sentinel_ttft", Long.class),
                                 row.get("negative_from_sentinel", Long.class))))))
                 .block();
+    }
+
+    /**
+     * How ClickHouse recorded the sentinel repair: how many commands, under how many distinct {@code mutation_id}s.
+     * {@code system.mutations} keeps one row per command but shares one id across an {@code ALTER}'s commands, which is
+     * the property the repair's single-pass cost rests on. Filtered to this statement's own commands, because schema
+     * migrations leave their own mutations on this table — Liquibase uses the same multi-command form.
+     */
+    private MutationShape sentinelRepairMutations() {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                SELECT uniqExact(mutation_id) AS ids, count() AS commands
+                FROM system.mutations
+                WHERE database = :db AND table = 'traces' AND command LIKE '%= NULL WHERE%'
+                """)
+                .bind("db", DATABASE_NAME)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> new MutationShape(
+                        row.get("ids", Long.class),
+                        row.get("commands", Long.class))))))
+                .block();
+    }
+
+    /** Distinct {@code mutation_id}s and command rows behind one {@code ALTER}. */
+    private record MutationShape(long ids, long commands) {
     }
 
     /** The three counts {@code 000004_rollback_verify_sentinels.sql} returns; only the first two are gates. */

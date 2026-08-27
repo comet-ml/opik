@@ -244,6 +244,36 @@ assert_traces_dist_old_free() {
     exit 1
 }
 
+# --reverse-replay-only and --sentinel-repair-only both act on a COMPLETED promote and are unsafe anywhere else, so they
+# share this assertion. Three signals, each ruling out a different wrong target:
+#   - `traces` has Nullable end_time — it is the restored ORIGINAL, not the live successor.
+#   - `traces_post_rollback_backup` exists AND holds the successor schema (non-Nullable end_time) — a promote really
+#     parked the successor there. Presence alone proves nothing: the name is convention, and a table under it carrying
+#     the ORIGINAL schema means something else owns it, which is exactly the pre-cutover estate these modes must refuse.
+#   - `traces_pre_cutover_backup` is GONE — the promote's rename consumes it. Still present alongside the other two is a
+#     contradiction (a half-done rename, or a retry that re-created it), and neither mode should guess which.
+# $1 is the mode; the rest are consequence lines, so each caller keeps its own explanation of what getting it wrong costs.
+assert_post_promote_state() {
+    local mode="$1" traces_end_time backup_end_time pre_cutover line
+    shift
+    traces_end_time="$(traces_endtime_type traces)"
+    backup_end_time="$(traces_endtime_type traces_post_rollback_backup)"
+    pre_cutover="$(traces_engine traces_pre_cutover_backup)"
+    if [[ "$traces_end_time" == Nullable* && -n "$backup_end_time" && "$backup_end_time" != Nullable* && -z "$pre_cutover" ]]; then
+        return 0
+    fi
+    echo "ERROR: $mode requires the post-rollback state — 'traces' = the restored ORIGINAL (Nullable end_time), the" >&2
+    echo "       successor parked as 'traces_post_rollback_backup' with the successor schema (non-Nullable end_time), and" >&2
+    echo "       no 'traces_pre_cutover_backup' left, since a promote's rename consumes it." >&2
+    echo "       Observed: traces end_time='$traces_end_time', traces_post_rollback_backup end_time='${backup_end_time:-<absent>}'," >&2
+    echo "                 traces_pre_cutover_backup engine='${pre_cutover:-<absent>}'." >&2
+    for line in "$@"; do
+        echo "       $line" >&2
+    done
+    echo "       Roll back with --stage B (or --stage C after the wrap) first." >&2
+    exit 1
+}
+
 # The migration walks traces through three shapes; a stage is only valid in one of them:
 #   pre-EXCHANGE       -> traces is a *MergeTree with Nullable end_time (the original schema)      -> stage A
 #   post-EXCHANGE      -> traces is a *MergeTree with non-Nullable end_time (the successor schema) -> stage B
@@ -440,14 +470,10 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
         echo "       original MergeTree. Roll the wrap back first with --stage C." >&2
         exit 1
     }
-    if [[ "$(traces_endtime_type traces)" != Nullable* || -z "$(traces_engine traces_post_rollback_backup)" ]]; then
-        echo "ERROR: --reverse-replay-only requires the post-rollback state — 'traces' = the restored ORIGINAL (Nullable" >&2
-        echo "       end_time) with the successor parked as 'traces_post_rollback_backup'. The reverse-replay carries no" >&2
-        echo "       resurrection guard, so run against the live successor (EXCHANGE ran but no rollback did) it would" >&2
-        echo "       mask deleted-then-recreated rows — silent data loss. Roll back with --stage B (or --stage C after the" >&2
-        echo "       wrap) first; only use --reverse-replay-only if that stage's promote succeeded but its replay did not." >&2
-        exit 1
-    fi
+    assert_post_promote_state "--reverse-replay-only" \
+        "The reverse-replay carries no resurrection guard, so aimed at the live successor (EXCHANGE ran but no rollback" \
+        "did) it would mask deleted-then-recreated rows — silent data loss. Use this mode only when a stage B/C promote" \
+        "succeeded but its replay did not."
     echo "NOTE: re-applying the reverse deletion replay only (no table swap) for deletes since cutover_start" >&2
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
     run_file 000004_rollback_reverse_replay.sql
@@ -457,16 +483,9 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
 fi
 
 # Sentinel-repair mode: restore NULL on the rows the flag wrote into the still-Nullable original, and recompute their
-# duration as a side effect (see 000004_rollback_sentinel_repair.sql). Guarded on the SAME post-promote shape as
-# --reverse-replay-only, and for a related reason: the two signals it would otherwise run on are ambiguous.
-#   - Against the live SUCCESSOR the epoch/NaN values are not damage at all, they ARE the schema's encoding of "absent",
-#     so repairing them is meaningless; the columns are non-Nullable there, so the statement errors out with a type
-#     failure rather than a refusal, which reads like a bug in the script instead of a wrong target.
-#   - Against a pre-cutover original that never went through a cutover, an epoch end_time is whatever a client actually
-#     sent. Requiring traces_post_rollback_backup is what distinguishes the two: only a completed promote creates it.
-# Consequence, deliberate: after finalize.sh has recycled that backup this mode refuses. The repair belongs BEFORE
-# finalize (the runbook orders it that way, and finalize is what makes the rollback irreversible), so a refusal there is
-# the correct answer rather than a gap.
+# duration as a side effect (see 000004_rollback_sentinel_repair.sql). Shares assert_post_promote_state with
+# --reverse-replay-only: the epoch/NaN values are damage only on a restored original, being the schema's own encoding of
+# "absent" on the successor and ordinary client data on a table that never went through a cutover.
 if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     sentinel_engine="$(traces_engine traces)"
     [[ -n "$sentinel_engine" ]] || { echo "ERROR: no 'traces' table found in database '$DATABASE'." >&2; exit 1; }
@@ -475,16 +494,11 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "       definition that holds no rows. Roll the wrap back first with --stage C." >&2
         exit 1
     }
-    if [[ "$(traces_endtime_type traces)" != Nullable* || -z "$(traces_engine traces_post_rollback_backup)" ]]; then
-        echo "ERROR: --sentinel-repair-only requires the post-rollback state — 'traces' = the restored ORIGINAL" >&2
-        echo "       (Nullable end_time) with the successor parked as 'traces_post_rollback_backup'. On the live" >&2
-        echo "       successor the epoch/NaN values are the schema's own encoding of an absent value, not damage; on an" >&2
-        echo "       original that never went through a cutover an epoch end_time is what a client actually sent. Only a" >&2
-        echo "       completed promote creates the parked successor, which is what tells those apart. If finalize.sh has" >&2
-        echo "       already recycled it, this refusal is by design: the repair belongs before finalize, so resolve that" >&2
-        echo "       ordering deliberately rather than working around the guard." >&2
-        exit 1
-    fi
+    assert_post_promote_state "--sentinel-repair-only" \
+        "On the live successor the epoch/NaN values are the schema's own encoding of an absent value, not damage; on an" \
+        "original that never went through a cutover an epoch end_time is what a client actually sent. Only a completed" \
+        "promote tells those apart. If finalize.sh has already recycled the parked successor, this refusal is by design:" \
+        "the repair belongs before finalize, so resolve that ordering deliberately rather than around the guard."
     echo "NOTE: repairing epoch/NaN sentinels on the restored original. Nothing is promoted, replayed or renamed — this" >&2
     echo "      is one mutation on the table that is already live, and it recomputes 'duration' from the restored NULL." >&2
 
