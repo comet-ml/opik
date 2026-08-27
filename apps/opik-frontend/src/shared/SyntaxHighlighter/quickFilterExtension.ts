@@ -28,8 +28,8 @@ export type QuickFilterCodeConfig = {
   onFilter: (path: string, value: string) => void;
   // The click can move the table to another view, so the caller names the
   // action up front instead of letting the user discover it afterwards.
-  hintText?: string;
-  appliedText?: string;
+  hintText: string;
+  appliedText: string;
 };
 
 const FILTER_ICON = renderToStaticMarkup(
@@ -40,8 +40,6 @@ const CHECK_ICON = renderToStaticMarkup(
   createElement(Check, { size: 12, strokeWidth: 2.5 }),
 );
 
-const DEFAULT_HINT_TEXT = "Filter by this attribute";
-const DEFAULT_APPLIED_TEXT = "Filter applied";
 // How long the "Filter applied" confirmation stays up before reverting.
 const APPLIED_VISIBLE_MS = 1500;
 
@@ -293,8 +291,7 @@ export const createQuickFilterExtension = (
   mode: QuickFilterMode,
   config: QuickFilterCodeConfig,
 ): Extension => {
-  const hintText = config.hintText ?? DEFAULT_HINT_TEXT;
-  const appliedText = config.appliedText ?? DEFAULT_APPLIED_TEXT;
+  const { hintText, appliedText } = config;
 
   const build = (view: EditorView): DecorationSet => {
     const doc = view.state.doc.toString();
