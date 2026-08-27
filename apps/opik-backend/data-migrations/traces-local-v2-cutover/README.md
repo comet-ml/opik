@@ -201,6 +201,19 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    `rollback.sh --unwrap-only` (see "Un-wrap"), which keeps the cutover — so a wrap concern need not become a decision
    about the whole migration.
 
+> **Readiness fails while the flag and the live topology disagree (OPIK-7773), and that stalls the
+> rollout rather than breaking the service.** Worth knowing before you watch it happen:
+>
+> - The check is a **critical READY dependency**, so a pod whose flag disagrees with the table it finds
+>   never becomes ready. During a rolling update that means the *new* pod stays unready and Kubernetes
+>   keeps the *old* one serving — the deployment looks stuck, traffic does not stop. The flip completes
+>   only once the paired DDL lands.
+> - It **re-evaluates live**. Once the DDL lands the check recovers on its own within a probe interval or
+>   two; no restart is needed to clear it.
+> - So in either ordering the window is self-announcing and self-healing. Keep it short, but do not
+>   respond to a stalled rollout by forcing a restart — that changes nothing, because the disagreement is
+>   with the database, not with the pod.
+
 > **HARD PREREQUISITE for the wrap (step 4, part 2): enable `tracesDistributedWrapEnabled` so trace mutations target `traces_local` first (OPIK-7455).** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
 > - `DELETE FROM <distributed>` → `Code 36 BAD_ARGUMENTS: DELETE query is not supported`
@@ -1081,6 +1094,19 @@ to `table="traces"`, so restore anything adjusted at wrap time. And if the wrap-
 regression, or a query regression from the new layout are all *cutover* problems — `--unwrap-only` changes none of them.
 Use stage B/C while the parked original still exists.
 
+> **Flag-vs-DDL ordering is not the same in both directions. This is the easiest thing here to get
+> backwards.** Each step's own section states its order; the table exists so the asymmetry is visible in
+> one place:
+>
+> | step | order | why |
+> |---|---|---|
+> | forward wrap (`--wrap-only`) | **toggle first**, then DDL | in the gap, deletes target a `traces_local` that does not exist yet → `Code 60`. DDL-first would send them at a `traces` that is already `Distributed` → `Code 36`, plus unbuffered cross-node skew |
+> | un-wrap (`--unwrap-only`) | **DDL first**, then toggle | the mirror image: the gap gives `Code 60` again, which is the cheaper failure |
+> | stage B / C | **DDL first**, then toggle | same reasoning as the un-wrap; the promote must land before the flags describing the new shape |
+>
+> Every gap is **delete-path-only** — reads and inserts never consult the flag — so the choice is only
+> ever *which* error the window produces, never whether reads break.
+
 > **Multi-replica note (production is multi-replica).** Stages B and C promote via a single `ON CLUSTER` RENAME of the
 > **live** `traces`. It runs synchronously across the shard's replicas — the client blocks until each applies it, or fails
 > loudly naming a laggard, which then converges via the DDL queue — so there is no durable mixed topology, only a brief
@@ -1115,6 +1141,19 @@ through the replay, not merely across the rename. A failure *between* the two ne
 - **Forward EXCHANGE half-done (stage B says the backup is missing).** If the forward `EXCHANGE` succeeded but its
   post-swap `RENAME` did not, the parked original is still under `traces_local_v2` and stage B aborts pointing at the
   one-line `RENAME` that finishes it (`traces_local_v2` → `traces_pre_cutover_backup`); run that, then re-run stage B.
+
+> **Run the sentinel count against `traces`, never against the parked successor.** The counts are only
+> meaningful on the *restored original*, which stores an absent value as `NULL`. The parked successor
+> stores it as the epoch/NaN **sentinel** by design — that is what the non-nullable schema is — so the
+> same query pointed there reports *every* absent value as a sentinel and invites a "repair" that would
+> overwrite correct data. The driver names `traces` explicitly for this reason; if you retype the query,
+> keep the table name.
+>
+> **Nothing to repair is a valid outcome.** The sentinels this fixes come from writes that landed on the
+> **original** while the flag was `true` — i.e. between the flip and the `EXCHANGE`. If little or no
+> traffic hit that window, the counts are legitimately `0` and there is no mutation to run. Do not force
+> one: an `ALTER … UPDATE` over the whole table is not free, and a `0` count is the success condition, not
+> a sign the query is wrong.
 
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
@@ -1350,6 +1389,19 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 # After the EXCHANGE: `traces` is the successor and the old data is parked as traces_pre_cutover_backup:
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
+
+> **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
+> tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
+> total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
+> read-only and idempotent: an interrupted run costs nothing, and because the bound is fixed by
+> `cutover_start` it covers the same windows whenever it is re-run.
+>
+> **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
+> because both surface at the end when the pressure is highest:
+> - the sentinel **count** is a full-table scan, so a read-only account carrying a `max_rows_to_read`
+>   ceiling cannot run it;
+> - the sentinel **repair** needs `ALTER UPDATE(end_time)` / `(ttft)`, which the rollback set deliberately
+>   omits (see the privileges table).
 
 **Verifying after a rollback.** After a stage B/C rollback the defaults do not apply — `traces_local_v2` no longer
 exists (the successor is parked as `traces_post_rollback_backup`), so a bare `verify.sh --database opik` dies with
