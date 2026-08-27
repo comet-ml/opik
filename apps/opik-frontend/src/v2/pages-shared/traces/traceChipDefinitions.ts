@@ -197,6 +197,12 @@ export const TRACE_CHIP_ORDER: string[] = [
 ];
 
 export const TRACE_DEFAULT_PINNED_CHIPS = ["with_errors", "tags", "metadata"];
+export const SPAN_DEFAULT_PINNED_CHIPS = [
+  "type",
+  "tags",
+  "with_errors",
+  "metadata",
+];
 
 export const buildSharedDynamicChips = ({
   projectId,
