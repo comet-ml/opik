@@ -34,10 +34,10 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
         if (!config.isEnabled()) {
             if (redactionService.isEnabled()) {
-                // trace_original_data_view is resolved by the authentication call and nothing else sets it, so
-                // with authentication off no caller can hold it and every response is masked for everybody, with
-                // no way to grant an exemption. Said out loud because the configuration reads as if it were a
-                // per-caller control here, and it is not.
+                // trace_original_data_view is resolved from the workspace permissions API and nothing else
+                // sets it, so with authentication off no caller can hold it and every response is masked for
+                // everybody, with no way to grant an exemption. Said out loud because the configuration reads
+                // as if it were a per-caller control here, and it is not.
                 log.warn("Read-time redaction is enabled while authentication is disabled: no caller can hold "
                         + "'{}', so every response will be redacted for every caller",
                         WorkspaceUserPermission.TRACE_ORIGINAL_DATA_VIEW.getValue());
@@ -60,6 +60,7 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
         return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
+                new RemoteWorkspacePermissionsService(client, config.getReactService()),
                 redactionService.isEnabled());
     }
 

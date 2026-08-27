@@ -50,20 +50,29 @@ public class AuthTestUtils {
      */
     public static void mockTargetWorkspaceWithPermissions(WireMockServer server, String apiKey,
             String workspaceName, String workspaceId, String user, List<String> grantedPermissions) {
+        mockTargetWorkspace(server, apiKey, workspaceName, workspaceId, user);
+
+        server.stubFor(
+                post(urlPathEqualTo("/opik/workspace-permissions"))
+                        .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .willReturn(okJson(newPermissionsResponse(user, workspaceName, grantedPermissions))));
+    }
+
+    /**
+     * The workspace permissions API answers what a caller may see, on its own endpoint per credential type.
+     * The authentication response carries no permissions, so these stubs are what a test with the redaction
+     * feature enabled needs in addition to the authentication stub.
+     */
+    private static String newPermissionsResponse(String user, String workspaceName,
+            List<String> grantedPermissions) {
         var response = new LinkedHashMap<String, Object>();
-        response.put("user", user);
-        response.put("workspaceId", workspaceId);
+        response.put("userName", user);
         response.put("workspaceName", workspaceName);
-        response.put("quotas", null);
         response.put("permissions", grantedPermissions.stream()
                 .map(name -> Map.of("permissionName", name, "permissionValue", "true"))
                 .toList());
-
-        server.stubFor(
-                post(urlPathEqualTo("/opik/auth"))
-                        .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
-                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
-                        .willReturn(okJson(JsonUtils.writeValueAsString(response))));
+        return JsonUtils.writeValueAsString(response);
     }
 
     public static void mockTargetWorkspace(
@@ -106,20 +115,13 @@ public class AuthTestUtils {
      */
     public static void mockSessionCookieTargetWorkspaceWithPermissions(WireMockServer server, String sessionToken,
             String workspaceName, String workspaceId, String user, List<String> grantedPermissions) {
-        var response = new LinkedHashMap<String, Object>();
-        response.put("user", user);
-        response.put("workspaceId", workspaceId);
-        response.put("workspaceName", workspaceName);
-        response.put("quotas", null);
-        response.put("permissions", grantedPermissions.stream()
-                .map(name -> Map.of("permissionName", name, "permissionValue", "true"))
-                .toList());
+        mockSessionCookieTargetWorkspace(server, sessionToken, workspaceName, workspaceId, user);
 
         server.stubFor(
-                post(urlPathEqualTo("/opik/auth-session"))
+                post(urlPathEqualTo("/opik/workspace-permissions-session"))
                         .withCookie(SESSION_COOKIE, equalTo(sessionToken))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
-                        .willReturn(okJson(JsonUtils.writeValueAsString(response))));
+                        .willReturn(okJson(newPermissionsResponse(user, workspaceName, grantedPermissions))));
     }
 
     public static void mockSessionCookieTargetWorkspace(WireMockServer server, String sessionToken,

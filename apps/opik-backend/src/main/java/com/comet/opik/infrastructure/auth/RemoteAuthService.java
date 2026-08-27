@@ -2,7 +2,9 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.WorkspaceUserPermissions;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
@@ -32,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -92,38 +95,25 @@ class RemoteAuthService implements AuthService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
 
+    private final @NonNull WorkspacePermissionsService workspacePermissionsService;
+
     /**
-     * Whether to ask the platform for the caller's workspace permissions.
+     * Whether the caller's workspace permissions are resolved at all.
      * <p>
-     * Only read-time redaction needs them, and resolving them costs the platform an extra read on the path
-     * every Opik request takes. So it is requested only where something will act on the answer; with the
-     * feature off the auth call is exactly what it was before.
+     * Only read-time redaction needs them, and resolving them costs a call on the path every Opik request
+     * takes. So it happens only where something acts on the answer; with the feature off no permission lookup
+     * is made and the authentication call is exactly what it was before.
      */
-    private final boolean includePermissions;
+    private final boolean resolvePermissions;
 
     @Builder(toBuilder = true)
     record AuthRequest(String workspaceName, String path,
-            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> requiredPermissions,
-            @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean includePermissions) {
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> requiredPermissions) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
-    record AuthResponse(
-            String user, String workspaceId, String workspaceName, List<Quota> quotas,
-            List<WorkspacePermission> permissions) {
-    }
-
-    /**
-     * One resolved permission as the platform reports it. The value is carried as text because that is the
-     * platform's representation; only {@code "true"} grants.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record WorkspacePermission(String permissionName, String permissionValue) {
-
-        boolean granted() {
-            return Boolean.parseBoolean(permissionValue);
-        }
+    record AuthResponse(String user, String workspaceId, String workspaceName, List<Quota> quotas) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -139,25 +129,15 @@ class RemoteAuthService implements AuthService {
             List<Quota> quotas,
             List<String> permissions) {
 
-        static ValidatedAuthCredentials from(AuthResponse authResponse) {
+        static ValidatedAuthCredentials from(AuthResponse authResponse, List<String> permissions) {
             return ValidatedAuthCredentials.builder()
                     .shouldCache(true)
                     .userName(authResponse.user())
                     .workspaceId(authResponse.workspaceId())
                     .workspaceName(authResponse.workspaceName())
                     .quotas(authResponse.quotas())
-                    .permissions(grantedNames(authResponse.permissions()))
+                    .permissions(permissions)
                     .build();
-        }
-
-        /** Only the granted names are kept; a permission reported as false is the same as absent. */
-        private static List<String> grantedNames(List<WorkspacePermission> permissions) {
-            return permissions == null
-                    ? List.of()
-                    : permissions.stream()
-                            .filter(WorkspacePermission::granted)
-                            .map(WorkspacePermission::permissionName)
-                            .toList();
         }
 
         static ValidatedAuthCredentials from(CacheService.AuthCredentials authCredentials) {
@@ -264,10 +244,11 @@ class RemoteAuthService implements AuthService {
                         .workspaceName(token.workspaceName())
                         .path(path)
                         .requiredPermissions(contextInfo.requiredPermissions())
-                        .includePermissions(includePermissions)
                         .build()))) {
             var authResponse = verifyResponse(response);
-            var credentials = ValidatedAuthCredentials.from(authResponse);
+            var credentials = ValidatedAuthCredentials.from(authResponse, grantedPermissions(
+                    () -> workspacePermissionsService.getPermissionsByUsername(token.userName(),
+                            token.workspaceName())));
             setCredentialIntoContext(credentials, token.workspaceName(), null);
         }
     }
@@ -438,10 +419,11 @@ class RemoteAuthService implements AuthService {
                         .workspaceName(workspaceName)
                         .path(path)
                         .requiredPermissions(requiredPermissions)
-                        .includePermissions(includePermissions)
                         .build()))) {
             var authResponse = verifyResponse(response);
-            var credentials = ValidatedAuthCredentials.from(authResponse);
+            var credentials = ValidatedAuthCredentials.from(authResponse, grantedPermissions(
+                    () -> workspacePermissionsService.getPermissionsBySession(sessionToken.getValue(),
+                            workspaceName)));
             setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
         }
     }
@@ -480,13 +462,44 @@ class RemoteAuthService implements AuthService {
                             .workspaceName(workspaceName)
                             .path(path)
                             .requiredPermissions(requiredPermissions)
-                            .includePermissions(includePermissions)
                             .build()))) {
                 var authResponse = verifyResponse(response);
-                return ValidatedAuthCredentials.from(authResponse);
+                return ValidatedAuthCredentials.from(authResponse, grantedPermissions(
+                        () -> workspacePermissionsService.getPermissions(apiKey, workspaceName)));
             }
         } else {
             return ValidatedAuthCredentials.from(credentials.get());
+        }
+    }
+
+    /**
+     * The caller's granted permission names, or none.
+     * <p>
+     * Read from the permissions API rather than the authentication response, so the answer is data about what
+     * the caller may see and not a by-product of whether it could be authenticated. Skipped entirely when
+     * nothing acts on it.
+     * <p>
+     * A lookup that fails leaves the caller with no permissions, which redacts. That is the safe direction for
+     * a feature whose purpose is withholding, but it does mean a permissions outage reads as masked content
+     * rather than as an error, so it is logged at warn to stay diagnosable.
+     */
+    private List<String> grantedPermissions(Supplier<WorkspaceUserPermissions> lookup) {
+        if (!resolvePermissions) {
+            return List.of();
+        }
+
+        try {
+            var permissions = lookup.get().permissions();
+            return permissions == null
+                    ? List.of()
+                    : permissions.stream()
+                            .filter(permission -> Boolean.parseBoolean(permission.permissionValue()))
+                            .map(WorkspaceUserPermissions.Permission::permissionName)
+                            .toList();
+        } catch (RuntimeException lookupFailed) {
+            log.warn("Could not resolve workspace permissions, treating the caller as unprivileged",
+                    lookupFailed);
+            return List.of();
         }
     }
 
