@@ -420,7 +420,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code (workspace_id, dataset_id, dataset_version_id, id)}, so ordering by {@code dataset_item_id} cannot
      * use {@code optimize_read_in_order} and forces a full blocking sort over the whole version. Carrying
      * {@code data} through that sort makes peak memory scale with the version's total payload rather than with
-     * the page size: a 120k-item version at ~138 KiB per item peaked at 30 GiB and returned 500 (OPIK-8109).
+     * the page size, so a version whose total payload exceeds the per-query memory cap fails with
+     * MEMORY_LIMIT_EXCEEDED even when a single row is requested (OPIK-8109).
      * <p>
      * Phase 1 resolves the page's {@code dataset_item_id}s from narrow columns only; phase 2 fetches the payload
      * for just those ids, served by the {@code dataset_item_id} skip indexes from migration {@code 000074}.
@@ -442,9 +443,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      *   <li>Phase 1 projects the same aliases as phase 2. ClickHouse binds {@code WHERE} and {@code ORDER BY} to
      *       {@code SELECT} aliases, and the dataset item filters emit bare {@code id}, {@code created_at},
      *       {@code last_updated_at}, {@code created_by} and {@code last_updated_by}. Drop the aliases and those
-     *       predicates bind to this table's physical columns instead: on a version whose rows were snapshotted
-     *       long after the items were authored, a {@code created_at} filter returned 175 items where the correct
-     *       answer was 0.</li>
+     *       predicates bind to this table's physical columns instead. Where a version's rows were snapshotted
+     *       well after its items were authored the two clocks diverge, and the filter then selects an entirely
+     *       different set of items.</li>
      * </ol>
      * <p>
      * One caveat for whoever edits this next: alias binding is the default of a ClickHouse setting, not a
@@ -458,12 +459,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WITH page AS (
                 SELECT
                     dataset_item_id,
-                    -- Same aliases as phase 2's projection. ClickHouse resolves WHERE and ORDER BY
-                    -- against SELECT aliases, and the dataset item filters emit bare `id`,
-                    -- `created_at`, `last_updated_at`, `created_by` and `last_updated_by`. Without
-                    -- these aliases those predicates would bind to the physical columns of
-                    -- dataset_item_versions instead -- a different row id and different timestamps --
-                    -- so a filtered page would silently select the wrong items.
                     dataset_item_id AS id,
                     item_created_at AS created_at,
                     item_last_updated_at AS last_updated_at,
@@ -517,8 +512,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code created_at}, {@code last_updated_at}, {@code created_by} and {@code last_updated_by} — all of
      * which also exist physically on this table with different meanings. Counting against the physical columns
      * while {@code SELECT_DATASET_ITEM_VERSIONS} selects rows against the item-level ones made the two
-     * disagree: on a version whose rows were snapshotted long after the items were authored, a
-     * {@code created_at} filter returned one row while reporting a total of 176.
+     * disagree, so a filtered page could report a total its own rows could not account for.
      * <p>
      * {@code * EXCEPT} keeps every other column in scope so filters on {@code data}, {@code source},
      * {@code tags}, {@code trace_id} and {@code span_id} still resolve. It costs nothing: ClickHouse prunes
@@ -1026,6 +1020,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code ei.dataset_item_id} was a per-version {@code dataset_item_versions.id}; for modern
      * rows it is already the stable id and the JOIN misses, falling back via
      * {@code if(notEmpty(...))} to the raw value.
+     *
+     * <p><b>The {@code lookup_div.dataset_id = :datasetId} predicate is load-bearing, not redundant.</b>
+     * It looks superfluous beside {@code lookup_div.id = ei.dataset_item_id}, but the ordering key is
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}: constraining only components 1 and 4
+     * leaves no usable prefix, so the join read every row in the workspace to resolve a handful of experiment
+     * items — enough on a large install to exhaust the per-query memory cap. With {@code dataset_id} the
+     * prefix widens to two components and the read is bounded by the dataset. It is still not a full key
+     * match, since {@code dataset_version_id} stays unconstrained and the key cannot reach {@code id}.
+     * <p>Note the predicate is a behaviour narrowing as well as a pruning one: a legacy id pointing at a row
+     * in a different dataset now misses where it previously matched. The {@code LEFT JOIN} plus the
+     * {@code if(notEmpty(...))} fallback absorb that, so no row drops, but the grouping key for such a row
+     * changes. Nothing validates that an experiment item's dataset item belongs to the experiment's dataset
+     * — only that the workspace matches — so this is empirically safe rather than structurally guaranteed.
+     *
+     * <p><b>Each item column is projected twice in the resolved CTEs, under its {@code item_*} name and its
+     * bare name.</b> That is not redundancy: the outer query consumes the {@code item_*} names for the
+     * response, while the dataset item filters resolve the bare ones. Dropping the bare half reintroduces the
+     * filter-binding defect; dropping the {@code item_*} half breaks the response projection. Both halves must
+     * source the {@code item_*} columns — sourcing the snapshot row's columns is what made this view report
+     * snapshot timestamps as authoring times.
      *
      * <p>The JOIN uses the direct {@code dataset_item_versions} table — NOT a CTE-based lookup.
      * A CTE-based LEFT JOIN drops rows in deletion-cascade scenarios in ClickHouse (known

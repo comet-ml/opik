@@ -5922,9 +5922,9 @@ class DatasetVersionResourceTest {
          * written now, so {@code item_created_at} and the physical {@code created_at} diverge by years.
          * <p>
          * Versioning produces this naturally: a snapshot taken today carries rows whose {@code created_at} is
-         * today while the items themselves were authored earlier. On production one version showed a 6.4-day
-         * gap. The divergence is what makes alias binding observable: a {@code created_at} filter selects
-         * different items depending on whether it binds to the item's time or the row's.
+         * today while the items themselves were authored earlier, so on a long-lived dataset the two clocks
+         * can diverge by days. That divergence is what makes alias binding observable: a {@code created_at}
+         * filter selects different items depending on whether it binds to the item's time or the row's.
          */
         private void addBackdatedItem(UUID datasetId, UUID versionId, String tag) {
             String sql = """
@@ -6093,7 +6093,7 @@ class DatasetVersionResourceTest {
                             %s: the page's total must be computed with the same filter semantics as its rows. \
                             The count query resolves the same bare column names, so if it lacks the item-level \
                             aliases the endpoint reports a total the rows cannot account for -- measured on \
-                            production as one row against a total of 176.""".formatted(scenario))
+                            a total the returned rows could not account for.""".formatted(scenario))
                     .isEqualTo(page.total());
         }
 
