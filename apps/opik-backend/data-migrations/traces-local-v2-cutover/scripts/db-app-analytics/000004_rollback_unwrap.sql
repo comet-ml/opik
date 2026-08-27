@@ -40,10 +40,10 @@
 -- pre-checks and reports rather than letting the RENAME fail obscurely.
 --
 -- BEFORE backends resume: set databaseAnalyticsDataModel.tracesDistributedWrapEnabled=false (OPIK-7455) — the inverse of
--- the flip that enabled the wrap. It is the ONLY flag this reverses: `traceColumnsNonNullable` must stay `true` (the live
--- table keeps the successor's sentinel schema) and `tracesWeeklyPartitionPruningEnabled` stays as it was (it asserts a
--- schema fact — that the live table is the partitioned successor — which un-wrapping preserves). Contrast stage B/C,
--- which revert all three because they restore the unpartitioned original.
+-- the flip that enabled the wrap. It is the ONLY flag this reverses, and `traceColumnsNonNullable` must stay `true`: the
+-- live table keeps the successor's sentinel schema, which un-wrapping preserves. Contrast stage B/C, which restore the
+-- unpartitioned original and so also revert `traceColumnsNonNullable` (stage C both flags), plus the sentinel/duration
+-- repair.
 
 -- 1. Gapless un-wrap: rotate both names atomically.
 SET log_comment = 'traces_local_v2_rollback:unwrap';

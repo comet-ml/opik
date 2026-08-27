@@ -50,6 +50,12 @@ import lombok.Builder;
  * {@code MODIFY COLUMN} must be applied to <b>both</b> {@code traces_local} and the {@code Distributed} {@code traces}
  * (the wrapper accepts them as metadata-only, and targeting only {@code traces_local} leaves the wrapper without the
  * column, so reads fail with code 47).</p>
+ *
+ * <p>This flag is asserted against the live topology at readiness by
+ * {@code ClickHouseTracesTopologyHealthCheck}: either direction of mismatch fails the
+ * {@code clickhouse-traces-topology} probe with a message naming the flag and the observed engine, so an install whose
+ * flag and database disagree is pulled from rotation instead of discovering it on its first trace delete. The flag
+ * stays the source of truth — the probe only reports, it never re-routes.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(

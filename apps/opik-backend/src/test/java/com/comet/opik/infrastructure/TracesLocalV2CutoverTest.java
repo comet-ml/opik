@@ -709,6 +709,92 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * The reverse-replay postcondition gate: {@code 0} means every delete the bridge recorded since {@code cutover_start}
+     * is masked on the restored {@code traces}, and any other number is an incomplete rollback serving rows users
+     * deleted. The statement is reimplemented inline like the rest of this class
+     * (see {@link #verifyReplayPostcondition}).
+     *
+     * <p>Each phase pins one way the gate can lie:
+     * <ul>
+     *   <li><b>a resurrected id → 1</b>, however many physical rows back it. The gate reads without {@code FINAL}
+     *   across every replica, so an updated trace has several versions and each row comes back once per replica —
+     *   counting rows would inflate an operator's damage estimate mid-rollback. The phase seeds a second version, but
+     *   asserts only the answer: pinning the multiplicity would need background merges frozen, which these tests do not
+     *   do, and the per-replica multiplicity is not reproducible on a single-replica container at all.</li>
+     *   <li><b>two bridge events for one id → still 1.</b> A trace can be re-recorded (retry, re-delete), so the
+     *   event count is not the id count either.</li>
+     *   <li><b>masked → 0</b>, the passing case after a real replay, and the only result that ends a rollback.</li>
+     *   <li><b>bridged under one project, alive under another → 0.</b> Ids are client-supplied and reusable across
+     *   projects; a gate matching on {@code id} alone would report a live row the replay was never asked to touch.</li>
+     *   <li><b>bridged before {@code cutover_start} → 0.</b> A trace deleted and recreated before the cutover is
+     *   legitimately live while still carrying a bridge event; without the window filter the gate would call that a
+     *   failed rollback and send the operator chasing a delete the replay was never asked to re-apply.</li>
+     * </ul>
+     */
+    @Test
+    void reverseReplayPostconditionGateCountsDistinctResurrectedIdsInTheReplaysWindowAndFullKey() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var otherProjectId = ID_GENERATOR.generateId();
+
+        // Exact-count ids throughout (mintIds is per-week), so every expected number below is self-evident.
+        // Deleted, bridged, then recreated — all BEFORE the cutover line. It is legitimately live, and its bridge event
+        // is outside the replay's window, so the gate must not mistake it for a resurrection the replay missed.
+        var preWindow = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(preWindow, workspaceId, projectId);
+        recordDeletionEvents(idStrings(preWindow), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(idStrings(preWindow), workspaceId, projectId);
+        insertRows(preWindow, workspaceId, projectId, "recreated", _ -> Instant.now());
+
+        var cutoverStart = nowMicros();
+
+        assertThat(liveCount("traces", idStrings(preWindow), workspaceId))
+                .as("negative control: the pre-window row is live again after being recreated")
+                .isEqualTo(1);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("a live row bridged before cutover_start is outside the replay's window, so the gate reports 0")
+                .isZero();
+
+        // A post-cutover delete the replay did NOT mask, given a second version so rows outnumber ids while it lasts.
+        // Nothing asserts on that multiplicity — a background merge may collapse it at any moment.
+        var resurrected = mintIdsAt(1, weekInstant(1, 1));
+        seedTraces(resurrected, workspaceId, projectId);
+        insertRows(resurrected, workspaceId, projectId, "updated", _ -> Instant.now());
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
+
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("one resurrected id counts once, whether or not its two versions have merged")
+                .isEqualTo(1);
+
+        // A second bridge event for the same id must not double it either. Deterministic, unlike the versions above:
+        // it would fail a gate that joined the bridge instead of matching against it as a set.
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("two bridge events for one id count once, not per event")
+                .isEqualTo(1);
+
+        // The passing case: the replay masks it, the gate clears.
+        reverseReplay(cutoverStart);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("after the replay masks the bridged delete, the gate reports 0")
+                .isZero();
+
+        // Full-key scope: id reused across projects, bridged and masked in one, alive in the other.
+        var reused = mintIdsAt(1, weekInstant(2, 1));
+        seedTraces(reused, workspaceId, projectId);
+        seedTraces(reused, workspaceId, otherProjectId);
+        recordDeletionEvents(idStrings(reused), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(idStrings(reused), workspaceId, projectId);
+
+        assertThat(liveCount("traces", idStrings(reused), workspaceId))
+                .as("negative control: the reused id is still live under the other project")
+                .isEqualTo(1);
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("a live row under a project the bridge never named is not a resurrection")
+                .isZero();
+    }
+
+    /**
      * rollback.sh refuses a wrong-stage run by reading two signals off the live {@code traces} — its engine and its
      * {@code end_time} nullability — and aborting unless they match the requested stage (the guard that stops a stage-A
      * {@code TRUNCATE} from destroying the parked original once the EXCHANGE has run). This drives the DB through the
@@ -1597,6 +1683,42 @@ class TracesLocalV2CutoverTest {
                 statement.bind("deleted_id" + i, idList.get(i));
             }
         });
+    }
+
+    /**
+     * The reverse-replay postcondition, mirroring {@code 000004_rollback_verify_replay.sql} — same key, same
+     * {@code toFixedString(36)} casts, same window and length guards, same aggregate, and the same database
+     * qualification on both tables. Kept in step with that file; its {@code log_comment} is the one omission, being
+     * observability rather than semantics, as elsewhere in this class.
+     *
+     * <p>The qualification is deliberate, not boilerplate: this is the only statement in the runbook that reads through
+     * {@code clusterAllReplicas}, so qualifying both the outer table and the {@code IN} subquery keeps it correct
+     * regardless of the connecting session's default database. A single-node container cannot show that.
+     */
+    private long verifyReplayPostcondition(String cutoverStart) {
+        var sql = """
+                SELECT uniqExact(workspace_id, project_id, id) AS resurrected
+                FROM clusterAllReplicas('{cluster}', %s.traces)
+                WHERE (workspace_id, project_id, id) IN (
+                    SELECT
+                        workspace_id,
+                        toFixedString(project_id, 36),
+                        toFixedString(deleted_id, 36)
+                    FROM %s.deletion_events_local
+                    WHERE source_table = 'traces'
+                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND project_id != ''
+                      AND length(project_id) = 36
+                      AND length(deleted_id) = 36
+                )
+                """.formatted(DATABASE_NAME, DATABASE_NAME);
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("cutover_start", cutoverStart)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
+                .block();
     }
 
     // --- query helpers -------------------------------------------------------------------------------------------

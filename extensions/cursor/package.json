@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
@@ -76,6 +76,26 @@
         }
       },
       {
+        "title": "Detailed Spans",
+        "properties": {
+          "opik.detailedSpans.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Log every step of a Cursor turn as a nested span: one `llm` span per model call, one `tool` span per tool call, and a `general` span for each Cursor error. Turn this off to log only the question and the answer."
+          },
+          "opik.detailedSpans.maxPayloadChars": {
+            "type": "number",
+            "default": 10000,
+            "markdownDescription": "Maximum size of the input and the output of a single span, in characters. Larger payloads keep their start and their end, and the middle is replaced by a marker."
+          },
+          "opik.detailedSpans.maxSpansPerTurn": {
+            "type": "number",
+            "default": 200,
+            "markdownDescription": "Maximum number of child spans for a single turn. Above this number the first and the last spans are kept, and a `truncated-steps` span records how many were dropped."
+          }
+        }
+      },
+      {
         "title": "Advanced",
         "properties": {
           "opik.enableDebugLogs": {
@@ -99,7 +119,8 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "verify-usage": "node scripts/verify-usage.js"
+    "verify-usage": "node scripts/verify-usage.js",
+    "test-spans": "node --test scripts/test-spans.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
