@@ -215,9 +215,25 @@ describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
     ).toBeUndefined();
   });
 
-  it("leaves parameters untouched when no level is selected", () => {
+  // The control shows the model's default even when the config holds no level, so the request has
+  // to carry that same default rather than silently falling back to the provider's own.
+  it("sends the model's default when the config holds no level", () => {
     const config = convertFormDataToStudioConfig(
       formData({ temperature: 0.5 }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      custom_parameters: { thinking: { level: "off" } },
+    });
+  });
+
+  it("adds nothing for a model without thinking support", () => {
+    const config = convertFormDataToStudioConfig(
+      {
+        ...formData({ temperature: 0.5 }),
+        modelName: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      } as unknown as OptimizationConfigFormType,
       "my-dataset",
     );
 

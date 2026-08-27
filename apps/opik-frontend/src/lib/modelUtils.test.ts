@@ -755,6 +755,31 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     });
   });
 
+  // A prompt persisted before the level control existed has no thinkingLevel, and the playground
+  // only reconciles configs on a model change — so nothing fills it in. The dropdown still displays
+  // the model default, so the request has to send it or the two disagree.
+  it("sends the model's default for a prompt persisted without a level", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "off" } });
+
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "medium" } });
+  });
+
+  it("adds no thinking block for models without a level control", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
   it("drops a level the model does not accept rather than sending it", () => {
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_PRO, {
       thinkingLevel: "off",

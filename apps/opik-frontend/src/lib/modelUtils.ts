@@ -478,8 +478,15 @@ export const sanitizeConfigForRequest = (
   // custom_parameters — the only free-form slot the request actually captures. This holds for
   // every caller: the playground proxy, experiment runs, and the optimizer, which all render the
   // same Gemini config panel and reach the model through the same request shape.
-  if (sanitized.thinkingLevel != null) {
-    const level = sanitized.thinkingLevel as GeminiThinkingLevel;
+  const thinkingLevelOptions = getThinkingLevelOptions(model);
+
+  if (sanitized.thinkingLevel != null || thinkingLevelOptions.length > 0) {
+    // Fall back to the model's default when the config holds no level. The control displays that
+    // same default, so without this a prompt persisted before the level existed shows one value and
+    // sends none — the reconciler only fills the config in on a model change, and a stored prompt
+    // whose model is still valid is never reconciled at all.
+    const level = (sanitized.thinkingLevel ??
+      getDefaultThinkingLevel(model)) as GeminiThinkingLevel;
 
     // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
     // level, so leaving it on the payload can only be dead weight.
@@ -487,7 +494,7 @@ export const sanitizeConfigForRequest = (
 
     // Only fold it in when the model actually accepts that level — a stale selection left over
     // from another model (say "off" carried onto Gemini 3) would otherwise be rejected upstream.
-    if (getThinkingLevelOptions(model).some((o) => o.value === level)) {
+    if (thinkingLevelOptions.some((o) => o.value === level)) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
       // Merge into any existing thinking block rather than replacing it — the backend also reads
