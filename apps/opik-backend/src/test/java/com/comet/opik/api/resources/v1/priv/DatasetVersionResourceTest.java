@@ -5782,6 +5782,20 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BoundedPageReads {
 
+        /**
+         * Sorts ahead of any generated id under {@code ORDER BY dataset_item_id DESC}, so a backdated item
+         * wrongly admitted by phase 1 necessarily consumes the first slot of the requested page.
+         */
+        private static final String BACKDATED_ITEM_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+
+        /** Item-level vs snapshot-row metadata for the alias-binding fixture; every pair differs. */
+        private static final String DIVERGENT_ITEM_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+        private static final String DIVERGENT_ROW_ID = "11111111-1111-1111-1111-111111111111";
+        private static final String ITEM_LEVEL_USER = "item-level-user";
+        private static final String ROW_LEVEL_USER = "row-level-user";
+        private static final String ITEM_LEVEL_TIME = "2020-01-01 00:00:00";
+        private static final String ROW_LEVEL_TIME = "2039-01-01 00:00:00";
+
         private void createTaggedItems(UUID datasetId, int count, String tag) {
             var items = IntStream.range(0, count)
                     .mapToObj(i -> DatasetItem.builder()
@@ -5903,6 +5917,294 @@ class DatasetVersionResourceTest {
                     .as("paging through the version must visit every item exactly once")
                     .hasSize(25)
                     .doesNotHaveDuplicates();
+        }
+
+        /**
+         * Inserts one extra item into a version whose authoring time is backdated while its snapshot row is
+         * written now, so {@code item_created_at} and the physical {@code created_at} diverge by years.
+         * <p>
+         * Versioning produces this naturally: a snapshot taken today carries rows whose {@code created_at} is
+         * today while the items themselves were authored earlier. On production one version showed a 6.4-day
+         * gap. The divergence is what makes alias binding observable: a {@code created_at} filter selects
+         * different items depending on whether it binds to the item's time or the row's.
+         */
+        private void addBackdatedItem(UUID datasetId, UUID versionId, String tag) {
+            String sql = """
+                    INSERT INTO dataset_item_versions
+                        (id, dataset_item_id, dataset_id, dataset_version_id, data, source,
+                         item_created_at, item_last_updated_at, item_created_by, item_last_updated_by,
+                         created_at, last_updated_at, created_by, last_updated_by, workspace_id)
+                    SELECT
+                        toString(generateUUIDv4()),
+                        :backdated_item_id,
+                        :dataset_id,
+                        :version_id,
+                        map('tag', :tag),
+                        'sdk',
+                        toDateTime64('2020-01-01 00:00:00', 9, 'UTC'),
+                        toDateTime64('2020-01-01 00:00:00', 9, 'UTC'),
+                        '', '',
+                        now64(9), now64(9),
+                        '', '',
+                        :workspace_id
+                    """;
+
+            clickHouseTemplate.nonTransaction(connection -> {
+                Statement statement = connection.createStatement(sql)
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .bind("backdated_item_id", BACKDATED_ITEM_ID)
+                        .bind("tag", "\"" + tag + "\"")
+                        .bind("workspace_id", WORKSPACE_ID);
+
+                Mono<? extends Result> result = Mono.from(statement.execute());
+                return result;
+            }).block();
+        }
+
+        @Test
+        @DisplayName("A created_at filter binds to the item's authoring time, not the snapshot row's")
+        void createdAtFilter__bindsToItemAuthoringTime__notTheSnapshotRow() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 3, "recent");
+            var version = getLatestVersion(datasetId);
+
+            // One extra item authored in 2020 but snapshotted into this version just now.
+            addBackdatedItem(datasetId, version.id(), "backdated");
+
+            // Cutoff sits between the two: after the backdated item's authoring time, before its row time.
+            var filter = new DatasetItemFilter(DatasetItemField.CREATED_AT, Operator.GREATER_THAN, null,
+                    "2021-01-01T00:00:00Z");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("size", 3, "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            var tags = page.content().stream()
+                    .map(item -> item.data().get("tag").asText())
+                    .toList();
+
+            assertThat(tags)
+                    .as("no returned row may fail the filter")
+                    .noneMatch(tag -> tag.contains("backdated"));
+
+            assertThat(tags)
+                    .as("""
+                            The filter must bind to item_created_at, which the projection aliases. If phase 1 \
+                            omits that alias the predicate binds to the snapshot row's physical created_at, so \
+                            phase 1 admits the backdated item and spends the first slot of the page on it. \
+                            Phase 2 re-filters correctly and drops it, leaving a SHORT page: two rows where \
+                            three matching items exist. That silent truncation, not a wrong row, is the \
+                            user-visible symptom.""")
+                    .hasSize(3)
+                    .allMatch(tag -> tag.contains("recent"));
+        }
+
+        /**
+         * Every field whose filter predicate is emitted as a bare column name that also exists physically on
+         * {@code dataset_item_versions}. ClickHouse binds {@code WHERE} to the {@code SELECT} alias, so each of
+         * these must resolve to the item-level column, never to the snapshot row's own column.
+         */
+        private Stream<Arguments> aliasedFilterFields() {
+            return Stream.of(
+                    Arguments.of(DatasetItemField.ID, Operator.EQUAL, DIVERGENT_ITEM_ID, true,
+                            "id binds to dataset_item_id"),
+                    Arguments.of(DatasetItemField.ID, Operator.EQUAL, DIVERGENT_ROW_ID, false,
+                            "id must not bind to the physical row id"),
+                    Arguments.of(DatasetItemField.CREATED_AT, Operator.LESS_THAN, "2030-01-01T00:00:00Z", true,
+                            "created_at binds to item_created_at"),
+                    Arguments.of(DatasetItemField.CREATED_AT, Operator.GREATER_THAN, "2030-01-01T00:00:00Z", false,
+                            "created_at must not bind to the row's created_at"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_AT, Operator.LESS_THAN, "2030-01-01T00:00:00Z", true,
+                            "last_updated_at binds to item_last_updated_at"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_AT, Operator.GREATER_THAN, "2030-01-01T00:00:00Z",
+                            false, "last_updated_at must not bind to the row's last_updated_at"),
+                    Arguments.of(DatasetItemField.CREATED_BY, Operator.EQUAL, ITEM_LEVEL_USER, true,
+                            "created_by binds to item_created_by"),
+                    Arguments.of(DatasetItemField.CREATED_BY, Operator.EQUAL, ROW_LEVEL_USER, false,
+                            "created_by must not bind to the row's created_by"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_BY, Operator.EQUAL, ITEM_LEVEL_USER, true,
+                            "last_updated_by binds to item_last_updated_by"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_BY, Operator.EQUAL, ROW_LEVEL_USER, false,
+                            "last_updated_by must not bind to the row's last_updated_by"));
+        }
+
+        /**
+         * Adds one item whose item-level metadata differs from its snapshot row's metadata in every aliased
+         * column, so a filter that binds to the wrong side is always observable.
+         */
+        private void addItemWithDivergentRowMetadata(UUID datasetId, UUID versionId) {
+            String sql = """
+                    INSERT INTO dataset_item_versions
+                        (id, dataset_item_id, dataset_id, dataset_version_id, data, source,
+                         item_created_at, item_last_updated_at, item_created_by, item_last_updated_by,
+                         created_at, last_updated_at, created_by, last_updated_by, workspace_id)
+                    SELECT
+                        :row_id, :item_id, :dataset_id, :version_id,
+                        map('tag', '"divergent"'), 'sdk',
+                        toDateTime64(:item_time, 9, 'UTC'), toDateTime64(:item_time, 9, 'UTC'),
+                        :item_user, :item_user,
+                        toDateTime64(:row_time, 9, 'UTC'), toDateTime64(:row_time, 9, 'UTC'),
+                        :row_user, :row_user,
+                        :workspace_id
+                    """;
+
+            clickHouseTemplate.nonTransaction(connection -> {
+                Statement statement = connection.createStatement(sql)
+                        .bind("row_id", DIVERGENT_ROW_ID)
+                        .bind("item_id", DIVERGENT_ITEM_ID)
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .bind("item_time", ITEM_LEVEL_TIME)
+                        .bind("row_time", ROW_LEVEL_TIME)
+                        .bind("item_user", ITEM_LEVEL_USER)
+                        .bind("row_user", ROW_LEVEL_USER)
+                        .bind("workspace_id", WORKSPACE_ID);
+
+                Mono<? extends Result> result = Mono.from(statement.execute());
+                return result;
+            }).block();
+        }
+
+        @ParameterizedTest(name = "{4}")
+        @MethodSource("aliasedFilterFields")
+        @DisplayName("Filters bind to item-level columns, not the snapshot row's")
+        void filters__bindToItemLevelColumns(DatasetItemField field, Operator operator, String value,
+                boolean expectPresent, String scenario) {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 2, "recent");
+            var version = getLatestVersion(datasetId);
+            addItemWithDivergentRowMetadata(datasetId, version.id());
+
+            var filter = new DatasetItemFilter(field, operator, null, value);
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("size", 20, "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            var ids = page.content().stream().map(item -> item.id().toString()).toList();
+
+            if (expectPresent) {
+                assertThat(ids).as(scenario).contains(DIVERGENT_ITEM_ID);
+            } else {
+                assertThat(ids).as(scenario).doesNotContain(DIVERGENT_ITEM_ID);
+            }
+
+            assertThat((long) page.content().size())
+                    .as("""
+                            %s: the page's total must be computed with the same filter semantics as its rows. \
+                            The count query resolves the same bare column names, so if it lacks the item-level \
+                            aliases the endpoint reports a total the rows cannot account for -- measured on \
+                            production as one row against a total of 176.""".formatted(scenario))
+                    .isEqualTo(page.total());
+        }
+
+        @Test
+        @DisplayName("Cursor pagination walks the whole version exactly once, in descending id order")
+        void cursorPagination__visitsEveryItemOnce() {
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 30);
+
+            var seen = new ArrayList<UUID>();
+            UUID cursor = null;
+            for (int guard = 0; guard < 10; guard++) {
+                var request = DatasetItemStreamRequest.builder()
+                        .datasetName(datasetName)
+                        .lastRetrievedId(cursor)
+                        .steamLimit(7)
+                        .build();
+
+                var batch = datasetResourceClient.streamDatasetItems(request, API_KEY, TEST_WORKSPACE);
+                if (batch.isEmpty()) {
+                    break;
+                }
+                assertThat(batch)
+                        .as("each cursor batch must be ordered by id descending")
+                        .isSortedAccordingTo(
+                                Comparator.comparing((DatasetItem item) -> item.id().toString()).reversed());
+                batch.forEach(item -> seen.add(item.id()));
+                cursor = batch.getLast().id();
+            }
+
+            assertThat(seen)
+                    .as("cursor pagination must not skip or repeat items across batches")
+                    .hasSize(30)
+                    .doesNotHaveDuplicates();
+        }
+
+        @Test
+        @DisplayName("Filtered pages are disjoint and cover exactly the matching items")
+        void filteredPages__areDisjointAndComplete() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 12, "keep");
+            createTaggedItems(datasetId, 8, "drop");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "keep");
+            var seen = new ArrayList<UUID>();
+            for (int page = 1; page <= 3; page++) {
+                var content = datasetResourceClient.getDatasetItems(
+                        datasetId,
+                        Map.of("page", page, "size", 5,
+                                "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                        API_KEY, TEST_WORKSPACE).content();
+                content.forEach(item -> seen.add(item.id()));
+            }
+
+            assertThat(seen)
+                    .as("paging a filtered result must visit each matching item exactly once")
+                    .hasSize(12)
+                    .doesNotHaveDuplicates();
+        }
+
+        @Test
+        @DisplayName("A filter matching nothing returns an empty page, not the unfiltered one")
+        void filterMatchingNothing__returnsEmptyPage() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 5, "keep");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "no-such-tag");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(page.content()).isEmpty();
+            assertThat(page.total()).isZero();
+        }
+
+        @Test
+        @DisplayName("An offset past the end returns an empty page")
+        void offsetPastTheEnd__returnsEmptyPage() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId, 100, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE);
+
+            assertThat(page.content()).isEmpty();
+            assertThat(page.total()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("truncate=true combined with a filter still returns the matching page")
+        void truncateWithFilter__returnsMatchingPage() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 6, "keep");
+            createTaggedItems(datasetId, 4, "drop");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "keep");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("size", 10, "truncate", true,
+                            "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(page.content()).hasSize(6);
+            assertThat(page.content())
+                    .allSatisfy(item -> assertThat(item.data().get("tag").asText()).contains("keep"));
         }
 
         @Test

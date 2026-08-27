@@ -427,7 +427,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Truncation stays in phase 2 so the image regex runs over the page instead of the whole version.
      * <p>
      * Three invariants hold this together. Each one broke a draft of this query, and each has a regression test
-     * in {@code DatasetItemVersionPaginationTest}:
+     * in {@code DatasetItemVersionQueryShapeTest}:
      * <ol>
      *   <li>Both phases order by {@code dataset_item_id DESC} first. A mismatch reorders the page.</li>
      *   <li>The ordering's leading key, {@code dataset_item_id}, is unique per output row after
@@ -439,18 +439,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      *   <li>Phase 2 repeats {@code dataset_item_filters}. Without it, an id selected in phase 1 via a superseded
      *       row that matches the filter resolves in phase 2 to the newest row for that id, which may not match,
      *       returning rows the caller filtered out.</li>
+     *   <li>Phase 1 projects the same aliases as phase 2. ClickHouse binds {@code WHERE} and {@code ORDER BY} to
+     *       {@code SELECT} aliases, and the dataset item filters emit bare {@code id}, {@code created_at},
+     *       {@code last_updated_at}, {@code created_by} and {@code last_updated_by}. Drop the aliases and those
+     *       predicates bind to this table's physical columns instead: on a version whose rows were snapshotted
+     *       long after the items were authored, a {@code created_at} filter returned 175 items where the correct
+     *       answer was 0.</li>
      * </ol>
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
             WITH page AS (
-                SELECT dataset_item_id
+                SELECT
+                    dataset_item_id,
+                    -- Same aliases as phase 2's projection. ClickHouse resolves WHERE and ORDER BY
+                    -- against SELECT aliases, and the dataset item filters emit bare `id`,
+                    -- `created_at`, `last_updated_at`, `created_by` and `last_updated_by`. Without
+                    -- these aliases those predicates would bind to the physical columns of
+                    -- dataset_item_versions instead -- a different row id and different timestamps --
+                    -- so a filtered page would silently select the wrong items.
+                    dataset_item_id AS id,
+                    item_created_at AS created_at,
+                    item_last_updated_at AS last_updated_at,
+                    item_created_by AS created_by,
+                    item_last_updated_by AS last_updated_by
                 FROM dataset_item_versions
                 WHERE dataset_id = :datasetId
                 AND dataset_version_id = :versionId
                 AND workspace_id = :workspace_id
                 <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
                 <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-                ORDER BY dataset_item_id DESC, item_last_updated_at DESC
+                ORDER BY dataset_item_id DESC, last_updated_at DESC
                 LIMIT 1 BY dataset_item_id
                 <if(lastRetrievedId)>
                 LIMIT :limit
@@ -484,13 +502,37 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             LIMIT 1 BY dataset_item_id
             """;
 
+    /**
+     * Counts the items a page request would return.
+     * <p>
+     * The subquery exists to put the item-level aliases in scope before the filters are applied. ClickHouse
+     * binds {@code WHERE} to {@code SELECT} aliases, and the dataset item filters emit bare {@code id},
+     * {@code created_at}, {@code last_updated_at}, {@code created_by} and {@code last_updated_by} — all of
+     * which also exist physically on this table with different meanings. Counting against the physical columns
+     * while {@code SELECT_DATASET_ITEM_VERSIONS} selects rows against the item-level ones made the two
+     * disagree: on a version whose rows were snapshotted long after the items were authored, a
+     * {@code created_at} filter returned one row while reporting a total of 176.
+     * <p>
+     * {@code * EXCEPT} keeps every other column in scope so filters on {@code data}, {@code source},
+     * {@code tags}, {@code trace_id} and {@code span_id} still resolve. It costs nothing: ClickHouse prunes
+     * the unread payload through the wrapper, and the read is byte-identical to the unwrapped form.
+     */
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
             SELECT count(DISTINCT dataset_item_id) as count
-            FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND workspace_id = :workspace_id
-            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            FROM (
+                SELECT
+                    * EXCEPT (id, created_at, last_updated_at, created_by, last_updated_by),
+                    dataset_item_id AS id,
+                    item_created_at AS created_at,
+                    item_last_updated_at AS last_updated_at,
+                    item_created_by AS created_by,
+                    item_last_updated_by AS last_updated_by
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            )
             """;
 
     private static final String DELETE_ITEMS_FROM_VERSION = """

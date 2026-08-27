@@ -57,9 +57,11 @@ class DatasetItemVersionQueryShapeTest {
 
         assertThat(BARE_DATA_COLUMN.matcher(phaseOne).find())
                 .as("""
-                        phase 1 must not reference the 'data' column. Pulling the payload into the phase that \
-                        sorts is exactly the OPIK-8109 regression: peak memory then scales with the version's \
-                        total payload instead of the page size.""")
+                        phase 1's own projection must not reference the 'data' column. Pulling the payload into \
+                        the phase that sorts is exactly the OPIK-8109 regression: peak memory then scales with \
+                        the version's total payload instead of the page size. Note this asserts the template: a \
+                        caller filtering on DATA or FULL_DATA still expands to 'data' inside \
+                        <dataset_item_filters>, which streams the payload without sorting it.""")
                 .isFalse();
 
         assertThat(BARE_DATA_COLUMN.matcher(phaseTwo).find())
@@ -90,6 +92,26 @@ class DatasetItemVersionQueryShapeTest {
     void invariantTwo__leadingSortKeyIsUniquePerRow() {
         assertThat(phaseOne).contains("LIMIT 1 BY dataset_item_id");
         assertThat(phaseTwo).contains("LIMIT 1 BY dataset_item_id");
+    }
+
+    @Test
+    @DisplayName("invariant 4: phase 1 projects the aliases the filters bind to")
+    void invariantFour__phaseOneProjectsFilterVisibleAliases() {
+        // FilterQueryBuilder emits bare column names for these fields, and ClickHouse binds WHERE to
+        // SELECT aliases. Phase 1 must therefore alias them exactly as phase 2 does, or a filtered page
+        // silently selects on this table's physical columns instead.
+        assertThat(phaseOne)
+                .contains("dataset_item_id AS id")
+                .contains("item_created_at AS created_at")
+                .contains("item_last_updated_at AS last_updated_at")
+                .contains("item_created_by AS created_by")
+                .contains("item_last_updated_by AS last_updated_by");
+    }
+
+    @Test
+    @DisplayName("both phases order by the same expression, so tied rows cannot diverge")
+    void orderBy__isTextuallyIdenticalAcrossPhases() {
+        assertThat(orderByOf(phaseOne)).isEqualTo(orderByOf(phaseTwo));
     }
 
     @Test
