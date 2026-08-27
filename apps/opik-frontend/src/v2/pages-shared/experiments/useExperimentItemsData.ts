@@ -80,7 +80,7 @@ const useExperimentItemsData = ({
       filters,
       sorting,
       search,
-      truncate,
+      truncate: false,
       page,
       size,
     },
