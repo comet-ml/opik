@@ -330,8 +330,17 @@ public class DatasetVersioningMigrationService {
 
                     return Mono.<Void>fromCallable(() -> {
                         template.inTransaction(WRITE, handle -> {
-                            handle.attach(DatasetVersionDAO.class)
+                            int updated = handle.attach(DatasetVersionDAO.class)
                                     .updateItemsTotal(workspaceId, versionId, count);
+
+                            if (updated == 0) {
+                                // The backfill only writes rows still holding the sentinel. Zero rows means an
+                                // API write already incremented this version from a real baseline, so its
+                                // counter is live and this (older) count would overwrite it with a stale value.
+                                log.info(
+                                        "Skipped items_total backfill for dataset '{}' version '{}': already migrated",
+                                        datasetId, versionId);
+                            }
                             return null;
                         });
                         return null;

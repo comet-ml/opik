@@ -606,7 +606,7 @@ public interface DatasetVersionDAO {
                 :version_id,
                 :dataset_id,
                 'v1',
-                0,
+                :items_total_not_migrated,
                 0,
                 0,
                 0,
@@ -627,7 +627,20 @@ public interface DatasetVersionDAO {
             """)
     int ensureVersion1Exists(@Bind("dataset_id") UUID datasetId,
             @Bind("version_id") UUID versionId,
-            @Bind("workspace_id") String workspaceId);
+            @Bind("workspace_id") String workspaceId,
+            @Bind("items_total_not_migrated") int itemsTotalNotMigrated);
+
+    /**
+     * Creates v1 for a lazily-migrated dataset, seeding {@code items_total} with
+     * {@link #ITEMS_TOTAL_NOT_MIGRATED} rather than {@code 0}.
+     * <p>
+     * The row is created before its items are counted, so a literal {@code 0} would be indistinguishable from a
+     * genuinely empty version: {@link #updateItemsTotal} would refuse to write the real count, and the batch
+     * backfill would never select the row. Seeding the sentinel keeps both paths able to fix it.
+     */
+    default int ensureVersion1Exists(UUID datasetId, UUID versionId, String workspaceId) {
+        return ensureVersion1Exists(datasetId, versionId, workspaceId, ITEMS_TOTAL_NOT_MIGRATED);
+    }
 
     /**
      * Backfills {@code items_total} for a version that has not been migrated yet.
