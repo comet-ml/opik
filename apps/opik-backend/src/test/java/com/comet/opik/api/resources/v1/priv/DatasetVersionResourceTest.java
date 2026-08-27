@@ -55,11 +55,14 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesServic
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Statement;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -75,12 +78,14 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -156,6 +161,7 @@ class DatasetVersionResourceTest {
     private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
     private ExperimentAggregatesService experimentAggregatesService;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
@@ -171,6 +177,7 @@ class DatasetVersionResourceTest {
         traceResourceClient = new TraceResourceClient(client, baseURI);
         spanResourceClient = new SpanResourceClient(client, baseURI);
         experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
+        clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
     }
 
     @AfterAll
@@ -5769,4 +5776,150 @@ class DatasetVersionResourceTest {
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
         }
     }
+
+    @Nested
+    @DisplayName("Page reads bounded by page size (OPIK-8109):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BoundedPageReads {
+
+        private void createTaggedItems(UUID datasetId, int count, String tag) {
+            var items = IntStream.range(0, count)
+                    .mapToObj(i -> DatasetItem.builder()
+                            .id(null)
+                            .source(DatasetItemSource.MANUAL)
+                            .data(Map.of(
+                                    "tag", JsonUtils.readTree("\"" + tag + "\""),
+                                    "input", JsonUtils.readTree("\"row-" + i + "\"")))
+                            .build())
+                    .toList();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build(), TEST_WORKSPACE, API_KEY);
+        }
+
+        /**
+         * Adds a second, newer physical row for every item in a version, with {@code data['tag']} rewritten.
+         * <p>
+         * The engine's deduplication key is {@code (workspace_id, dataset_id, dataset_version_id, id)}, so two
+         * rows sharing a {@code dataset_item_id} but holding different physical {@code id}s are never collapsed
+         * by a merge. That is exactly why the read deduplicates with {@code LIMIT 1 BY dataset_item_id} rather
+         * than by {@code id}, and it is the only state in which the two-phase read's filter handling is
+         * observable: with the filter applied only when resolving the page's ids, the superseding row is what
+         * gets returned.
+         */
+        private void addSupersedingRow(UUID datasetId, UUID versionId, String newTag) {
+            String sql = """
+                    INSERT INTO dataset_item_versions
+                        (id, dataset_item_id, dataset_id, dataset_version_id, data, source,
+                         item_created_at, item_last_updated_at, item_created_by, item_last_updated_by,
+                         created_at, last_updated_at, created_by, last_updated_by, workspace_id)
+                    SELECT
+                        toString(generateUUIDv4()),
+                        dataset_item_id,
+                        dataset_id,
+                        dataset_version_id,
+                        mapUpdate(data, map('tag', :new_tag)),
+                        source,
+                        item_created_at,
+                        item_last_updated_at + toIntervalSecond(60),
+                        item_created_by,
+                        item_last_updated_by,
+                        created_at,
+                        last_updated_at + toIntervalSecond(60),
+                        created_by,
+                        last_updated_by,
+                        workspace_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :dataset_id
+                    AND dataset_version_id = :version_id
+                    """;
+
+            clickHouseTemplate.nonTransaction(connection -> {
+                Statement statement = connection.createStatement(sql)
+                        .bind("new_tag", "\"" + newTag + "\"")
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .bind("workspace_id", WORKSPACE_ID);
+
+                Mono<? extends Result> result = Mono.from(statement.execute());
+                return result;
+            }).block();
+        }
+
+        @Test
+        @DisplayName("Filtered page never returns a row that fails the filter, even when a newer row supersedes it")
+        void filteredPage__whenSupersedingRowFailsTheFilter__thenItIsNotReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 3, "keep");
+            var version = getLatestVersion(datasetId);
+
+            // Two rows per item now: the original tagged "keep", and a newer one tagged "superseded".
+            addSupersedingRow(datasetId, version.id(), "superseded");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "keep");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content())
+                    .as("""
+                            Filters are applied before deduplication, so a filtered page only ever contains rows \
+                            that match. If phase 2 of the two-phase read omits the filters, the id is selected \
+                            from the matching older row but resolved to the newer one, and the caller receives \
+                            rows it filtered out.""")
+                    .allSatisfy(item -> assertThat(item.data().get("tag").asText())
+                            .contains("keep")
+                            .doesNotContain("superseded"));
+        }
+
+        @Test
+        @DisplayName("Pages are ordered by id descending and disjoint across the whole version")
+        void pages__areOrderedAndDisjoint() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 25);
+
+            var seen = new ArrayList<UUID>();
+            for (int page = 1; page <= 3; page++) {
+                var content = datasetResourceClient.getDatasetItems(
+                        datasetId, page, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+                assertThat(content)
+                        .as("page %d must be ordered by id descending, matching the query's leading sort key",
+                                page)
+                        .isSortedAccordingTo(
+                                Comparator.comparing((DatasetItem item) -> item.id().toString()).reversed());
+
+                content.forEach(item -> seen.add(item.id()));
+            }
+
+            assertThat(seen)
+                    .as("paging through the version must visit every item exactly once")
+                    .hasSize(25)
+                    .doesNotHaveDuplicates();
+        }
+
+        @Test
+        @DisplayName("truncate=true returns the page, since truncation runs over the page not the version")
+        void truncatedPage__isReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("page", 1, "size", 3, "truncate", true),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(page.content()).hasSize(3);
+            assertThat(page.total()).isEqualTo(5);
+        }
+    }
+
 }

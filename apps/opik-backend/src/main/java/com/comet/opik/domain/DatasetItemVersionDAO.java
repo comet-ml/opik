@@ -413,7 +413,51 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_item_id IN :itemIds
             """;
 
+    /**
+     * Reads one page of a dataset version.
+     * <p>
+     * Resolved in two phases so the wide {@code data} column never enters a sort. The table's ordering key is
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}, so ordering by {@code dataset_item_id} cannot
+     * use {@code optimize_read_in_order} and forces a full blocking sort over the whole version. Carrying
+     * {@code data} through that sort makes peak memory scale with the version's total payload rather than with
+     * the page size: a 120k-item version at ~138 KiB per item peaked at 30 GiB and returned 500 (OPIK-8109).
+     * <p>
+     * Phase 1 resolves the page's {@code dataset_item_id}s from narrow columns only; phase 2 fetches the payload
+     * for just those ids, served by the {@code dataset_item_id} skip indexes from migration {@code 000074}.
+     * Truncation stays in phase 2 so the image regex runs over the page instead of the whole version.
+     * <p>
+     * Three invariants hold this together. Each one broke a draft of this query, and each has a regression test
+     * in {@code DatasetItemVersionPaginationTest}:
+     * <ol>
+     *   <li>Both phases order by {@code dataset_item_id DESC} first. A mismatch reorders the page.</li>
+     *   <li>The ordering's leading key, {@code dataset_item_id}, is unique per output row after
+     *       {@code LIMIT 1 BY dataset_item_id}, so the page order is fully determined and the trailing
+     *       timestamp only picks a winner among duplicate rows for the same id. If custom sorting is ever
+     *       added here, the sort must still <em>end</em> in {@code dataset_item_id}: with a non-unique sort
+     *       key and no unique tiebreak, the two phases sort different column sets and can order tied rows
+     *       differently.</li>
+     *   <li>Phase 2 repeats {@code dataset_item_filters}. Without it, an id selected in phase 1 via a superseded
+     *       row that matches the filter resolves in phase 2 to the newest row for that id, which may not match,
+     *       returning rows the caller filtered out.</li>
+     * </ol>
+     */
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
+            WITH page AS (
+                SELECT dataset_item_id
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
+                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+                ORDER BY dataset_item_id DESC, item_last_updated_at DESC
+                LIMIT 1 BY dataset_item_id
+                <if(lastRetrievedId)>
+                LIMIT :limit
+                <else>
+                LIMIT :limit OFFSET :offset
+                <endif>
+            )
             SELECT
                 dataset_item_id AS id,
                 dataset_id,
@@ -434,15 +478,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            AND dataset_item_id IN (SELECT dataset_item_id FROM page)
             ORDER BY dataset_item_id DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
-            <if(lastRetrievedId)>
-            LIMIT :limit
-            <else>
-            LIMIT :limit OFFSET :offset
-            <endif>
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
