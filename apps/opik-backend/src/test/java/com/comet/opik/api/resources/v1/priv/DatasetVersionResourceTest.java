@@ -97,6 +97,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1665,6 +1666,10 @@ class DatasetVersionResourceTest {
             assertThat(latestVersion.id()).isEqualTo(version1.id()); // Same version ID
             assertThat(latestVersion.versionName()).isEqualTo("v1");
             assertThat(latestVersion.itemsTotal()).isEqualTo(4); // 5 - 1 = 4
+            // A delete moves total and deleted only; the added/modified counters from v1 stay put.
+            assertThat(latestVersion.itemsDeleted()).isEqualTo(1);
+            assertThat(latestVersion.itemsAdded()).isEqualTo(version1.itemsAdded());
+            assertThat(latestVersion.itemsModified()).isEqualTo(version1.itemsModified());
 
             // Verify only 4 items remain in the latest version
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
@@ -3828,6 +3833,9 @@ class DatasetVersionResourceTest {
             var version = getLatestVersion(datasetId);
             assertThat(version.itemsTotal()).isEqualTo(6);
             assertThat(version.itemsAdded()).isEqualTo(6);
+            // Appends of brand-new items move total and added only; nothing here is an update or a delete.
+            assertThat(version.itemsModified()).isZero();
+            assertThat(version.itemsDeleted()).isZero();
             assertThat(version.versionName()).isEqualTo("v1");
 
             // Verify items can be fetched
@@ -5434,6 +5442,214 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(latestItems).hasSize(1);
             assertThat(latestItems.getFirst().description()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Atomic version count updates (OPIK-7707):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AtomicVersionCountUpdates {
+
+        private int incrementCounts(UUID versionId, int total, int added, int modified, int deleted) {
+            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(versionId, total, added, modified, deleted, WORKSPACE_ID, USER));
+        }
+
+        private void awaitBarrier(CyclicBarrier barrier) {
+            try {
+                barrier.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            } catch (BrokenBarrierException | TimeoutException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: single-batch append accumulates the full counter triple")
+        void insertItems__whenAppendingToExistingVersion__thenCountersAccumulate() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var seed = getLatestVersion(datasetId);
+            assertThat(seed.itemsTotal()).isEqualTo(3);
+            assertThat(seed.itemsAdded()).isEqualTo(3);
+            assertThat(seed.itemsModified()).isZero();
+
+            // 2 brand-new items plus a re-send of an existing one: only the new items move itemsTotal.
+            var existingItem = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, seed.versionHash(), API_KEY, TEST_WORKSPACE).content().getFirst();
+            var items = new ArrayList<>(generateDatasetItems(2));
+            items.add(existingItem);
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated.id()).isEqualTo(seed.id());
+            assertThat(updated.itemsTotal()).isEqualTo(5); // 3 + 2 new (the update doesn't count)
+            assertThat(updated.itemsAdded()).isEqualTo(5);
+            assertThat(updated.itemsModified()).isEqualTo(1);
+            assertThat(updated.itemsDeleted()).isZero();
+        }
+
+        @Test
+        @DisplayName("Success: concurrent increments are exact without the per-dataset lock")
+        void incrementCounts__whenConcurrentWritersBypassTheLock__thenCountersAreExact() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Hit the DAO directly so withDatasetVersionLock is out of the picture entirely: this is what
+            // proves the arithmetic itself is atomic rather than merely serialized by the lock. The old
+            // read-modify-write would lose updates here.
+            int writers = 8;
+            int incrementsPerWriter = 25;
+
+            ExecutorService executor = Executors.newFixedThreadPool(writers);
+            CyclicBarrier barrier = new CyclicBarrier(writers);
+            try {
+                IntStream.range(0, writers)
+                        .mapToObj(i -> CompletableFuture.runAsync(() -> {
+                            awaitBarrier(barrier);
+                            for (int n = 0; n < incrementsPerWriter; n++) {
+                                incrementCounts(versionId, 1, 1, 2, 0);
+                            }
+                        }, executor))
+                        .toList()
+                        .forEach(CompletableFuture::join);
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            int expectedIncrements = writers * incrementsPerWriter;
+            var version = getLatestVersion(datasetId);
+            assertThat(version.itemsTotal()).isEqualTo(1 + expectedIncrements);
+            assertThat(version.itemsAdded()).isEqualTo(1 + expectedIncrements);
+            assertThat(version.itemsModified()).isEqualTo(2 * expectedIncrements);
+        }
+
+        @Test
+        @DisplayName("Success: NULL counters are treated as zero rather than staying NULL")
+        void incrementCounts__whenCountersAreNull__thenTreatedAsZero() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // The counter columns are `INT DEFAULT 0` -- nullable, since DEFAULT only applies when the
+            // column is omitted on INSERT. A bare `col + :delta` would leave NULL as NULL, which then
+            // unboxes to an NPE on the Integer-typed record. The absolute update this replaced happened
+            // to repair a NULL by overwriting it, so the increment has to COALESCE explicitly.
+            int nulled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = NULL, items_added = NULL, items_modified = NULL, items_deleted = NULL
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(nulled).isOne();
+
+            assertThat(incrementCounts(versionId, 3, 3, 1, 0)).isOne();
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded,
+                            DatasetVersion::itemsModified, DatasetVersion::itemsDeleted)
+                    .containsExactly(3, 3, 1, 0);
+        }
+
+        @Test
+        @DisplayName("Success: increment against an unknown version affects no rows")
+        void incrementCounts__whenVersionDoesNotExist__thenNoRowsAffected() {
+            assertThat(incrementCounts(UUID.randomUUID(), 1, 1, 0, 0)).isZero();
+        }
+
+        @Test
+        @DisplayName("Success: increment scoped to another workspace affects no rows")
+        void incrementCounts__whenVersionBelongsToAnotherWorkspace__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            var seed = getLatestVersion(datasetId);
+
+            // Real version id, wrong workspace: the workspace predicate must keep the update from matching, which is
+            // what lets both count-update helpers detect a missing/foreign version from the affected-row count alone.
+            int updated = mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(seed.id(), 1, 1, 0, 0, UUID.randomUUID().toString(), USER));
+
+            assertThat(updated).isZero();
+            assertThat(getLatestVersion(datasetId).itemsTotal()).isEqualTo(seed.itemsTotal());
+        }
+
+        @Test
+        @DisplayName("Success: a version left at the not-migrated sentinel is never incremented")
+        void incrementCounts__whenVersionHoldsNotMigratedSentinel__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Liquibase 000046 leaves pre-versioning datasets at items_total = -1 until the backfill runs, and
+            // findVersionsNeedingItemsTotalMigration selects on exactly that value. Adding a delta would both
+            // corrupt the counter and hide the row from the backfill forever, so the increment must skip it.
+            int sentinelled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(sentinelled).isOne();
+
+            assertThat(incrementCounts(versionId, 5, 5, 0, 0)).isZero();
+
+            // Still exactly the sentinel: untouched, so the backfill will still find it.
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
+        }
+
+        @Test
+        @DisplayName("Error: insert whose version is left at the sentinel surfaces 404, not a silent success")
+        void insertItems__whenCountUpdateMatchesNoRow__thenNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Reaching the `updated == 0` guard through the public API needs a version that still resolves as
+            // "latest" (so the insert appends rather than minting a new version) but that the count UPDATE
+            // refuses to match. The not-migrated sentinel is exactly that state: an un-backfilled version being
+            // written to before the migration job has reached it.
+            mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+
+            try (var response = datasetResourceClient.callCreateDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(1))
+                    .build(), TEST_WORKSPACE, API_KEY)) {
+
+                // Surfacing this beats the alternatives: silently dropping the counter update, or corrupting the
+                // sentinel so the backfill never reconciles the row.
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
         }
     }
 
