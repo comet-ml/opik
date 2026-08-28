@@ -12,12 +12,14 @@
 # is abandoned, no reverse-replay is needed, and no sentinel repair follows. Unlike stages B/C it does not need the
 # parked original, so it is the only wrap recovery left once finalize.sh has dropped it. It undoes SHARDING only: if the
 # successor itself is suspect, use stage B/C instead. See 000004_rollback_unwrap.sql.
-# Or --sentinel-repair-only: after a stage B/C promote, restore NULL on the rows written into the still-Nullable
-# original while traceColumnsNonNullable was true (they read back as an epoch/NaN sentinel, and its MATERIALIZED
-# duration computed a large negative from them). Kept separate from the stages rather than appended to them because the
-# flag revert must land on every backend FIRST — otherwise in-flight writes keep minting sentinels behind the repair —
-# and rolling out config is outside these DB-facing scripts. Skips the mutation when there is nothing to repair, so it
-# is safe to run speculatively. See 000004_rollback_sentinel_repair.sql.
+# Or --sentinel-repair-only: restore NULL on the rows written into the still-Nullable original while
+# traceColumnsNonNullable was true (they read back as an epoch/NaN sentinel, and its MATERIALIZED duration computed a
+# large negative from them). It covers BOTH windows that mint them: after a stage B/C promote, and after a cutover
+# abandoned before the EXCHANGE, which damages the live original just the same but has no promote to point at. Kept
+# separate from the stages rather than appended to them because the flag revert must land on every backend FIRST —
+# otherwise in-flight writes keep minting sentinels behind the repair — and rolling out config is outside these
+# DB-facing scripts. Skips the mutation when there is nothing to repair, so it is safe to run speculatively. See
+# 000004_rollback_sentinel_repair.sql.
 # Or --reverse-replay-only: re-apply just the reverse deletion replay against the current live `traces`. Use it when a
 # stage B/C run's promote succeeded but its reverse-replay was interrupted — the promote leaves `traces` in the restored
 # canonical shape, so re-running the stage is (correctly) rejected by the topology guard, which would otherwise strand
@@ -57,6 +59,13 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the next packet from the server before giving up
+#                             (SETTINGS receive_timeout). Default 1800, against ClickHouse's own 300. The sentinel
+#                             repair blocks on mutations_sync = 2 until every replica has applied a whole-table
+#                             rewrite, and that wait is unbounded server-side, so the client socket timeout is the
+#                             only limit on it. Under the stock 300 a healthy repair on a large table is reported as
+#                             a failure. The cost of a generous value is that a genuinely dead connection takes that
+#                             long to surface.
 #   --sentinel-repair-only    repair ONLY the epoch/NaN sentinels on the restored original (no promote, no replay, no
 #                             rename). Requires --confirm-flag-reverted. Mutually exclusive with --stage,
 #                             --reverse-replay-only and --unwrap-only.
@@ -92,6 +101,7 @@ UNWRAP_ONLY=0
 SENTINEL_REPAIR_ONLY=0
 CONFIRM_MAINTENANCE=0
 CONFIRM_FLAG_REVERTED=0
+RECEIVE_TIMEOUT=1800     # seconds tolerated between server packets, not total query time. See --receive-timeout.
 SENTINEL_CHECK_FAILED=0  # set by the sentinel postcondition; decides the exit code without cutting the guidance short
 
 while [[ $# -gt 0 ]]; do
@@ -106,6 +116,7 @@ while [[ $# -gt 0 ]]; do
         --sentinel-repair-only) SENTINEL_REPAIR_ONLY=1; shift ;;
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         --confirm-flag-reverted) CONFIRM_FLAG_REVERTED=1; shift ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -117,6 +128,7 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # Exactly one mode: --stage A|B|C, --reverse-replay-only, --unwrap-only, or --sentinel-repair-only.
 if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY + SENTINEL_REPAIR_ONLY > 1 )); then
@@ -203,8 +215,15 @@ if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$ACCEPT_WRITE_LOSS" != "1" ]]; 
     exit 2
 fi
 
+# One place for the connection and client-side options, so the call sites below cannot drift — in particular so
+# --receive-timeout covers the sentinel repair, whose mutations_sync = 2 wait is bounded only by this timeout.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
+
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_rollback' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_rollback' --query "$1"
 }
 
 # Single scalar (or empty string if the object does not exist). Used by the topology guards below.
@@ -274,6 +293,35 @@ assert_post_promote_state() {
     exit 1
 }
 
+# The sentinel repair accepts a SECOND shape the reverse replay must not, so it gets its own assertion rather than a
+# widened shared one. Both windows the runbook documents put sentinels in the still-Nullable original: the promote-to-
+# flag-revert window (post-rollback, above) AND the flip-to-EXCHANGE window — where the cutover may simply be abandoned,
+# leaving damaged rows with no promote to point at. What both states have in common is that a cutover was attempted
+# HERE, which is what separates a sentinel from an epoch a client genuinely sent; the disposable shadow is that evidence
+# in the pre-EXCHANGE case, and stage A leaves it in place (emptied) rather than dropping it.
+#
+# The reverse replay cannot accept this shape: it needs the promote to have happened, or it masks live rows.
+assert_sentinel_repair_state() {
+    local traces_end_time backup_end_time shadow
+    traces_end_time="$(traces_endtime_type traces)"
+    backup_end_time="$(traces_endtime_type traces_post_rollback_backup)"
+    shadow="$(traces_engine traces_local_v2)"
+    if [[ "$traces_end_time" == Nullable* ]] \
+        && { { [[ -n "$backup_end_time" && "$backup_end_time" != Nullable* ]]; } || [[ -n "$shadow" ]]; }; then
+        return 0
+    fi
+    echo "ERROR: --sentinel-repair-only needs 'traces' to be an ORIGINAL-schema table (Nullable end_time) in an estate" >&2
+    echo "       where a cutover was attempted — either the successor parked as 'traces_post_rollback_backup' with the" >&2
+    echo "       successor schema (after a stage B/C promote), or the disposable 'traces_local_v2' shadow still present" >&2
+    echo "       (the cutover was abandoned before the EXCHANGE)." >&2
+    echo "       Observed: traces end_time='$traces_end_time', traces_post_rollback_backup end_time='${backup_end_time:-<absent>}'," >&2
+    echo "                 traces_local_v2 engine='${shadow:-<absent>}'." >&2
+    echo "       Neither signal means an epoch end_time here is what a client sent, not a sentinel this flag minted, so" >&2
+    echo "       repairing would overwrite real data. If finalize.sh has already recycled the backup, resolve that" >&2
+    echo "       ordering deliberately: the repair belongs before finalize." >&2
+    exit 1
+}
+
 # The migration walks traces through three shapes; a stage is only valid in one of them:
 #   pre-EXCHANGE       -> traces is a *MergeTree with Nullable end_time (the original schema)      -> stage A
 #   post-EXCHANGE      -> traces is a *MergeTree with non-Nullable end_time (the successor schema) -> stage B
@@ -338,7 +386,7 @@ verify_replay_postcondition() {
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
-    resurrected="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --query "$sql")"
+    resurrected="$(clickhouse-client "${CH_ARGS[@]}" --query "$sql")"
     if [[ "$resurrected" == "0" ]]; then
         echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'traces'."
         return 0
@@ -361,12 +409,13 @@ verify_replay_postcondition() {
 
 # Same sourcing contract as run_file (versioned .sql, one placeholder here — it takes no cutover window). Returns the
 # three counts as one tab-separated line so the driver gates on them, instead of leaving numbers on a screen to read.
+# Called only inside a command substitution, so it must not try to report its own failures: an exit here ends the
+# subshell, not the script. The caller validates the file up front and treats unusable output as unverified.
 sentinel_counts() {
     local file="$SQL_DIR/000004_rollback_verify_sentinels.sql" sql
-    [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --query "$sql"
 }
 
 run_file() {
@@ -375,7 +424,7 @@ run_file() {
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Un-wrap mode: reverse the Distributed wrap and stop, leaving the partitioned successor live (see
@@ -494,11 +543,12 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "       definition that holds no rows. Roll the wrap back first with --stage C." >&2
         exit 1
     }
-    assert_post_promote_state "--sentinel-repair-only" \
-        "On the live successor the epoch/NaN values are the schema's own encoding of an absent value, not damage; on an" \
-        "original that never went through a cutover an epoch end_time is what a client actually sent. Only a completed" \
-        "promote tells those apart. If finalize.sh has already recycled the parked successor, this refusal is by design:" \
-        "the repair belongs before finalize, so resolve that ordering deliberately rather than around the guard."
+    # Validated here, not inside sentinel_counts: that function is only ever called in a command substitution, where an
+    # exit terminates the subshell and the caller reports it as an unreadable count, i.e. the wrong cause.
+    for sentinel_sql in 000004_rollback_sentinel_repair.sql 000004_rollback_verify_sentinels.sql; do
+        [[ -f "$SQL_DIR/$sentinel_sql" ]] || { echo "ERROR: cannot find $SQL_DIR/$sentinel_sql" >&2; exit 2; }
+    done
+    assert_sentinel_repair_state
     echo "NOTE: repairing epoch/NaN sentinels on the restored original. Nothing is promoted, replayed or renamed — this" >&2
     echo "      is one mutation on the table that is already live, and it recomputes 'duration' from the restored NULL." >&2
 
@@ -519,12 +569,16 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
 
     if ! run_file 000004_rollback_sentinel_repair.sql; then
         echo >&2
-        echo "ERROR: the sentinel repair did not complete. If ClickHouse reported ACCESS_DENIED, this is the expected" >&2
-        echo "       failure for a user scoped to the rollback grant set: it holds ALTER UPDATE(_row_exists) — all the" >&2
-        echo "       reverse replay needs — and this statement needs ALTER UPDATE(end_time) AND ALTER UPDATE(ttft) on" >&2
-        echo "       'traces'. It carries both commands in one mutation, so a missing grant on either applies neither;" >&2
-        echo "       nothing is half-repaired. Grant the two columns (or run as a more privileged user) and re-run — the" >&2
-        echo "       repair is idempotent, and revoke them again afterwards." >&2
+        echo "ERROR: the sentinel repair did not complete. Read the ClickHouse error above before re-running: the two" >&2
+        echo "       likely causes need opposite responses." >&2
+        echo "  ACCESS_DENIED — the expected failure for a user scoped to the rollback grant set, which holds only" >&2
+        echo "       ALTER UPDATE(_row_exists). This statement needs ALTER UPDATE(end_time) AND ALTER UPDATE(ttft) on" >&2
+        echo "       'traces', and carries both commands in one mutation, so a missing grant on either applies neither." >&2
+        echo "       Nothing is half-repaired. Grant the two columns (or use a more privileged user), re-run, revoke." >&2
+        echo "  A TIMEOUT — the mutation is very likely still running and healthy; only the client gave up waiting. Do" >&2
+        echo "       NOT re-run blind, which queues a second whole-table rewrite behind the first. Check for an" >&2
+        echo "       unfinished mutation on 'traces' in system.mutations, let it finish, then re-run this mode to read" >&2
+        echo "       the postcondition. Raise --receive-timeout (currently ${RECEIVE_TIMEOUT}s) for the next attempt." >&2
         exit 1
     fi
 

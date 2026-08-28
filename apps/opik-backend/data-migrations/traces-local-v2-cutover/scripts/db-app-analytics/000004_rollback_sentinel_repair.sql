@@ -28,10 +28,17 @@
 -- KEEP IN STEP WITH 000004_rollback_verify_sentinels.sql: same two predicates, same DateTime64 precision 9 (the
 -- original's end_time is nanosecond). A check filtered differently from the repair would clear while sentinels remain,
 -- or never clear at all. Change one, change both.
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
-    UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9),
+-- Deliberately NOT `ON CLUSTER`, matching the reverse replay beside it. `traces` is a Replicated*MergeTree, so a
+-- mutation entered on one replica reaches the others through the replication log; routing it through the distributed-DDL
+-- queue instead would add a second, unrelated wait bounded by `distributed_ddl_task_timeout` (180s by default). This
+-- mutation rewrites every part, so on a large table that bound is exceeded routinely, and with the default
+-- `distributed_ddl_output_mode = 'throw'` the client raises TIMEOUT_EXCEEDED while the mutation is progressing normally.
+-- The driver would then report a healthy repair as failed. Single-shard assumption, same as the reverse replay's.
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces
+    UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC'),
     UPDATE ttft = NULL WHERE isNaN(ttft)
 -- mutations_sync = 2: wait for the mutation on every replica, so the repair has converged cluster-wide before the
--- postcondition reads it back (same rationale as lightweight_deletes_sync = 2 in the reverse replay).
+-- postcondition reads it back (same rationale as lightweight_deletes_sync = 2 in the reverse replay). The wait is
+-- unbounded server-side, so the CLIENT socket timeout is what limits it — see rollback.sh --receive-timeout.
 SETTINGS mutations_sync = 2,
          log_comment = 'traces_local_v2_rollback:sentinel_repair';

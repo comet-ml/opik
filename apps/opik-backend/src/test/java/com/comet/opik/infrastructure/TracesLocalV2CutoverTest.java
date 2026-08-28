@@ -862,6 +862,13 @@ class TracesLocalV2CutoverTest {
                         + " negative-duration total useless as a gate")
                 .isEqualTo(9);
 
+        // The epoch literal pins 'UTC'. Unpinned it parses in the server timezone, so on a non-UTC host the predicate
+        // matches nothing and the driver reports "nothing to repair" over damaged rows — a silent false negative on the
+        // gate. The container runs UTC, so only an explicit foreign session timezone can catch a regression here.
+        assertThat(sentinelCounts("America/New_York"))
+                .as("the gate is independent of the server timezone, because the epoch literal is pinned to UTC")
+                .isEqualTo(new SentinelCounts(6L, 6L, 6L));
+
         var beforeRepair = serverNow();
         repairSentinels();
 
@@ -1745,7 +1752,10 @@ class TracesLocalV2CutoverTest {
      * a cohort can be asserted on afterwards. A {@code null} {@code endTime} or {@code ttft} stores SQL {@code NULL};
      * pass {@link Instant#EPOCH} or {@link Double#NaN} to store the sentinels the flip produced. The timestamps go over
      * the wire as text and through {@code toDateTime64} so the nanosecond precision the source column carries survives,
-     * which a bound {@code Instant} would not guarantee — but they are still bound values, not spliced text.
+     * which a bound {@code Instant} would not guarantee — but they are still bound values, not spliced text. Each bind
+     * is named for the column it fills and carries that column's own precision: {@code created_at} is
+     * {@code DateTime64(9)} while {@code last_updated_at}, the {@code ReplacingMergeTree} version column, is
+     * {@code DateTime64(6)}.
      */
     private void insertShapedTrace(String workspaceId, UUID projectId, String name, Instant startTime,
             Instant endTime, Double ttft) {
@@ -1753,14 +1763,16 @@ class TracesLocalV2CutoverTest {
                 INSERT INTO traces (id, workspace_id, project_id, name, start_time, end_time, created_at,
                                     last_updated_at, ttft)
                 VALUES (:id, :workspace_id, :project_id, :name, toDateTime64(:start_time, 9),
-                        toDateTime64(:end_time, 9), toDateTime64(:start_time, 9), toDateTime64(:created_at, 6), :ttft)
+                        toDateTime64(:end_time, 9), toDateTime64(:created_at, 9),
+                        toDateTime64(:last_updated_at, 6), :ttft)
                 """, statement -> {
             statement.bind("id", ID_GENERATOR.generateId())
                     .bind("workspace_id", workspaceId)
                     .bind("project_id", projectId)
                     .bind("name", name)
                     .bind("start_time", ClickHouseDateTimeFormat.formatNanos(startTime))
-                    .bind("created_at", ClickHouseDateTimeFormat.formatMicros(startTime));
+                    .bind("created_at", ClickHouseDateTimeFormat.formatNanos(startTime))
+                    .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(startTime));
             if (endTime == null) {
                 statement.bindNull("end_time", String.class);
             } else {
@@ -1871,14 +1883,15 @@ class TracesLocalV2CutoverTest {
      * The sentinel repair (000004_rollback_sentinel_repair), reimplemented inline like the rest of this class. One
      * {@code ALTER} carrying both commands, as the shipped file does: neither predicate is on the primary key, so
      * ClickHouse cannot prune parts and a mutation rewrites every one — combining them halves that to a single pass.
-     * {@code mutations_sync = 2} is mirrored (it is what makes the postcondition an observation rather than an
-     * assumption on a replicated table); {@code log_comment} is the one omission, being observability rather than
-     * semantics, as elsewhere in this class.
+     * Also mirrored: the absence of {@code ON CLUSTER} (the mutation travels by replication, not the distributed-DDL
+     * queue), the {@code 'UTC'} on the epoch literal, and {@code mutations_sync = 2}, which is what makes the
+     * postcondition an observation rather than an assumption on a replicated table. {@code log_comment} is the one
+     * omission, being observability rather than semantics, as elsewhere in this class.
      */
     private void repairSentinels() {
         execute("""
-                ALTER TABLE traces ON CLUSTER '{cluster}'
-                    UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9),
+                ALTER TABLE traces
+                    UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC'),
                     UPDATE ttft = NULL WHERE isNaN(ttft)
                 SETTINGS mutations_sync = 2
                 """, _ -> {
@@ -1897,15 +1910,21 @@ class TracesLocalV2CutoverTest {
      * {@code FINAL} is that the check must see exactly what the mutation rewrites; it is argued in the .sql header.
      */
     private SentinelCounts sentinelCounts() {
+        return sentinelCounts(null);
+    }
+
+    /** As above, evaluated under an explicit {@code session_timezone}. See the UTC assertion in the repair test. */
+    private SentinelCounts sentinelCounts(String sessionTimezone) {
         var sql = """
                 SELECT
-                    uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS sentinel_end_time,
+                    uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
                     uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
                     uniqExactIf((workspace_id, project_id, id),
-                                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS negative_from_sentinel
+                                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel
                 FROM clusterAllReplicas('{cluster}', %s.traces)
                 """
-                .formatted(DATABASE_NAME);
+                .formatted(DATABASE_NAME)
+                + (sessionTimezone == null ? "" : " SETTINGS session_timezone = '%s'".formatted(sessionTimezone));
         return template
                 .nonTransaction(connection -> Mono
                         .from(connection.createStatement(sql).execute())

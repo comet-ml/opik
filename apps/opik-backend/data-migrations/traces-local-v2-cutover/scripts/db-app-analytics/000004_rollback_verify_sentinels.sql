@@ -24,12 +24,18 @@
 -- included, so the check has to see them too: FINAL would hide a stale version still carrying a sentinel behind a clean
 -- newer one, and that version is what a non-FINAL read of this table would serve.
 --
--- KEEP IN STEP WITH 000004_rollback_sentinel_repair.sql: same two predicates, same DateTime64 precision 9.
+-- The epoch literal pins 'UTC' deliberately. Without it the string is parsed in the SERVER timezone, while the sentinel
+-- the backend writes is an absolute instant 0 into a DateTime64(9, 'UTC') column — so on a non-UTC host the predicate
+-- matches nothing, every count returns 0, and the driver reports "nothing to repair" over unrepaired rows. That is a
+-- silent false negative on the one gate that decides whether damaged rows get fixed, so it must not depend on host
+-- configuration.
+--
+-- KEEP IN STEP WITH 000004_rollback_sentinel_repair.sql: same two predicates, same DateTime64 precision 9, same 'UTC'.
 
 SELECT
-    uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS sentinel_end_time,
+    uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
     uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
     uniqExactIf((workspace_id, project_id, id),
-                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS negative_from_sentinel
+                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel
 FROM clusterAllReplicas('{cluster}', ${ANALYTICS_DB_DATABASE_NAME}.traces)
 SETTINGS log_comment = 'traces_local_v2_rollback:verify_sentinels';
