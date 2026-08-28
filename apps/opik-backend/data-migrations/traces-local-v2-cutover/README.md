@@ -466,8 +466,8 @@ the `traceColumnsNonNullable` flip").
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
 **Trace-delete partition pruning needs no flip at all (OPIK-6901).** A trace `DELETE` binds itself to the weekly
-partitions its own ids resolve to instead of being planned against every part of the table — on prod-test, 12 ids
-rewrote 3,928 parts / 5.40 TiB before this. There is **no flag, no ordering constraint, and nothing to revert on
+partitions its own ids resolve to instead of being planned against every part of the table, so a handful of ids no
+longer rewrites the whole table. There is **no flag, no ordering constraint, and nothing to revert on
 rollback**: the predicate is emitted unconditionally, and one rendered statement is correct against the original and
 against the successor alike.
 
@@ -1413,8 +1413,31 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
 > total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
-> read-only and idempotent: an interrupted run costs nothing, and because the bound is fixed by
-> `cutover_start` it covers the same windows whenever it is re-run.
+> read-only and idempotent, so an interruption cannot damage anything. It does **not** follow that a re-run covers the
+> same windows: both bounds are read live from the old-schema table — `toMonday(min(created_at))` for the anchor and
+> `max(created_at)` for the last week — so on a table still taking writes, or one that retention is pruning, the offsets
+> move under you. Both are read once, at startup: rows written after that are outside the horizon the run computed,
+> and are the delta's business rather than the compare's.
+>
+> **Resume with `--from-week`; do not restart from 0.** Idempotent does not mean free: a restart repeats
+> every window already compared. Each window either reports a line or has not run, so the resume point is
+> the last reported week plus the **stride** — plus one only at the default `--weeks-stride 1` — and the same
+> stride must be passed again, or the resumed run samples different windows than the run it continues. The
+> offsets are anchored as above, so confirm a resumed run's first window is the one you expect before treating its
+> output as continuous with an earlier log — if the anchor has moved, the logs describe different windows and must not be
+> read as one run.
+>
+> **Never resume the pre-`EXCHANGE` gate run — restart it.** That gate (see the exit checklist) requires one full compare
+> with no narrowing, and it is the last backstop before an irreversible step. Two runs whose windows happen to add up are
+> only equivalent if the anchor held throughout, which is not something anyone can confirm under pressure; a `PASSED`
+> line now states the range it covered, so a stitched-together pass is visible rather than arguable. Resume is for the
+> exploratory compares and the long post-rollback one, where the bound is deliberately partial anyway.
+>
+> **A mismatching week costs a second, slower query.** On `ok=0` the driver re-checks the differing keys on
+> the sorting key to separate a real mismatch from a superseded-version artifact. That re-check can stall for
+> longer than ClickHouse's 300s `receive_timeout` default even where the window compare did not, which aborts
+> the whole compare at the first mismatching week. `verify.sh` therefore defaults to `1800`; raise it with
+> `--receive-timeout` if a window still trips it.
 >
 > **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
 > because both surface at the end when the pressure is highest:
@@ -1473,6 +1496,8 @@ bound is still worth passing.
 infeasible, sample and still get high confidence:
 - `--sample-mod N` compares a deterministic 1/N `id` sample — the *same* rows on both sides, so like-for-like.
 - `--weeks-stride S` compares every S-th weekly partition (partition-pruned, so genuinely cheaper).
+- `--receive-timeout N` raises the client's per-packet wait (default 1800, against ClickHouse's 300). The
+  post-mismatch confirm-keys re-check can stall past the stock value and abort the compare at the first mismatch.
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
   `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 
