@@ -57,7 +57,7 @@ def patch_sync_stream(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from openai.Stream.",
+                    "Exception raised from openai.Stream: %s",
                     str(exception),
                     exc_info=True,
                 )
@@ -120,7 +120,7 @@ def patch_async_stream(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from openai.AsyncStream.",
+                    "Exception raised from openai.AsyncStream: %s",
                     str(exception),
                     exc_info=True,
                 )

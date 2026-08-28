@@ -928,6 +928,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FIN_FREE,
+      label: "inclusionai/ling-3.0-flash-fin:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
       label: "inclusionai/ling-3.0-flash:free",
     },
@@ -1176,12 +1180,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7_FREE,
+      label: "minimax/minimax-m2.7:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
       label: "minimax/minimax-m3",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_BATCH,
       label: "minimax/minimax-m3:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_FREE,
+      label: "minimax/minimax-m3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
@@ -2373,6 +2385,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.8-27b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_FLASH,
+      label: "qwen/qwen3.8-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_MAX,
       label: "qwen/qwen3.8-max",
     },
@@ -2721,6 +2737,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5.3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASH,
+      label: "z-ai/glm-5.3-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
     },
@@ -2792,6 +2812,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.5 Flash Lite",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_TRANSCRIBE,
+      label: "Gemini 3.5 Transcribe",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
     },
@@ -2822,6 +2846,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
       label: "Gemma 4 31B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
+      label: "Gemini Omni 1.1 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_FLASH_PREVIEW,

@@ -129,19 +129,6 @@ databaseAnalyticsDataModel:
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
   tracesDistributedWrapEnabled: false
   #  Default: false
-  #  Description: Enables partition-aware PRUNING of trace deletes - it does NOT create or activate any partitioning.
-  #   With it on, a trace DELETE bounds itself to the weekly partitions its own ids resolve to instead of being planned
-  #   against every part of the table. Turning it on therefore ASSERTS a schema fact rather than causing one: that the
-  #   live mutation target already IS the weekly partitioned successor, id_at as DateTime64(0,'UTC') under
-  #   PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))). Installing that schema is the
-  #   EXCHANGE step of the cutover, never this flag. Purely an optimisation: false keeps the unbounded mutation, which
-  #   is always correct and merely slower. A third flag on purpose - the partitioning appears at the EXCHANGE, and
-  #   neither sibling marks it:
-  #   traceColumnsNonNullable must be rolled out BEFORE the EXCHANGE, tracesDistributedWrapEnabled flips at the wrap,
-  #   which may be deferred long after it. Leave false at deploy time; set true once the EXCHANGE is confirmed, and back
-  #   to false BEFORE a rollback promotes the original `traces` (legacy `traces` has no PARTITION BY and a 32-bit
-  #   DateTime id_at that overflows past 2106, so the predicate would silently match zero rows for a far-future id).
-  tracesWeeklyPartitionPruningEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -218,6 +205,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-cold-storage-disk
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-traces-topology
       critical: true
       type: ready
       initialState: false
@@ -413,6 +405,17 @@ cors:
   # Default: false
   # Description: Whether or not to allow cross site scripting
   enabled: false
+
+# Read-time redaction configuration
+redaction:
+  # Default: false
+  # Description: Master switch. Off here so the suite exercises the shipped default; the tests that need it on
+  # override redaction.enabled and redaction.rules per application, which is what keeps this file honest about
+  # the keys existing.
+  enabled: false
+  # Default: [] - valid only while enabled=false, since an empty set with enabled=true fails startup.
+  # Description: JSON array of {"regex", "replace"} applied to every string in a response.
+  rules: '[]'
 
 # Encryption related configuration
 encryption:
@@ -840,9 +843,6 @@ serviceToggles:
   #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
-  # Default: false
-  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
-  agenticToolsEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
