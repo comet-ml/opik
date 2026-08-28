@@ -1410,6 +1410,11 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
 
+> **A version tie can make this gate mismatch, and can also make it pass.** If a key carries two or more rows with an
+> identical `last_updated_at`, `FINAL` has no winner and the comparison for that key is arbitrary in both directions. It
+> is not rollback-specific despite where it is written up: see "a version tie" under *Verifying after a rollback* for the
+> shape and the confirming read, ignoring that section's `cutover_start` test, which has no meaning before the `EXCHANGE`.
+>
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
 > total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
@@ -1480,17 +1485,33 @@ from the successor *entirely* is the real signal — that is a copy gap, and it 
 often this bites tracks how much pre-existing data the workload rewrites; for many it is none, which is why the weekly
 bound is still worth passing.
 
-**A third shape, which the confirm-keys re-check cannot resolve: a version tie.** Its premise — that filtering on the
-sorting key lets `FINAL` return the true winner — holds only while versions differ. When a key carries two or more rows
-with an **identical** `last_updated_at`, the `ReplacingMergeTree` version column, there is no winner: `FINAL` picks
-arbitrarily, and because the two tables' part layouts differ, each side can pick a different row. The key is then counted
-as `genuinely_differing_keys` even where both tables hold the same data.
+**A third shape, which the confirm-keys re-check cannot resolve: a version tie.** This one is not rollback-specific — it
+can hit the pre-`EXCHANGE` gate too (see "Verifying the migration"), where the `cutover_start` test below does not apply.
 
-Its signature is **equal row counts with a differing checksum**, and neither rule above fits it — the key is present on
-both sides *and* its `last_updated_at` predates `cutover_start`. Deciding it needs the key's full set of versions read
-from both tables without `FINAL`, which no shipped driver does; `--drill-down` reads one `FINAL` row per key and stops at
-100 keys, so it cannot show a tie. **Treat such a week as unresolved and escalate rather than passing it:** a non-unique
-top version makes the comparison arbitrary, which is not the same as benign.
+Its premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while versions differ.
+When a key carries two or more rows with an **identical** `last_updated_at`, the `ReplacingMergeTree` version column,
+there is no winner: `FINAL` picks arbitrarily, and because the two tables' part layouts differ, each side may or may not
+land on the same row. **Arbitrary cuts both ways, and the second direction is the dangerous one:**
+
+- the picks differ, and the key is reported in `genuinely_differing_keys` even though both tables hold the same data;
+- the picks coincide, and the key is confirmed as matching **even if one side is missing a version** — a real copy gap.
+  So a `0` from the re-check, and any `OK — superseded-version artifact` verdict built on it, is not conclusive while
+  ties exist.
+
+`--drill-down` cannot show a tie: it reads one `FINAL` row per key and stops at 100. Confirm one by reading the key's
+versions from both tables without `FINAL` — a read-only diagnostic, not a procedure step:
+
+```sql
+SELECT 'src' AS side, created_at, last_updated_at, _part FROM <old-table> WHERE (workspace_id, project_id, id) = (…)
+UNION ALL
+SELECT 'dst' AS side, created_at, last_updated_at, _part FROM <new-table> WHERE (workspace_id, project_id, id) = (…)
+ORDER BY side, created_at;
+```
+
+A **non-unique top `last_updated_at` on either side** means the comparison for that key was arbitrary. Then compare the
+two version sets: identical sets mean the copy is faithful and only the tie-break differed; a version present on one
+side only is the copy gap, whatever the re-check said. If the sets cannot be established, treat the week as unresolved
+and escalate rather than passing it — arbitrary is not the same as benign.
 
 > **The pre-EXCHANGE compare is the gate; the post-EXCHANGE compare has a caveat.** `traces_pre_cutover_backup` is a
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
