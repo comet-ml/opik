@@ -1484,7 +1484,7 @@ bound is still worth passing.
 sorting key lets `FINAL` return the true winner — holds only while versions differ. When a key carries two or more rows
 with an **identical** `last_updated_at`, the `ReplacingMergeTree` version column, there is no winner: `FINAL` picks
 arbitrarily, and because the two tables' part layouts differ, each side can pick a different row. The key is then counted
-as `genuinely_differing` even where both tables hold the same data.
+as `genuinely_differing_keys` even where both tables hold the same data.
 
 Its signature is **equal row counts with a differing checksum**, and neither rule above fits it — the key is present on
 both sides *and* its `last_updated_at` predates `cutover_start`. Deciding it needs the key's full set of versions read
