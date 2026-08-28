@@ -57,6 +57,17 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(0) @Max(10_000) private int streamTrimLimit;
 
+    /**
+     * Whether the publisher may enqueue messages larger than Jackson's default maxStringLength.
+     *
+     * <p>Leave false during a rolling upgrade. Consumers on a build without the codec-init fix still
+     * decode with Jackson's default limit, so a message above it that they receive fails inside
+     * Redisson before {@code BaseRedisSubscriber} sees a messageId - it can never be acked or removed,
+     * and the stream wedges. Only enable once every consumer is upgraded.
+     */
+    @JsonProperty
+    private boolean allowOversizedPayloads;
+
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 

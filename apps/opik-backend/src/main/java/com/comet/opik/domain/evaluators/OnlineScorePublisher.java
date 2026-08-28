@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -111,14 +112,21 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
-        // Mirror exactly the document-level constraint the consumer's Jackson reader enforces. Per-string
-        // length needs no guard here: the HTTP mapper already rejects an oversized string at ingest with
-        // the same maxStringLength the stream reader applies, so the two are aligned by configuration.
-        // maxDocumentLength <= 0 means unlimited, in which case the reader has no document limit either
-        // and there is nothing to guard against.
-        this.maxPayloadBytes = jacksonConfig.getMaxDocumentLength() > 0
+        // Mirror the document-level constraint the consumer's Jackson reader enforces. Per-string length
+        // needs no guard here: the HTTP mapper already rejects an oversized string at ingest with the same
+        // maxStringLength the stream reader applies, so the two are aligned by configuration.
+        // maxDocumentLength <= 0 means unlimited, in which case the reader has no document limit either.
+        long configuredLimit = jacksonConfig.getMaxDocumentLength() > 0
                 ? jacksonConfig.getMaxDocumentLength()
                 : Long.MAX_VALUE;
+        // During a rolling upgrade the consumer that picks a message up may still be running a build
+        // without the codec-init fix, and so still decoding at Jackson's default. Writing above that
+        // default would strand the entry on such a pod exactly as before this fix - it fails inside
+        // Redisson, no messageId reaches processMessage, and it can never be acked or removed. Stay at
+        // the legacy ceiling until an operator confirms the whole fleet is upgraded.
+        this.maxPayloadBytes = config.isAllowOversizedPayloads()
+                ? configuredLimit
+                : Math.min(configuredLimit, StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
@@ -209,7 +217,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         try {
             return JsonUtils.getMapper().writeValueAsBytes(message).length;
         } catch (JsonProcessingException exception) {
-            log.warn("Could not measure message size, allowing enqueue to proceed", exception);
+            // Deliberately not logged: the enqueue proceeds and the same failure surfaces once, at error
+            // level with the counter incremented, from stream.add's doOnError below.
             return 0L;
         }
     }
