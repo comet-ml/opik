@@ -201,7 +201,19 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- once, far enough apart to land in different created_at weeks, can trigger it; trace ids are
 -- client-supplied, so a re-sent id is ordinary rather than exotic.
 --
--- Why this re-check is trustworthy. It filters ONLY on (workspace_id, project_id, id) -- the sorting key,
+-- LIMITATION, which bounds the argument that follows: this cannot resolve a VERSION TIE. last_updated_at is the
+-- ReplacingMergeTree version column, so when two or more rows for a key carry the same value there is nothing left to
+-- rank them by: FINAL picks arbitrarily, and the two tables' part layouts differ, so each side may or may not land on
+-- the same row. Arbitrary cuts BOTH ways, and the second is the
+-- dangerous one:
+--   * the picks differ -> the key is reported in genuinely_differing_keys even where both tables hold the same data;
+--   * the picks coincide -> the key is confirmed as matching even if one side is MISSING a version, which is a real
+--     copy gap. A 0 from this block is therefore not conclusive while ties exist, and neither is an
+--     "OK -- superseded-version artifact" verdict built on it.
+-- Deciding a tied key needs each side's full version SET, which this query does not read. The runbook's triage section
+-- carries the check; do not infer the shape from row counts here, which this block does not output.
+--
+-- Why this re-check is trustworthy WHERE VERSIONS DIFFER. It filters ONLY on (workspace_id, project_id, id) -- the sorting key,
 -- which IS the dedup key. That predicate cannot hide a version from FINAL: every part contributes the
 -- granules holding the key, so FINAL always sees all versions of it and returns the true winner. The
 -- window bounds are used only to pick the candidate keys, never to decide the verdict.
