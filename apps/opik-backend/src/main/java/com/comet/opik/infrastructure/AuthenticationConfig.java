@@ -43,13 +43,11 @@ public class AuthenticationConfig {
      * well under the 30s shared timeout it replaces, but callers that need a hard sub-3s ceiling
      * must set {@link #requestMaxRetries} to 0.
      */
-    // Defaults live here as well as in config.yml, deliberately. OpikConfiguration holds
-    // `@Valid @NotNull AuthenticationConfig authentication = new AuthenticationConfig()`, so a
-    // configuration file that omits the `authentication:` block entirely still gets this instance
-    // and is cascade-validated. Without Java-side defaults that is a boot failure for every
-    // deployment that leaves auth unconfigured -- including `enabled: false`, where the settings
-    // are never read. Sibling config classes (LlmProviderClientConfig, OnlineScoringConfig) keep
-    // their defaults in Java for the same reason.
+    // No Java-side default: config.yml is the single source for these values, so there is nothing
+    // to keep in sync. @NotNull turns a missing key into a boot failure naming the property rather
+    // than a silent fallback. Note this means a configuration file must carry the `authentication:`
+    // block; omitting it entirely fails validation, because OpikConfiguration cascades @Valid into
+    // its default AuthenticationConfig instance.
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
     // Bounded by the shipped jerseyClient.timeout (30s). Note this is an override, not a clamp:
@@ -59,7 +57,7 @@ public class AuthenticationConfig {
     // because jerseyClient is bound on a different configuration class; if that default ever
     // changes, this bound must change with it.
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
-    private Duration requestTimeout = Duration.seconds(3);
+    private Duration requestTimeout;
 
     /**
      * Maximum retry attempts for a failed auth request.
@@ -75,11 +73,11 @@ public class AuthenticationConfig {
      * recover a request stalled by one of those. The timeout is what bounds user-visible latency.
      * Set to 0 to disable retries.
      */
-    @Valid @JsonProperty
+    @Valid @NotNull @JsonProperty
     @Min(0)
     // Capped deliberately: each retry re-issues an auth call against a React service that may
     // already be CPU-starved, and retries cannot recover a multi-minute brownout anyway.
-    @Max(5) private int requestMaxRetries = 1;
+    @Max(5) private Integer requestMaxRetries;
 
     /**
      * Minimum backoff between auth request attempts. Deliberately non-zero: an immediate retry
@@ -88,7 +86,7 @@ public class AuthenticationConfig {
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
-    private Duration requestRetryMinBackoff = Duration.milliseconds(250);
+    private Duration requestRetryMinBackoff;
 
     /**
      * Upper bound on the backoff between auth request attempts, which doubles from
@@ -97,7 +95,7 @@ public class AuthenticationConfig {
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
-    private Duration requestRetryMaxBackoff = Duration.seconds(1);
+    private Duration requestRetryMaxBackoff;
 
     /**
      * Cross-field constraint: a backoff whose minimum exceeds its maximum is contradictory, and
