@@ -1402,8 +1402,9 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
 > read-only and idempotent, so an interruption cannot damage anything. It does **not** follow that a re-run covers the
 > same windows: both bounds are read live from the old-schema table — `toMonday(min(created_at))` for the anchor and
-> `max(created_at)` for the last week — so on a table still taking writes, or one retention is pruning, the offsets move
-> under you.
+> `max(created_at)` for the last week — so on a table still taking writes, or one that retention is pruning, the offsets
+> move under you. Both are read once, at startup: rows written after that are outside the horizon the run computed,
+> and are the delta's business rather than the compare's.
 >
 > **Resume with `--from-week`; do not restart from 0.** Idempotent does not mean free: a restart repeats
 > every window already compared. Each window either reports a line or has not run, so the resume point is
