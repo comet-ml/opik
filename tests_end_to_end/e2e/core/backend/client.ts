@@ -1192,6 +1192,31 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     /**
+     * Spans visible for a project under `filters`, as `{id, name}` —
+     * `GET /v1/private/spans`. The name comes back alongside the id because the
+     * SDK bridge's `createNestedTrace` answers with the trace id and a span
+     * count but no span ids, so a seed that needs to assert on exact span ids
+     * has to resolve them by the names it chose.
+     *
+     * Same `filters` shape as `listTraceIds`, which is what lets a fixture prove
+     * server-side that a filter really discriminates before a spec asserts the
+     * same narrowing in the browser.
+     */
+    async listSpans(
+      args: { projectId: string; traceId?: string; filters?: BackendFilter[]; size?: number },
+    ): Promise<Array<{ id: string; name: string }>> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        size: args.size ?? 200,
+        page: 1,
+        truncate: true,
+        ...(args.traceId ? { traceId: args.traceId } : {}),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      });
+      return (page.content ?? []).map((s) => ({ id: String(s.id), name: String(s.name ?? '') }));
+    },
+
+    /**
      * Create a trace with an explicit id and `source`. The SDK bridge always
      * emits `source=sdk`; the optimization-trial overlay filters on
      * `source=optimization`, so a trial-log fixture cannot be built through the

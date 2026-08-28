@@ -1,4 +1,4 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 
 export class TracePanelPage {
   constructor(
@@ -176,6 +176,53 @@ export class TracePanelPage {
     const tag = this.feedbackScoreTag(scoreName);
     await tag.waitFor({ state: 'visible' });
     return (await tag.getByTestId('feedback-score-tag-value').textContent())?.trim() ?? '';
+  }
+
+  // --- Quick attribute filters ---
+
+  /**
+   * The inline quick-filter affordance on one attribute line of the Details
+   * tab's Input / Output / Metadata viewers.
+   *
+   * `destination` is the accessible name the button carries, and it is a real
+   * assertion rather than a locator detail: the label names the table the click
+   * will filter ("Filter spans by this attribute" when a span is selected,
+   * "…traces…" otherwise), so asking for the wrong one fails instead of
+   * clicking the right icon for the wrong reason.
+   *
+   * Scoping to `.cm-line` is deliberate and, for now, unavoidable. The button
+   * itself has a role and an accessible name, but every filterable attribute in
+   * the panel carries the *same* name, so the line is the only thing that says
+   * which attribute. The line is rendered imperatively by CodeMirror (see
+   * `quickFilterExtension.ts`), not by a React component a `data-testid` could
+   * be added to. It is matched by content rather than position — anchored and
+   * exact, so `stage: retrieve` cannot also match `stage: retrieve-later` — and
+   * the caller asserts the lookup resolved to exactly one line.
+   */
+  quickFilterButton(attributeLine: string, destination: 'traces' | 'spans'): Locator {
+    const anchored = new RegExp(`^${attributeLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+    return this.root
+      .locator('.cm-line')
+      .filter({ hasText: anchored })
+      .getByRole('button', { name: `Filter ${destination} by this attribute` });
+  }
+
+  /**
+   * Click the quick-filter icon on an attribute line.
+   *
+   * Only clicks — it deliberately does not wait for an outcome, because the two
+   * outcomes differ: an in-place apply leaves the table where it is, while a
+   * handoff moves it to the other view. The caller waits for the one it expects.
+   */
+  async quickFilterAttribute(
+    attributeLine: string,
+    destination: 'traces' | 'spans',
+  ): Promise<void> {
+    return test.step(`Quick-filter "${attributeLine}" into the ${destination} view`, async () => {
+      const button = this.quickFilterButton(attributeLine, destination);
+      await expect(button).toHaveCount(1);
+      await button.click();
+    });
   }
 
   /** Rendered input text inside the panel's Details tab. */
