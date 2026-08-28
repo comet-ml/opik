@@ -61,9 +61,9 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
         return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
-                toJavaDuration(config.getRequestTimeout()), config.getRequestMaxRetries(),
-                toJavaDuration(config.getRequestRetryMinBackoff()),
-                toJavaDuration(config.getRequestRetryMaxBackoff()),
+                config.getRequestTimeout().toJavaDuration(), config.getRequestMaxRetries(),
+                config.getRequestRetryMinBackoff().toJavaDuration(),
+                config.getRequestRetryMaxBackoff().toJavaDuration(),
                 workspacePermissionsService, redactionService.isEnabled());
     }
 
@@ -86,11 +86,4 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         return new RemoteWorkspacePermissionsService(client, config.getReactService());
     }
 
-    /**
-     * Dropwizard's Duration is a configuration-binding type. Converting here keeps it at the
-     * composition root so the services below work in java.time.Duration throughout.
-     */
-    private static java.time.Duration toJavaDuration(io.dropwizard.util.Duration duration) {
-        return java.time.Duration.ofMillis(duration.toMilliseconds());
-    }
 }
