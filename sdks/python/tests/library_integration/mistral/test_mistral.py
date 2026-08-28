@@ -245,6 +245,116 @@ def test_mistral_chat_stream_async__happyflow(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+def _fail_mid_stream(stream) -> None:
+    """Make a real mistralai stream raise partway through iteration.
+
+    ``EventStream.__next__`` pulls from ``self.generator``, so swapping that
+    generator injects a mid-stream failure (a dropped connection, say) into a
+    genuine stream object without touching the class opik patched.
+    """
+
+    def failing_generator():
+        yield from ()
+        raise RuntimeError("stream-blew-up")
+
+    stream.generator = failing_generator()
+
+
+def test_mistral_chat_stream__untracked_stream_fails_after_class_patched__error_propagates(
+    fake_backend,
+):
+    """Regression test for the `return` inside `finally`.
+
+    opik patches ``__iter__`` on mistralai's stream class, so once any tracked
+    stream has been consumed every stream in the process runs through the
+    wrapper - including streams from untracked clients. A `return` in `finally`
+    swallowed the in-flight exception, so an untracked stream that failed
+    mid-iteration finished silently instead of raising.
+    """
+    tracked_client = track_mistral(
+        mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    )
+    for _ in tracked_client.chat.stream(
+        model=MODEL_FOR_TESTS, messages=MESSAGES, max_tokens=10
+    ):
+        pass
+
+    untracked_client = mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    untracked_stream = untracked_client.chat.stream(
+        model=MODEL_FOR_TESTS, messages=MESSAGES, max_tokens=10
+    )
+    _fail_mid_stream(untracked_stream)
+
+    with pytest.raises(RuntimeError, match="stream-blew-up"):
+        for _ in untracked_stream:
+            pass
+
+    opik.flush_tracker()
+
+    # Only the tracked stream is logged; the untracked one must not be.
+    assert len(fake_backend.trace_trees) == 1
+
+
+def test_mistral_chat_stream_async__untracked_stream_fails_after_class_patched__error_propagates(
+    fake_backend,
+):
+    """Async variant of the regression test above."""
+    tracked_client = track_mistral(
+        mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    )
+
+    async def async_call():
+        async for _ in await tracked_client.chat.stream_async(
+            model=MODEL_FOR_TESTS, messages=MESSAGES, max_tokens=10
+        ):
+            pass
+
+        untracked_client = mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+        untracked_stream = await untracked_client.chat.stream_async(
+            model=MODEL_FOR_TESTS, messages=MESSAGES, max_tokens=10
+        )
+
+        async def failing_generator():
+            for _ in ():
+                yield
+            raise RuntimeError("stream-blew-up")
+
+        untracked_stream.generator = failing_generator()
+
+        with pytest.raises(RuntimeError, match="stream-blew-up"):
+            async for _ in untracked_stream:
+                pass
+
+    asyncio.run(async_call())
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+
+
+def test_mistral_chat_stream__tracked_stream_fails_mid_iteration__error_propagates_and_error_info_logged(
+    fake_backend,
+):
+    """The tracked path must keep working: the exception still propagates and
+    the span is closed with error_info."""
+    client = track_mistral(mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"]))
+
+    stream = client.chat.stream(model=MODEL_FOR_TESTS, messages=MESSAGES, max_tokens=10)
+    _fail_mid_stream(stream)
+
+    with pytest.raises(RuntimeError, match="stream-blew-up"):
+        for _ in stream:
+            pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    logged_span = fake_backend.trace_trees[0].spans[0]
+    assert logged_span.output is None
+    assert logged_span.error_info["exception_type"] == "RuntimeError"
+    assert "stream-blew-up" in logged_span.error_info["message"]
+
+
 def test_mistral_chat_complete__custom_provider__provider_logged_but_usage_still_parsed(
     fake_backend,
 ):

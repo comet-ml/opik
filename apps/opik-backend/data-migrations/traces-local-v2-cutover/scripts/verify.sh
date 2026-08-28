@@ -28,6 +28,13 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the next packet from the server before giving up
+#                             (SETTINGS receive_timeout). Default 1800, against ClickHouse's own 300. It bounds the GAP
+#                             between packets, not total query time: a window compare running well past 300s does not
+#                             trip it, while the post-mismatch confirm-keys re-check can — so under the stock default the
+#                             first mismatching week aborts the whole run. The cost of a generous value is that a
+#                             genuinely dead connection takes that long to surface; for a read-only, resumable compare,
+#                             losing a long run to a transient stall is the worse failure.
 #   --old-table NAME    old-schema table (Nullable, nanosecond). Default traces. After the EXCHANGE: traces_pre_cutover_backup.
 #   --new-table NAME    new-schema table (sentinels, microsecond). Default traces_local_v2. After the EXCHANGE: traces.
 #                       After a stage B/C ROLLBACK the defaults do not apply at all — traces_local_v2 no longer exists, so a
@@ -60,6 +67,7 @@ FROM_WEEK=0
 TO_WEEK=""
 WEEKS_STRIDE=1              # 1 = every week; S skips to every S-th weekly partition for a quick, pruned pass
 DRILL_DOWN=0
+RECEIVE_TIMEOUT=1800        # seconds tolerated between server packets, not total query time. See --receive-timeout.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -71,6 +79,7 @@ while [[ $# -gt 0 ]]; do
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
         --weeks-stride) WEEKS_STRIDE="${2:?"$1 requires a value"}"; shift 2 ;;
         --drill-down) DRILL_DOWN=1; shift ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -88,12 +97,20 @@ done
 [[ "$SAMPLE_MOD" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --sample-mod must be a positive integer." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" == last-sealed || "$TO_WEEK" =~ ^[0-9]+$ ]] \
     || { echo "ERROR: --to-week must be a non-negative integer or 'last-sealed'." >&2; exit 2; }
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
+# One place for the connection and client-side options, so the four call sites below cannot drift — in particular so
+# --receive-timeout applies to the confirm-keys re-check and the drill-down, not only to the window compare.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --receive_timeout="$RECEIVE_TIMEOUT")
+
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --query "$1"
 }
 
 log() {
@@ -117,19 +134,19 @@ render_block() {
 
 # Verdict TSV row for one window: src_rows dst_rows src_checksum dst_checksum ok
 compare_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block compare "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block compare "$1" "$2")"
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block drill-down "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block drill-down "$1" "$2")"
 }
 
 # Count of keys in one window that GENUINELY differ, re-checked on the sorting key so FINAL cannot hide a
 # version (see the confirm-keys block for why a created_at window can surface a superseded row on one side
 # only). 0 means the window's difference is a superseded-version artifact, not a data difference.
 confirm_keys_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block confirm-keys "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block confirm-keys "$1" "$2")"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"
@@ -232,9 +249,9 @@ if [[ "$checked" == "0" ]]; then
     exit 1
 fi
 if [[ "$artifacts" != "0" ]]; then
-    log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
+    log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
     log "        artifact only — a key written more than once lands its stale version in an earlier created_at week on"
     log "        one side. Live data is identical on both sides; nothing to fix (see the confirm-keys block)."
 else
-    log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD)."
+    log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD)."
 fi

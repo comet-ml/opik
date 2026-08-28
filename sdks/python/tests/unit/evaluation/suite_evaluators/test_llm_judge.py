@@ -345,7 +345,7 @@ class TestLLMJudgeRetries:
 
         assert calls["n"] == 1, "auth failures must not be retried"
 
-    def test_score__empty_response_logged__diagnostic_reaches_logger(self, caplog):
+    def test_score__empty_response_logged__diagnostic_reaches_logger(self, capture_log):
         from opik import exceptions
         from opik.evaluation.models import base_model
 
@@ -353,7 +353,7 @@ class TestLLMJudgeRetries:
             def generate_provider_response(self, messages, **kwargs):
                 raise exceptions.EmptyLLMResponseError("no content, no tool calls")
 
-        caplog.set_level(logging.ERROR)
+        capture_log.set_level(logging.ERROR)
         with pytest.raises(exceptions.EmptyLLMResponseError):
             with base_model.get_provider_response(
                 model_provider=EmptyModel(), messages=[]
@@ -361,7 +361,8 @@ class TestLLMJudgeRetries:
                 pass
 
         assert any(
-            "Failed to call LLM provider" in record.message for record in caplog.records
+            "Failed to call LLM provider" in record.message
+            for record in capture_log.records
         )
 
     @pytest.mark.asyncio
@@ -409,7 +410,7 @@ class TestLLMJudgeRetries:
 
     @pytest.mark.asyncio
     async def test_aget_provider_response__empty_response__logged_and_type_preserved(
-        self, caplog
+        self, capture_log
     ):
         from opik import exceptions
         from opik.evaluation.models import base_model
@@ -418,7 +419,7 @@ class TestLLMJudgeRetries:
             async def agenerate_provider_response(self, messages, **kwargs):
                 raise exceptions.EmptyLLMResponseError("no content, no tool calls")
 
-        caplog.set_level(logging.ERROR)
+        capture_log.set_level(logging.ERROR)
         with pytest.raises(exceptions.EmptyLLMResponseError):
             async with base_model.aget_provider_response(
                 model_provider=EmptyAsyncModel(), messages=[]
@@ -426,5 +427,6 @@ class TestLLMJudgeRetries:
                 pass
 
         assert any(
-            "Failed to call LLM provider" in record.message for record in caplog.records
+            "Failed to call LLM provider" in record.message
+            for record in capture_log.records
         )

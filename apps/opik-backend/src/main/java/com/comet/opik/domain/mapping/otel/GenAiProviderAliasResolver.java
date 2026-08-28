@@ -1,0 +1,83 @@
+package com.comet.opik.domain.mapping.otel;
+
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Maps the OTel GenAI semantic-convention provider vocabulary onto the canonical Opik provider
+ * names used as price-table keys.
+ * <p>
+ * Instrumentations report the provider via {@code gen_ai.system} (deprecated) or its replacement
+ * {@code gen_ai.provider.name}, using the values from the OTel registry. Several of those spell
+ * the same provider differently from Opik: {@code vertex_ai} vs {@code google_vertexai},
+ * {@code aws.bedrock} vs {@code bedrock}, {@code x_ai} vs {@code xai}. A value that reaches
+ * {@code CostService} unmapped matches no pricing row, so the span silently costs 0 (OPIK-7717).
+ * <p>
+ * Only renames that resolve to a single Opik <em>provider family</em> belong here — values naming
+ * more than one backend are excluded:
+ * <ul>
+ *     <li>{@code google} and {@code gcp.gen_ai} ("specific backend is unknown" per the semconv)
+ *     need the endpoint host and are handled by {@link GoogleProviderResolver} instead.</li>
+ *     <li>{@code azure.ai.inference} / {@code az.ai.inference} front either Azure OpenAI
+ *     (priced under {@code azure}) or Azure AI Foundry models such as Claude and Llama, which
+ *     LiteLLM prices under a separate {@code azure_ai} provider that Opik does not load at all.
+ *     Aliasing them to {@code azure} would price a Foundry model against the OpenAI table.</li>
+ * </ul>
+ * The {@code vertex_ai} entries are the one case where the endpoint alone is not the whole answer:
+ * Vertex also serves Anthropic models, which Opik prices under a distinct provider. This resolver
+ * still maps them to {@code google_vertexai} — the Vertex default — and
+ * {@link VertexAnthropicResolver} narrows the Anthropic ones afterwards.
+ * <p>
+ * Values already matching the Opik vocabulary ({@code openai}, {@code anthropic}, {@code groq},
+ * {@code deepseek}, {@code perplexity}) need no entry and pass through unchanged, as do values
+ * Opik has no pricing for at all ({@code cohere}, {@code ibm.watsonx.ai}).
+ *
+ * @see <a href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/">OTel GenAI attribute registry</a>
+ */
+@Slf4j
+public class GenAiProviderAliasResolver implements ProviderResolver {
+
+    private static final Map<String, String> ALIASES = Map.ofEntries(
+            // Legacy spellings the semconv renamed but instrumentation still emits (OPIK-7717):
+            // `vertex_ai` -> `gcp.vertex_ai`, `az.ai.openai` -> `azure.ai.openai`.
+            Map.entry("vertex_ai", GoogleProviderResolver.GOOGLE_VERTEX_AI),
+            Map.entry("az.ai.openai", "azure"),
+            // Current spellings, each scoped to a single backend
+            Map.entry("gcp.vertex_ai", GoogleProviderResolver.GOOGLE_VERTEX_AI),
+            Map.entry("gcp.gemini", GoogleProviderResolver.GOOGLE_AI),
+            Map.entry("aws.bedrock", "bedrock"),
+            Map.entry("azure.ai.openai", "azure"),
+            Map.entry("mistral_ai", "mistral"),
+            Map.entry("x_ai", "xai"));
+
+    /**
+     * Claims every span that reported a provider at all, not just the aliased ones: surrounding
+     * whitespace has to be stripped either way. An aliased value is matched on its trimmed form, so
+     * leaving a padded {@code " openai "} verbatim would make the two paths inconsistent and miss
+     * the price-table lookup, which keys on the exact provider string.
+     */
+    @Override
+    public boolean appliesTo(Resolution resolution) {
+        return StringUtils.isNotBlank(resolution.provider());
+    }
+
+    /**
+     * Returns the canonical Opik provider for a semantic-convention provider value, or the trimmed
+     * provider when it needs no aliasing.
+     */
+    @Override
+    public Resolution apply(Resolution resolution, ObjectNode metadata) {
+        String trimmed = StringUtils.trim(resolution.provider());
+        String resolved = ALIASES.get(trimmed.toLowerCase(Locale.ROOT));
+        if (resolved == null) {
+            return new Resolution(resolution.model(), trimmed);
+        }
+
+        log.debug("Aliased OTel provider '{}' to canonical '{}'", resolution.provider(), resolved);
+        return new Resolution(resolution.model(), resolved);
+    }
+}
