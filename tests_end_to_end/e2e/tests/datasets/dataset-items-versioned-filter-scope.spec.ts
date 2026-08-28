@@ -36,10 +36,14 @@ import type { BackendFilter } from '@e2e/core/backend';
  * They assert the CORRECT behaviour, so each reports "Expected to fail, but
  * passed" once the fix lands, which is the prompt to remove the marker.
  *
- * The control test runs first on purpose. It drives the same endpoint over the
- * same doubly-versioned dataset with a `data.<key>` filter and must pass, which
- * is what makes a failure below a statement about column binding rather than
- * about the endpoint, the fixture, or the environment.
+ * The control test is listed first for readability, not sequenced: the suite is
+ * `fullyParallel`, and each test builds its OWN dataset through the
+ * `versionedDataset` fixture (named off the test title), so none of these
+ * depends on another's state or ordering. Its value is diagnostic — it drives
+ * the same endpoint over an equally doubly-versioned dataset with a
+ * `data.<key>` filter and must pass, so the others failing is a statement about
+ * column binding rather than about the endpoint, the fixture, or the
+ * environment. Read the run as a set, not a sequence.
  *
  * SCOPE — ungrouped, as `dataset-items-filter-scope.spec.ts` is: no
  * `batch_group_id` is sent, so each mutation updates the latest version rather
@@ -86,11 +90,6 @@ test.describe('Dataset items — filter scope across versions', { tag: ['@t3-nig
     'a delete filtered by item id removes exactly the item that filter lists',
     { tag: ['@cap:datasets.bulk-delete-items'] },
     async ({ versionedDataset, backendClient }) => {
-      // Known failure — OPIK-8150. The delete binds `id` to the version
-      // snapshot row's column, which holds a fresh UUID from the second version
-      // on, so the filter matches nothing and the item survives a 204.
-      test.fail();
-
       const { id: datasetId, itemIds } = versionedDataset;
       const target = itemIds[0];
       const survivors = itemIds.filter((id) => id !== target);
@@ -103,8 +102,24 @@ test.describe('Dataset items — filter scope across versions', { tag: ['@t3-nig
         expect(listed.items[0].id, 'the listed row is the target item').toBe(target);
       });
 
-      await test.step('A delete with the identical filter removes exactly that item', async () => {
-        await backendClient.deleteDatasetItemsByFilter({ datasetId, filters: idFilter });
+      // Asserted OUTSIDE test.fail(): the contract under test is that an
+      // ACCEPTED delete touches the listed set. A rejected request would
+      // otherwise satisfy the marker exactly as the bug does, so replacing
+      // OPIK-8150 with a hard 4xx/5xx would keep this test reporting green.
+      await test.step('The delete is accepted', async () => {
+        const { status, message } = await backendClient.datasetItemMutationStatus({
+          operation: 'delete',
+          datasetId,
+          filters: idFilter,
+        });
+        expect(status, `the delete was accepted — ${message}`).toBe(204);
+      });
+
+      await test.step('And removes exactly that item', async () => {
+        // Known failure — OPIK-8150. The delete binds `id` to the version
+        // snapshot row's column, which holds a fresh UUID from the second
+        // version on, so the filter matches nothing and the item survives.
+        test.fail();
 
         const remaining = await backendClient.listDatasetItemsPage({ datasetId });
         // Both halves matter. "The target is gone" alone would also be true of a
@@ -123,11 +138,6 @@ test.describe('Dataset items — filter scope across versions', { tag: ['@t3-nig
     'a delete filtered by a created_at window that lists no rows removes no rows',
     { tag: ['@cap:datasets.bulk-delete-items'] },
     async ({ versionedDataset, backendClient }) => {
-      // Known failure — OPIK-8150. `created_at` binds to the snapshot row's
-      // column on the write path, so a window the items page reports as empty
-      // still matches every snapshot row and the delete removes them.
-      test.fail();
-
       const { id: datasetId, itemIds, versionCreatedAt, lastItemCreatedAt } = versionedDataset;
 
       // Strictly after every item was authored, strictly before the version was
@@ -160,8 +170,20 @@ test.describe('Dataset items — filter scope across versions', { tag: ['@t3-nig
         expect(listed.items, 'the rows carried for an empty window').toHaveLength(0);
       });
 
-      await test.step('A delete with the identical filter removes nothing', async () => {
-        await backendClient.deleteDatasetItemsByFilter({ datasetId, filters: windowFilter });
+      await test.step('The delete is accepted', async () => {
+        const { status, message } = await backendClient.datasetItemMutationStatus({
+          operation: 'delete',
+          datasetId,
+          filters: windowFilter,
+        });
+        expect(status, `the delete was accepted — ${message}`).toBe(204);
+      });
+
+      await test.step('And removes nothing', async () => {
+        // Known failure — OPIK-8150. `created_at` binds to the snapshot row's
+        // column on the write path, so a window the items page reports as empty
+        // still matches every snapshot row and the delete removes them.
+        test.fail();
 
         const remaining = await backendClient.listDatasetItemsPage({ datasetId });
         expect(sorted(remaining.items.map((i) => i.id)), 'every item survives a delete that matched nothing')
@@ -175,9 +197,6 @@ test.describe('Dataset items — filter scope across versions', { tag: ['@t3-nig
     'a batch update filtered by item id tags exactly the item that filter lists',
     { tag: ['@cap:datasets.filter-scoped-batch-update'] },
     async ({ versionedDataset, backendClient }) => {
-      // Known failure — OPIK-8150, the same `id` binding as the delete above.
-      test.fail();
-
       const { id: datasetId, itemIds } = versionedDataset;
       const target = itemIds[0];
       const idFilter: BackendFilter[] = [{ field: 'id', operator: '=', value: target }];
@@ -188,12 +207,19 @@ test.describe('Dataset items — filter scope across versions', { tag: ['@t3-nig
         expect(listed.items[0].id, 'the listed row is the target item').toBe(target);
       });
 
-      await test.step('The update tags exactly that item, and no other', async () => {
-        await backendClient.batchUpdateDatasetItemsByFilter({
+      await test.step('The update is accepted', async () => {
+        const { status, message } = await backendClient.datasetItemMutationStatus({
+          operation: 'batch-update',
           datasetId,
           filters: idFilter,
-          tags: [APPLIED_TAG],
+          tag: APPLIED_TAG,
         });
+        expect(status, `the batch update was accepted — ${message}`).toBe(204);
+      });
+
+      await test.step('And tags exactly that item, and no other', async () => {
+        // Known failure — OPIK-8150, the same `id` binding as the delete above.
+        test.fail();
 
         const after = await backendClient.listDatasetItemsPage({ datasetId });
         expect(after.items, 'a scoped update must not add or remove rows').toHaveLength(TOTAL_ITEMS);

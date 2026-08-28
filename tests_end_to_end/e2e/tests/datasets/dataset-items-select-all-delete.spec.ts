@@ -110,8 +110,6 @@ test.describe('Dataset items — select-all delete', { tag: ['@t2-cuj', '@area:d
     'the select-all delete removes exactly the matching items, and only those',
     { tag: ['@cap:datasets.bulk-delete-items'] },
     async ({ versionedDataset, backendClient, page }) => {
-      test.fail();
-
       const { id: datasetId, projectId, idPrefix, prefixBystanderItemIds } = versionedDataset;
       const items = new DatasetItemsPage(page, projectId, datasetId);
       const sorted = (ids: string[]): string[] => [...ids].sort();
@@ -120,11 +118,20 @@ test.describe('Dataset items — select-all delete', { tag: ['@t2-cuj', '@area:d
       await items.waitForReady();
       await items.selectAllOnPage();
       await items.selectAllMatching(VERSIONED_DATASET_MATCHING);
-      await items.bulkDeleteAllSelected();
 
-      const remaining = await backendClient.listDatasetItemsPage({ datasetId });
-      expect(sorted(remaining.items.map((i) => i.id)), 'exactly the bystanders survive')
-        .toEqual(sorted(prefixBystanderItemIds));
+      // Asserted OUTSIDE test.fail(), for the same reason as the API-level
+      // specs: a rejected delete would satisfy the marker exactly as the bug
+      // does, so a hard failure replacing OPIK-8150 would go unnoticed.
+      const status = await items.bulkDeleteAllSelected();
+      expect(status, 'the delete request was accepted').toBe(204);
+
+      await test.step('The accepted delete removed exactly the matching items', async () => {
+        test.fail();
+
+        const remaining = await backendClient.listDatasetItemsPage({ datasetId });
+        expect(sorted(remaining.items.map((i) => i.id)), 'exactly the bystanders survive')
+          .toEqual(sorted(prefixBystanderItemIds));
+      });
     },
   );
 });

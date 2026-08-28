@@ -1001,6 +1001,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       operation: 'delete' | 'batch-update';
       datasetId: string;
       filters: unknown;
+      /**
+       * The tag a `batch-update` applies. Defaults to a value nothing asserts
+       * on, for the negative paths where the request is expected to be rejected
+       * before it mutates anything; a caller asserting on the *effect* of an
+       * accepted update passes the tag it will look for.
+       */
+      tag?: string;
     }): Promise<RawApiResult> {
       const { status, message } =
         args.operation === 'delete'
@@ -1011,7 +1018,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
               body: {
                 dataset_id: args.datasetId,
                 filters: args.filters,
-                update: { tags_to_add: ['should-never-be-applied'] },
+                update: { tags_to_add: [args.tag ?? 'should-never-be-applied'] },
               },
             });
       return { status, message };
