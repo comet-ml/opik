@@ -555,16 +555,25 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     # Read first: it sizes the work, and a clean table skips the mutation entirely (so the mode is safe to run
     # speculatively). Empty or non-numeric output is a dead client, not a clean table — never let that read as success.
     if ! sentinel_before="$(sentinel_counts)"; then sentinel_before=""; fi
-    read -r before_end_time before_ttft before_negative <<< "$sentinel_before"
-    if ! [[ "$before_end_time" =~ ^[0-9]+$ && "$before_ttft" =~ ^[0-9]+$ ]]; then
+    read -r before_end_time before_ttft before_negative before_stale <<< "$sentinel_before"
+    if ! [[ "$before_end_time" =~ ^[0-9]+$ && "$before_ttft" =~ ^[0-9]+$ && "$before_stale" =~ ^[0-9]+$ ]]; then
         echo "ERROR: the sentinel counts could not be read, so it is unknown whether there is anything to repair." >&2
         echo "       Treat this as unverified, not as clean. Fix connectivity and re-run — no mutation was issued." >&2
         exit 1
     fi
     echo "Sentinels before repair: end_time=$before_end_time ttft=$before_ttft (of those, serving a negative duration: $before_negative)"
     if (( before_end_time == 0 && before_ttft == 0 )); then
-        echo "Nothing to repair: no row on any replica carries an epoch end_time or a NaN ttft. No mutation issued."
-        exit 0
+        if (( before_stale == 0 )); then
+            echo "Nothing to repair: no row on any replica carries an epoch end_time or a NaN ttft. No mutation issued."
+            exit 0
+        fi
+        # A negative duration on a row whose end_time is NULL cannot happen while `duration` is MATERIALIZED, and this
+        # mutation cannot fix it: with no sentinel left to match, it would rewrite nothing. Needs a human, not a re-run.
+        echo "WARNING: no sentinel remains, but $before_stale row(s) have a negative duration with a NULL end_time, which" >&2
+        echo "         the materialized expression cannot produce. 'duration' is not being recomputed on rewrite — check" >&2
+        echo "         that it is still a MATERIALIZED column. This repair matches on the sentinel, so it cannot correct" >&2
+        echo "         them. No mutation issued." >&2
+        exit 1
     fi
 
     if ! run_file 000004_rollback_sentinel_repair.sql; then
@@ -583,22 +592,30 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     fi
 
     if ! sentinel_after="$(sentinel_counts)"; then sentinel_after=""; fi
-    read -r after_end_time after_ttft after_negative <<< "$sentinel_after"
-    if ! [[ "$after_end_time" =~ ^[0-9]+$ && "$after_ttft" =~ ^[0-9]+$ ]]; then
+    read -r after_end_time after_ttft after_negative after_stale <<< "$sentinel_after"
+    if ! [[ "$after_end_time" =~ ^[0-9]+$ && "$after_ttft" =~ ^[0-9]+$ && "$after_stale" =~ ^[0-9]+$ ]]; then
         echo "WARNING: sentinel postcondition COULD NOT BE EVALUATED — the counts came back unreadable. The mutation" >&2
         echo "         reported success, but treat the repair as unverified: re-run this mode to re-read the counts." >&2
         SENTINEL_CHECK_FAILED=1
-    elif (( after_end_time == 0 && after_ttft == 0 )); then
-        echo "Sentinel postcondition OK: end_time=0 ttft=0 on every replica."
+    elif (( after_end_time == 0 && after_ttft == 0 && after_stale == 0 )); then
+        echo "Sentinel postcondition OK: end_time=0 ttft=0 stale_duration=0 on every replica."
         echo "Repaired $before_end_time end_time and $before_ttft ttft value(s); 'duration' recomputed from the restored NULL."
         echo "A residual count of negative durations elsewhere in the table is EXPECTED and is not this repair's business:"
         echo "rows whose end_time genuinely precedes start_time are a pre-existing source artifact and stay negative."
     else
-        echo "WARNING: sentinel postcondition FAILED — end_time=$after_end_time ttft=$after_ttft still present after the" >&2
-        echo "         mutation reported success. The likeliest cause is a backend instance still running with" >&2
-        echo "         traceColumnsNonNullable=true and minting fresh sentinels behind the repair; --confirm-flag-reverted" >&2
-        echo "         asserts that is not so, but cannot check it. Confirm the revert is live on EVERY instance, then" >&2
-        echo "         re-run this mode (idempotent)." >&2
+        echo "WARNING: sentinel postcondition FAILED — end_time=$after_end_time ttft=$after_ttft stale_duration=$after_stale" >&2
+        echo "         after the mutation reported success." >&2
+        if (( after_end_time > 0 || after_ttft > 0 )); then
+            echo "         A remaining sentinel most likely means a backend instance is still running with" >&2
+            echo "         traceColumnsNonNullable=true and minting fresh ones behind the repair; --confirm-flag-reverted" >&2
+            echo "         asserts that is not so but cannot check it. Confirm the revert is live on EVERY instance, then" >&2
+            echo "         re-run this mode (idempotent)." >&2
+        fi
+        if (( after_stale > 0 )); then
+            echo "         A non-zero stale_duration means the rewrite did NOT recompute 'duration': rows now have a" >&2
+            echo "         NULL end_time and a negative duration, which the materialized expression cannot produce." >&2
+            echo "         Re-running will not help — check that 'duration' is still a MATERIALIZED column." >&2
+        fi
         SENTINEL_CHECK_FAILED=1
     fi
     exit "$SENTINEL_CHECK_FAILED"
@@ -619,6 +636,17 @@ case "$STAGE" in
         run_file 000004_rollback_stage_a_discard_shadow.sql
         echo "Stage A done: shadow 'traces_local_v2' discarded (now empty); live 'traces' was untouched."
         echo "Nothing to soak or finalize — re-run the backfill to retry the cutover, or stop here."
+        echo
+        echo "BUT the live 'traces' may still need repairing before you walk away. traceColumnsNonNullable was rolled"
+        echo "out before the EXCHANGE, so any trace written while it was true carries an epoch/NaN sentinel and a large"
+        echo "negative duration in this table — untouched by stage A, which only discarded the shadow. If you are"
+        echo "abandoning the cutover rather than retrying it:"
+        echo "  1. Set databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance."
+        echo "  2. ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --sentinel-repair-only --confirm-flag-reverted"
+        echo "     Order matters only between those two: repairing while any instance still has the flag true lets it"
+        echo "     mint fresh sentinels behind the mutation. Stage A itself may come before or after — it TRUNCATEs the"
+        echo "     shadow rather than dropping it, so the evidence the repair needs survives either way."
+        echo "     It reports 'nothing to repair' and exits 0 if no trace landed in that window, so it is safe to run."
         ;;
     B)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }

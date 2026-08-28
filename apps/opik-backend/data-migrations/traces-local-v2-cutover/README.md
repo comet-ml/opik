@@ -870,7 +870,7 @@ read-only drivers cannot surface a mutation-privilege gap by construction.
 | rollback stage A/B (if in scope) | stage A `TRUNCATE`; stage B 2-way `RENAME` + reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). **Stage B also renames**, so it needs **`INSERT` + `CREATE TABLE`** on **`traces_post_rollback_backup`** — a destination that **does not exist yet**, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — and **`SELECT` + `DROP TABLE`** on **`traces_pre_cutover_backup`**, its source. Note stage B is the *likelier* rollback, not the exotic one: the wrap is deferred by default, so the post-`EXCHANGE` resting state is the one stage B reverses, and reaching it needs no extra step. Withhold unless a rollback is actually planned. |
 | rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | **`INSERT` + `CREATE TABLE`** on **`traces_dist_old`** and **`traces_post_rollback_backup`** — both `RENAME` destinations, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — plus `DROP TABLE` on `traces_dist_old`, which is dropped after the rotation. `DROP TABLE` on `traces_local`, plus `ALTER UPDATE(_row_exists)` on the restored `traces`. **Decide this before applying the wrap:** without these grants there is no way back to the pre-cutover table until another grant change lands. (The *wrap itself* stays reversible via the un-wrap row below, which needs no extra grants — but that returns to the successor, not to the original.) |
 | **un-wrap** (`--unwrap-only`, if the wrap is applied) | 2-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces`**, **`traces_local`** and **`traces_dist_old`**, plus **`INSERT` + `CREATE TABLE`** on **`traces_dist_old`** as the `RENAME` destination — a **subset of what stage C's statements require** (same source and destination names, minus `traces_pre_cutover_backup` and `traces_post_rollback_backup`), so a grant set that genuinely covers stage C covers this with nothing added. No `ALTER UPDATE` and no `TRUNCATE`: it promotes no backup and replays nothing. Grant it even when stage C is out of scope — it is the only wrap recovery once `finalize.sh` has dropped the parked original. |
-| post-rollback sentinel repair (`--sentinel-repair-only`, stage B/C only) | one `ALTER TABLE traces` carrying `UPDATE end_time = NULL …` and `UPDATE ttft = NULL …` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` here. Both commands travel in one mutation, so a missing grant on either applies neither. Either grant these two columns with the rollback grants (and revoke them after), or plan to run the repair as a more privileged user. |
+| sentinel repair (`--sentinel-repair-only`, after a stage B/C promote **or** a cutover abandoned pre-`EXCHANGE`) | one `ALTER TABLE traces` carrying `UPDATE end_time = NULL …` and `UPDATE ttft = NULL …` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` here. Both commands travel in one mutation, so a missing grant on either applies neither. Either grant these two columns with the rollback grants (and revoke them after), or plan to run the repair as a more privileged user. |
 | `finalize.sh` (if in scope) | `TRUNCATE` / `DROP TABLE` | `TRUNCATE`, `DROP TABLE`, and `max_table_size_to_drop` override |
 
 > **`RENAME` and `EXCHANGE` check four privileges per name, not two.** Verified against a real server (26.3): a
@@ -1014,6 +1014,9 @@ Pick the stage by how far the cutover got:
 
 - **Stage A — before EXCHANGE:** `./scripts/rollback.sh --database opik --stage A`. Discards the disposable shadow
   `traces_local_v2`; the live `traces` was never touched. (Guarded: aborts unless `traces` is still the original schema.)
+  **"Untouched" is about rows, not values:** the flag was rolled out before the `EXCHANGE`, so traces written during
+  that window carry sentinels and a negative `duration` in the live table, and stage A does not address them. Abandoning
+  the cutover therefore still needs the sentinel repair below; retrying it does not, since the retry's copy heals them.
 - **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'
   --confirm-retention-paused --accept-post-cutover-write-loss`. `EXCHANGE` `traces_pre_cutover_backup` back to live
   `traces`, park the now-displaced successor as `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts
@@ -1032,11 +1035,13 @@ Pick the stage by how far the cutover got:
   --confirm-maintenance`. Rotates the data-less wrapper out and `traces_local` back into `traces` in one atomic
   `RENAME`, then drops the ex-wrapper — landing in the post-`EXCHANGE`, pre-wrap state. (Guarded: aborts unless `traces`
   is `Distributed` and `traces_local` holds the successor schema.) See "Un-wrap" below for when to prefer it over stage C.
-- **Sentinel repair — the tail of stage B/C, once the flag revert is live everywhere:** `./scripts/rollback.sh --database
-  opik --sentinel-repair-only --confirm-flag-reverted`. Restores `NULL` on the rows the flag wrote into the still-Nullable
-  original and recomputes their `duration`. Separate from the stages by necessity, not preference: the config revert has
-  to land on every instance first, and these scripts do not roll out config. See step 2 of "Rolling back the
-  `traceColumnsNonNullable` flip".
+- **Sentinel repair — after a stage B/C promote, or after abandoning the cutover pre-`EXCHANGE`:**
+  `./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted`. Restores `NULL` on the rows the
+  flag wrote into the still-Nullable original and recomputes their `duration`. Separate from the stages by necessity, not
+  preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
+  the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
+  behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
+  evidence the guard looks for survives. See step 2 of "Rolling back the `traceColumnsNonNullable` flip".
 
 ### Un-wrap: reversing sharding without reversing the cutover
 

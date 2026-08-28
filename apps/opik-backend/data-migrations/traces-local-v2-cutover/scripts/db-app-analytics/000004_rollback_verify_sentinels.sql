@@ -11,6 +11,14 @@
 -- it is bounded by the sentinel set and answers a question the operator does have before repairing — how many rows are
 -- currently serving a bogus duration; it is implied 0 once the two gates are, and is not itself a gate.
 --
+-- `stale_duration` is the third gate, and it catches the one way this repair can pass while leaving derived data wrong.
+-- The original's `duration` expression returns NULL whenever `end_time IS NULL`, so a negative duration on a row whose
+-- end_time is NULL is impossible while that column is MATERIALIZED — it can only mean the value was not recomputed when
+-- the row was rewritten. Restoring NULL relies entirely on that recomputation (a MATERIALIZE COLUMN would not help,
+-- since it re-evaluates the same expression), and nothing else here would notice: `negative_from_sentinel` tests the
+-- epoch, which the repair has just cleared, so it reads 0 either way. This invariant needs no assumption about the
+-- column's declared type, which is why it is preferred to asserting one.
+--
 -- What 0 proves: no row on any replica still carries either sentinel, so nothing reads back as "ended at 1970" and no
 -- duration is negative *because of* the flip. What it does not prove: that every such row was found — a write that
 -- lands after this reads has not been counted, which is why the flag revert must be live cluster-wide first
@@ -36,6 +44,7 @@ SELECT
     uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
     uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
     uniqExactIf((workspace_id, project_id, id),
-                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel
+                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
+    uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
 FROM clusterAllReplicas('{cluster}', ${ANALYTICS_DB_DATABASE_NAME}.traces)
 SETTINGS log_comment = 'traces_local_v2_rollback:verify_sentinels';

@@ -856,7 +856,7 @@ class TracesLocalV2CutoverTest {
         assertThat(sentinelCounts())
                 .as("before the repair: 6 rows carry an epoch end_time, 6 a NaN ttft, and all 6 epoch rows are already"
                         + " serving a negative duration the promote made live")
-                .isEqualTo(new SentinelCounts(6L, 6L, 6L));
+                .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
         assertThat(countMatching(workspaceId, "duration < 0"))
                 .as("negative control: 9 negative durations, 6 from the sentinel and 3 genuine — the mix that makes a"
                         + " negative-duration total useless as a gate")
@@ -867,7 +867,7 @@ class TracesLocalV2CutoverTest {
         // gate. The container runs UTC, so only an explicit foreign session timezone can catch a regression here.
         assertThat(sentinelCounts("America/New_York"))
                 .as("the gate is independent of the server timezone, because the epoch literal is pinned to UTC")
-                .isEqualTo(new SentinelCounts(6L, 6L, 6L));
+                .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
 
         var beforeRepair = serverNow();
         repairSentinels();
@@ -881,7 +881,7 @@ class TracesLocalV2CutoverTest {
 
         assertThat(sentinelCounts())
                 .as("the gate clears: no epoch end_time and no NaN ttft left on any replica")
-                .isEqualTo(new SentinelCounts(0L, 0L, 0L));
+                .isEqualTo(new SentinelCounts(0L, 0L, 0L, 0L));
         assertThat(countMatching(workspaceId, "duration < 0"))
                 .as("the 3 genuine negatives remain, so a healthy repair still leaves this total non-zero — it must"
                         + " never be the success criterion")
@@ -1920,7 +1920,8 @@ class TracesLocalV2CutoverTest {
                     uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
                     uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
                     uniqExactIf((workspace_id, project_id, id),
-                                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel
+                                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
+                    uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
                 FROM clusterAllReplicas('{cluster}', %s.traces)
                 """
                 .formatted(DATABASE_NAME)
@@ -1931,7 +1932,8 @@ class TracesLocalV2CutoverTest {
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> new SentinelCounts(
                                 row.get("sentinel_end_time", Long.class),
                                 row.get("sentinel_ttft", Long.class),
-                                row.get("negative_from_sentinel", Long.class))))))
+                                row.get("negative_from_sentinel", Long.class),
+                                row.get("stale_duration", Long.class))))))
                 .block();
     }
 
@@ -1975,8 +1977,11 @@ class TracesLocalV2CutoverTest {
     private record MutationShape(long mutationIds, long commands) {
     }
 
-    /** The three counts {@code 000004_rollback_verify_sentinels.sql} returns; only the first two are gates. */
-    private record SentinelCounts(long endTime, long ttft, long negativeFromSentinel) {
+    /**
+     * The counts {@code 000004_rollback_verify_sentinels.sql} returns. {@code endTime}, {@code ttft} and
+     * {@code staleDuration} are gates; {@code negativeFromSentinel} is context for sizing the damage before a repair.
+     */
+    private record SentinelCounts(long endTime, long ttft, long negativeFromSentinel, long staleDuration) {
     }
 
     // --- query helpers -------------------------------------------------------------------------------------------
