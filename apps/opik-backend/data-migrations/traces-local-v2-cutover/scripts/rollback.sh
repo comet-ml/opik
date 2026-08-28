@@ -658,7 +658,9 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     fi
     # Same aggregates over an all-time range. A 0 inside the window against a non-zero total is the signature of a wrong
     # window -- bounds in local time, a typo -- which otherwise reports as a clean estate and exits 0 over unrepaired rows.
-    if ! sentinel_all="$(sentinel_counts '1970-01-01 00:00:00' '2100-01-01 00:00:00')"; then sentinel_all=""; fi
+    # 1900..2299 is the DateTime64 range, not a round number: far-future timestamps are real in this dataset
+    # (see the runbook's far-future id section), and an arbitrary ceiling would hide exactly those from the comparison.
+    if ! sentinel_all="$(sentinel_counts '1900-01-01 00:00:00' '2299-12-31 23:59:59')"; then sentinel_all=""; fi
     read -r all_end_time all_ttft _ _ <<< "$sentinel_all"
     [[ "$all_end_time" =~ ^[0-9]+$ ]] || { all_end_time="?"; all_ttft="?"; }
 

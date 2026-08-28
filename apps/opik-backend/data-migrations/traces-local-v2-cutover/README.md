@@ -1266,7 +1266,11 @@ Treat a stage B/C rollback as complete only when all of these hold:
       expected, from rows whose `end_time` genuinely precedes `start_time`.
       **"Nothing to repair" is not interchangeable with a completed repair.** It is equally what a wrong window
       produces — bounds in local time being the common case — so check it against the unbounded counts the driver prints
-      beside it before ticking this. This box gates `finalize.sh`, which truncates the parked successor.
+      beside it before ticking this.
+      **`finalize.sh` does not check any of this** — it has no notion of the repair, and reads no marker proving one
+      ran with the right window. This checklist is the only control standing between a wrong-window no-op and
+      `TRUNCATE TABLE traces_post_rollback_backup`, which retires the last reference copy. Treat the box as a human
+      gate, because that is all it is.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
       of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
 
