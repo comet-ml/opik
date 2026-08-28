@@ -46,15 +46,22 @@ const isProvidersAggregateKey = (path: string): boolean =>
 
 const isProviderRootKey = (path: string): boolean => path === PROVIDER_KEY;
 
+// The mounted chip state of the view named by `type`. All three come together:
+// reading the current rows, writing them back and pinning the chip are one
+// operation, so a caller cannot hold half of it.
+export interface QuickFilterLocalChips {
+  values: ChipValueMap;
+  applyValue: (id: string, value: ChipValue) => void;
+  pinChip: (id: string) => void;
+}
+
 interface UseQuickAttributeFilterActionsArgs {
   // The entity whose attributes are on screen. It is also the view the filter
   // lands on, so it drives the target chip, the labels and the analytics.
   type: TRACE_DATA_TYPE;
   tableId: string;
   // Omitted by callers whose own table can never hold the filter (Threads).
-  values?: ChipValueMap;
-  applyValue?: (id: string, value: ChipValue) => void;
-  pinChip?: (id: string) => void;
+  local?: QuickFilterLocalChips;
   // Set when that view is not the one on screen: the row is sent there and the
   // caller moves the table, instead of applying the filter in place.
   handoff?: (chipId: string, row: Filter) => void;
@@ -112,21 +119,17 @@ export const resolveQuickFilterTarget = (
   };
 };
 
-const EMPTY_VALUES: ChipValueMap = {};
-
 export const useQuickAttributeFilterActions = ({
   type,
   tableId,
-  values = EMPTY_VALUES,
-  applyValue,
-  pinChip,
+  local,
   handoff,
 }: UseQuickAttributeFilterActionsArgs): QuickAttributeFilterApi => {
-  // Read chip values through a ref so applying a filter (which mutates `values`)
-  // doesn't change `filter`'s identity — otherwise every chip edit would tear
-  // down and rebuild the CodeMirror quick-filter extension.
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
+  // Read the mounted chips through a ref so applying a filter (which mutates
+  // `values`) doesn't change `filter`'s identity — otherwise every chip edit
+  // would tear down and rebuild the CodeMirror quick-filter extension.
+  const localRef = useRef(local);
+  localRef.current = local;
 
   const canFilter = useCallback(
     (section: QuickFilterSection, path: string) =>
@@ -155,8 +158,12 @@ export const useQuickAttributeFilterActions = ({
       if (handoff) {
         // The destination view owns its chip state, so it merges and pins.
         handoff(chipId, buildRow());
-      } else if (applyValue && pinChip) {
-        const existing = getRows(valuesRef.current[chipId]);
+      } else {
+        const chips = localRef.current;
+        // No handoff and no mounted chips: nothing can hold the filter.
+        if (!chips) return;
+
+        const existing = getRows(chips.values[chipId]);
         const alreadyApplied = existing.some(
           (row) =>
             (row.key ?? "") === (key ?? "") &&
@@ -169,13 +176,10 @@ export const useQuickAttributeFilterActions = ({
           const nextRows = existing.filter(
             (row) => (row.key ?? "") !== "" || (row.value ?? "") !== "",
           );
-          applyValue(chipId, { rows: [...nextRows, buildRow()] });
+          chips.applyValue(chipId, { rows: [...nextRows, buildRow()] });
         }
 
-        pinChip(chipId);
-      } else {
-        // No handoff and no local chip state: nothing can hold the filter.
-        return;
+        chips.pinChip(chipId);
       }
 
       trackEvent(OpikEvent.QUICK_FILTER_APPLIED, {
@@ -186,7 +190,7 @@ export const useQuickAttributeFilterActions = ({
         table_id: tableId,
       });
     },
-    [type, tableId, handoff, applyValue, pinChip],
+    [type, tableId, handoff],
   );
 
   const targetsSpans = type === TRACE_DATA_TYPE.spans;

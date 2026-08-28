@@ -786,9 +786,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const quickAttributeFilterFactory = useLogsQuickAttributeFilter({
     logsType,
     onLogsTypeChange,
-    values: chipValues,
-    applyValue: applyChipValue,
-    pinChip,
+    local: { values: chipValues, applyValue: applyChipValue, pinChip },
   });
 
   const effectiveFilters = useMemo(() => {

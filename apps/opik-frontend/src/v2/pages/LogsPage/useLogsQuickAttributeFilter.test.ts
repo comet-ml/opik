@@ -55,7 +55,7 @@ const setup = (
     useLogsQuickAttributeFilter({
       logsType,
       onLogsTypeChange,
-      ...(withLocalChips ? { values: {}, applyValue, pinChip } : {}),
+      local: withLocalChips ? { values: {}, applyValue, pinChip } : undefined,
     }),
   );
   return {
@@ -238,6 +238,28 @@ describe("useLogsQuickAttributeFilter", () => {
       expect(eventsNamed(OpikEvent.FILTER_PINNED)[0][1]).toMatchObject({
         filter_name: "metadata",
         table_id: "logs.spans",
+      });
+    });
+
+    it("counts only the rows the destination will keep", () => {
+      // Same field, but no value: `sanitizeFilters` drops this row on read, so
+      // the mounted path would never report it either.
+      urlValues[SPANS_KEY] = [
+        {
+          id: "1",
+          field: "metadata",
+          type: "dictionary",
+          operator: "contains",
+          key: "env",
+          value: "",
+        } as Filter,
+      ];
+      const { result } = setup(LOGS_TYPE.threads, "span", false);
+      act(() => result.current.filter("metadata", "model", "opus"));
+      writtenTo(SPANS_KEY);
+
+      expect(eventsNamed(OpikEvent.FILTER_APPLIED)[0][1]).toMatchObject({
+        values: ["opus"],
       });
     });
 

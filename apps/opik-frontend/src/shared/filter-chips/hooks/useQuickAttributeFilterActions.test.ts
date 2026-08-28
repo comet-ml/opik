@@ -90,9 +90,7 @@ describe("useQuickAttributeFilterActions", () => {
       useQuickAttributeFilterActions({
         type,
         tableId: TABLE_ID,
-        values,
-        applyValue,
-        pinChip,
+        local: { values, applyValue, pinChip },
         handoff,
       }),
     );
@@ -141,9 +139,7 @@ describe("useQuickAttributeFilterActions", () => {
           useQuickAttributeFilterActions({
             type: SPANS,
             tableId: TABLE_ID,
-            values,
-            applyValue,
-            pinChip,
+            local: { values, applyValue, pinChip },
           }),
         { initialProps: { values: {} as ChipValueMap } },
       );

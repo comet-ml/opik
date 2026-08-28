@@ -2,13 +2,16 @@ import { useCallback } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, NumberParam, useQueryParam } from "use-query-params";
 import { Filter } from "@/types/filters";
+import { isFilterValid } from "@/lib/filters";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
-import { ChipValue, ChipValueMap } from "@/shared/filter-chips/types";
 import {
   QuickAttributeFilterApi,
   QuickAttributeFilterFactory,
 } from "@/shared/filter-chips/QuickAttributeFilterContext";
-import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import {
+  QuickFilterLocalChips,
+  useQuickAttributeFilterActions,
+} from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
 import { queryBuilderFilterEventProps } from "@/shared/filter-chips/hooks/useFilterChipsAnalytics";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
@@ -80,10 +83,14 @@ const useHandoffWriter = (view: LogsView) => {
         if (duplicate) return prevRaw;
 
         const next = [...existing, row];
+        // Report what the destination will actually apply. `sanitizeFilters`
+        // drops rows the chip cannot hold, and the mounted path reports the
+        // sanitized rows only — so filter the same way rather than counting a
+        // stale row the destination is about to discard.
         trackEvent(OpikEvent.FILTER_APPLIED, {
           ...queryBuilderFilterEventProps(
             chipId,
-            next.filter((r) => r.field === row.field),
+            next.filter((r) => r.field === row.field && isFilterValid(r)),
           ),
           table_id: view.tableId,
         });
@@ -103,23 +110,21 @@ const useHandoffWriter = (view: LogsView) => {
   );
 };
 
-interface LocalChips {
-  values?: ChipValueMap;
-  applyValue?: (id: string, value: ChipValue) => void;
-  pinChip?: (id: string) => void;
-}
-
 /**
  * The quick-filter behaviour for one destination view. The filter applies to
  * the mounted chips when that view is already on screen, and is written into
  * the view plus followed by the table when it is not.
+ *
+ * `local` belongs to the view on screen, so the caller passes it only to the
+ * matching view. That is what makes a write into the wrong table impossible to
+ * express, rather than only unreachable while `handoff` is set.
  */
 const useViewQuickAttributeFilter = (
   view: LogsView,
-  logsType: LOGS_TYPE,
+  isOnScreen: boolean,
   onLogsTypeChange: (logsType: LOGS_TYPE) => void,
   setPage: (page: number) => void,
-  local: LocalChips,
+  local: QuickFilterLocalChips | undefined,
 ): QuickAttributeFilterApi => {
   const write = useHandoffWriter(view);
 
@@ -137,10 +142,8 @@ const useViewQuickAttributeFilter = (
   return useQuickAttributeFilterActions({
     type: view.type,
     tableId: view.tableId,
-    values: local.values,
-    applyValue: local.applyValue,
-    pinChip: local.pinChip,
-    handoff: logsType === view.logsType ? undefined : handoff,
+    local: isOnScreen ? local : undefined,
+    handoff: isOnScreen ? undefined : handoff,
   });
 };
 
@@ -149,9 +152,7 @@ interface UseLogsQuickAttributeFilterArgs {
   onLogsTypeChange: (logsType: LOGS_TYPE) => void;
   // The mounted view's own chips. Omitted by Threads, whose table has no
   // metadata / input / output fields and so can never hold these filters.
-  values?: ChipValueMap;
-  applyValue?: (id: string, value: ChipValue) => void;
-  pinChip?: (id: string) => void;
+  local?: QuickFilterLocalChips;
 }
 
 /**
@@ -165,25 +166,22 @@ interface UseLogsQuickAttributeFilterArgs {
 const useLogsQuickAttributeFilter = ({
   logsType,
   onLogsTypeChange,
-  values,
-  applyValue,
-  pinChip,
+  local,
 }: UseLogsQuickAttributeFilterArgs): QuickAttributeFilterFactory => {
   const [, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
 
-  const local = { values, applyValue, pinChip };
   const tracesApi = useViewQuickAttributeFilter(
     TRACES_VIEW,
-    logsType,
+    logsType === TRACES_VIEW.logsType,
     onLogsTypeChange,
     setPage,
     local,
   );
   const spansApi = useViewQuickAttributeFilter(
     SPANS_VIEW,
-    logsType,
+    logsType === SPANS_VIEW.logsType,
     onLogsTypeChange,
     setPage,
     local,
