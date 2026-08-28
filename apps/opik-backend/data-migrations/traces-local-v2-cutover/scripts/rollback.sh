@@ -89,9 +89,11 @@
 #   --confirm-flag-was-live   Only for --sentinel-repair-only, and only needed when there is NO parked successor: an
 #                             abandoned pre-EXCHANGE cutover, or an estate finalize.sh has already recycled. Asserts
 #                             traceColumnsNonNullable was live HERE, so the epoch/NaN values in `traces` are sentinels it
-#                             minted rather than values a client sent, and accepts that every one of them in the table
-#                             becomes NULL. There is no topological proof of this: `traces_local_v2` exists on every
-#                             installation, so its presence establishes nothing.
+#                             minted rather than values a client sent, and accepts that those WITHIN THE WINDOW become
+#                             NULL. It authorises a window-scoped repair, not a table-wide one: rows outside the window
+#                             are never touched, whether or not this flag is passed. There is no topological proof of
+#                             the assertion: `traces_local_v2` exists on every installation, so its presence
+#                             establishes nothing.
 #   --unwrap-only             reverse ONLY the Distributed wrap (no promote, no reverse-replay). Requires
 #                             --confirm-maintenance. Mutually exclusive with --stage and --reverse-replay-only.
 #   --confirm-maintenance     REQUIRED with --unwrap-only. The un-wrap is gapless per node (atomic rotate), but renaming
@@ -392,7 +394,8 @@ assert_sentinel_repair_state() {
     fi
     if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" ]]; then
         echo "NOTE: no parked successor, so proceeding on --confirm-flag-was-live: you assert traceColumnsNonNullable was" >&2
-        echo "      live on THIS estate, and accept that every epoch end_time and NaN ttft in 'traces' becomes NULL." >&2
+        echo "      live on THIS estate, and accept that every epoch end_time and NaN ttft WITHIN THE SUPPLIED WINDOW" >&2
+        echo "      becomes NULL. Rows outside it are not touched." >&2
         return 0
     fi
     echo "ERROR: --sentinel-repair-only found no parked successor ('traces_post_rollback_backup' carrying the successor" >&2
@@ -730,7 +733,10 @@ case "$STAGE" in
         echo "negative duration in this table — untouched by stage A, which only discarded the shadow. If you are"
         echo "abandoning the cutover rather than retrying it:"
         echo "  1. Set databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance."
-        echo "  2. ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live"
+        echo "  2. ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live \\"
+        echo "       --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'"
+        echo "     Fill both bounds in before running: they are mandatory and this script cannot know them. Only rows"
+        echo "     written inside the window are repaired, so widening is safe and guessing is not."
         echo "     --confirm-flag-was-live is required HERE and not after a stage B/C promote: stage A parks no successor,"
         echo "     and the parked successor is the only topological proof a cutover ran on this estate. Without it the"
         echo "     repair cannot tell a sentinel this flag minted from an epoch a client sent, so you assert it."
@@ -802,7 +808,9 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "     MATERIALIZED duration expression — which guards only 'end_time IS NOT NULL', not the sentinel — computed"
     echo "     a large NEGATIVE duration that the promote made live again. Once step 1 is live on EVERY instance (do it"
     echo "     first, or in-flight writes keep minting sentinels behind the repair):"
-    echo "       ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --sentinel-repair-only --confirm-flag-reverted"
+    echo "       ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --sentinel-repair-only --confirm-flag-reverted \\"
+    echo "         --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'"
+    echo "       Both bounds are mandatory and this script cannot know them; fill them in before running."
     echo "     It counts first and skips the mutation if there is nothing to repair, restores NULL (a MATERIALIZE COLUMN"
     echo "     would NOT: it re-evaluates the same expression on the same sentinel), and asserts the counts reached 0."
     echo "     It needs ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces', which the rollback grant set does not"

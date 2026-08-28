@@ -861,23 +861,35 @@ class TracesLocalV2CutoverTest {
             insertShapedTrace(workspaceId, projectId, "outside-window", Instant.parse("2025-01-01T10:00:00Z"),
                     Instant.EPOCH, Double.NaN);
         }
+        // The last_updated_at arm: created long before the window, updated inside it — which is where its sentinel came
+        // from. Dropping that arm from either the repair or the counts would leave this row damaged and still pass.
+        var historic = Instant.parse("2024-11-05T08:00:00Z");
+        insertShapedTrace(workspaceId, projectId, "updated-in-window", startTime, Instant.EPOCH, Double.NaN,
+                historic, Instant.parse("2025-03-04T10:30:00Z"));
+        // The half-open boundaries. windowFrom is inclusive, windowTo exclusive, so exactly one of these is repaired;
+        // flipping either operator, or swapping >= for >, moves one of them and fails.
+        insertShapedTrace(workspaceId, projectId, "at-window-from", startTime, Instant.EPOCH, Double.NaN,
+                historic, Instant.parse("2025-03-04T09:00:00Z"));
+        insertShapedTrace(workspaceId, projectId, "at-window-to", startTime, Instant.EPOCH, Double.NaN,
+                historic, Instant.parse("2025-03-04T11:00:00Z"));
 
         assertThat(sentinelCounts(windowFrom, windowTo))
-                .as("before the repair, window-scoped: 6 rows carry an epoch end_time, 6 a NaN ttft, and all 6 epoch rows are already"
-                        + " serving a negative duration the promote made live")
-                .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
+                .as("before the repair, window-scoped: 8 keys are in the window — the 6 same-timestamp cohorts plus the row"
+                        + " updated inside it and the row exactly at windowFrom. The row at windowTo is excluded, the"
+                        + " window being half-open")
+                .isEqualTo(new SentinelCounts(8L, 8L, 8L, 0L));
         assertThat(countMatching(workspaceId, "duration < 0"))
-                .as("negative control: 11 negative durations — 6 from sentinels inside the window, 3 genuine, and 2 from"
-                        + " the out-of-window cohort. Only the first 6 are this repair's business, which is what makes a"
-                        + " negative-duration total useless as a gate")
-                .isEqualTo(11);
+                .as("negative control: 14 negative durations, of which only the 8 inside the window are this repair's"
+                        + " business — which is what makes a negative-duration total useless as a gate")
+                .isEqualTo(14);
 
         // The epoch literal pins 'UTC'. Unpinned it parses in the server timezone, so on a non-UTC host the predicate
         // matches nothing and the driver reports "nothing to repair" over damaged rows — a silent false negative on the
         // gate. The container runs UTC, so only an explicit foreign session timezone can catch a regression here.
         assertThat(sentinelCountsUnderForeignTimezone(windowFrom, windowTo))
-                .as("the gate is independent of the server timezone, because the epoch literal is pinned to UTC")
-                .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
+                .as("the gate is independent of the server timezone: both the epoch literal and the window bounds are"
+                        + " pinned to UTC")
+                .isEqualTo(new SentinelCounts(8L, 8L, 8L, 0L));
 
         var beforeRepair = serverNow();
         repairSentinels(windowFrom, windowTo);
@@ -893,9 +905,9 @@ class TracesLocalV2CutoverTest {
                 .as("the gate clears: no epoch end_time and no NaN ttft left on any replica")
                 .isEqualTo(new SentinelCounts(0L, 0L, 0L, 0L));
         assertThat(countMatching(workspaceId, "duration < 0"))
-                .as("5 negatives remain after a fully successful repair — 3 genuine and 2 out-of-window — so this total"
-                        + " must never be the success criterion")
-                .isEqualTo(5);
+                .as("6 negatives remain after a fully successful repair — 3 genuine, 2 out-of-window, and the one exactly"
+                        + " at the exclusive windowTo bound — so this total must never be the success criterion")
+                .isEqualTo(6);
 
         // The property the window exists for. Without it these two are indistinguishable from the flag's damage, and
         // nothing could restore them: the parked successor encodes an absent end_time as this same epoch.
@@ -903,6 +915,20 @@ class TracesLocalV2CutoverTest {
                 "name = 'outside-window' AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC') AND isNaN(ttft)"))
                 .as("a row matching the predicate but written outside the window keeps both of its values")
                 .isEqualTo(2);
+
+        // The last_updated_at arm and the two boundaries. Each of these fails on a different single-character change.
+        assertThat(countMatching(workspaceId,
+                "name = 'updated-in-window' AND end_time IS NULL AND ttft IS NULL AND duration IS NULL"))
+                .as("created before the window but updated inside it: repaired, because the window matches either column")
+                .isEqualTo(1);
+        assertThat(countMatching(workspaceId,
+                "name = 'at-window-from' AND end_time IS NULL AND ttft IS NULL"))
+                .as("windowFrom is inclusive, so a row exactly on it is repaired")
+                .isEqualTo(1);
+        assertThat(countMatching(workspaceId,
+                "name = 'at-window-to' AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC') AND isNaN(ttft)"))
+                .as("windowTo is exclusive, so a row exactly on it keeps its sentinels")
+                .isEqualTo(1);
 
         assertThat(countMatching(workspaceId,
                 "name = 'sentinel-both' AND end_time IS NULL AND ttft IS NULL AND duration IS NULL"))
@@ -1776,6 +1802,16 @@ class TracesLocalV2CutoverTest {
      */
     private void insertShapedTrace(String workspaceId, UUID projectId, String name, Instant startTime,
             Instant endTime, Double ttft) {
+        insertShapedTrace(workspaceId, projectId, name, startTime, endTime, ttft, startTime, startTime);
+    }
+
+    /**
+     * As above, with {@code created_at} and {@code last_updated_at} set independently of {@code start_time}. The repair
+     * window matches on either, so a row created before it but updated inside it must still be repaired — a cohort no
+     * caller of the shorter form can express, since it ties all three together.
+     */
+    private void insertShapedTrace(String workspaceId, UUID projectId, String name, Instant startTime,
+            Instant endTime, Double ttft, Instant createdAt, Instant lastUpdatedAt) {
         execute("""
                 INSERT INTO traces (id, workspace_id, project_id, name, start_time, end_time, created_at,
                                     last_updated_at, ttft)
@@ -1788,8 +1824,8 @@ class TracesLocalV2CutoverTest {
                     .bind("project_id", projectId)
                     .bind("name", name)
                     .bind("start_time", ClickHouseDateTimeFormat.formatNanos(startTime))
-                    .bind("created_at", ClickHouseDateTimeFormat.formatNanos(startTime))
-                    .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(startTime));
+                    .bind("created_at", ClickHouseDateTimeFormat.formatNanos(createdAt))
+                    .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt));
             if (endTime == null) {
                 statement.bindNull("end_time", String.class);
             } else {
@@ -1954,14 +1990,17 @@ class TracesLocalV2CutoverTest {
                                 duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
                     uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
                 FROM clusterAllReplicas('{cluster}', %s.traces)
-                WHERE (   (created_at      >= toDateTime64('%s', 6, 'UTC') AND created_at      < toDateTime64('%s', 6, 'UTC'))
-                       OR (last_updated_at >= toDateTime64('%s', 6, 'UTC') AND last_updated_at < toDateTime64('%s', 6, 'UTC')))
+                WHERE (   (created_at      >= toDateTime64(:from, 6, 'UTC') AND created_at      < toDateTime64(:to, 6, 'UTC'))
+                       OR (last_updated_at >= toDateTime64(:from, 6, 'UTC') AND last_updated_at < toDateTime64(:to, 6, 'UTC')))
                 """
-                .formatted(DATABASE_NAME, windowFrom, windowTo, windowFrom, windowTo)
+                .formatted(DATABASE_NAME)
                 + settingsClause;
         return template
                 .nonTransaction(connection -> Mono
-                        .from(connection.createStatement(sql).execute())
+                        .from(connection.createStatement(sql)
+                                .bind("from", windowFrom)
+                                .bind("to", windowTo)
+                                .execute())
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> new SentinelCounts(
                                 row.get("sentinel_end_time", Long.class),
                                 row.get("sentinel_ttft", Long.class),
