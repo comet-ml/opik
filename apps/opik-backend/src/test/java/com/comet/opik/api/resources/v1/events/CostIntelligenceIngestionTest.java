@@ -590,7 +590,7 @@ class CostIntelligenceIngestionTest {
                 // distinct from every other integer above, so a positional-bind rotation in
                 // CipxTraceIdentityDAO shows up here as a value reported under the wrong name.
                 // These are session running totals re-stamped on each trace of the session — a
-                // reader aggregates them with max() per session_id, never sum() (migration 000118).
+                // reader aggregates them with max() per session_id, never sum() (migration 000119).
                 assertThat(row.get().agentsDispatched()).isEqualTo(17);
                 assertThat(row.get().agentsLinked()).isEqualTo(12);
                 assertThat(row.get().agentsAmbiguous()).isEqualTo(4);
