@@ -338,7 +338,8 @@ authentication:
   #   the auth hop -- lower this value too.
   requestTimeout: ${AUTH_REQUEST_TIMEOUT:-3s}
   # Default: 1
-  # Description: Maximum retry attempts for a failed auth request. The call is issued through the
+  # Description: Maximum number of RETRIES for a failed auth request -- additional attempts after
+  #   the first, not a total attempt budget. The default of 1 therefore permits 2 outbound calls. The call is issued through the
   #   shared RetriableHttpClient, which owns the retry policy for outbound calls in this service --
   #   nothing bespoke is implemented for this hop. Retried: transport failures per
   #   RetryUtils.handleHttpErrors (SocketException, TimeoutException, InterruptedIOException --

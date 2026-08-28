@@ -14,7 +14,6 @@ import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -84,10 +83,10 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RemoteAuthServiceTest {
 
-    // Auth-call timeout/retry knobs (see AuthenticationConfig). Retries are disabled for the
-    // shared service so the assertions below observe exactly one request per call; the retry and
-    // timeout behaviour itself is covered by the dedicated tests near the bottom of this class,
-    // which build their own service with retries enabled.
+    // Auth-call timeout/retry knobs (see AuthenticationConfig, applied in authCall). Retries are
+    // disabled for the shared service so the assertions below observe exactly one request per call;
+    // the retry and timeout behaviour itself is covered by the dedicated tests near the bottom of
+    // this class, which build their own service with retries enabled.
     private static final Duration TEST_AUTH_TIMEOUT = Duration.ofSeconds(3);
     private static final int TEST_AUTH_MAX_RETRIES = 0;
     private static final Duration TEST_AUTH_MIN_BACKOFF = Duration.ofMillis(250);
@@ -735,11 +734,12 @@ class RemoteAuthServiceTest {
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
 
-    // --- Auth-call timeout and retry (see AuthenticationConfig / withAuthTimeout / withAuthRetry) ---
+    // --- Auth-call timeout and retry (see AuthenticationConfig, and authPost/authCall which apply
+    // the readTimeout and retry policy through the shared RetriableHttpClient) ---
     //
     // The class-level service disables retries so the assertions above observe exactly one request.
     // These tests build their own service with retries enabled and assert on the request count
-    // WireMock actually received, which is the only way a regression in withAuthRetry is visible.
+    // WireMock actually received, which is the only way a retry regression is visible.
 
     private RemoteAuthService authServiceWith(Duration timeout, int maxRetries) {
         return new RemoteAuthService(TestHttpClientUtils.client(),
@@ -793,17 +793,22 @@ class RemoteAuthServiceTest {
         var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
         var scenario = "transient-transport-failure";
 
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+
         // EMPTY_RESPONSE surfaces as NoHttpResponseException, which RetryUtils treats as retriable.
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .inScenario(scenario).whenScenarioStateIs(Scenario.STARTED)
                 .willSetStateTo("recovered")
                 .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
+        // The recovery stub matches ONLY when the retried request still carries the credential.
+        // requestCustomizer is re-applied per attempt; if that ever regressed, the retry would miss
+        // this stub and the test would fail instead of silently authenticating without credentials.
         WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                 .inScenario(scenario).whenScenarioStateIs("recovered")
                 .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
 
-        var apiKey = "apiKey-" + UUID.randomUUID();
-        var workspaceName = "workspace-" + UUID.randomUUID();
         authenticateWith(authServiceWith(TEST_AUTH_TIMEOUT, 1), workspaceName, apiKey);
 
         // The second attempt is what populated the context: without the retry this would have thrown.
@@ -818,34 +823,26 @@ class RemoteAuthServiceTest {
         assertThat(authRequestCount()).isEqualTo(2);
     }
 
-    @Test
-    void authRetry__whenTransportKeepsFailing__thenAttemptsAreBoundedByMaxRetries() {
-        WIRE_MOCK.server().stubFor(post("/opik/auth")
-                .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
-
-        var service = authServiceWith(TEST_AUTH_TIMEOUT, 2);
-
-        assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
-                "apiKey-" + UUID.randomUUID()))
-                .isInstanceOf(ProcessingException.class);
-
-        // maxRetries=2 means 1 initial attempt + 2 retries. A regression that retries unbounded,
-        // or not at all, changes this number.
-        assertThat(authRequestCount()).isEqualTo(3);
+    static Stream<Arguments> retryBudgetArgs() {
+        // maxRetries -> total outbound attempts. maxRetries counts retries, not attempts, so the
+        // expected count is always maxRetries + 1. 0 must mean "no retry", not "retry once".
+        return Stream.of(arguments(0, 1), arguments(1, 2), arguments(2, 3));
     }
 
-    @Test
-    void authRetry__whenRetriesDisabled__thenSingleAttempt() {
+    @ParameterizedTest
+    @MethodSource("retryBudgetArgs")
+    void authRetry__whenTransportKeepsFailing__thenAttemptsAreBoundedByMaxRetries(int maxRetries,
+            int expectedAttempts) {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
 
-        var service = authServiceWith(TEST_AUTH_TIMEOUT, 0);
+        var service = authServiceWith(TEST_AUTH_TIMEOUT, maxRetries);
 
         assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
                 "apiKey-" + UUID.randomUUID()))
                 .isInstanceOf(ProcessingException.class);
 
-        assertThat(authRequestCount()).isEqualTo(1);
+        assertThat(authRequestCount()).isEqualTo(expectedAttempts);
     }
 
     /**
@@ -945,19 +942,27 @@ class RemoteAuthServiceTest {
     /**
      * 503/504 are retried, because {@link RetriableHttpClient} maps them to
      * {@code RetryUtils.RetryableHttpException} before the response reaches {@code verifyResponse}.
-     * That is the shared client's contract rather than this service's choice, and it is the useful
-     * behaviour here: React emits 503s while draining during a rolling restart.
+     * That is the shared client's contract rather than this service's choice, and it is useful
+     * here: React emits 503s while draining during a rolling restart.
+     * <p>
+     * On exhaustion the caller must still see the same public error every other upstream failure on
+     * this path produces, and it must not carry the upstream body: that message is attacker-
+     * influenced content on a credential-bearing request, and it belongs in the log, not in the
+     * response envelope.
      */
     @Test
-    void authRetry__whenReactReturnsServiceUnavailable__thenRetried() {
+    void authRetry__whenReactReturnsServiceUnavailable__thenRetriedThenMappedToPublicError() {
+        var upstreamBody = "SENSITIVE-UPSTREAM-DETAIL-" + UUID.randomUUID();
         WIRE_MOCK.server().stubFor(post("/opik/auth")
-                .willReturn(aResponse().withStatus(HttpStatus.SC_SERVICE_UNAVAILABLE)));
+                .willReturn(aResponse().withStatus(HttpStatus.SC_SERVICE_UNAVAILABLE).withBody(upstreamBody)));
 
         var service = authServiceWith(TEST_AUTH_TIMEOUT, 2);
 
         assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
                 "apiKey-" + UUID.randomUUID()))
-                .isInstanceOf(RetryUtils.RetryableHttpException.class);
+                .isInstanceOf(InternalServerErrorException.class)
+                .hasMessage("Unexpected error while authenticating user")
+                .hasMessageNotContaining(upstreamBody);
 
         assertThat(authRequestCount()).isEqualTo(3);
     }

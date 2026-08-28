@@ -60,7 +60,8 @@ public class AuthenticationConfig {
     private Duration requestTimeout;
 
     /**
-     * Maximum retry attempts for a failed auth request.
+     * Maximum number of <em>retries</em> for a failed auth request: additional attempts after the
+     * first, not a total attempt budget. The default of 1 therefore permits 2 outbound calls.
      * <p>
      * The call goes through the shared {@code RetriableHttpClient}, which owns retry and timeout
      * policy for outbound calls in this service, so nothing bespoke is implemented for this hop.
@@ -89,8 +90,8 @@ public class AuthenticationConfig {
     private Duration requestRetryMinBackoff;
 
     /**
-     * Upper bound on the backoff between auth request attempts, which doubles from
-     * {@link #requestRetryMinBackoff} and is capped here.
+     * Upper bound on the backoff between auth request attempts. Reactor's {@code Retry.backoff}
+     * grows exponentially from {@link #requestRetryMinBackoff} and is capped here.
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)

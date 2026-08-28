@@ -30,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.net.URI;
 import java.time.Duration;
@@ -106,6 +107,14 @@ class RemoteAuthService implements AuthService {
     private final int requestMaxRetries;
     private final Duration requestRetryMinBackoff;
     private final Duration requestRetryMaxBackoff;
+
+    /**
+     * Built once and reused: {@link Retry} is immutable and its inputs are fixed configuration, so
+     * rebuilding it per request allocates for nothing. Computed lazily rather than in a field
+     * initializer, which cannot read the blank finals the generated constructor assigns. The race
+     * is benign -- two threads may both build one, and either is equivalent.
+     */
+    private volatile Retry retryPolicy;
 
     private final @NonNull WorkspacePermissionsService workspacePermissionsService;
 
@@ -554,7 +563,7 @@ class RemoteAuthService implements AuthService {
      * no large-payload case arguing for an exclusion.
      */
     private String getWorkspaceId(String workspaceName) {
-        return authCall(RetriableHttpClient.Request.<String>builder()
+        return authCall("getting workspace id", RetriableHttpClient.Request.<String>builder()
                 .requestFunction(c -> c.target(URI.create(reactServiceUrl.url()))
                         .path("workspaces")
                         .path("workspace-id")
@@ -578,7 +587,7 @@ class RemoteAuthService implements AuthService {
      */
     private <T> T authPost(String path, Consumer<Invocation.Builder> credentials, AuthRequest body,
             Function<Response, T> responseFunction) {
-        return authCall(RetriableHttpClient.Request.<T>builder()
+        return authCall("authenticating user", RetriableHttpClient.Request.<T>builder()
                 .requestFunction(target -> target.target(URI.create(reactServiceUrl.url()))
                         .path("opik")
                         .path(path))
@@ -605,14 +614,35 @@ class RemoteAuthService implements AuthService {
      * A {@code requestTimeout} of zero means "inherit the shared client timeout", expressed by
      * leaving {@code readTimeout} unset rather than sending a zero.
      */
-    private <T> T authCall(RetriableHttpClient.Request.RequestBuilder<T> request,
+    private Retry retryPolicy() {
+        var cached = retryPolicy;
+        if (cached == null) {
+            cached = RetryUtils.handleHttpErrors(requestMaxRetries, requestRetryMinBackoff,
+                    requestRetryMaxBackoff);
+            retryPolicy = cached;
+        }
+        return cached;
+    }
+
+    private <T> T authCall(String operation, RetriableHttpClient.Request.RequestBuilder<T> request,
             Function<RetriableHttpClient.Request<T>, Mono<T>> execute) {
-        return execute.apply(request
-                .retryPolicy(RetryUtils.handleHttpErrors(requestMaxRetries, requestRetryMinBackoff,
-                        requestRetryMaxBackoff))
-                .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
-                .build())
-                .block();
+        try {
+            return execute.apply(request
+                    .retryPolicy(retryPolicy())
+                    .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
+                    .build())
+                    .block();
+        } catch (RetryUtils.RetryableHttpException retriesExhausted) {
+            // RetriableHttpClient converts 503/504 into this before the response reaches
+            // verifyResponse, so an exhausted retry would otherwise surface a different error shape
+            // than every other upstream failure on this path, and its message carries the upstream
+            // body -- which must not reach the caller of a credential-bearing request. Collapse it
+            // onto the same public error unexpectedRemoteError produces, keeping the detail in the
+            // log and the cause rather than in what the caller sees.
+            log.error("Unexpected error while {}, retries exhausted against the auth service",
+                    operation, retriesExhausted);
+            throw new InternalServerErrorException("Unexpected error while " + operation);
+        }
     }
 
     private String getWorkspaceIdFromResponse(Response response) {

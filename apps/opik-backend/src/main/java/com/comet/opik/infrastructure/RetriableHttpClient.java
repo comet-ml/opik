@@ -14,6 +14,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -34,6 +35,9 @@ import java.util.function.Function;
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RetriableHttpClient {
+
+    /** Upstream error bodies are arbitrary content; cap what reaches exception messages and logs. */
+    private static final int MAX_DIAGNOSTIC_BODY_LENGTH = 512;
 
     private final @NonNull Client client;
 
@@ -83,9 +87,9 @@ public class RetriableHttpClient {
                     int statusCode = response.getStatus();
                     if (isRetryableStatusCode(statusCode)) {
                         response.bufferEntity(); // Buffer the entity to allow multiple reads
-                        String body = response.readEntity(String.class);
                         return Mono.error(new RetryUtils.RetryableHttpException(
-                                "Service temporarily unavailable (HTTP %s): %s".formatted(statusCode, body),
+                                "Service temporarily unavailable (HTTP %s): %s"
+                                        .formatted(statusCode, abbreviatedBody(response)),
                                 statusCode));
                     }
                     return Mono.just(response);
@@ -93,6 +97,24 @@ public class RetriableHttpClient {
                 .flatMap(value -> Mono.fromCallable(() -> request.responseFunction().apply(value))))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(request.retryPolicy());
+    }
+
+    /**
+     * The upstream body, truncated to {@link #MAX_DIAGNOSTIC_BODY_LENGTH}.
+     * <p>
+     * This string ends up in {@code RetryableHttpException}'s message, which
+     * {@code RetryUtils.handleHttpErrors} logs before every retry and which propagates to the
+     * caller on exhaustion. A 503/504 body is arbitrary upstream content -- a proxy error page, a
+     * stack trace, or on a credential-bearing call whatever the upstream chose to echo back -- so
+     * it must not be able to flood the logs or carry an unbounded amount of upstream detail into
+     * them. Mirrors the same bound in {@code RemoteAuthService.readErrorMessage}.
+     */
+    private String abbreviatedBody(Response response) {
+        try {
+            return StringUtils.abbreviate(response.readEntity(String.class), MAX_DIAGNOSTIC_BODY_LENGTH);
+        } catch (RuntimeException unreadable) {
+            return "<unreadable body>";
+        }
     }
 
     private boolean isRetryableStatusCode(int statusCode) {
