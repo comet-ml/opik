@@ -1036,12 +1036,19 @@ Pick the stage by how far the cutover got:
   `RENAME`, then drops the ex-wrapper — landing in the post-`EXCHANGE`, pre-wrap state. (Guarded: aborts unless `traces`
   is `Distributed` and `traces_local` holds the successor schema.) See "Un-wrap" below for when to prefer it over stage C.
 - **Sentinel repair — after a stage B/C promote, or after abandoning the cutover pre-`EXCHANGE`:**
-  `./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted`. Restores `NULL` on the rows the
-  flag wrote into the still-Nullable original and recomputes their `duration`. **Without a parked successor** — an
-  abandoned pre-`EXCHANGE` cutover, or an estate `finalize.sh` has recycled — it also needs `--confirm-flag-was-live`,
-  because nothing in the topology or the data then proves an epoch `end_time` is a sentinel this flag minted rather than
-  a value a client sent, and the repair rewrites the whole table. **Single shard only:** it mutates the shard it connects
-  to while verifying across all of them, so it refuses on a multi-shard cluster and must be run once per shard. Separate from the stages by necessity, not
+  restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. Which
+  invocation depends on whether a promote parked the successor, because that is the only topological proof a cutover ran
+  on this estate:
+  ```bash
+  # after a stage B/C promote — traces_post_rollback_backup is the proof
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+  # no parked successor: abandoned pre-EXCHANGE (incl. after stage A), or finalize.sh has recycled it
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live
+  ```
+  The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
+  distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
+  table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
+  a multi-shard cluster and must be run once per shard. Separate from the stages by necessity, not
   preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
   the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
   behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
