@@ -928,6 +928,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FIN_FREE,
+      label: "inclusionai/ling-3.0-flash-fin:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
       label: "inclusionai/ling-3.0-flash:free",
     },
@@ -2842,6 +2846,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
       label: "Gemma 4 31B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
+      label: "Gemini Omni 1.1 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_FLASH_PREVIEW,

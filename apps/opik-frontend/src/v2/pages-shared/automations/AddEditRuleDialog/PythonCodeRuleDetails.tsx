@@ -12,11 +12,9 @@ import { Label } from "@/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { resolveTraceEvaluatorVariableDefault } from "@/lib/llm";
+import { reservedPythonMetricVariablesForScope } from "./helpers";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -34,14 +32,15 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
-  const agenticToolsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENTIC_TOOLS_ENABLED,
-  );
 
   // Determine the type for autocomplete based on scope
   const autocompleteType = isSpanScope
     ? TRACE_DATA_TYPE.spans
     : TRACE_DATA_TYPE.traces;
+
+  // Scope-appropriate reserved set, as LLMJudgeRuleDetails does — `spans` is a
+  // trace-scope sentinel that span scope's schema rejects.
+  const reservedVariables = reservedPythonMetricVariablesForScope(scope);
 
   return (
     <>
@@ -76,7 +75,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                                   v,
                                   currentArguments[v],
                                   scope,
-                                  agenticToolsEnabled,
+                                  reservedVariables,
                                 );
                             });
                         } catch (e) {
@@ -127,11 +126,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 datasetColumnNames={datasetColumnNames}
                 type={autocompleteType}
                 includeIntermediateNodes
-                reservedSentinels={
-                  agenticToolsEnabled
-                    ? RESERVED_TRACE_EVALUATOR_VARIABLES
-                    : undefined
-                }
+                reservedSentinels={reservedVariables}
               />
             );
           }}

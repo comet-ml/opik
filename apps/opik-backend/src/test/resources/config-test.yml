@@ -843,9 +843,6 @@ serviceToggles:
   #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
-  # Default: false
-  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
-  agenticToolsEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"

@@ -4,6 +4,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
@@ -63,6 +64,9 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
     @Mock
     private TraceService traceService;
+    // Only reaches the base scorer's shared span-size helper, which this scorer never calls.
+    @Mock
+    private SpanService spanService;
 
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
@@ -105,6 +109,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                 redissonClient,
                 feedbackScoreService,
                 traceService,
+                spanService,
                 pythonEvaluatorService);
     }
 
