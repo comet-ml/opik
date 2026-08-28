@@ -83,7 +83,7 @@ For quickstarts, installs, and any sequential procedure. `title` on each `<Step>
   <Step title="Run the integration">
     Once the skill is installed, you can add tracing using the following prompt:
     ```
-    Instrument my agent with Opik using the /instrument command.
+    Instrument my agent with Opik using the /opik-instrument command.
     ```
   </Step>
 </Steps>
