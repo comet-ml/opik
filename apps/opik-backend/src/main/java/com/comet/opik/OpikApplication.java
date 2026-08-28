@@ -50,6 +50,7 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
+import io.dropwizard.core.ConfiguredBundle;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 import io.dropwizard.forms.MultiPartBundle;
@@ -94,6 +95,21 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .migrationsFileName(DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME)
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
+        // MUST run before the GuiceBundle below. Redisson's codecs capture JsonUtils' mapper while the
+        // Guice injector is built, which happens in the bundle run phase — before Application.run().
+        // RedisConfig holds it by reference and RedisStreamCodec memoizes a copy, while
+        // JsonUtils.configure() *replaces* the static mapper, so a holder that captured it earlier keeps
+        // Jackson's defaults (maxStringLength 20_000_000) for the life of the process no matter what
+        // JACKSON_MAX_STRING_LENGTH says. An entry over that default can be written to a Redis stream but
+        // never read back, and the decode fails inside Redisson below our error handling — no messageId,
+        // so the entry is never acked or removed and the stream wedges permanently.
+        bootstrap.addBundle(new ConfiguredBundle<OpikConfiguration>() {
+            @Override
+            public void run(OpikConfiguration configuration, Environment environment) {
+                JsonUtils.configure(configuration.getJacksonConfig().getMaxStringLength(),
+                        configuration.getJacksonConfig().getMaxDocumentLength());
+            }
+        });
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle
                         .<OpikConfiguration>forDatabase(
@@ -142,10 +158,10 @@ public class OpikApplication extends Application<OpikConfiguration> {
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
         long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();
 
-        // Apply the same stream-read limits to both the HTTP (Dropwizard) and internal (JsonUtils) mappers,
-        // so an oversized batch aborts mid-parse before a huge node tree is built.
+        // Apply the same stream-read limits to the HTTP (Dropwizard) mapper, so an oversized batch aborts
+        // mid-parse before a huge node tree is built. JsonUtils itself is configured earlier, from the
+        // bundle registered in initialize() — it has to happen before the Guice injector captures it.
         JsonUtils.applyStreamReadConstraints(environment.getObjectMapper(), maxStringLength, maxDocumentLength);
-        JsonUtils.configure(maxStringLength, maxDocumentLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

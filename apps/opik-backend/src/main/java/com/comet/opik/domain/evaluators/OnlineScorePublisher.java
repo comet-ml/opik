@@ -7,11 +7,14 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.infrastructure.JacksonConfig;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -97,15 +100,25 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     private final Map<AutomationRuleEvaluatorType, OnlineScoringStreamConfigurationAdapter> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final LongCounter enqueueCounter;
+    private final long maxPayloadBytes;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
+            @NonNull @Config("jacksonConfig") JacksonConfig jacksonConfig,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        // Mirror exactly the document-level constraint the consumer's Jackson reader enforces. Per-string
+        // length needs no guard here: the HTTP mapper already rejects an oversized string at ingest with
+        // the same maxStringLength the stream reader applies, so the two are aligned by configuration.
+        // maxDocumentLength <= 0 means unlimited, in which case the reader has no document limit either
+        // and there is nothing to guard against.
+        this.maxPayloadBytes = jacksonConfig.getMaxDocumentLength() > 0
+                ? jacksonConfig.getMaxDocumentLength()
+                : Long.MAX_VALUE;
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
@@ -139,6 +152,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
+            var tooLargeAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
+                    WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "skipped_too_large");
             return Flux.fromIterable(messages)
                     // Stamp the workspace name resolved from the reactive context onto messages that don't
                     // already carry one, so async consumers and their per-workspace metrics get a real name.
@@ -149,6 +164,26 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             && StringUtils.isNotBlank(ctxWorkspaceName)
                                     ? scoped.withWorkspaceName(ctxWorkspaceName)
                                     : message)
+                    // Refuse to enqueue anything the consumer could not read back. Jackson has no
+                    // serialization-side limit, so without this check an oversized message is written happily
+                    // and then fails to decode on read — inside Redisson, with no messageId, which means it
+                    // can never be acked or removed and wedges the stream for good. Skipping one evaluation
+                    // is strictly better than losing the stream.
+                    .filterWhen(message -> Mono.fromCallable(() -> {
+                        if (maxPayloadBytes == Long.MAX_VALUE) {
+                            return true; // no document limit configured; don't pay for serializing to measure
+                        }
+                        long size = serializedSize(message);
+                        if (size <= maxPayloadBytes) {
+                            return true;
+                        }
+                        enqueueCounter.add(1, tooLargeAttrs);
+                        log.warn(
+                                "Skipping online scoring: payload of '{}' bytes exceeds the '{}' byte document "
+                                        + "limit, evaluatorType '{}', workspaceId '{}'",
+                                size, maxPayloadBytes, type.getType(), workspaceId);
+                        return false;
+                    }))
                     .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> {
@@ -163,6 +198,20 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 // Run the enqueue (Redis stream writes) off the caller's thread — e.g. the EventBus thread for
                 // the samplers — on a bounded worker pool.
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Serialized size of a message as the stream codec would write it. Returns 0 when the message can't be
+     * serialized at all, so the enqueue proceeds and fails (and is counted) on the normal error path rather
+     * than being silently dropped here.
+     */
+    private long serializedSize(Object message) {
+        try {
+            return JsonUtils.getMapper().writeValueAsBytes(message).length;
+        } catch (JsonProcessingException exception) {
+            log.warn("Could not measure message size, allowing enqueue to proceed", exception);
+            return 0L;
+        }
     }
 
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,
