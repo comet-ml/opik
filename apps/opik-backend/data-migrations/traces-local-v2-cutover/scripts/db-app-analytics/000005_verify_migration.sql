@@ -201,9 +201,10 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- once, far enough apart to land in different created_at weeks, can trigger it; trace ids are
 -- client-supplied, so a re-sent id is ordinary rather than exotic.
 --
--- LIMITATION, which bounds the argument that follows: this cannot resolve a VERSION TIE. When a key carries two or more
--- rows with an identical last_updated_at, FINAL has no winner to return -- it picks arbitrarily, and the two tables'
--- part layouts differ, so each side may or may not land on the same row. Arbitrary cuts BOTH ways, and the second is the
+-- LIMITATION, which bounds the argument that follows: this cannot resolve a VERSION TIE. last_updated_at is the
+-- ReplacingMergeTree version column, so when two or more rows for a key carry the same value there is nothing left to
+-- rank them by: FINAL picks arbitrarily, and the two tables' part layouts differ, so each side may or may not land on
+-- the same row. Arbitrary cuts BOTH ways, and the second is the
 -- dangerous one:
 --   * the picks differ -> the key is reported in genuinely_differing_keys even where both tables hold the same data;
 --   * the picks coincide -> the key is confirmed as matching even if one side is MISSING a version, which is a real

@@ -1489,9 +1489,9 @@ bound is still worth passing.
 can hit the pre-`EXCHANGE` gate too (see "Verifying the migration"), where the `cutover_start` test below does not apply.
 
 Its premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while versions differ.
-When a key carries two or more rows with an **identical** `last_updated_at`, the `ReplacingMergeTree` version column,
-there is no winner: `FINAL` picks arbitrarily, and because the two tables' part layouts differ, each side may or may not
-land on the same row. **Arbitrary cuts both ways, and the second direction is the dangerous one:**
+`last_updated_at` is the `ReplacingMergeTree` version column, so when two or more rows for a key carry the **same**
+value there is nothing left to rank them by: `FINAL` picks arbitrarily, and because the two tables' part layouts differ,
+each side may or may not land on the same row. **Arbitrary cuts both ways, and the second direction is the dangerous one:**
 
 - the picks differ, and the key is reported in `genuinely_differing_keys` even though both tables hold the same data;
 - the picks coincide, and the key is confirmed as matching **even if one side is missing a version** — a real copy gap.
