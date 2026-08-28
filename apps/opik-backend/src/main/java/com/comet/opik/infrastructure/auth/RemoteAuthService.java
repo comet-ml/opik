@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -54,6 +55,10 @@ class RemoteAuthService implements AuthService {
     // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
     };
+
+    // Comet-internal workspaces are named by wrapping the name in double underscores. A user may technically belong to
+    // one, but it must never be targetable from an agent.
+    private static final Pattern INTERNAL_WORKSPACE_NAME = Pattern.compile("^__.+__$");
 
     private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
         {
@@ -220,7 +225,7 @@ class RemoteAuthService implements AuthService {
                 throw toSessionAuthException(response);
             }
             return response.readEntity(WORKSPACE_LIST_TYPE).stream()
-                    .filter(workspace -> !isDefaultWorkspace(workspace.workspaceName()))
+                    .filter(workspace -> isEligibleWorkspace(workspace.workspaceName()))
                     .map(workspace -> WorkspaceInfo.builder()
                             .id(workspace.workspaceId())
                             .name(workspace.workspaceName())
@@ -256,7 +261,9 @@ class RemoteAuthService implements AuthService {
     @Override
     public UserWorkspace authorizeWorkspace(Cookie sessionToken, @NonNull String workspaceName) {
         requireSession(sessionToken);
-        if (isDefaultWorkspace(workspaceName)) {
+        // Mirrors the filtering applied when listing: hiding a workspace from the consent screen is cosmetic unless a
+        // hand-crafted consent submission naming it is rejected too.
+        if (!isEligibleWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
         try (var response = client.target(URI.create(reactServiceUrl.url()))
@@ -561,6 +568,16 @@ class RemoteAuthService implements AuthService {
 
     private boolean isDefaultWorkspace(String workspaceName) {
         return ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName);
+    }
+
+    /**
+     * Reports whether a workspace may be offered to, and consented for, an OAuth client. Blank names are rejected
+     * because the react service is the source of the list and a name is what identifies the workspace downstream.
+     */
+    private boolean isEligibleWorkspace(String workspaceName) {
+        return StringUtils.isNotBlank(workspaceName)
+                && !isDefaultWorkspace(workspaceName)
+                && !INTERNAL_WORKSPACE_NAME.matcher(workspaceName).matches();
     }
 
     private String getWorkspaceId(String workspaceName) {
