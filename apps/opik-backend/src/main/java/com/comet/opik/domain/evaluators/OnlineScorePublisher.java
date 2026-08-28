@@ -178,7 +178,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             return true;
                         }
                         enqueueCounter.add(1, tooLargeAttrs);
-                        log.warn(
+                        log.error(
                                 "Skipping online scoring: payload of '{}' bytes exceeds the '{}' byte document "
                                         + "limit, evaluatorType '{}', workspaceId '{}'",
                                 size, maxPayloadBytes, type.getType(), workspaceId);
