@@ -659,14 +659,21 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     # Same aggregates over an all-time range. A 0 inside the window against a non-zero total is the signature of a wrong
     # window -- bounds in local time, a typo -- which otherwise reports as a clean estate and exits 0 over unrepaired rows.
     #
-    # These bounds are the DateTime64(9) representable range, NOT the DateTime64 type-family range (1900..2299) this used
-    # to pass. `created_at` is DateTime64(9), so a 2299 literal is promoted to precision 9 to be compared and raises
+    # Only the CEILING is wrong in the range this used to pass (1900..2299). `created_at` is DateTime64(9), whose ceiling
+    # is 2262-04-11 23:47:16.854775807, so a 2299 literal is promoted to precision 9 for the comparison and raises
     # DECIMAL_OVERFLOW (Code 407) every time -- which made this whole comparison dead code on every real schema, printing
-    # '?' where the operator was told to read a number. The ceiling costs the `created_at` arm nothing, since the column
-    # cannot hold a later value; it costs the `last_updated_at` arm (DateTime64(6)) only 2262..2299, unreachable for a
-    # column set from now64(). Far-future values in this dataset are far-future *ids*, which drive the successor's `id_at`
-    # partitioning -- not `created_at`, which an earlier revision of this comment conflated them with.
-    if ! sentinel_all="$(sentinel_counts '1677-09-21 00:12:44' '2262-04-11 23:47:16.854775807')"; then sentinel_all=""; fi
+    # '?' where the operator was told to read a number.
+    #
+    # The floor stays 1900-01-01. DateTime64's lower bound does NOT narrow with precision the way the upper one does, and
+    # an earlier literal below it is silently CLAMPED to it rather than rejected: toDateTime64('1677-09-21 00:12:44', 9)
+    # evaluates to 1900-01-01 00:12:44, keeping the time of day and so landing 12m44s LATER than the bound it replaced.
+    # A "true precision-9 minimum" is therefore both unnecessary and invisible, which is worse than wrong.
+    #
+    # The ceiling costs the `created_at` arm nothing, since the column cannot hold a later value; it costs the
+    # `last_updated_at` arm (DateTime64(6)) only 2262..2299, unreachable for a column set from now64(). Far-future values
+    # in this dataset are far-future *ids*, which drive the successor's `id_at` partitioning -- not `created_at`, which an
+    # earlier revision of this comment conflated them with.
+    if ! sentinel_all="$(sentinel_counts '1900-01-01 00:00:00' '2262-04-11 23:47:16.854775807')"; then sentinel_all=""; fi
     read -r all_end_time all_ttft _ _ <<< "$sentinel_all"
     [[ "$all_end_time" =~ ^[0-9]+$ ]] || { all_end_time="?"; all_ttft="?"; }
 
