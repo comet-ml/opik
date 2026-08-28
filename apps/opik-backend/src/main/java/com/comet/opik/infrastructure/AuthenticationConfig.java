@@ -38,9 +38,9 @@ public class AuthenticationConfig {
      * <p>
      * This bounds a single <em>attempt</em>, not the whole operation. With retries enabled the
      * end-to-end worst case is {@code (requestMaxRetries + 1) * requestTimeout} plus the backoff
-     * between attempts -- ~6.4s at the defaults (2 attempts, 250ms min backoff with Reactor's
-     * jitter). That is still well under the 30s shared timeout it replaces, but callers that need
-     * a hard sub-3s ceiling must set {@link #requestMaxRetries} to 0.
+     * between attempts -- ~6.25s at the shipped values (2 attempts, 250ms backoff). That is still
+     * well under the 30s shared timeout it replaces, but callers that need a hard sub-3s ceiling
+     * must set {@link #requestMaxRetries} to 0.
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
@@ -51,12 +51,14 @@ public class AuthenticationConfig {
     // because jerseyClient is bound on a different configuration class; if that default ever
     // changes, this bound must change with it.
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
-    private Duration requestTimeout = Duration.seconds(3);
+    private Duration requestTimeout;
 
     /**
-     * Maximum retry attempts for a failed auth request, using
-     * {@link com.comet.opik.utils.RetryUtils#handleHttpErrors} so the retriable-exception set and
-     * backoff behaviour match the rest of the codebase.
+     * Maximum retry attempts for a failed auth request. The retry is a plain synchronous loop in
+     * {@code RemoteAuthService}, but it classifies failures with
+     * {@link com.comet.opik.utils.RetryUtils#isRetriableException} -- the same predicate
+     * {@code RetryUtils.handleHttpErrors} filters on -- so the retriable set matches the rest of
+     * the codebase without building a Reactor chain around a blocking call.
      * <p>
      * That set is transport-level only: {@code SocketException}, {@code TimeoutException},
      * {@code InterruptedIOException} (covering {@code SocketTimeoutException} and
@@ -70,11 +72,11 @@ public class AuthenticationConfig {
      * recover a request stalled by one of those - it recovers sub-second connection blips. The
      * timeout above is what bounds user-visible latency. Set to 0 to disable retries.
      */
-    @Valid @JsonProperty
+    @Valid @NotNull @JsonProperty
     @Min(0)
     // Capped deliberately: each retry re-issues an auth call against a React service that may
     // already be CPU-starved, and retries cannot recover a multi-minute brownout anyway.
-    @Max(5) private int requestMaxRetries = 1;
+    @Max(5) private Integer requestMaxRetries;
 
     /**
      * Minimum backoff between auth request attempts. Deliberately non-zero: an immediate retry
@@ -83,20 +85,22 @@ public class AuthenticationConfig {
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
-    private Duration requestRetryMinBackoff = Duration.milliseconds(250);
+    private Duration requestRetryMinBackoff;
 
     /**
-     * Upper bound on the exponential backoff between auth request attempts.
+     * Upper bound on the backoff between auth request attempts, which doubles from
+     * {@link #requestRetryMinBackoff} and is capped here.
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
-    private Duration requestRetryMaxBackoff = Duration.seconds(1);
+    private Duration requestRetryMaxBackoff;
 
     /**
-     * Cross-field constraint: an exponential backoff whose minimum exceeds its maximum is
-     * contradictory, and Reactor would clamp it silently rather than fail. Validate it at startup
-     * so a bad config is a boot failure with a clear message, not a runtime surprise.
+     * Cross-field constraint: a backoff whose minimum exceeds its maximum is contradictory, and
+     * the doubling loop would silently clamp every attempt to the maximum rather than fail.
+     * Validate it at startup so a bad config is a boot failure with a clear message, not a runtime
+     * surprise.
      */
     @JsonIgnore
     @AssertTrue(message = "authentication.requestRetryMinBackoff must not exceed authentication.requestRetryMaxBackoff") public boolean isRetryBackoffRangeValid() {

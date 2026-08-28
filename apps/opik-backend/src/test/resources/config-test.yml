@@ -260,6 +260,14 @@ authentication:
   reactService:
     url: ''
 
+  # Per-call read timeout for auth requests to the React service (overrides jerseyClient.timeout for this hop).
+  requestTimeout: 3s
+  # Maximum retry attempts for a failed auth request. Transport failures only; HTTP error statuses are not retried.
+  requestMaxRetries: 1
+  # Minimum backoff between auth request attempts.
+  requestRetryMinBackoff: 250ms
+  # Upper bound on the backoff between auth request attempts.
+  requestRetryMaxBackoff: 1s
 sharedHttpClientHealthCheck:
   timeout: 1s
 

@@ -11,10 +11,10 @@ import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import io.dropwizard.util.Duration;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
@@ -30,9 +30,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
-import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -613,19 +613,36 @@ class RemoteAuthService implements AuthService {
      * Not applied to {@code listEligibleWorkspaces}, which has a documented large-payload case.
      */
     private Invocation.Builder withAuthTimeout(Invocation.Builder builder) {
-        if (requestTimeout == null || requestTimeout.toMilliseconds() <= 0) {
+        if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
             return builder;
         }
-        return builder.property(ClientProperties.READ_TIMEOUT, (int) requestTimeout.toMilliseconds());
+        return builder.property(ClientProperties.READ_TIMEOUT, (int) requestTimeout.toMillis());
     }
 
     /**
-     * Runs an auth call under the codebase-standard retry policy
-     * ({@link RetryUtils#handleHttpErrors}), so the retriable-exception set and backoff behaviour
-     * match every other outbound call here. That set already covers this hop's failure modes:
+     * Runs an auth call with a bounded synchronous retry.
+     * <p>
+     * Deliberately not a Reactor chain. An earlier revision wrapped the call in
+     * {@code Mono.fromCallable(...).retryWhen(...).block()}, which made a blocking call reactive
+     * only to obtain a retry: it parked the caller on {@code block()} and scheduled its backoff
+     * delays on the shared parallel scheduler, so a slow auth service could occupy threads used by
+     * unrelated reactive paths. The loop below blocks only the thread that was already going to
+     * block on the HTTP call itself, and touches no shared scheduler.
+     * <p>
+     * The retriable-exception set is still the codebase-standard one:
+     * {@link RetryUtils#isRetriableException}, the same predicate
+     * {@link RetryUtils#handleHttpErrors} filters on, so this does not introduce a second
+     * definition of "retriable". It already covers this hop's failure modes --
      * {@code SocketTimeoutException} and {@code ConnectTimeoutException} extend
      * {@code InterruptedIOException}, {@code HttpHostConnectException} extends
      * {@code SocketException}, and {@code ProcessingException} wrappers are unwrapped.
+     * Deterministic failures (4xx/5xx mapped to {@code ClientErrorException} /
+     * {@code InternalServerErrorException}, serialization errors) are not retriable and propagate
+     * on the first attempt.
+     * <p>
+     * Backoff doubles from {@code requestRetryMinBackoff}, capped at
+     * {@code requestRetryMaxBackoff}. No jitter: at one retry by default there is nothing to
+     * de-synchronise, and this hop runs at ~14 calls/s rather than as a thundering herd.
      * <p>
      * Retries recover sub-second blips. They will not recover a request stalled by a React CPU
      * brownout: those last 1-3 minutes in production, so the retry lands in the same brownout.
@@ -636,21 +653,36 @@ class RemoteAuthService implements AuthService {
      * the body is retried like any other transport failure and every attempt closes its own
      * response. Returning a bare {@code Response} here and processing it afterwards would place
      * that work outside the retry boundary and leak a response per attempt.
-     * <p>
-     * Deterministic failures are not retried: {@link RetryUtils#handleHttpErrors} filters on
-     * {@code isRetriableException}, which unwraps {@code ProcessingException} and matches only
-     * transport causes, so request serialization or missing-provider errors propagate immediately.
      */
     private <T> T withAuthRetry(Supplier<T> call) {
-        if (requestMaxRetries <= 0) {
-            return call.get();
+        var backoff = requestRetryMinBackoff;
+        for (int attempt = 0;; attempt++) {
+            try {
+                return call.get();
+            } catch (RuntimeException failure) {
+                if (attempt >= requestMaxRetries || !RetryUtils.isRetriableException(failure)) {
+                    throw failure;
+                }
+                log.warn("Retrying auth call after {}: {}", failure.getClass().getSimpleName(),
+                        failure.getMessage());
+                sleepBeforeRetry(backoff);
+                backoff = nextBackoff(backoff);
+            }
         }
-        return Mono.fromCallable(call::get)
-                .retryWhen(RetryUtils.handleHttpErrors(
-                        requestMaxRetries,
-                        java.time.Duration.ofMillis(requestRetryMinBackoff.toMilliseconds()),
-                        java.time.Duration.ofMillis(requestRetryMaxBackoff.toMilliseconds())))
-                .block();
+    }
+
+    private Duration nextBackoff(Duration current) {
+        var doubled = current.multipliedBy(2);
+        return doubled.compareTo(requestRetryMaxBackoff) > 0 ? requestRetryMaxBackoff : doubled;
+    }
+
+    private void sleepBeforeRetry(Duration backoff) {
+        try {
+            Thread.sleep(backoff.toMillis());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new ProcessingException("Interrupted while backing off before an auth retry", interrupted);
+        }
     }
 
     private String getWorkspaceIdFromResponse(Response response) {

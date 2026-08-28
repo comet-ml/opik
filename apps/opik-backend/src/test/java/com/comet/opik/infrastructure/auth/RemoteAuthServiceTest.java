@@ -18,7 +18,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.dropwizard.client.JerseyClientBuilder;
-import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ProcessingException;
@@ -42,6 +41,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -84,10 +84,10 @@ class RemoteAuthServiceTest {
     // shared service so the assertions below observe exactly one request per call; the retry and
     // timeout behaviour itself is covered by the dedicated tests near the bottom of this class,
     // which build their own service with retries enabled.
-    private static final Duration TEST_AUTH_TIMEOUT = Duration.seconds(3);
+    private static final Duration TEST_AUTH_TIMEOUT = Duration.ofSeconds(3);
     private static final int TEST_AUTH_MAX_RETRIES = 0;
-    private static final Duration TEST_AUTH_MIN_BACKOFF = Duration.milliseconds(250);
-    private static final Duration TEST_AUTH_MAX_BACKOFF = Duration.seconds(1);
+    private static final Duration TEST_AUTH_MIN_BACKOFF = Duration.ofMillis(250);
+    private static final Duration TEST_AUTH_MAX_BACKOFF = Duration.ofSeconds(1);
 
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -740,7 +740,7 @@ class RemoteAuthServiceTest {
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
-                timeout, maxRetries, Duration.milliseconds(10), Duration.milliseconds(50),
+                timeout, maxRetries, Duration.ofMillis(10), Duration.ofMillis(50),
                 new RemoteWorkspacePermissionsService(TestHttpClientUtils.client(),
                         new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url(""))),
                 false);
@@ -777,11 +777,18 @@ class RemoteAuthServiceTest {
                 .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
 
         var apiKey = "apiKey-" + UUID.randomUUID();
-        authenticateWith(authServiceWith(TEST_AUTH_TIMEOUT, 1), "workspace-" + UUID.randomUUID(), apiKey);
+        var workspaceName = "workspace-" + UUID.randomUUID();
+        authenticateWith(authServiceWith(TEST_AUTH_TIMEOUT, 1), workspaceName, apiKey);
 
         // The second attempt is what populated the context: without the retry this would have thrown.
-        assertThat(requestContext.getUserName()).isEqualTo(authResponse.user());
-        assertThat(requestContext.getWorkspaceId()).isEqualTo(authResponse.workspaceId());
+        var expectedRequestContext = RequestContext.builder()
+                .userName(authResponse.user())
+                .workspaceId(authResponse.workspaceId())
+                .workspaceName(authResponse.workspaceName())
+                .apiKey(apiKey)
+                .quotas(authResponse.quotas())
+                .build();
+        assertThat(requestContext).isEqualTo(expectedRequestContext);
         assertThat(authRequestCount()).isEqualTo(2);
     }
 
@@ -832,7 +839,7 @@ class RemoteAuthServiceTest {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(okJson("{}").withFixedDelay(2_000)));
 
-        var service = authServiceWith(Duration.milliseconds(200), 1);
+        var service = authServiceWith(Duration.ofMillis(200), 1);
 
         var startedAt = System.nanoTime();
         assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
