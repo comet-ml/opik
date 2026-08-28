@@ -26,7 +26,6 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
@@ -50,7 +49,6 @@ import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_PARAM;
 
-@RequiredArgsConstructor
 @Slf4j
 class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
@@ -104,17 +102,13 @@ class RemoteAuthService implements AuthService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
     private final Duration requestTimeout;
-    private final int requestMaxRetries;
-    private final Duration requestRetryMinBackoff;
-    private final Duration requestRetryMaxBackoff;
 
     /**
-     * Built once and reused: {@link Retry} is immutable and its inputs are fixed configuration, so
-     * rebuilding it per request allocates for nothing. Computed lazily rather than in a field
-     * initializer, which cannot read the blank finals the generated constructor assigns. The race
-     * is benign -- two threads may both build one, and either is equivalent.
+     * Built once in the constructor. {@link Retry} is immutable and its inputs are fixed
+     * configuration, so there is nothing to defer and nothing to synchronise: a final field
+     * assigned during construction is safely published to every thread.
      */
-    private volatile Retry retryPolicy;
+    private final Retry retryPolicy;
 
     private final @NonNull WorkspacePermissionsService workspacePermissionsService;
 
@@ -126,6 +120,30 @@ class RemoteAuthService implements AuthService {
      * is made and the authentication call is exactly what it was before.
      */
     private final boolean resolvePermissions;
+
+    RemoteAuthService(@NonNull Client client,
+            @NonNull RetriableHttpClient retriableHttpClient,
+            @NonNull AuthenticationConfig.UrlConfig reactServiceUrl,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull CacheService cacheService,
+            Duration requestTimeout,
+            int requestMaxRetries,
+            @NonNull Duration requestRetryMinBackoff,
+            @NonNull Duration requestRetryMaxBackoff,
+            @NonNull WorkspacePermissionsService workspacePermissionsService,
+            boolean resolvePermissions) {
+        this.client = client;
+        this.retriableHttpClient = retriableHttpClient;
+        this.reactServiceUrl = reactServiceUrl;
+        this.requestContext = requestContext;
+        this.cacheService = cacheService;
+        this.requestTimeout = requestTimeout;
+        this.workspacePermissionsService = workspacePermissionsService;
+        this.resolvePermissions = resolvePermissions;
+        // The retry inputs are only ever needed to build this, so they are not kept as fields.
+        this.retryPolicy = RetryUtils.handleHttpErrors(requestMaxRetries, requestRetryMinBackoff,
+                requestRetryMaxBackoff);
+    }
 
     @Builder(toBuilder = true)
     record AuthRequest(String workspaceName, String path,
@@ -614,21 +632,11 @@ class RemoteAuthService implements AuthService {
      * A {@code requestTimeout} of zero means "inherit the shared client timeout", expressed by
      * leaving {@code readTimeout} unset rather than sending a zero.
      */
-    private Retry retryPolicy() {
-        var cached = retryPolicy;
-        if (cached == null) {
-            cached = RetryUtils.handleHttpErrors(requestMaxRetries, requestRetryMinBackoff,
-                    requestRetryMaxBackoff);
-            retryPolicy = cached;
-        }
-        return cached;
-    }
-
     private <T> T authCall(String operation, RetriableHttpClient.Request.RequestBuilder<T> request,
             Function<RetriableHttpClient.Request<T>, Mono<T>> execute) {
         try {
             return execute.apply(request
-                    .retryPolicy(retryPolicy())
+                    .retryPolicy(retryPolicy)
                     .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
                     .build())
                     .block();
