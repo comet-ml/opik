@@ -22,6 +22,11 @@ on:
         type: boolean
         required: false
         default: false
+      dist_tag:
+        type: string
+        required: false
+        description: "npm dist-tag to publish under (use e.g. `next` for a prerelease so `latest` does not move)"
+        default: "latest"
   workflow_call:
     inputs:
       version:
@@ -32,6 +37,10 @@ on:
         type: boolean
         required: false
         default: false
+      dist_tag:
+        type: string
+        required: false
+        default: "latest"
 
 jobs:
   publish:
@@ -40,6 +49,7 @@ jobs:
     env:
       VERSION: ${{ github.event.inputs.version || inputs.version }}
       IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
+      DIST_TAG: ${{ github.event.inputs.dist_tag || inputs.dist_tag || 'latest' }}
     defaults:
       run:
         working-directory: sdks/typescript/src/opik/configure
@@ -70,7 +80,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate version format
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         run: |
           if ! [[ "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "Error: Invalid version format '${{ env.VERSION }}'. Expected format: X.Y.Z or X.Y.Z-suffix"
@@ -78,7 +88,7 @@ jobs:
           fi
 
       - name: Update version
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         run: pnpm version ${{ env.VERSION }} --no-git-tag-version
 
       - name: Lint and format check
@@ -97,7 +107,7 @@ jobs:
           fi
 
       - name: Check if version already exists on NPM
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           if npm view "$PACKAGE_NAME@${{ env.VERSION }}" version 2>/dev/null; then
@@ -107,7 +117,7 @@ jobs:
           echo "Version check passed - ${{ env.VERSION }} is available"
 
       - name: Commit version changes
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         run: |
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
@@ -115,12 +125,12 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: update Opik Configure version to ${{ env.VERSION }}"
 
       - name: Create git tag
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         run: |
           git tag -a "configure-v${{ env.VERSION }}" -m "Release Opik Configure v${{ env.VERSION }}"
 
       - name: Publish to NPM
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         # Published with `npm publish`, not `pnpm publish`: OIDC trusted publishing
         # landed in pnpm 10.x (this workflow pins pnpm 9.15.5 for install/build) and
         # pnpm 11 has an open report of OIDC publishes 404-ing. `--access public` is
@@ -129,13 +139,17 @@ jobs:
         # `npm config delete` removes the `_authToken=${NODE_AUTH_TOKEN}` stub that
         # `setup-node` writes into ~/.npmrc — with no token, npm would try that empty
         # credential instead of falling back to the OIDC exchange.
+        #
+        # `--tag` defaults to `latest`; pass `next` (or similar) on a dispatch to
+        # publish a prerelease without moving `latest` — npm applies `latest` to
+        # any untagged publish, prerelease version or not.
         run: |
-          echo "Publishing $(node -p "require('./package.json').name") version ${{ env.VERSION }} to NPM..."
+          echo "Publishing $(node -p "require('./package.json').name") version ${{ env.VERSION }} to NPM under dist-tag '${DIST_TAG}'..."
           npm config delete //registry.npmjs.org/:_authToken || true
-          npm publish --access public
+          npm publish --access public --tag "${DIST_TAG}"
 
       - name: Push changes and tags
-        if: ${{ env.IS_RELEASE }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         run: |
           git push origin "${REF}"
           git push origin "configure-v${{ env.VERSION }}"
@@ -154,11 +168,12 @@ jobs:
           echo ""
           echo "- **Version**: ${{ env.VERSION }}"
           echo "- **Is Release**: ${{ env.IS_RELEASE }}"
+          echo "- **Dist tag**: ${{ env.DIST_TAG }}"
           echo "- **Branch**: ${REF_NAME}"
           echo "- **Triggered by**: @${ACTOR}"
           echo ""
           if [ "${{ env.IS_RELEASE }}" == "true" ]; then
-            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})"
+            echo "✅ Package published to NPM: [opik-ts@${{ env.VERSION }}](https://www.npmjs.com/package/opik-ts/v/${{ env.VERSION }}) under dist-tag \`${{ env.DIST_TAG }}\`"
             echo "✅ Git tag created: configure-v${{ env.VERSION }}"
           else
             echo "ℹ️ Dry run completed - no changes published"
