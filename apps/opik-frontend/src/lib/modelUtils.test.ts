@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
+  getThinkingLevelOptions,
   sanitizeConfigForRequest,
+  supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
   supportsSamplingParams,
+  supportsVertexAIThinkingLevel,
   updateProviderConfig,
 } from "@/lib/modelUtils";
 import {
   COMPOSED_PROVIDER_TYPE,
+  GeminiThinkingLevel,
   LLMAnthropicConfigsType,
   LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -532,5 +537,410 @@ describe("sanitizeConfigForRequest", () => {
       topP: 0.9,
     });
     expect(result.topP).toBe(0.9);
+  });
+});
+
+describe("Gemini thinking level", () => {
+  it("is supported by the Gemini 2.5 family, including Flash Lite", () => {
+    expect(
+      supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE),
+    ).toBe(true);
+    expect(
+      supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO),
+    ).toBe(true);
+    expect(
+      supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH),
+    ).toBe(true);
+  });
+
+  it("is supported by the Vertex Gemini 2.5 family", () => {
+    expect(
+      supportsVertexAIThinkingLevel(
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      ),
+    ).toBe(true);
+    expect(
+      supportsVertexAIThinkingLevel(
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the Gemini 3 models supported", () => {
+    expect(supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toBe(
+      true,
+    );
+    expect(
+      supportsVertexAIThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO),
+    ).toBe(true);
+  });
+
+  it("covers the newer Flash models on both providers", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+    ]) {
+      expect(supportsGeminiThinkingLevel(model)).toBe(true);
+      expect(supportsVertexAIThinkingLevel(model)).toBe(false);
+    }
+
+    for (const model of [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+    ]) {
+      expect(supportsVertexAIThinkingLevel(model)).toBe(true);
+      expect(supportsGeminiThinkingLevel(model)).toBe(false);
+    }
+  });
+
+  // Per Google's support table; the sets genuinely differ per model.
+  it("offers each model only the levels it documents", () => {
+    const values = (m: PROVIDER_MODEL_TYPE) =>
+      getThinkingLevelOptions(m).map((o) => o.value);
+
+    // 3.7 Flash has no "minimal".
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    expect(values(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    // 3.6/3.5 Flash have all four.
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH)).toEqual([
+      "minimal",
+      "low",
+      "medium",
+      "high",
+    ]);
+    // 3.1 Flash Lite has only minimal and high.
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE)).toEqual([
+      "minimal",
+      "high",
+    ]);
+    // Gemini 3 Pro: low and high only.
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toEqual(["low", "high"]);
+  });
+
+  it("preselects each model's own documented default", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toBe(
+      "medium",
+    );
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH),
+    ).toBe("medium");
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE),
+    ).toBe("minimal");
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE),
+    ).toBe("minimal");
+  });
+
+  it("only ever preselects a level the model actually offers", () => {
+    for (const model of Object.values(PROVIDER_MODEL_TYPE)) {
+      const options = getThinkingLevelOptions(model);
+      if (options.length === 0) continue;
+
+      expect(
+        options.map((o) => o.value),
+        `default for ${model} must be offered`,
+      ).toContain(getDefaultThinkingLevel(model));
+    }
+  });
+
+  it("is not offered for models without thinking support", () => {
+    expect(supportsGeminiThinkingLevel(PROVIDER_MODEL_TYPE.GPT_4O)).toBe(false);
+    expect(getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GPT_4O)).toEqual([]);
+  });
+
+  it("offers an off option for the 2.5 family so thinking can be disabled again", () => {
+    const values = getThinkingLevelOptions(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+    ).map((o) => o.value);
+
+    expect(values).toContain("off");
+  });
+
+  it("does not offer off for Gemini 3, which cannot disable thinking", () => {
+    const values = getThinkingLevelOptions(
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+    ).map((o) => o.value);
+
+    expect(values).not.toContain("off");
+  });
+
+  it("does not offer off for 2.5 Pro, which cannot disable thinking either", () => {
+    expect(
+      getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO).map(
+        (o) => o.value,
+      ),
+    ).toEqual(["auto", "low", "medium", "high"]);
+    expect(
+      getThinkingLevelOptions(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO).map(
+        (o) => o.value,
+      ),
+    ).not.toContain("off");
+  });
+
+  it("defaults Flash Lite to off, matching Google's own default", () => {
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE),
+    ).toBe("off");
+    expect(
+      getDefaultThinkingLevel(
+        PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      ),
+    ).toBe("off");
+  });
+
+  // Pre-Gemini-3 models take a numeric budget whose documented default is dynamic, so they lead with
+  // "auto" — pinning `high` would silently triple the thinking budget over Google's own default.
+  it("defaults pre-Gemini-3 models to auto", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO)).toBe(
+      "auto",
+    );
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH)).toBe(
+      "auto",
+    );
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH),
+    ).toBe("auto");
+  });
+
+  it("still defaults Gemini 3 Pro to high", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toBe(
+      "high",
+    );
+  });
+
+  it("offers auto only for pre-Gemini-3 models", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+    ]) {
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should offer auto`,
+      ).toContain("auto");
+    }
+
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+    ]) {
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should not offer auto`,
+      ).not.toContain("auto");
+    }
+  });
+
+  // "auto" is the absence of a setting, so it must not reach custom_parameters.
+  it("sends no thinking block for auto, letting the model decide", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+      }).custom_parameters,
+    ).toBeUndefined();
+
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+});
+
+describe("sanitizeConfigForRequest — Gemini thinking", () => {
+  it("nests the level under custom_parameters, since flat fields are dropped by the backend", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      { thinkingLevel: "low" },
+    );
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toEqual({ thinking: { level: "low" } });
+  });
+
+  it("does the same for Vertex models", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      { thinkingLevel: "high" },
+    );
+
+    expect(result.custom_parameters).toEqual({ thinking: { level: "high" } });
+  });
+
+  it("forwards an off level so thinking can be turned back off", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      { thinkingLevel: "off" },
+    );
+
+    expect(result.custom_parameters).toEqual({ thinking: { level: "off" } });
+  });
+
+  it("preserves unrelated custom parameters", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      { thinkingLevel: "medium", custom_parameters: { foo: "bar" } },
+    );
+
+    expect(result.custom_parameters).toEqual({
+      foo: "bar",
+      thinking: { level: "medium" },
+    });
+  });
+
+  // A prompt persisted before the level control existed has no thinkingLevel, and the playground
+  // only reconciles configs on a model change — so nothing fills it in. The dropdown still displays
+  // the model default, so the request has to send it or the two disagree.
+  it("sends the model's default for a prompt persisted without a level", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "off" } });
+
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "medium" } });
+  });
+
+  it("adds no thinking block for models without a level control", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, {
+        temperature: 0,
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  // A level the model doesn't offer resolves to that model's default, same as a missing one, so the
+  // dropdown and the request agree. Sending nothing would leave them disagreeing.
+  it("replaces a level the model does not accept with the model default", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_PRO, {
+      thinkingLevel: "off",
+    });
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toEqual({ thinking: { level: "high" } });
+  });
+
+  // Gemini 2.5's default is "auto", which sends nothing at all.
+  it("sends nothing when a rejected level falls back to an auto default", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+    );
+
+    expect(result.custom_parameters).toBeUndefined();
+  });
+
+  // An explicit budget outranks the level server-side, so "off" has to clear it.
+  it("clears a persisted budget when off is selected", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      {
+        thinkingLevel: "off",
+        custom_parameters: {
+          thinking: { budget_tokens: 4096, include_thoughts: true },
+        },
+      },
+    );
+
+    expect(result.custom_parameters).toEqual({
+      thinking: { include_thoughts: true, level: "off" },
+    });
+  });
+
+  it("drops the level for models without thinking support", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      { thinkingLevel: "high" },
+    );
+
+    expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toBeUndefined();
+  });
+
+  it("merges the level into an existing thinking block, keeping its other fields", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      {
+        thinkingLevel: "low",
+        custom_parameters: {
+          thinking: { budget_tokens: 4096, include_thoughts: true },
+        },
+      },
+    );
+
+    expect(result.custom_parameters).toEqual({
+      thinking: { budget_tokens: 4096, include_thoughts: true, level: "low" },
+    });
+  });
+});
+
+describe("updateProviderConfig — Gemini thinking level", () => {
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  it("coerces a level the new model does not accept to that model's default", () => {
+    const next = updateProviderConfig(
+      { thinkingLevel: "off" as const },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
+    );
+
+    expect(next?.thinkingLevel).toBe("high");
+  });
+
+  it("drops the level for a model without thinking support", () => {
+    const next = updateProviderConfig(
+      { thinkingLevel: "high" as const },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, provider: GEMINI },
+    );
+
+    expect(next?.thinkingLevel).toBeUndefined();
+  });
+
+  it("fills in the model's default when no level is set, so the shown value is the sent value", () => {
+    const empty: { thinkingLevel?: GeminiThinkingLevel } = {};
+
+    expect(
+      updateProviderConfig(empty, {
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+        provider: GEMINI,
+      })?.thinkingLevel,
+    ).toBe("off");
+    expect(
+      updateProviderConfig(empty, {
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+        provider: GEMINI,
+      })?.thinkingLevel,
+    ).toBe("auto");
+  });
+
+  it("leaves a level the model accepts untouched", () => {
+    const config = { thinkingLevel: "off" as const };
+    const next = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      provider: GEMINI,
+    });
+
+    expect(next).toBe(config);
   });
 });
