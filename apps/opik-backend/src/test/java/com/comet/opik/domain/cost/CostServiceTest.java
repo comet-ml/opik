@@ -503,10 +503,11 @@ class CostServiceTest {
     }
 
     /**
-     * Mistral cost tracking: until `mistral` was added to PROVIDER_ALIASES the entire set of
-     * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
-     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
-     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     * Mistral cost tracking: the identity fallback in {@code buildRuntimeKey} / {@code buildModelPrice}
+     * loads any provider present in the price file without an explicit {@code PROVIDER_ALIASES} entry,
+     * so the entire set of upstream LiteLLM {@code litellm_provider: "mistral"} rows is now loaded at
+     * startup. This locks in both the upstream-sourced rows and the two override-only rows
+     * (Medium 3.5, Small 4).
      */
     @ParameterizedTest
     @MethodSource("provideMistralModels")
@@ -969,17 +970,14 @@ class CostServiceTest {
     }
 
     /**
-     * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
-     * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
-     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
-     * {@link CostService#PROVIDER_ALIASES}, so {@code buildModelPrice} dropped every one of
-     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
-     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * Five vendors OpenRouter resells: {@code ai21}, {@code morph}, {@code inception}, {@code meta},
+     * and {@code zai} all carry non-zero-cost rows in {@code model_prices_and_context_window.json}.
+     * The identity fallback in {@code buildRuntimeKey} / {@code buildModelPrice} loads them
+     * automatically without explicit {@link CostService#PROVIDER_ALIASES} entries.
      * <p>
-     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
-     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
-     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
-     * The other four spell both the same way, so one entry each.
+     * {@code z-ai} still needs an explicit alias ({@code z-ai} to {@code zai}) because OpenRouter
+     * uses {@code z-ai} as the model-name prefix while the price file's {@code litellm_provider}
+     * is {@code zai}. The other four spell both the same way, so the identity fallback is enough.
      * <p>
      * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
      * models below publish a {@code cache_read_input_token_cost}, but none of these providers is

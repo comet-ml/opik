@@ -225,7 +225,7 @@ public class CostService {
         if (prefixSlash > 0) {
             String modelPrefix = originalModelName.substring(0, prefixSlash);
             String canonicalFromPrefix = PROVIDER_ALIASES.getOrDefault(modelPrefix, modelPrefix);
-            if (canonicalFromPrefix != null && !canonicalFromPrefix.equalsIgnoreCase(provider)) {
+            if (!canonicalFromPrefix.equalsIgnoreCase(provider)) {
                 for (String candidate : new String[]{modelName, normalizedModelName, baseOriginalModelName,
                         baseNormalizedModelName, baseOriginalVersionName, baseNormalizedVersionName}) {
                     ModelPrice prefixMatch = modelProviderPrices
@@ -392,7 +392,7 @@ public class CostService {
     private static void applyDirectOverride(Map<String, ModelPrice> prices, String modelName, ModelCostData override) {
         String runtimeKey = buildRuntimeKey(modelName, override);
         if (runtimeKey == null) {
-            log.warn("Override entry '{}' has unknown provider '{}'; skipping",
+            log.warn("Override entry '{}' skipped: provider '{}' is blank or resolves to a legacy Bedrock path",
                     modelName, override.litellmProvider());
             return;
         }
@@ -426,9 +426,6 @@ public class CostService {
         if (provider.isBlank()) {
             return null;
         }
-        // Resolve alias; unknown providers use their own name as canonical.
-        String canonicalProvider = PROVIDER_ALIASES.getOrDefault(provider, provider);
-
         BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
         BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
