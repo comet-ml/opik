@@ -249,9 +249,9 @@ if [[ "$checked" == "0" ]]; then
     exit 1
 fi
 if [[ "$artifacts" != "0" ]]; then
-    log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
+    log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
     log "        artifact only — a key written more than once lands its stale version in an earlier created_at week on"
     log "        one side. Live data is identical on both sides; nothing to fix (see the confirm-keys block)."
 else
-    log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD)."
+    log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD)."
 fi

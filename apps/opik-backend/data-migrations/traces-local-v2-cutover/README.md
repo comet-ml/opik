@@ -1400,15 +1400,23 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
 > total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
-> read-only and idempotent, so an interruption cannot damage anything, and because the bound is fixed by
-> `cutover_start` it covers the same windows whenever it is re-run.
+> read-only and idempotent, so an interruption cannot damage anything. It does **not** follow that a re-run covers the
+> same windows: both bounds are read live from the old-schema table — `toMonday(min(created_at))` for the anchor and
+> `max(created_at)` for the last week — so on a table still taking writes, or one retention is pruning, the offsets move
+> under you.
 >
 > **Resume with `--from-week`; do not restart from 0.** Idempotent does not mean free: a restart repeats
 > every window already compared. Each window either reports a line or has not run, so the resume point is
 > the last reported week plus the **stride** — plus one only at the default `--weeks-stride 1` — and the same
 > stride must be passed again, or the resumed run samples different windows than the run it continues. The
-> offsets are anchored on `toMonday(min(created_at))` of the old-schema table, so confirm a resumed run's
-> first window is the one you expect before treating its output as continuous with an earlier log.
+> offsets are anchored as above, so confirm a resumed run's first window is the one you expect before treating its
+> output as continuous with an earlier log — if the anchor has moved, the logs describe different windows and must not be
+> read as one run.
+>
+> **A resumed run does not by itself discharge the pre-`EXCHANGE` gate.** That gate (see the exit checklist) requires a
+> full compare with no narrowing, and each `PASSED` line reports only the windows *that run* compared. Split runs satisfy
+> it only if their windows together cover every week **and** the anchor held throughout; if either is in doubt, re-run
+> whole. Resuming is for the long post-rollback compare, where the bound is deliberately partial anyway.
 >
 > **A mismatching week costs a second, slower query.** On `ok=0` the driver re-checks the differing keys on
 > the sorting key to separate a real mismatch from a superseded-version artifact. That re-check can stall for
@@ -1473,6 +1481,8 @@ bound is still worth passing.
 infeasible, sample and still get high confidence:
 - `--sample-mod N` compares a deterministic 1/N `id` sample — the *same* rows on both sides, so like-for-like.
 - `--weeks-stride S` compares every S-th weekly partition (partition-pruned, so genuinely cheaper).
+- `--receive-timeout N` raises the client's per-packet wait (default 1800, against ClickHouse's 300). The
+  post-mismatch confirm-keys re-check can stall past the stock value and abort the compare at the first mismatch.
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
   `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 
