@@ -206,6 +206,12 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- granules holding the key, so FINAL always sees all versions of it and returns the true winner. The
 -- window bounds are used only to pick the candidate keys, never to decide the verdict.
 --
+-- LIMITATION: this cannot resolve a VERSION TIE. The reasoning below holds only while versions differ. When a key
+-- carries two or more rows with an identical last_updated_at, FINAL has no winner to return: it picks arbitrarily, and
+-- the two tables' part layouts differ, so each side can pick a different row. Such a key is counted as genuinely
+-- differing even where both tables hold the same data. Signature: equal row counts with a differing checksum. Deciding
+-- it needs each side's full version SET, which this query does not read -- see the runbook's triage section.
+--
 -- 0  = every differing key has identical live rows on both sides -> superseded-version artifact, not a
 --      data difference (the live row is still compared, and must match, in the week its winner lands in).
 -- >0 = that many keys genuinely differ -> real fidelity failure.

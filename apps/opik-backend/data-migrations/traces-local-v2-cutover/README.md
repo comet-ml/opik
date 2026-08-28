@@ -1480,6 +1480,18 @@ from the successor *entirely* is the real signal — that is a copy gap, and it 
 often this bites tracks how much pre-existing data the workload rewrites; for many it is none, which is why the weekly
 bound is still worth passing.
 
+**A third shape, which the confirm-keys re-check cannot resolve: a version tie.** Its premise — that filtering on the
+sorting key lets `FINAL` return the true winner — holds only while versions differ. When a key carries two or more rows
+with an **identical** `last_updated_at`, the `ReplacingMergeTree` version column, there is no winner: `FINAL` picks
+arbitrarily, and because the two tables' part layouts differ, each side can pick a different row. The key is then counted
+as `genuinely_differing` even where both tables hold the same data.
+
+Its signature is **equal row counts with a differing checksum**, and neither rule above fits it — the key is present on
+both sides *and* its `last_updated_at` predates `cutover_start`. Deciding it needs the key's full set of versions read
+from both tables without `FINAL`, which no shipped driver does; `--drill-down` reads one `FINAL` row per key and stops at
+100 keys, so it cannot show a tie. **Treat such a week as unresolved and escalate rather than passing it:** a non-unique
+top version makes the comparison arbitrary, which is not the same as benign.
+
 > **The pre-EXCHANGE compare is the gate; the post-EXCHANGE compare has a caveat.** `traces_pre_cutover_backup` is a
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
 > the **current (live) week will legitimately show a mismatch** (the live table is a superset of the frozen backup by
