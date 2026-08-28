@@ -74,6 +74,12 @@
 #                             instance. The scripts cannot read backend config, and a repair run while any instance
 #                             still has it true is not merely incomplete: that instance keeps writing fresh sentinels
 #                             behind the mutation, so the counts can clear and then regress.
+#   --confirm-flag-was-live   Only for --sentinel-repair-only, and only needed when there is NO parked successor: an
+#                             abandoned pre-EXCHANGE cutover, or an estate finalize.sh has already recycled. Asserts
+#                             traceColumnsNonNullable was live HERE, so the epoch/NaN values in `traces` are sentinels it
+#                             minted rather than values a client sent, and accepts that every one of them in the table
+#                             becomes NULL. There is no topological proof of this: `traces_local_v2` exists on every
+#                             installation, so its presence establishes nothing.
 #   --unwrap-only             reverse ONLY the Distributed wrap (no promote, no reverse-replay). Requires
 #                             --confirm-maintenance. Mutually exclusive with --stage and --reverse-replay-only.
 #   --confirm-maintenance     REQUIRED with --unwrap-only. The un-wrap is gapless per node (atomic rotate), but renaming
@@ -102,6 +108,7 @@ SENTINEL_REPAIR_ONLY=0
 CONFIRM_MAINTENANCE=0
 CONFIRM_FLAG_REVERTED=0
 RECEIVE_TIMEOUT=1800     # seconds tolerated between server packets, not total query time. See --receive-timeout.
+CONFIRM_FLAG_WAS_LIVE=0  # only consulted by --sentinel-repair-only, and only without a parked successor.
 SENTINEL_CHECK_FAILED=0  # set by the sentinel postcondition; decides the exit code without cutting the guidance short
 
 while [[ $# -gt 0 ]]; do
@@ -117,6 +124,7 @@ while [[ $# -gt 0 ]]; do
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         --confirm-flag-reverted) CONFIRM_FLAG_REVERTED=1; shift ;;
         --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --confirm-flag-was-live) CONFIRM_FLAG_WAS_LIVE=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -145,6 +153,10 @@ fi
 # --confirm-flag-reverted asserts a precondition only the sentinel repair has. Reject it elsewhere rather than ignoring
 # it: silently accepting it would let an operator believe a stage B/C run had taken the flag state into account, when
 # stages B/C in fact run BEFORE the revert and print it as their own next step.
+if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
+    echo "ERROR: --confirm-flag-was-live belongs to --sentinel-repair-only and to no other mode." >&2
+    exit 2
+fi
 if [[ "$CONFIRM_FLAG_REVERTED" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     echo "ERROR: --confirm-flag-reverted belongs to --sentinel-repair-only and to no other mode. Stages B/C run BEFORE" >&2
     echo "       traceColumnsNonNullable is reverted — reverting it is the next step they print — so asserting it here" >&2
@@ -293,32 +305,66 @@ assert_post_promote_state() {
     exit 1
 }
 
-# The sentinel repair accepts a SECOND shape the reverse replay must not, so it gets its own assertion rather than a
+# The sentinel repair accepts a SECOND state the reverse replay must not, so it gets its own assertion rather than a
 # widened shared one. Both windows the runbook documents put sentinels in the still-Nullable original: the promote-to-
-# flag-revert window (post-rollback, above) AND the flip-to-EXCHANGE window — where the cutover may simply be abandoned,
-# leaving damaged rows with no promote to point at. What both states have in common is that a cutover was attempted
-# HERE, which is what separates a sentinel from an epoch a client genuinely sent; the disposable shadow is that evidence
-# in the pre-EXCHANGE case, and stage A leaves it in place (emptied) rather than dropping it.
+# flag-revert window (post-rollback), AND the flip-to-EXCHANGE window, where the cutover may be abandoned and there is
+# no promote to point at.
 #
-# The reverse replay cannot accept this shape: it needs the promote to have happened, or it masks live rows.
+# Only the first is TOPOLOGICALLY provable. `traces_post_rollback_backup` carrying the successor schema exists solely
+# because a promote created it. There is no equivalent signal for the pre-EXCHANGE case — in particular NOT the presence
+# of `traces_local_v2`, which Liquibase creates unconditionally on every installation (000101), so it says nothing about
+# whether a cutover was attempted here. Nor does the data distinguish an epoch this flag minted from one a client
+# genuinely sent, which is what makes a table-wide rewrite dangerous on an estate that never flipped it. So the operator
+# asserts it, and only where the proof is unavailable: --confirm-flag-was-live.
+#
+# The reverse replay cannot accept the pre-EXCHANGE state at all: without a completed promote it masks live rows.
+# The repair mutates the shard it is connected to (it deliberately avoids ON CLUSTER, so it travels by replication,
+# which spans a shard's replicas and not other shards), while its postcondition reads clusterAllReplicas, which spans
+# every shard. On more than one shard those two scopes disagree: the mutation would fix one shard and the check would
+# keep failing, after a whole-table rewrite that could not have satisfied it. Refuse up front instead — the wasted work
+# is the point, not the confusing verdict. The reverse replay shares the single-shard assumption; this is the mode where
+# the mismatch became observable, because it is the one that verifies across the cluster.
+assert_single_shard() {
+    local shards
+    shards="$(ch "SELECT uniqExact(shard_num) FROM system.clusters
+                  WHERE cluster = (SELECT substitution FROM system.macros WHERE macro = 'cluster')" 2>/dev/null || true)"
+    if [[ "$shards" =~ ^[0-9]+$ ]] && (( shards > 1 )); then
+        echo "ERROR: this cluster reports $shards shards. The repair reaches only the shard you are connected to, while" >&2
+        echo "       its postcondition reads every shard, so it would rewrite one shard and then report failure." >&2
+        echo "       Run it once per shard, connecting to a replica of each with --host, and treat the postcondition as" >&2
+        echo "       satisfied only after the last one clears." >&2
+        exit 1
+    fi
+    # Not fatal when unreadable: the count needs system.clusters/system.macros, which a narrower grant may withhold, and
+    # single-shard is the documented topology. Say so rather than blocking on a check that is advisory here.
+    [[ "$shards" =~ ^[0-9]+$ ]] || echo "NOTE: could not read the shard count; assuming a single shard, as the runbook documents." >&2
+}
+
 assert_sentinel_repair_state() {
-    local traces_end_time backup_end_time shadow
+    local traces_end_time backup_end_time
     traces_end_time="$(traces_endtime_type traces)"
     backup_end_time="$(traces_endtime_type traces_post_rollback_backup)"
-    shadow="$(traces_engine traces_local_v2)"
-    if [[ "$traces_end_time" == Nullable* ]] \
-        && { { [[ -n "$backup_end_time" && "$backup_end_time" != Nullable* ]]; } || [[ -n "$shadow" ]]; }; then
+    if [[ "$traces_end_time" != Nullable* ]]; then
+        echo "ERROR: --sentinel-repair-only needs 'traces' on the ORIGINAL schema (Nullable end_time); observed" >&2
+        echo "       end_time='${traces_end_time:-<absent>}'. On the successor the epoch/NaN values are that schema's own" >&2
+        echo "       encoding of an absent value, not damage. Roll the cutover back first." >&2
+        exit 1
+    fi
+    if [[ -n "$backup_end_time" && "$backup_end_time" != Nullable* ]]; then
+        return 0   # a completed promote parked the successor here; nothing left to assert
+    fi
+    if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" ]]; then
+        echo "NOTE: no parked successor, so proceeding on --confirm-flag-was-live: you assert traceColumnsNonNullable was" >&2
+        echo "      live on THIS estate, and accept that every epoch end_time and NaN ttft in 'traces' becomes NULL." >&2
         return 0
     fi
-    echo "ERROR: --sentinel-repair-only needs 'traces' to be an ORIGINAL-schema table (Nullable end_time) in an estate" >&2
-    echo "       where a cutover was attempted — either the successor parked as 'traces_post_rollback_backup' with the" >&2
-    echo "       successor schema (after a stage B/C promote), or the disposable 'traces_local_v2' shadow still present" >&2
-    echo "       (the cutover was abandoned before the EXCHANGE)." >&2
-    echo "       Observed: traces end_time='$traces_end_time', traces_post_rollback_backup end_time='${backup_end_time:-<absent>}'," >&2
-    echo "                 traces_local_v2 engine='${shadow:-<absent>}'." >&2
-    echo "       Neither signal means an epoch end_time here is what a client sent, not a sentinel this flag minted, so" >&2
-    echo "       repairing would overwrite real data. If finalize.sh has already recycled the backup, resolve that" >&2
-    echo "       ordering deliberately: the repair belongs before finalize." >&2
+    echo "ERROR: --sentinel-repair-only found no parked successor ('traces_post_rollback_backup' carrying the successor" >&2
+    echo "       schema), which is the only proof a cutover ran here. Observed end_time='${backup_end_time:-<absent>}'." >&2
+    echo "       Without it this cannot tell a sentinel the flag minted from an epoch a client genuinely sent, and the" >&2
+    echo "       repair rewrites the whole table — so on an estate that never flipped the flag it would destroy real" >&2
+    echo "       values. 'traces_local_v2' is NOT evidence either way: Liquibase creates it on every installation." >&2
+    echo "       If the cutover was abandoned before the EXCHANGE, or finalize.sh has recycled the backup, and you know" >&2
+    echo "       the flag was live here, re-run with --confirm-flag-was-live to accept that." >&2
     exit 1
 }
 
@@ -549,6 +595,7 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         [[ -f "$SQL_DIR/$sentinel_sql" ]] || { echo "ERROR: cannot find $SQL_DIR/$sentinel_sql" >&2; exit 2; }
     done
     assert_sentinel_repair_state
+    assert_single_shard
     echo "NOTE: repairing epoch/NaN sentinels on the restored original. Nothing is promoted, replayed or renamed — this" >&2
     echo "      is one mutation on the table that is already live, and it recomputes 'duration' from the restored NULL." >&2
 

@@ -1037,7 +1037,11 @@ Pick the stage by how far the cutover got:
   is `Distributed` and `traces_local` holds the successor schema.) See "Un-wrap" below for when to prefer it over stage C.
 - **Sentinel repair — after a stage B/C promote, or after abandoning the cutover pre-`EXCHANGE`:**
   `./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted`. Restores `NULL` on the rows the
-  flag wrote into the still-Nullable original and recomputes their `duration`. Separate from the stages by necessity, not
+  flag wrote into the still-Nullable original and recomputes their `duration`. **Without a parked successor** — an
+  abandoned pre-`EXCHANGE` cutover, or an estate `finalize.sh` has recycled — it also needs `--confirm-flag-was-live`,
+  because nothing in the topology or the data then proves an epoch `end_time` is a sentinel this flag minted rather than
+  a value a client sent, and the repair rewrites the whole table. **Single shard only:** it mutates the shard it connects
+  to while verifying across all of them, so it refuses on a multi-shard cluster and must be run once per shard. Separate from the stages by necessity, not
   preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
   the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
   behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
@@ -1194,10 +1198,13 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    reached `0` (`000004_rollback_verify_sentinels.sql`). It is idempotent. A bare `MATERIALIZE COLUMN duration` does
    **not** fix this — it re-evaluates the same expression against the same sentinel.
 
-   **Success is `sentinel_end_time` and `sentinel_ttft` reaching `0`, and no other number.** Rows whose `end_time`
-   genuinely precedes `start_time` are a pre-existing source artifact this repair does not address and stay negative —
-   which is why the shipped counts report no negative-duration total at all. Waiting for one to reach `0` would look
-   like a failed repair forever.
+   **Success is `sentinel_end_time`, `sentinel_ttft` and `stale_duration` all reaching `0`.** The third is what catches
+   a `duration` that was not recomputed when the row was rewritten: a negative duration on a row whose `end_time` is
+   `NULL` cannot be produced by the materialized expression, and the other two counts read `0` either way once the
+   sentinel is cleared, so nothing else would notice. `negative_from_sentinel` is informational, for sizing the damage
+   before repairing. There is deliberately no total of negative durations: rows whose `end_time` genuinely precedes
+   `start_time` are a pre-existing source artifact this repair does not address, so such a total never reaches `0` and
+   waiting for it would look like a failed repair forever.
 
    > **It needs column privileges the rollback grant set omits** — `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)`,
    > where that set carries only `ALTER UPDATE(_row_exists)`. Both commands travel in one mutation, so a missing grant on
@@ -1224,8 +1231,9 @@ Treat a stage B/C rollback as complete only when all of these hold:
       unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
       as `null`.
 - [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` (or reported nothing to
-      repair, which is equally valid) and **exited zero**. The gate is `sentinel_end_time` and `sentinel_ttft` at `0`; a
-      residual `duration < 0` count is expected, from rows whose `end_time` genuinely precedes `start_time`.
+      repair, which is equally valid) and **exited zero**. The gate is `sentinel_end_time`, `sentinel_ttft` and
+      `stale_duration` all at `0`; a residual `duration < 0` count elsewhere in the table is expected, from rows whose
+      `end_time` genuinely precedes `start_time`.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
       of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
 

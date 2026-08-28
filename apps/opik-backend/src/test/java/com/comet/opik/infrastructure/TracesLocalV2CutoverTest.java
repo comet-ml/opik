@@ -865,7 +865,7 @@ class TracesLocalV2CutoverTest {
         // The epoch literal pins 'UTC'. Unpinned it parses in the server timezone, so on a non-UTC host the predicate
         // matches nothing and the driver reports "nothing to repair" over damaged rows — a silent false negative on the
         // gate. The container runs UTC, so only an explicit foreign session timezone can catch a regression here.
-        assertThat(sentinelCounts("America/New_York"))
+        assertThat(sentinelCountsUnderForeignTimezone())
                 .as("the gate is independent of the server timezone, because the epoch literal is pinned to UTC")
                 .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
 
@@ -1910,11 +1910,19 @@ class TracesLocalV2CutoverTest {
      * {@code FINAL} is that the check must see exactly what the mutation rewrites; it is argued in the .sql header.
      */
     private SentinelCounts sentinelCounts() {
-        return sentinelCounts(null);
+        return sentinelCounts("");
     }
 
-    /** As above, evaluated under an explicit {@code session_timezone}. See the UTC assertion in the repair test. */
-    private SentinelCounts sentinelCounts(String sessionTimezone) {
+    /**
+     * The same counts evaluated under a non-UTC {@code session_timezone}, which is the only way this suite can catch an
+     * unpinned epoch literal: the container runs UTC. The clause is a compile-time constant rather than a parameter —
+     * a {@code SETTINGS} value cannot be bound, so the alternative would be assembling one from an argument.
+     */
+    private SentinelCounts sentinelCountsUnderForeignTimezone() {
+        return sentinelCounts(" SETTINGS session_timezone = 'America/New_York'");
+    }
+
+    private SentinelCounts sentinelCounts(String settingsClause) {
         var sql = """
                 SELECT
                     uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
@@ -1925,7 +1933,7 @@ class TracesLocalV2CutoverTest {
                 FROM clusterAllReplicas('{cluster}', %s.traces)
                 """
                 .formatted(DATABASE_NAME)
-                + (sessionTimezone == null ? "" : " SETTINGS session_timezone = '%s'".formatted(sessionTimezone));
+                + settingsClause;
         return template
                 .nonTransaction(connection -> Mono
                         .from(connection.createStatement(sql).execute())
