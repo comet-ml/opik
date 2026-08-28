@@ -94,13 +94,7 @@ public class RetryUtils {
         return isMySQLDeadlock || (throwable.getCause() != null && isDatabaseDeadlock(throwable.getCause()));
     }
 
-    /**
-     * Whether a failure is a transient transport error worth retrying. Exposed so that callers
-     * which retry synchronously -- i.e. without building a Reactor chain purely to get a retry --
-     * classify failures identically to {@link #handleHttpErrors}, rather than maintaining a second
-     * definition of "retriable" that can drift from this one.
-     */
-    public static boolean isRetriableException(Throwable throwable) {
+    private static boolean isRetriableException(Throwable throwable) {
         return switch (throwable) {
             // Network and timeout transient errors
             case SocketException ex -> true;

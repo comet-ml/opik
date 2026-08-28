@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.auth;
 import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.WorkspaceUserPermissions;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -65,6 +66,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -751,6 +753,25 @@ class RemoteAuthServiceTest {
                 false);
     }
 
+    /** A path/method pair that is actually in {@code RemoteAuthService.PUBLIC_ENDPOINTS}. */
+    private static final String PUBLIC_ENDPOINT_PATH = "/v1/private/projects";
+
+    private void authenticateVia(RemoteAuthService service, String path, String method,
+            String workspaceName, String apiKey) {
+        service.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo(path))
+                        .method(method)
+                        .build());
+    }
+
+    private int workspaceIdLookupCount() {
+        return WIRE_MOCK.server()
+                .countRequestsMatching(getRequestedFor(urlPathEqualTo("/workspaces/workspace-id")).build())
+                .getCount();
+    }
+
     private void authenticateWith(RemoteAuthService service, String workspaceName, String apiKey) {
         service.authenticate(
                 getHeadersMock(workspaceName, apiKey), null,
@@ -860,35 +881,65 @@ class RemoteAuthServiceTest {
     }
 
     /**
+     * Control for the test below: proves the public-endpoint fixture actually reaches the fallback.
+     * A 401 on a public endpoint is a {@code ClientErrorException}, which
+     * {@code authenticate} catches, so {@code getWorkspaceId} runs and the request succeeds as
+     * PUBLIC.
+     * <p>
+     * Without this control the sibling assertion "the fallback was not called" would pass for the
+     * wrong reason if the fixture were misconfigured -- which is exactly what happened in an
+     * earlier revision, where the stub URL and the endpoint path were both wrong and the
+     * zero-fallback assertion proved nothing.
+     */
+    @Test
+    void publicEndpointFallback__whenAuthReturnsUnauthorized__thenWorkspaceResolvedAsPublic() {
+        var workspaceId = UUID.randomUUID().toString();
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)));
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-id"))
+                .willReturn(ok(workspaceId)));
+
+        var workspaceName = "workspace-" + UUID.randomUUID();
+        authenticateVia(authServiceWith(TEST_AUTH_TIMEOUT, 0), PUBLIC_ENDPOINT_PATH, "GET",
+                workspaceName, "apiKey-" + UUID.randomUUID());
+
+        assertThat(requestContext.getVisibility()).isEqualTo(Visibility.PUBLIC);
+        assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId);
+        assertThat(requestContext.getUserName()).isEqualTo("Public");
+        assertThat(workspaceIdLookupCount()).isEqualTo(1);
+    }
+
+    /**
      * Bounds retry amplification on the unauthenticated path. {@code authenticate} falls back to
-     * {@code getWorkspaceId} for public endpoints, and both call sites retry, so the concern is
-     * that one inbound request could multiply into (attempts x 2) calls against a React service
-     * that is already failing.
+     * {@code getWorkspaceId} for public endpoints and both call sites retry, so the concern is that
+     * one inbound request could multiply into (attempts x 2) calls against a React service that is
+     * already failing.
      * <p>
      * It cannot: the fallback is behind {@code catch (ClientErrorException)}, and a transport
-     * failure raises {@code ProcessingException}, which is not a {@code ClientErrorException}. So
-     * on the exact failure mode where amplification would matter, the fallback is unreachable and
-     * the request stays bounded by {@code requestMaxRetries + 1}. This test fails if that catch is
-     * ever widened to {@code RuntimeException} or {@code Exception}.
+     * failure raises {@code ProcessingException}, which is not a {@code ClientErrorException}. So on
+     * the exact failure mode where amplification would matter the fallback is unreachable, and the
+     * request stays bounded by {@code requestMaxRetries + 1}.
+     * <p>
+     * Uses the same public endpoint and fallback stub as the control above, so the fallback is
+     * genuinely reachable here and a zero count means the catch did not match -- not that the
+     * fixture was wrong. Fails if that catch is ever widened to {@code RuntimeException}.
      */
     @Test
     void authRetry__whenTransportFailsOnPublicEndpoint__thenFallbackNotAttempted() {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withFault(Fault.EMPTY_RESPONSE)));
-        // Would serve the public fallback if it were ever reached.
-        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/opik/workspaces"))
-                .willReturn(okJson("{\"id\":\"" + UUID.randomUUID() + "\"}")));
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-id"))
+                .willReturn(ok(UUID.randomUUID().toString())));
 
         var service = authServiceWith(TEST_AUTH_TIMEOUT, 2);
 
-        assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
-                "apiKey-" + UUID.randomUUID()))
+        assertThatThrownBy(() -> authenticateVia(service, PUBLIC_ENDPOINT_PATH, "GET",
+                "workspace-" + UUID.randomUUID(), "apiKey-" + UUID.randomUUID()))
                 .isInstanceOf(ProcessingException.class);
 
-        // 3 = 1 initial + 2 retries on the single auth call. Not 6, which is what a second
-        // retrying call site would cost.
+        // 3 = 1 initial + 2 retries on the auth call alone. A second retrying call site would cost 6.
         assertThat(authRequestCount()).isEqualTo(3);
-        assertThat(WIRE_MOCK.server().getAllServeEvents()).hasSize(3);
+        assertThat(workspaceIdLookupCount()).isZero();
     }
 
     /**
