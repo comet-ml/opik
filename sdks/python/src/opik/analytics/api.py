@@ -17,7 +17,7 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 _SDK_MODULE_PREFIXES = ("opik.", "_opik")
 
-Component = Literal["client", "evaluation", "integration"]
+Component = Literal["client", "configuration", "evaluation", "integration"]
 """
 The root of an event's path - which part of the SDK it came from.
 
@@ -27,6 +27,8 @@ only a human can tell apart. Deeper levels of the path are free-form; this one i
 not. Add a value here rather than passing a new string.
 
 - `client`: `Opik` methods - `create_dataset()`, `search_traces()`, ...
+- `configuration`: `opik configure` and `opik mcp configure` - the onboarding
+  flow, including which deployment, which AI clients, and where it stops
 - `evaluation`: `evaluate()`, `run_tests()`, and which metrics get instantiated
 - `integration`: the `track_<library>()` entry point of each integration
 """
