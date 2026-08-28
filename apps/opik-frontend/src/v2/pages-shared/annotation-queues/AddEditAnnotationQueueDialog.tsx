@@ -57,6 +57,7 @@ const formSchema = z.object({
   project_id: z.string().min(1, "Project is required"),
   name: z
     .string()
+    .trim()
     .min(1, "Name is required")
     .max(255, "Name cannot exceed 255 characters"),
   description: z.string().optional(),
@@ -151,9 +152,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       {
         annotationQueue: getQueue(),
       },
-      { onSuccess: onQueueCreatedEdited },
+      {
+        onSuccess: (queue) => {
+          onQueueCreatedEdited(queue);
+          setOpen(false);
+        },
+      },
     );
-    setOpen(false);
   }, [createMutate, getQueue, onQueueCreatedEdited, setOpen]);
 
   const editQueue = useCallback(() => {
@@ -164,9 +169,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           ...getQueue(),
         },
       },
-      { onSuccess: onQueueCreatedEdited },
+      {
+        onSuccess: (queue) => {
+          onQueueCreatedEdited(queue);
+          setOpen(false);
+        },
+      },
     );
-    setOpen(false);
   }, [updateMutate, defaultQueue?.id, getQueue, onQueueCreatedEdited, setOpen]);
 
   const onSubmit = useCallback(
