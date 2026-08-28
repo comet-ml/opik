@@ -830,7 +830,7 @@ run by hand.** Each `.sql` file is the single source a driver reads:
 | 2 — delta + replay | `000002_delta_and_deletion_replay.sql` | `delta_replay.sh` |
 | 3 — EXCHANGE + wrap | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
 | QA — fidelity compare (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
-| rollback | `000004_rollback_stage_{a,b,c}_*.sql`, `000004_rollback_unwrap.sql`, `000004_rollback_reverse_replay.sql` + its postcondition `000004_rollback_verify_replay.sql` | `rollback.sh` |
+| rollback | `000004_rollback_stage_{a,b,c}_*.sql`, `000004_rollback_unwrap.sql`, `000004_rollback_reverse_replay.sql` + its postcondition `000004_rollback_verify_replay.sql`, `000004_rollback_sentinel_repair.sql` + its postcondition `000004_rollback_verify_sentinels.sql` | `rollback.sh` |
 | finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
 
 Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOUSE_HOST`, `CLICKHOUSE_USER` and
@@ -870,7 +870,7 @@ read-only drivers cannot surface a mutation-privilege gap by construction.
 | rollback stage A/B (if in scope) | stage A `TRUNCATE`; stage B 2-way `RENAME` + reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). **Stage B also renames**, so it needs **`INSERT` + `CREATE TABLE`** on **`traces_post_rollback_backup`** — a destination that **does not exist yet**, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — and **`SELECT` + `DROP TABLE`** on **`traces_pre_cutover_backup`**, its source. Note stage B is the *likelier* rollback, not the exotic one: the wrap is deferred by default, so the post-`EXCHANGE` resting state is the one stage B reverses, and reaching it needs no extra step. Withhold unless a rollback is actually planned. |
 | rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | **`INSERT` + `CREATE TABLE`** on **`traces_dist_old`** and **`traces_post_rollback_backup`** — both `RENAME` destinations, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — plus `DROP TABLE` on `traces_dist_old`, which is dropped after the rotation. `DROP TABLE` on `traces_local`, plus `ALTER UPDATE(_row_exists)` on the restored `traces`. **Decide this before applying the wrap:** without these grants there is no way back to the pre-cutover table until another grant change lands. (The *wrap itself* stays reversible via the un-wrap row below, which needs no extra grants — but that returns to the successor, not to the original.) |
 | **un-wrap** (`--unwrap-only`, if the wrap is applied) | 2-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces`**, **`traces_local`** and **`traces_dist_old`**, plus **`INSERT` + `CREATE TABLE`** on **`traces_dist_old`** as the `RENAME` destination — a **subset of what stage C's statements require** (same source and destination names, minus `traces_pre_cutover_backup` and `traces_post_rollback_backup`), so a grant set that genuinely covers stage C covers this with nothing added. No `ALTER UPDATE` and no `TRUNCATE`: it promotes no backup and replays nothing. Grant it even when stage C is out of scope — it is the only wrap recovery once `finalize.sh` has dropped the parked original. |
-| post-rollback sentinel repair (stage B/C only) | `ALTER TABLE traces UPDATE end_time = NULL …`, same for `ttft` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` on the repair `rollback.sh` prints when it finishes. Either grant these two columns with the rollback grants, or plan to run the repair as a more privileged user. |
+| sentinel repair (`--sentinel-repair-only`, after a stage B/C promote **or** a cutover abandoned pre-`EXCHANGE`) | one `ALTER TABLE traces` carrying `UPDATE end_time = NULL …` and `UPDATE ttft = NULL …` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` here. Both commands travel in one mutation, so a missing grant on either applies neither. Either grant these two columns with the rollback grants (and revoke them after), or plan to run the repair as a more privileged user. |
 | `finalize.sh` (if in scope) | `TRUNCATE` / `DROP TABLE` | `TRUNCATE`, `DROP TABLE`, and `max_table_size_to_drop` override |
 
 > **`RENAME` and `EXCHANGE` check four privileges per name, not two.** Verified against a real server (26.3): a
@@ -917,9 +917,8 @@ runbook. Two kinds, both deliberate and documented where they occur:
 - **Procedural**, in one place only: the retry's `RENAME` of the parked backup back to `traces_local_v2` (see "Retrying
   the cutover after a stage B/C rollback"). It is unautomated on purpose — it reuses data whose trustworthiness may be
   the reason the rollback happened — so the operator runs it having read the guards.
-- **Remediation the drivers print rather than perform**, when a guard refuses or a step needs finishing by hand: the
-  post-rollback sentinel repair's two `ALTER … UPDATE`s (which need column grants the rollback set deliberately omits —
-  see the privileges row above), clearing a leftover `traces_dist_old`, and completing an interrupted forward `RENAME`.
+- **Remediation the drivers print rather than perform**, when a guard refuses and the fix depends on facts the script
+  cannot check: clearing a leftover `traces_dist_old`, and completing an interrupted forward `RENAME`.
 
 All of it runs against the same database and connection the drivers use, and each statement is printed in full at the
 point it becomes necessary — the drivers never withhold one, and never run it for you.
@@ -953,9 +952,9 @@ The two `*_backup` names are the only retained backups and never co-exist. The o
 
 The full, ready-to-run rollback — including the **reverse deletion replay** so deletes don't resurrect — is pre-written
 as one file per stage (`000004_rollback_stage_a_discard_shadow.sql`, `…_stage_b_exchange_back.sql`,
-`…_stage_c_promote_original.sql`, the narrower `000004_rollback_unwrap.sql`, and the shared
-`000004_rollback_reverse_replay.sql`) and driven by [`scripts/rollback.sh`](scripts/rollback.sh), so no one authors it
-under pressure.
+`…_stage_c_promote_original.sql`, the narrower `000004_rollback_unwrap.sql`, the shared
+`000004_rollback_reverse_replay.sql`, and the tail's `000004_rollback_sentinel_repair.sql`) and driven by
+[`scripts/rollback.sh`](scripts/rollback.sh), so no one authors it under pressure.
 
 **Roll back only for a regression you cannot serve through.** The successor is the live table once the `EXCHANGE`
 lands, so a fault in it is a production fault and the normal choice applies: fix forward, or reverse. Reverse when the
@@ -1015,6 +1014,9 @@ Pick the stage by how far the cutover got:
 
 - **Stage A — before EXCHANGE:** `./scripts/rollback.sh --database opik --stage A`. Discards the disposable shadow
   `traces_local_v2`; the live `traces` was never touched. (Guarded: aborts unless `traces` is still the original schema.)
+  **"Untouched" is about rows, not values:** the flag was rolled out before the `EXCHANGE`, so traces written during
+  that window carry sentinels and a negative `duration` in the live table, and stage A does not address them. Abandoning
+  the cutover therefore still needs the sentinel repair below; retrying it does not, since the retry's copy heals them.
 - **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'
   --confirm-retention-paused --accept-post-cutover-write-loss`. `EXCHANGE` `traces_pre_cutover_backup` back to live
   `traces`, park the now-displaced successor as `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts
@@ -1033,6 +1035,24 @@ Pick the stage by how far the cutover got:
   --confirm-maintenance`. Rotates the data-less wrapper out and `traces_local` back into `traces` in one atomic
   `RENAME`, then drops the ex-wrapper — landing in the post-`EXCHANGE`, pre-wrap state. (Guarded: aborts unless `traces`
   is `Distributed` and `traces_local` holds the successor schema.) See "Un-wrap" below for when to prefer it over stage C.
+- **Sentinel repair — after a stage B/C promote, or after abandoning the cutover pre-`EXCHANGE`:**
+  restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. Which
+  invocation depends on whether a promote parked the successor, because that is the only topological proof a cutover ran
+  on this estate:
+  ```bash
+  # after a stage B/C promote — traces_post_rollback_backup is the proof
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+  # no parked successor: abandoned pre-EXCHANGE (incl. after stage A), or finalize.sh has recycled it
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live
+  ```
+  The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
+  distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
+  table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
+  a multi-shard cluster and must be run once per shard. Separate from the stages by necessity, not
+  preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
+  the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
+  behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
+  evidence the guard looks for survives. See step 2 of "Rolling back the `traceColumnsNonNullable` flip".
 
 ### Un-wrap: reversing sharding without reversing the cutover
 
@@ -1145,22 +1165,20 @@ through the replay, not merely across the rename. A failure *between* the two ne
   post-swap `RENAME` did not, the parked original is still under `traces_local_v2` and stage B aborts pointing at the
   one-line `RENAME` that finishes it (`traces_local_v2` → `traces_pre_cutover_backup`); run that, then re-run stage B.
 
-> **Run the sentinel count against `traces`, never against the parked successor.** The counts are only
-> meaningful on the *restored original*, which stores an absent value as `NULL`. The parked successor
-> stores it as the epoch/NaN **sentinel** by design — that is what the non-nullable schema is — so the
-> same query pointed there reports *every* absent value as a sentinel and invites a "repair" that would
-> overwrite correct data. The driver names `traces` explicitly for this reason; if you retype the query,
-> keep the table name.
+> **The repair is only meaningful on the restored original.** The parked successor stores an absent value
+> as the epoch/NaN **sentinel** by design, so the same counts pointed there report *every* absent value as
+> damage and invite a "repair" that would overwrite correct data. `--sentinel-repair-only` refuses unless
+> `traces` is the Nullable original *with the successor parked* — that pairing is also what separates it
+> from a pre-cutover table, where an epoch `end_time` is simply what a client sent.
 >
 > **Two windows put sentinels in the original, not one.** Writes land on it with the flag still `true`
 > between the flip and the `EXCHANGE`, **and again from a stage B/C promote until the flag reverts on
 > every instance** — the promote restores the Nullable original while backends still hold `true`. Count
 > after the restart has landed everywhere, or the second window keeps refilling what you just repaired.
 >
-> **Nothing to repair is still a valid outcome.** If little or no traffic hit either window, the counts
-> are legitimately `0` and there is no mutation to run. Do not force
-> one: an `ALTER … UPDATE` over the whole table is not free, and a `0` count is the success condition, not
-> a sign the query is wrong.
+> **Nothing to repair is still a valid outcome.** If little or no traffic hit either window the counts are
+> legitimately `0`; the mode reads them first and issues no mutation, which is why it is safe to run
+> speculatively. A `0` is the success condition, not a sign the check is wrong.
 
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
@@ -1174,38 +1192,31 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    keeps binding sentinels (epoch/NaN) and using sentinel-based absent-value logic against the now-Nullable column,
    mixing sentinel and `null` representations: not a hard write failure, but inconsistent absent-value
    reads/filters/sorts.
-2. **Repair the sentinels written into the original during the pre-swap window** (see the caveats under "The
-   `traceColumnsNonNullable` flip"). Those rows carry `end_time = epoch` / `ttft = NaN` where the original's convention is
-   `NULL`, and — because the original's `duration` expression guards only `end_time IS NOT NULL` — a large **negative**
-   `duration`. The promote made them live again, and the successor's healed copy is discarded by `finalize.sh`, so repair
-   them here. Do this **after** step 1, or in-flight writes keep minting more:
-   ```sql
-   -- how many need repair. Scope the count to the SENTINEL, not to `duration < 0`: a table can hold rows whose
-   -- end_time legitimately precedes start_time, and those are negative for reasons this repair does not address.
-   SELECT countIf(end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS sentinel_end_time,
-          countIf(isNaN(ttft))                                       AS sentinel_ttft,
-          countIf(duration < 0)                                      AS negative_duration_total,
-          countIf(duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS negative_from_sentinel
-   FROM <database>.traces;
-   -- restore the original's NULL convention; the mutation rewrites the parts and recomputes `duration`
-   ALTER TABLE <database>.traces ON CLUSTER '{cluster}'
-       UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9) SETTINGS mutations_sync = 2;
-   ALTER TABLE <database>.traces ON CLUSTER '{cluster}'
-       UPDATE ttft = NULL WHERE isNaN(ttft) SETTINGS mutations_sync = 2;
+2. **Repair the sentinels written into the original** (see the caveats under "The `traceColumnsNonNullable` flip").
+   Those rows carry `end_time = epoch` / `ttft = NaN` where the original's convention is `NULL`, and — because the
+   original's `duration` expression epoch-guards `start_time` but checks `end_time` for NULL alone — a large **negative**
+   `duration`. The promote made them live again and `finalize.sh` discards the successor's healed copy, so repair them
+   here, **after** step 1 has landed on every instance or in-flight writes keep minting more:
    ```
-   A bare `MATERIALIZE COLUMN duration` does **not** fix it — it re-evaluates the same expression against the same
-   sentinel and reproduces the negative value.
+   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+   ```
+   It reads the counts first and issues no mutation when they are `0`, restores `NULL` in a single mutation
+   (`000004_rollback_sentinel_repair.sql`) which recomputes `duration` as it rewrites each row, then asserts the counts
+   reached `0` (`000004_rollback_verify_sentinels.sql`). It is idempotent. A bare `MATERIALIZE COLUMN duration` does
+   **not** fix this — it re-evaluates the same expression against the same sentinel.
 
-   **Success is `sentinel_end_time` and `sentinel_ttft` reaching `0` — not `negative_duration_total`.** A table can
-   also hold rows whose `end_time` genuinely precedes `start_time`. Those are a pre-existing source artifact that the
-   migration carries faithfully, they have nothing to do with the sentinel, and they stay negative. Where any exist,
-   waiting for a negative total of `0` would look like a failed repair forever.
+   **Success is `sentinel_end_time`, `sentinel_ttft` and `stale_duration` all reaching `0`.** The third is what catches
+   a `duration` that was not recomputed when the row was rewritten: a negative duration on a row whose `end_time` is
+   `NULL` cannot be produced by the materialized expression, and the other two counts read `0` either way once the
+   sentinel is cleared, so nothing else would notice. `negative_from_sentinel` is informational, for sizing the damage
+   before repairing. There is deliberately no total of negative durations: rows whose `end_time` genuinely precedes
+   `start_time` are a pre-existing source artifact this repair does not address, so such a total never reaches `0` and
+   waiting for it would look like a failed repair forever.
 
-   > **These two statements need column privileges the cutover user may not hold.** They update `end_time` and `ttft`,
-   > while the rollback grant set carries only `ALTER UPDATE(_row_exists)` — all the reverse replay needs. A user
-   > scoped to that set gets `ACCESS_DENIED` here, so the repair cannot simply be pasted into the session that ran
-   > `rollback.sh`. Either grant both columns alongside the rollback grants, or run the repair as a more privileged
-   > user.
+   > **It needs column privileges the rollback grant set omits** — `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)`,
+   > where that set carries only `ALTER UPDATE(_row_exists)`. Both commands travel in one mutation, so a missing grant on
+   > either applies neither and nothing is half-repaired; the mode explains the `ACCESS_DENIED` if you hit it. Grant the
+   > two columns alongside the rollback grants and revoke them afterwards, or run the repair as a more privileged user.
 
 **When the rollback is done.** The stages leave the estate correct but not self-evidently so — the promote and the
 replay report success independently of whether the result is consistent, and two of the steps are config rather than SQL.
@@ -1226,8 +1237,10 @@ Treat a stage B/C rollback as complete only when all of these hold:
       `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
       unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
       as `null`.
-- [ ] **Sentinel repair applied** — `sentinel_end_time` and `sentinel_ttft` at `0`. Not `duration < 0`, which has a
-      non-zero floor from rows whose `end_time` genuinely precedes `start_time`.
+- [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` (or reported nothing to
+      repair, which is equally valid) and **exited zero**. The gate is `sentinel_end_time`, `sentinel_ttft` and
+      `stale_duration` all at `0`; a residual `duration < 0` count elsewhere in the table is expected, from rows whose
+      `end_time` genuinely precedes `start_time`.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
       of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
 

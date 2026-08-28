@@ -87,7 +87,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * cutover is reversible: the post-wrap rollback drops the wrapper, promotes the parked old data back to {@code traces},
  * and reverse-replays so a post-cutover delete does not resurrect — and, separately, that the wrap alone can be
  * reversed ({@code --unwrap-only}) leaving the partitioned successor and its post-cutover writes live, with no parked
- * original required and the wrap re-appliable afterwards.
+ * original required and the wrap re-appliable afterwards. The rollback's tail is covered too: the sentinel repair
+ * restores {@code NULL} on the rows the schema-state flag wrote into the still-Nullable original and lets the mutation
+ * recompute their {@code duration}, without disturbing a negative duration the source data genuinely carries.
  *
  * <p><b>Dedicated, non-reused containers</b> are required because the cutover ends in a destructive {@code EXCHANGE} +
  * {@code RENAME} of the live {@code traces} table, which must never touch a container shared with other suites. Runs
@@ -689,6 +691,11 @@ class TracesLocalV2CutoverTest {
         assertThat(columnType("traces_post_rollback_backup", "end_time"))
                 .as("parked backup carries the successor's non-Nullable schema")
                 .doesNotStartWith("Nullable");
+        // Both signals above, plus this one, are what --reverse-replay-only and --sentinel-repair-only assert before
+        // acting: the promote's RENAME consumes the parked original, so it surviving here would mean a half-done rename.
+        assertThat(tableExists("traces_pre_cutover_backup"))
+                .as("the promote's RENAME consumed the parked original, so its name is free after the swap-back")
+                .isFalse();
         assertThat(tableExists("traces_local_v2"))
                 .as("the disposable shadow name is free after rollback (so stage A cannot truncate the backup)")
                 .isFalse();
@@ -792,6 +799,118 @@ class TracesLocalV2CutoverTest {
         assertThat(verifyReplayPostcondition(cutoverStart))
                 .as("a live row under a project the bridge never named is not a resurrection")
                 .isZero();
+    }
+
+    /**
+     * The sentinel repair and the counts that gate it (000004_rollback_sentinel_repair / _verify_sentinels, driven by
+     * {@code rollback.sh --sentinel-repair-only}). Rows written into the still-Nullable original while
+     * {@code traceColumnsNonNullable} was true carry the successor's encoding of an absent value — epoch
+     * {@code end_time}, NaN {@code ttft} — and the original's MATERIALIZED {@code duration} turned the first of those
+     * into a large negative, because the expression epoch-guards {@code start_time} but checks {@code end_time} for NULL
+     * alone. The repair restores NULL and the mutation recomputes {@code duration} while rewriting the row.
+     *
+     * <p>The cohorts exist to pin what the repair must and must not touch:
+     * <ul>
+     *   <li><b>both sentinels, and each alone</b> — the repair carries two commands with different predicates in one
+     *   mutation, so a row matching only one must get only that column restored, and the other must survive intact.</li>
+     *   <li><b>a genuine negative duration</b> ({@code end_time} really before {@code start_time}, no sentinel) — the
+     *   control that makes the gate's shape correct. It stays negative, so a total count of negative durations never
+     *   reaches 0 on a healthy repair; gating on that number would report every successful run as a failure. This is
+     *   why the shipped counts report {@code sentinel_end_time} / {@code sentinel_ttft} and deliberately not a
+     *   negative-duration total.</li>
+     *   <li><b>a clean row and an already-NULL row</b> — negative controls for a predicate that over-matched.</li>
+     * </ul>
+     *
+     * <p>Restoring NULL is the only fix: {@code MATERIALIZE COLUMN duration} would re-evaluate the same expression
+     * against the same sentinel. Asserting {@code duration IS NULL} after the repair is what pins that.
+     */
+    @Test
+    void sentinelRepairRestoresNullAndRecomputesDurationLeavingGenuineNegativesAlone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var startTime = Instant.parse("2025-03-04T10:00:00Z");
+        var ended = startTime.plusMillis(100);
+        // A real end_time BEFORE start_time: a negative duration owed to the source data, not to the flip.
+        var endedEarly = startTime.minusSeconds(5);
+
+        // Exact counts per cohort, so every expected number below is self-evident.
+        for (int i = 0; i < 4; i++) {
+            insertShapedTrace(workspaceId, projectId, "sentinel-both", startTime, Instant.EPOCH, Double.NaN);
+        }
+        for (int i = 0; i < 2; i++) {
+            insertShapedTrace(workspaceId, projectId, "sentinel-end-time", startTime, Instant.EPOCH, 1.5);
+        }
+        for (int i = 0; i < 2; i++) {
+            insertShapedTrace(workspaceId, projectId, "sentinel-ttft", startTime, ended, Double.NaN);
+        }
+        for (int i = 0; i < 3; i++) {
+            insertShapedTrace(workspaceId, projectId, "genuine-negative", startTime, endedEarly, 2.5);
+        }
+        for (int i = 0; i < 3; i++) {
+            insertShapedTrace(workspaceId, projectId, "clean", startTime, ended, 2.5);
+        }
+        for (int i = 0; i < 2; i++) {
+            insertShapedTrace(workspaceId, projectId, "absent", startTime, null, null);
+        }
+
+        assertThat(sentinelCounts())
+                .as("before the repair: 6 rows carry an epoch end_time, 6 a NaN ttft, and all 6 epoch rows are already"
+                        + " serving a negative duration the promote made live")
+                .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
+        assertThat(countMatching(workspaceId, "duration < 0"))
+                .as("negative control: 9 negative durations, 6 from the sentinel and 3 genuine — the mix that makes a"
+                        + " negative-duration total useless as a gate")
+                .isEqualTo(9);
+
+        // The epoch literal pins 'UTC'. Unpinned it parses in the server timezone, so on a non-UTC host the predicate
+        // matches nothing and the driver reports "nothing to repair" over damaged rows — a silent false negative on the
+        // gate. The container runs UTC, so only an explicit foreign session timezone can catch a regression here.
+        assertThat(sentinelCountsUnderForeignTimezone())
+                .as("the gate is independent of the server timezone, because the epoch literal is pinned to UTC")
+                .isEqualTo(new SentinelCounts(6L, 6L, 6L, 0L));
+
+        var beforeRepair = serverNow();
+        repairSentinels();
+
+        // The two commands travel in ONE mutation, which is why the repair costs a single part rewrite rather than two.
+        // Asserted because it is a claim the .sql header makes and nothing else would catch if ClickHouse split them.
+        assertThat(sentinelRepairMutations(beforeRepair))
+                .as("both commands ran, and under ONE mutation id — so the repair is a single pass over the parts, which"
+                        + " is the whole reason for combining them")
+                .isEqualTo(new MutationShape(1L, 2L));
+
+        assertThat(sentinelCounts())
+                .as("the gate clears: no epoch end_time and no NaN ttft left on any replica")
+                .isEqualTo(new SentinelCounts(0L, 0L, 0L, 0L));
+        assertThat(countMatching(workspaceId, "duration < 0"))
+                .as("the 3 genuine negatives remain, so a healthy repair still leaves this total non-zero — it must"
+                        + " never be the success criterion")
+                .isEqualTo(3);
+
+        assertThat(countMatching(workspaceId,
+                "name = 'sentinel-both' AND end_time IS NULL AND ttft IS NULL AND duration IS NULL"))
+                .as("both columns restored to NULL, and duration recomputed as NULL by the rewrite — not left negative,"
+                        + " which is what a MATERIALIZE COLUMN would have done")
+                .isEqualTo(4);
+        assertThat(countMatching(workspaceId,
+                "name = 'sentinel-end-time' AND end_time IS NULL AND ttft = 1.5 AND duration IS NULL"))
+                .as("only the matching column is restored: the real ttft on an epoch-end_time row survives")
+                .isEqualTo(2);
+        assertThat(countMatching(workspaceId,
+                "name = 'sentinel-ttft' AND ttft IS NULL AND end_time IS NOT NULL AND duration > 0"))
+                .as("the ttft command leaves a real end_time and its positive duration untouched")
+                .isEqualTo(2);
+        assertThat(countMatching(workspaceId, "name = 'genuine-negative' AND end_time IS NOT NULL AND duration < 0"))
+                .as("a genuine negative duration is not the repair's business and is left exactly as it was")
+                .isEqualTo(3);
+        assertThat(
+                countMatching(workspaceId, "name = 'clean' AND end_time IS NOT NULL AND ttft = 2.5 AND duration > 0"))
+                .as("an unaffected row is untouched by either predicate")
+                .isEqualTo(3);
+        assertThat(countMatching(workspaceId,
+                "name = 'absent' AND end_time IS NULL AND ttft IS NULL AND duration IS NULL"))
+                .as("a row that was already NULL stays NULL: neither predicate matches a NULL")
+                .isEqualTo(2);
     }
 
     /**
@@ -1628,6 +1747,45 @@ class TracesLocalV2CutoverTest {
         return ids;
     }
 
+    /**
+     * One trace with explicitly chosen {@code start_time}, {@code end_time} and {@code ttft}, tagged by {@code name} so
+     * a cohort can be asserted on afterwards. A {@code null} {@code endTime} or {@code ttft} stores SQL {@code NULL};
+     * pass {@link Instant#EPOCH} or {@link Double#NaN} to store the sentinels the flip produced. The timestamps go over
+     * the wire as text and through {@code toDateTime64} so the nanosecond precision the source column carries survives,
+     * which a bound {@code Instant} would not guarantee — but they are still bound values, not spliced text. Each bind
+     * is named for the column it fills and carries that column's own precision: {@code created_at} is
+     * {@code DateTime64(9)} while {@code last_updated_at}, the {@code ReplacingMergeTree} version column, is
+     * {@code DateTime64(6)}.
+     */
+    private void insertShapedTrace(String workspaceId, UUID projectId, String name, Instant startTime,
+            Instant endTime, Double ttft) {
+        execute("""
+                INSERT INTO traces (id, workspace_id, project_id, name, start_time, end_time, created_at,
+                                    last_updated_at, ttft)
+                VALUES (:id, :workspace_id, :project_id, :name, toDateTime64(:start_time, 9),
+                        toDateTime64(:end_time, 9), toDateTime64(:created_at, 9),
+                        toDateTime64(:last_updated_at, 6), :ttft)
+                """, statement -> {
+            statement.bind("id", ID_GENERATOR.generateId())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_id", projectId)
+                    .bind("name", name)
+                    .bind("start_time", ClickHouseDateTimeFormat.formatNanos(startTime))
+                    .bind("created_at", ClickHouseDateTimeFormat.formatNanos(startTime))
+                    .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(startTime));
+            if (endTime == null) {
+                statement.bindNull("end_time", String.class);
+            } else {
+                statement.bind("end_time", ClickHouseDateTimeFormat.formatNanos(endTime));
+            }
+            if (ttft == null) {
+                statement.bindNull("ttft", Double.class);
+            } else {
+                statement.bind("ttft", ttft);
+            }
+        });
+    }
+
     private void lightweightDelete(Set<String> ids, String workspaceId) {
         execute("""
                 DELETE FROM traces
@@ -1721,7 +1879,137 @@ class TracesLocalV2CutoverTest {
                 .block();
     }
 
+    /**
+     * The sentinel repair (000004_rollback_sentinel_repair), reimplemented inline like the rest of this class. One
+     * {@code ALTER} carrying both commands, as the shipped file does: neither predicate is on the primary key, so
+     * ClickHouse cannot prune parts and a mutation rewrites every one — combining them halves that to a single pass.
+     * Also mirrored: the absence of {@code ON CLUSTER} (the mutation travels by replication, not the distributed-DDL
+     * queue), the {@code 'UTC'} on the epoch literal, and {@code mutations_sync = 2}, which is what makes the
+     * postcondition an observation rather than an assumption on a replicated table. {@code log_comment} is the one
+     * omission, being observability rather than semantics, as elsewhere in this class.
+     */
+    private void repairSentinels() {
+        execute("""
+                ALTER TABLE traces
+                    UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC'),
+                    UPDATE ttft = NULL WHERE isNaN(ttft)
+                SETTINGS mutations_sync = 2
+                """, _ -> {
+        });
+    }
+
+    /**
+     * The sentinel counts, mirroring {@code 000004_rollback_verify_sentinels.sql} — same predicates, same
+     * {@code DateTime64} precision 9, same distinct aggregate over the full key, same absence of {@code FINAL}, and the
+     * same database qualification through {@code clusterAllReplicas}.
+     *
+     * <p>One property of that file is deliberately NOT pinned here: that a superseded {@code ReplacingMergeTree} version
+     * still carrying a sentinel is counted (and repaired) behind a clean newer one. Constructing it needs two versions
+     * of one id to coexist, which a background merge may collapse at any moment, so any assertion on it would be flaky
+     * rather than strict — the same reason the replay gate does not pin row multiplicity. The reasoning for omitting
+     * {@code FINAL} is that the check must see exactly what the mutation rewrites; it is argued in the .sql header.
+     */
+    private SentinelCounts sentinelCounts() {
+        return sentinelCounts("");
+    }
+
+    /**
+     * The same counts evaluated under a non-UTC {@code session_timezone}, which is the only way this suite can catch an
+     * unpinned epoch literal: the container runs UTC. The clause is a compile-time constant rather than a parameter —
+     * a {@code SETTINGS} value cannot be bound, so the alternative would be assembling one from an argument.
+     */
+    private SentinelCounts sentinelCountsUnderForeignTimezone() {
+        return sentinelCounts(" SETTINGS session_timezone = 'America/New_York'");
+    }
+
+    private SentinelCounts sentinelCounts(String settingsClause) {
+        var sql = """
+                SELECT
+                    uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
+                    uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
+                    uniqExactIf((workspace_id, project_id, id),
+                                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
+                    uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
+                FROM clusterAllReplicas('{cluster}', %s.traces)
+                """
+                .formatted(DATABASE_NAME)
+                + settingsClause;
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql).execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> new SentinelCounts(
+                                row.get("sentinel_end_time", Long.class),
+                                row.get("sentinel_ttft", Long.class),
+                                row.get("negative_from_sentinel", Long.class),
+                                row.get("stale_duration", Long.class))))))
+                .block();
+    }
+
+    /**
+     * How ClickHouse recorded the sentinel repair: how many commands, under how many distinct {@code mutation_id}s.
+     * {@code system.mutations} keeps one row per command but shares one id across an {@code ALTER}'s commands, which is
+     * the property the repair's single-pass cost rests on.
+     *
+     * <p>Scoped two ways, because that table is cumulative and outlives {@link #resetTables()}: to the repair's own two
+     * commands, and to mutations created at or after {@code since}. Without both, the schema migrations on this table
+     * (Liquibase uses the same multi-command form, so one of its ids also covers two commands) and any earlier test's
+     * mutations would be counted here.
+     */
+    private MutationShape sentinelRepairMutations(String since) {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                SELECT uniqExact(mutation_id) AS mutationIds, count() AS commands
+                FROM system.mutations
+                WHERE database = :db
+                  AND table = 'traces'
+                  AND create_time >= parseDateTimeBestEffort(:since)
+                  AND (command LIKE '%UPDATE end_time = NULL WHERE%' OR command LIKE '%UPDATE ttft = NULL WHERE%')
+                """)
+                .bind("db", DATABASE_NAME)
+                .bind("since", since)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> new MutationShape(
+                        row.get("mutationIds", Long.class),
+                        row.get("commands", Long.class))))))
+                .block();
+    }
+
+    /** Server clock, for bounding a {@code system.mutations} read to what a test issued after this point. */
+    private String serverNow() {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement(
+                "SELECT toString(now()) AS n").execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("n", String.class)))))
+                .block();
+    }
+
+    /** Distinct {@code mutation_id}s and command rows behind one {@code ALTER}. */
+    private record MutationShape(long mutationIds, long commands) {
+    }
+
+    /**
+     * The counts {@code 000004_rollback_verify_sentinels.sql} returns. {@code endTime}, {@code ttft} and
+     * {@code staleDuration} are gates; {@code negativeFromSentinel} is context for sizing the damage before a repair.
+     */
+    private record SentinelCounts(long endTime, long ttft, long negativeFromSentinel, long staleDuration) {
+    }
+
     // --- query helpers -------------------------------------------------------------------------------------------
+
+    /**
+     * Distinct keys in the live {@code traces} matching a raw predicate. No {@code FINAL}, matching the scope of the
+     * repair mutation and of the counts that gate it.
+     */
+    private long countMatching(String workspaceId, String predicate) {
+        var sql = """
+                SELECT uniqExact(workspace_id, project_id, id) AS c
+                FROM traces
+                WHERE workspace_id = :workspace_id AND (%s)
+                """.formatted(predicate);
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql).bind("workspace_id", workspaceId).execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class)))))
+                .block();
+    }
 
     /** Distinct live (mask-honored) ids from {@code table} within {@code ids} — collapses ReplacingMergeTree versions. */
     private long liveCount(String table, Set<String> ids, String workspaceId) {
