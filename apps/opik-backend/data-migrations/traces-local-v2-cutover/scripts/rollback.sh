@@ -658,16 +658,29 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     fi
     # Same aggregates over an all-time range. A 0 inside the window against a non-zero total is the signature of a wrong
     # window -- bounds in local time, a typo -- which otherwise reports as a clean estate and exits 0 over unrepaired rows.
-    # 1900..2299 is the DateTime64 range, not a round number: far-future timestamps are real in this dataset
-    # (see the runbook's far-future id section), and an arbitrary ceiling would hide exactly those from the comparison.
-    if ! sentinel_all="$(sentinel_counts '1900-01-01 00:00:00' '2299-12-31 23:59:59')"; then sentinel_all=""; fi
+    #
+    # These bounds are the DateTime64(9) representable range, NOT the DateTime64 type-family range (1900..2299) this used
+    # to pass. `created_at` is DateTime64(9), so a 2299 literal is promoted to precision 9 to be compared and raises
+    # DECIMAL_OVERFLOW (Code 407) every time -- which made this whole comparison dead code on every real schema, printing
+    # '?' where the operator was told to read a number. The ceiling costs the `created_at` arm nothing, since the column
+    # cannot hold a later value; it costs the `last_updated_at` arm (DateTime64(6)) only 2262..2299, unreachable for a
+    # column set from now64(). Far-future values in this dataset are far-future *ids*, which drive the successor's `id_at`
+    # partitioning -- not `created_at`, which an earlier revision of this comment conflated them with.
+    if ! sentinel_all="$(sentinel_counts '1677-09-21 00:12:44' '2262-04-11 23:47:16.854775807')"; then sentinel_all=""; fi
     read -r all_end_time all_ttft _ _ <<< "$sentinel_all"
     [[ "$all_end_time" =~ ^[0-9]+$ ]] || { all_end_time="?"; all_ttft="?"; }
 
     echo "Sentinels IN WINDOW [$SENTINEL_WINDOW_FROM, $SENTINEL_WINDOW_TO): end_time=$before_end_time ttft=$before_ttft (of those, serving a negative duration: $before_negative)"
     echo "Same counts with no window, for comparison: end_time=$all_end_time ttft=$all_ttft"
+    # '?' means the comparison did not run, which is not the same as it running and agreeing. Say so, rather than leaving a
+    # bare '?' on a line the runbook points operators at: a check that silently did not execute reads as one that passed.
+    if [[ "$all_end_time" == "?" ]]; then
+        echo "NOTE: the no-window comparison returned no usable number, so it is not evidence either way -- neither that the" >&2
+        echo "      window is right nor that it is wrong. The gate remains the IN-WINDOW count, and the selected rows still" >&2
+        echo "      have to be reconciled by identity before a clean read is trusted." >&2
+    fi
     if (( before_end_time == 0 && before_ttft == 0 )); then
-        if [[ "$all_end_time" != "0" || "$all_ttft" != "0" ]]; then
+        if [[ "$all_end_time" =~ ^[0-9]+$ ]] && [[ "$all_end_time" != "0" || "$all_ttft" != "0" ]]; then
             echo "WARNING: nothing matches INSIDE the window, but the table holds end_time=$all_end_time ttft=$all_ttft" >&2
             echo "         outside it. That is what a wrong window looks like, and bounds in local time rather than UTC is" >&2
             echo "         the common case. Confirm the bounds are the window the flag was live in, in UTC, before reading" >&2
