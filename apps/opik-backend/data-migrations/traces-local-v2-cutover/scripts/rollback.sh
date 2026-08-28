@@ -664,10 +664,14 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     # DECIMAL_OVERFLOW (Code 407) every time -- which made this whole comparison dead code on every real schema, printing
     # '?' where the operator was told to read a number.
     #
-    # The floor stays 1900-01-01. DateTime64's lower bound does NOT narrow with precision the way the upper one does, and
-    # an earlier literal below it is silently CLAMPED to it rather than rejected: toDateTime64('1677-09-21 00:12:44', 9)
-    # evaluates to 1900-01-01 00:12:44, keeping the time of day and so landing 12m44s LATER than the bound it replaced.
-    # A "true precision-9 minimum" is therefore both unnecessary and invisible, which is worse than wrong.
+    # The floor stays 1900-01-01, though NOT because that is the type's minimum: DateTime64(9) does represent
+    # 1677-09-21 00:12:44 onwards, per the docs, and a value built from ticks round-trips there exactly. The reason is
+    # that this bound reaches the server as a STRING, and toDateTime64('<string>', N) cannot express anything earlier --
+    # it clamps the DATE to 1900-01-01 while KEEPING the time of day, silently and in the wrong direction:
+    # '1677-09-21 00:12:44' becomes 1900-01-01 00:12:44 (12m44s later than the plain floor) and '1899-12-31 23:59:59'
+    # becomes 1900-01-01 23:59:59 (nearly a day later than asked). Reaching the true minimum would take
+    # fromUnixTimestamp64Nano() in place of the substituted literal, which this file shares with the windowed gate where
+    # the bound has to stay an operator-supplied datetime. Immaterial regardless: nothing in these columns predates 1900.
     #
     # The ceiling costs the `created_at` arm nothing, since the column cannot hold a later value; it costs the
     # `last_updated_at` arm (DateTime64(6)) only 2262..2299, unreachable for a column set from now64(). Far-future values
