@@ -28,6 +28,15 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the NEXT packet from the server before giving up
+#                             (SETTINGS receive_timeout). Default 1800, well above ClickHouse's own 300. This bounds
+#                             SILENCE, not query duration: a long compare stays alive because the server keeps sending
+#                             progress packets. What overruns 300 is a query with a long quiet phase — the post-mismatch
+#                             confirm-keys re-check, which builds its candidate-key set before emitting anything, and on a
+#                             multi-million-row week can exceed it. That aborts the whole compare on the first mismatching
+#                             week, so the default here is deliberately generous. The cost is that a genuinely dead
+#                             connection now takes this long to surface; for a read-only, resumable compare that runs for
+#                             hours, losing the run to a transient quiet phase is the worse failure.
 #   --old-table NAME    old-schema table (Nullable, nanosecond). Default traces. After the EXCHANGE: traces_pre_cutover_backup.
 #   --new-table NAME    new-schema table (sentinels, microsecond). Default traces_local_v2. After the EXCHANGE: traces.
 #                       After a stage B/C ROLLBACK the defaults do not apply at all — traces_local_v2 no longer exists, so a
@@ -60,6 +69,7 @@ FROM_WEEK=0
 TO_WEEK=""
 WEEKS_STRIDE=1              # 1 = every week; S skips to every S-th weekly partition for a quick, pruned pass
 DRILL_DOWN=0
+RECEIVE_TIMEOUT=1800        # seconds of SILENCE tolerated from the server, not query duration. See --receive-timeout.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -71,6 +81,7 @@ while [[ $# -gt 0 ]]; do
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
         --weeks-stride) WEEKS_STRIDE="${2:?"$1 requires a value"}"; shift 2 ;;
         --drill-down) DRILL_DOWN=1; shift ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -88,12 +99,20 @@ done
 [[ "$SAMPLE_MOD" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --sample-mod must be a positive integer." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" == last-sealed || "$TO_WEEK" =~ ^[0-9]+$ ]] \
     || { echo "ERROR: --to-week must be a non-negative integer or 'last-sealed'." >&2; exit 2; }
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
+# One place for the connection and client-side options, so the four call sites below cannot drift — in particular so
+# --receive-timeout applies to the confirm-keys re-check and the drill-down, not only to the window compare.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --receive_timeout="$RECEIVE_TIMEOUT")
+
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --query "$1"
 }
 
 log() {
@@ -117,19 +136,19 @@ render_block() {
 
 # Verdict TSV row for one window: src_rows dst_rows src_checksum dst_checksum ok
 compare_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block compare "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block compare "$1" "$2")"
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block drill-down "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block drill-down "$1" "$2")"
 }
 
 # Count of keys in one window that GENUINELY differ, re-checked on the sorting key so FINAL cannot hide a
 # version (see the confirm-keys block for why a created_at window can surface a superseded row on one side
 # only). 0 means the window's difference is a superseded-version artifact, not a data difference.
 confirm_keys_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block confirm-keys "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block confirm-keys "$1" "$2")"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"

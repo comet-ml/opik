@@ -1400,8 +1400,20 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
 > total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
-> read-only and idempotent: an interrupted run costs nothing, and because the bound is fixed by
+> read-only and idempotent, so an interruption cannot damage anything, and because the bound is fixed by
 > `cutover_start` it covers the same windows whenever it is re-run.
+>
+> **Resume with `--from-week`; do not restart from 0.** Idempotent does not mean free: on a large table a
+> restart repeats hours of scanning. Every window either reports a line or did not run, so the resume point
+> is the last reported week plus one. The offsets are anchored on `toMonday(min(created_at))` of the
+> old-schema table, so confirm a resumed run's first window is the one you expect before treating its output
+> as continuous with an earlier log.
+>
+> **A mismatching week costs a second, quieter query.** On `ok=0` the driver re-checks the differing keys on
+> the sorting key to separate a real mismatch from a superseded-version artifact, and that query builds its
+> candidate set before emitting anything. On a multi-million-row week the silence can exceed ClickHouse's
+> 300s `receive_timeout` default, which aborts the whole compare at the first mismatching week. `verify.sh`
+> therefore defaults to `1800`; raise it further with `--receive-timeout` if a window still trips it.
 >
 > **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
 > because both surface at the end when the pressure is highest:
