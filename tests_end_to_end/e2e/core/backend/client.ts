@@ -615,14 +615,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return { id, name: args.name, description: args.description };
     },
 
-    async deleteDashboard(id: string): Promise<void> {
-      try {
-        await opik.api.dashboards.deleteDashboard(id);
-      } catch (err) {
-        if (!isNotFoundError(err)) throw err;
-      }
-    },
-
     async createProject(name: string, description?: string): Promise<void> {
       await opik.api.projects.createProject({
         name,
