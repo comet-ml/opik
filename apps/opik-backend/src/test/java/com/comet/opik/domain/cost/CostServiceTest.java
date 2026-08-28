@@ -1014,6 +1014,8 @@ class CostServiceTest {
                 Arguments.of("z-ai/glm-4.5", "openrouter", "0.00104"),
                 // Date-suffixed variant: prefix fallback must also try date-stripped name.
                 Arguments.of("z-ai/glm-4.5-2025-12-17", "openrouter", "0.00104"),
+                // Version-suffixed variant: primary lookup misses, z-ai canonicalizes to zai, :0 stripped.
+                Arguments.of("z-ai/glm-4.5:0", "openrouter", "0.00104"),
                 Arguments.of("z-ai/glm-5", "openrouter", "0.00164"),
                 Arguments.of("morph/morph-v3-fast", "openrouter", "0.00104"),
                 Arguments.of("morph/morph-v3-large", "openrouter", "0.00128"),
