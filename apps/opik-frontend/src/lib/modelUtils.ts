@@ -16,6 +16,7 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import omit from "lodash/omit";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 export const getRoutableProviderModelValue = (
@@ -499,20 +500,24 @@ export const sanitizeConfigForRequest = (
     // same default, so without this a prompt persisted before the level existed shows one value and
     // sends none — the reconciler only fills the config in on a model change, and a stored prompt
     // whose model is still valid is never reconciled at all.
-    const level = (sanitized.thinkingLevel ??
-      getDefaultThinkingLevel(model)) as GeminiThinkingLevel;
+    // Both stale cases resolve the same way, to the model's default: a config with no level (persisted
+    // before the control existed) and a config holding a level this model does not offer (carried over
+    // from another model outside the reconciler). Either way the dropdown displays the default, so the
+    // request has to send it rather than nothing.
+    const stored = sanitized.thinkingLevel as GeminiThinkingLevel | undefined;
+    const level = (
+      stored != null && thinkingLevelOptions.some((o) => o.value === stored)
+        ? stored
+        : getDefaultThinkingLevel(model)
+    ) as GeminiThinkingLevel;
 
     // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
     // level, so leaving it on the payload can only be dead weight.
     delete sanitized.thinkingLevel;
 
     // "auto" means "send nothing and let the model decide", so it is deliberately not folded in —
-    // that absence IS the setting. Anything else is folded only when the model accepts that level: a
-    // stale selection from another model (say "off" carried onto Gemini 3) would be rejected upstream.
-    if (
-      level !== "auto" &&
-      thinkingLevelOptions.some((o) => o.value === level)
-    ) {
+    // that absence IS the setting. `level` is already known to be one this model offers.
+    if (level !== "auto" && thinkingLevelOptions.length > 0) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
       // Merge into any existing thinking block rather than replacing it — the backend also reads
@@ -522,7 +527,12 @@ export const sanitizeConfigForRequest = (
 
       sanitized.custom_parameters = {
         ...customParameters,
-        thinking: { ...thinking, level },
+        // An explicit budget outranks the level server-side, so "off" has to clear it. Left in, the
+        // block would say "disabled" and "4096 tokens" at once and thinking would stay on.
+        thinking:
+          level === "off"
+            ? { ...omit(thinking, "budget_tokens"), level }
+            : { ...thinking, level },
       };
     }
   }

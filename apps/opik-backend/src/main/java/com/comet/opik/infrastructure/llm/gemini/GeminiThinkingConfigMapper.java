@@ -29,6 +29,13 @@ class GeminiThinkingConfigMapper {
             return Optional.empty();
         }
 
+        // Gemini 3+ cannot disable thinking and does not accept a budget, so an "off" level there is
+        // better ignored than translated into a zero budget the API would reject. The UI never offers
+        // "off" for those models, but the judge path takes custom_parameters verbatim from the API.
+        if (params.level() == Level.OFF && GeminiThinkingParams.modelAcceptsLevel(model)) {
+            return Optional.empty();
+        }
+
         var builder = GeminiThinkingConfig.builder();
         boolean levelOnTheWire = params.level() != null
                 && params.level() != Level.OFF

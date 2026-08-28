@@ -831,13 +831,42 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toBeUndefined();
   });
 
-  it("drops a level the model does not accept rather than sending it", () => {
+  // A level the model doesn't offer resolves to that model's default, same as a missing one, so the
+  // dropdown and the request agree. Sending nothing would leave them disagreeing.
+  it("replaces a level the model does not accept with the model default", () => {
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_PRO, {
       thinkingLevel: "off",
     });
 
     expect(result.thinkingLevel).toBeUndefined();
+    expect(result.custom_parameters).toEqual({ thinking: { level: "high" } });
+  });
+
+  // Gemini 2.5's default is "auto", which sends nothing at all.
+  it("sends nothing when a rejected level falls back to an auto default", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+    );
+
     expect(result.custom_parameters).toBeUndefined();
+  });
+
+  // An explicit budget outranks the level server-side, so "off" has to clear it.
+  it("clears a persisted budget when off is selected", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      {
+        thinkingLevel: "off",
+        custom_parameters: {
+          thinking: { budget_tokens: 4096, include_thoughts: true },
+        },
+      },
+    );
+
+    expect(result.custom_parameters).toEqual({
+      thinking: { include_thoughts: true, level: "off" },
+    });
   });
 
   it("drops the level for models without thinking support", () => {

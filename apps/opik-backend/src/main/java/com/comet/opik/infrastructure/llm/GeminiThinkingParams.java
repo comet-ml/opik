@@ -26,7 +26,10 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
 
     public static final GeminiThinkingParams ABSENT = new GeminiThinkingParams(null, null, null);
 
-    private static final Pattern GEMINI_MAJOR_VERSION = Pattern.compile("gemini-(\\d+)");
+    // Bounded, and required to be a real version token (followed by "." or "-"). The judge path takes
+    // the model name as free text from the API: an unbounded group would overflow Integer.parseInt,
+    // and a merely bounded one would read "gemini-99999999999-flash" as version 999.
+    private static final Pattern GEMINI_MAJOR_VERSION = Pattern.compile("gemini-(\\d{1,3})(?=[.-])");
 
     /**
      * Thinking levels accepted by the Google AI Studio API, with the budget each one maps to on Vertex.
@@ -68,7 +71,7 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
      * <p>
      * Matched on the model id rather than an allowlist so a newly synced Gemini 3+ model is not silently treated as
      * 2.5. Ids look like {@code gemini-3.7-flash} or {@code vertex_ai/gemini-2.5-pro}, so the major version is the
-     * digits after the last {@code gemini-}.
+     * digits following the first {@code gemini-} in the id.
      */
     public static boolean modelAcceptsLevel(String model) {
         if (StringUtils.isBlank(model)) {

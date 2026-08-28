@@ -597,17 +597,34 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )
-      ? { thinking: { ...(persistedThinking ?? {}), level: thinkingLevel } }
+      ? {
+          // "off" must clear any persisted budget_tokens: an explicit budget outranks the level
+          // server-side, so keeping both would leave thinking on while the UI reads "Off".
+          thinking: {
+            ...(thinkingLevel === "off"
+              ? omit(persistedThinking ?? {}, "budget_tokens")
+              : persistedThinking ?? {}),
+            level: thinkingLevel,
+          },
+        }
       : undefined;
 
-  // `thinking` is owned by the thinkingLevel field, which was lifted out of the persisted
-  // custom_parameters on load. Drop the persisted copy before re-adding the current selection, or a
-  // level rejected above survives in the spread — a stale "off" would reach a model that cannot
-  // disable thinking, which is what the check exists to prevent.
-  const otherCustomParameters = omit(
-    (custom_parameters ?? {}) as Record<string, unknown>,
-    "thinking",
-  );
+  // On a model whose level control owns `thinking`, drop the persisted copy before re-adding the
+  // current selection: otherwise a level rejected above survives in the spread, and a stale "off"
+  // reaches a model that cannot disable thinking.
+  //
+  // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
+  // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
+  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
+  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
+  const persistedCustomParameters = (custom_parameters ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const otherCustomParameters =
+    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0
+      ? omit(persistedCustomParameters, "thinking")
+      : persistedCustomParameters;
 
   if (
     Object.keys(otherCustomParameters).length > 0 ||

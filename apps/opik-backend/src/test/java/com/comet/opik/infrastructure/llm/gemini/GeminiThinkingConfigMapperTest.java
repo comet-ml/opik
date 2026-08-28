@@ -30,20 +30,22 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
-    @DisplayName("level off becomes a zero budget, as the API has no off level")
-    void mapsLevelOffToZeroBudget() {
-        var config = GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3,
-                new GeminiThinkingParams(Level.OFF, null, null));
+    @DisplayName("level off sends nothing on Gemini 3+, which cannot disable thinking or take a budget")
+    void ignoresLevelOffOnGemini3() {
+        assertThat(GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3,
+                new GeminiThinkingParams(Level.OFF, null, null))).isEmpty();
+    }
 
-        assertThat(config).isPresent();
-        assertThat(config.get().thinkingBudget()).isZero();
-        assertThat(config.get().thinkingLevel()).isNull();
+    @Test
+    @DisplayName("a model name with an absurd version does not blow up the version check")
+    void toleratesAbsurdModelVersion() {
+        assertThat(GeminiThinkingParams.modelAcceptsLevel("gemini-99999999999-flash")).isFalse();
     }
 
     @Test
     @DisplayName("an explicit budget wins over level off, matching how Vertex resolves the same input")
     void explicitBudgetWinsOverLevelOff() {
-        var config = GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3,
+        var config = GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_2_5,
                 new GeminiThinkingParams(Level.OFF, 4096, null));
 
         assertThat(config).isPresent();

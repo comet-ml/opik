@@ -60,13 +60,13 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
-  it("keeps budget_tokens and include_thoughts across an unchanged round trip", () => {
+  it("keeps include_thoughts across an unchanged round trip", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
-        thinkingLevel: "off",
+        thinkingLevel: "low",
         custom_parameters: {
           thinking: {
-            level: "off",
+            level: "low",
             budget_tokens: 4096,
             include_thoughts: true,
           },
@@ -75,7 +75,39 @@ describe("LLM judge thinking level round trip", () => {
     );
 
     expect(object.model.custom_parameters).toEqual({
-      thinking: { level: "off", budget_tokens: 4096, include_thoughts: true },
+      thinking: { level: "low", budget_tokens: 4096, include_thoughts: true },
+    });
+  });
+
+  // "off" is the exception: a persisted budget would outrank it server-side and leave thinking on.
+  it("clears a persisted budget when the level is off", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
+        thinkingLevel: "off",
+        custom_parameters: {
+          thinking: { budget_tokens: 4096, include_thoughts: true },
+        },
+      }),
+    );
+
+    expect(object.model.custom_parameters).toEqual({
+      thinking: { include_thoughts: true, level: "off" },
+    });
+  });
+
+  // custom_parameters.thinking is not Gemini-only: Anthropic reads it for extended thinking, so an
+  // unedited save of an Anthropic rule must leave the block alone.
+  it("leaves thinking untouched for a model without a level control", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData("claude-sonnet-4-5-20250929" as PROVIDER_MODEL_TYPE, {
+        custom_parameters: {
+          thinking: { type: "enabled", budget_tokens: 4096 },
+        },
+      }),
+    );
+
+    expect(object.model.custom_parameters).toEqual({
+      thinking: { type: "enabled", budget_tokens: 4096 },
     });
   });
 
