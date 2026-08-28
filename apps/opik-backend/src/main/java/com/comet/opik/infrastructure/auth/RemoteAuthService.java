@@ -7,6 +7,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -14,7 +15,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
@@ -29,7 +29,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.glassfish.jersey.client.ClientProperties;
+import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.time.Duration;
@@ -39,6 +39,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
@@ -96,6 +98,7 @@ class RemoteAuthService implements AuthService {
     };
 
     private final @NonNull Client client;
+    private final @NonNull RetriableHttpClient retriableHttpClient;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
@@ -241,26 +244,16 @@ class RemoteAuthService implements AuthService {
     @Override
     public void authorizeOAuth(@NonNull ValidatedToken token, @NonNull ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
-        var credentials = withAuthRetry(() -> {
-            try (var response = withAuthTimeout(client
-                    .target(URI.create(reactServiceUrl.url()))
-                    .path("opik")
-                    .path("auth-by-username")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON)
-                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                    .acceptEncoding("identity")
-                    .header(OAUTH_USERNAME_HEADER, token.userName()))
-                    .post(Entity.json(AuthRequest.builder()
-                            .workspaceName(token.workspaceName())
-                            .path(path)
-                            .requiredPermissions(contextInfo.requiredPermissions())
-                            .build()))) {
-                return ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
+        var credentials = authPost("auth-by-username",
+                builder -> builder.header(OAUTH_USERNAME_HEADER, token.userName()),
+                AuthRequest.builder()
+                        .workspaceName(token.workspaceName())
+                        .path(path)
+                        .requiredPermissions(contextInfo.requiredPermissions())
+                        .build(),
+                response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
                         () -> workspacePermissionsService.getPermissionsByUsername(token.userName(),
-                                token.workspaceName())));
-            }
-        });
+                                token.workspaceName()))));
         setCredentialIntoContext(credentials, token.workspaceName(), null);
     }
 
@@ -270,25 +263,17 @@ class RemoteAuthService implements AuthService {
         if (isDefaultWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        return withAuthRetry(() -> {
-            try (var response = withAuthTimeout(client
-                    .target(URI.create(reactServiceUrl.url()))
-                    .path("opik")
-                    .path("auth-session")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON)
-                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                    .acceptEncoding("identity")
-                    .cookie(sessionToken))
-                    .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
-                var authResponse = verifyResponse(response);
-                return UserWorkspace.builder()
-                        .userName(authResponse.user())
-                        .workspaceId(authResponse.workspaceId())
-                        .workspaceName(authResponse.workspaceName())
-                        .build();
-            }
-        });
+        return authPost("auth-session",
+                builder -> builder.cookie(sessionToken),
+                AuthRequest.builder().workspaceName(workspaceName).build(),
+                response -> {
+                    var authResponse = verifyResponse(response);
+                    return UserWorkspace.builder()
+                            .userName(authResponse.user())
+                            .workspaceId(authResponse.workspaceId())
+                            .workspaceName(authResponse.workspaceName())
+                            .build();
+                });
     }
 
     private void requireSession(Cookie sessionToken) {
@@ -421,26 +406,16 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        var credentials = withAuthRetry(() -> {
-            try (var response = withAuthTimeout(client
-                    .target(URI.create(reactServiceUrl.url()))
-                    .path("opik")
-                    .path("auth-session")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON)
-                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                    .acceptEncoding("identity")
-                    .cookie(sessionToken))
-                    .post(Entity.json(AuthRequest.builder()
-                            .workspaceName(workspaceName)
-                            .path(path)
-                            .requiredPermissions(requiredPermissions)
-                            .build()))) {
-                return ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
+        var credentials = authPost("auth-session",
+                builder -> builder.cookie(sessionToken),
+                AuthRequest.builder()
+                        .workspaceName(workspaceName)
+                        .path(path)
+                        .requiredPermissions(requiredPermissions)
+                        .build(),
+                response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
                         () -> workspacePermissionsService.getPermissionsBySession(sessionToken.getValue(),
-                                workspaceName)));
-            }
-        });
+                                workspaceName))));
         setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
     }
 
@@ -465,26 +440,15 @@ class RemoteAuthService implements AuthService {
                 requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            return withAuthRetry(() -> {
-                try (var response = withAuthTimeout(client
-                        .target(URI.create(reactServiceUrl.url()))
-                        .path("opik")
-                        .path("auth")
-                        .request()
-                        .accept(MediaType.APPLICATION_JSON)
-                        // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                        .acceptEncoding("identity")
-                        .header(HttpHeaders.AUTHORIZATION,
-                                apiKey))
-                        .post(Entity.json(AuthRequest.builder()
-                                .workspaceName(workspaceName)
-                                .path(path)
-                                .requiredPermissions(requiredPermissions)
-                                .build()))) {
-                    return ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
-                            () -> workspacePermissionsService.getPermissions(apiKey, workspaceName)));
-                }
-            });
+            return authPost("auth",
+                    builder -> builder.header(HttpHeaders.AUTHORIZATION, apiKey),
+                    AuthRequest.builder()
+                            .workspaceName(workspaceName)
+                            .path(path)
+                            .requiredPermissions(requiredPermissions)
+                            .build(),
+                    response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
+                            () -> workspacePermissionsService.getPermissions(apiKey, workspaceName))));
         } else {
             return ValidatedAuthCredentials.from(credentials.get());
         }
@@ -590,99 +554,65 @@ class RemoteAuthService implements AuthService {
      * no large-payload case arguing for an exclusion.
      */
     private String getWorkspaceId(String workspaceName) {
-        return withAuthRetry(() -> {
-            try (var response = withAuthTimeout(client
-                    .target(URI.create(reactServiceUrl.url()))
-                    .path("workspaces")
-                    .path("workspace-id")
-                    .queryParam("name", workspaceName)
-                    .request()
-                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
-                    .acceptEncoding("identity"))
-                    .get()) {
-                return getWorkspaceIdFromResponse(response);
-            }
-        });
+        return authCall(RetriableHttpClient.Request.<String>builder()
+                .requestFunction(c -> c.target(URI.create(reactServiceUrl.url()))
+                        .path("workspaces")
+                        .path("workspace-id")
+                        .queryParam("name", workspaceName))
+                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                .requestCustomizer(builder -> builder.acceptEncoding("identity"))
+                .responseFunction(this::getWorkspaceIdFromResponse),
+                retriableHttpClient::executeGetWithRetry);
     }
 
     /**
-     * Applies the per-call auth read timeout, overriding the shared jerseyClient timeout (30s)
-     * for this hop only. Without it a stalled auth call blocks the request thread for the full
-     * 30s and returns a 500, on a call whose measured p99.99 is 1.15s.
+     * Issues an auth POST through the shared {@link RetriableHttpClient}, which owns the retry and
+     * timeout policy for outbound calls in this service. Nothing bespoke is implemented here: the
+     * retriable-exception set is {@link RetryUtils#handleHttpErrors}, and the per-call read timeout
+     * is the client's own {@code readTimeout}, overriding the shared jerseyClient timeout (30s) for
+     * this hop only.
      * <p>
-     * Not applied to {@code listEligibleWorkspaces}, which has a documented large-payload case.
+     * The {@code requestCustomizer} hook carries this hop's credentials -- an
+     * {@code Authorization} header, a session cookie or the OAuth username header -- which cannot
+     * be expressed through {@code requestFunction} because that only reaches the {@code WebTarget}.
      */
-    private Invocation.Builder withAuthTimeout(Invocation.Builder builder) {
-        if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
-            return builder;
-        }
-        return builder.property(ClientProperties.READ_TIMEOUT, (int) requestTimeout.toMillis());
+    private <T> T authPost(String path, Consumer<Invocation.Builder> credentials, AuthRequest body,
+            Function<Response, T> responseFunction) {
+        return authCall(RetriableHttpClient.Request.<T>builder()
+                .requestFunction(target -> target.target(URI.create(reactServiceUrl.url()))
+                        .path("opik")
+                        .path(path))
+                .requestCustomizer(builder -> {
+                    builder.accept(MediaType.APPLICATION_JSON)
+                            // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                            .acceptEncoding("identity");
+                    credentials.accept(builder);
+                })
+                .body(Entity.json(body))
+                .responseFunction(responseFunction),
+                retriableHttpClient::executePostWithRetry);
     }
 
     /**
-     * Runs an auth call with a bounded synchronous retry.
+     * Applies this hop's retry and timeout settings and runs the call.
      * <p>
-     * Deliberately not a Reactor chain. An earlier revision wrapped the call in
-     * {@code Mono.fromCallable(...).retryWhen(...).block()}, which made a blocking call reactive
-     * only to obtain a retry: it parked the caller on {@code block()} and scheduled its backoff
-     * delays on the shared parallel scheduler, so a slow auth service could occupy threads used by
-     * unrelated reactive paths. The loop below blocks only the thread that was already going to
-     * block on the HTTP call itself, and touches no shared scheduler.
+     * {@code block()} is deliberate: authentication runs in a JAX-RS request filter that returns
+     * {@code void}, so there is no reactive pipeline to compose into. The blocking happens on the
+     * request thread that was already going to wait for this call, while
+     * {@link RetriableHttpClient} issues the request asynchronously and subscribes on
+     * {@code boundedElastic}, so no request thread is held inside the reactive chain itself.
      * <p>
-     * The retriable-exception set is still the codebase-standard one:
-     * {@link RetryUtils#isRetriableException}, the same predicate
-     * {@link RetryUtils#handleHttpErrors} filters on, so this does not introduce a second
-     * definition of "retriable". It already covers this hop's failure modes --
-     * {@code SocketTimeoutException} and {@code ConnectTimeoutException} extend
-     * {@code InterruptedIOException}, {@code HttpHostConnectException} extends
-     * {@code SocketException}, and {@code ProcessingException} wrappers are unwrapped.
-     * Deterministic failures (4xx/5xx mapped to {@code ClientErrorException} /
-     * {@code InternalServerErrorException}, serialization errors) are not retriable and propagate
-     * on the first attempt.
-     * <p>
-     * Backoff doubles from {@code requestRetryMinBackoff}, capped at
-     * {@code requestRetryMaxBackoff}. No jitter: at one retry by default there is nothing to
-     * de-synchronise, and this hop runs at ~14 calls/s rather than as a thundering herd.
-     * <p>
-     * Retries recover sub-second blips. They will not recover a request stalled by a React CPU
-     * brownout: those last 1-3 minutes in production, so the retry lands in the same brownout.
-     * The timeout is what bounds user-visible latency; this reclaims the transient cases.
-     * <p>
-     * Callers must perform response verification and entity reading <em>inside</em> the supplied
-     * callable, in a try-with-resources, so that a {@code ProcessingException} raised while reading
-     * the body is retried like any other transport failure and every attempt closes its own
-     * response. Returning a bare {@code Response} here and processing it afterwards would place
-     * that work outside the retry boundary and leak a response per attempt.
+     * A {@code requestTimeout} of zero means "inherit the shared client timeout", expressed by
+     * leaving {@code readTimeout} unset rather than sending a zero.
      */
-    private <T> T withAuthRetry(Supplier<T> call) {
-        var backoff = requestRetryMinBackoff;
-        for (int attempt = 0;; attempt++) {
-            try {
-                return call.get();
-            } catch (RuntimeException failure) {
-                if (attempt >= requestMaxRetries || !RetryUtils.isRetriableException(failure)) {
-                    throw failure;
-                }
-                log.warn("Retrying auth call after {}: {}", failure.getClass().getSimpleName(),
-                        failure.getMessage());
-                sleepBeforeRetry(backoff);
-                backoff = nextBackoff(backoff);
-            }
-        }
-    }
-
-    private Duration nextBackoff(Duration current) {
-        var doubled = current.multipliedBy(2);
-        return doubled.compareTo(requestRetryMaxBackoff) > 0 ? requestRetryMaxBackoff : doubled;
-    }
-
-    private void sleepBeforeRetry(Duration backoff) {
-        try {
-            Thread.sleep(backoff.toMillis());
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new ProcessingException("Interrupted while backing off before an auth retry", interrupted);
-        }
+    private <T> T authCall(RetriableHttpClient.Request.RequestBuilder<T> request,
+            Function<RetriableHttpClient.Request<T>, Mono<T>> execute) {
+        return execute.apply(request
+                .retryPolicy(RetryUtils.handleHttpErrors(requestMaxRetries, requestRetryMinBackoff,
+                        requestRetryMaxBackoff))
+                .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
+                .build())
+                .block();
     }
 
     private String getWorkspaceIdFromResponse(Response response) {

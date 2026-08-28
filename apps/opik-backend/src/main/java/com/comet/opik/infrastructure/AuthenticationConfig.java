@@ -38,7 +38,8 @@ public class AuthenticationConfig {
      * <p>
      * This bounds a single <em>attempt</em>, not the whole operation. With retries enabled the
      * end-to-end worst case is {@code (requestMaxRetries + 1) * requestTimeout} plus the backoff
-     * between attempts -- ~6.25s at the shipped values (2 attempts, 250ms backoff). That is still
+     * between attempts -- ~6.4s at the shipped values (2 attempts, 250ms backoff plus Reactor's
+     * jitter). That is still
      * well under the 30s shared timeout it replaces, but callers that need a hard sub-3s ceiling
      * must set {@link #requestMaxRetries} to 0.
      */
@@ -54,23 +55,18 @@ public class AuthenticationConfig {
     private Duration requestTimeout;
 
     /**
-     * Maximum retry attempts for a failed auth request. The retry is a plain synchronous loop in
-     * {@code RemoteAuthService}, but it classifies failures with
-     * {@link com.comet.opik.utils.RetryUtils#isRetriableException} -- the same predicate
-     * {@code RetryUtils.handleHttpErrors} filters on -- so the retriable set matches the rest of
-     * the codebase without building a Reactor chain around a blocking call.
+     * Maximum retry attempts for a failed auth request.
      * <p>
-     * That set is transport-level only: {@code SocketException}, {@code TimeoutException},
-     * {@code InterruptedIOException} (covering {@code SocketTimeoutException} and
-     * {@code ConnectTimeoutException}), {@code NoHttpResponseException},
-     * {@code RetryUtils.RetryableHttpException}, and a {@code ProcessingException} wrapping any of
-     * those. An HTTP error <em>status</em> is deliberately not retried: {@code verifyResponse} maps
-     * 4xx/5xx to {@code ClientErrorException}/{@code InternalServerErrorException}, neither of which
-     * is retriable, so a 503 surfaces to the caller on the first attempt.
+     * The call goes through the shared {@code RetriableHttpClient}, which owns retry and timeout
+     * policy for outbound calls in this service, so nothing bespoke is implemented for this hop.
+     * Retried: transport failures per {@code RetryUtils.handleHttpErrors}, plus HTTP 503/504, which
+     * the client maps to {@code RetryUtils.RetryableHttpException} -- React emits 503s while
+     * draining during a rolling restart. Not retried: any other HTTP error status, since
+     * {@code verifyResponse} maps 4xx to {@code ClientErrorException}, which is not retriable.
      * <p>
      * Note: React CPU brownouts observed in production last 1-3 minutes, so a retry will not
-     * recover a request stalled by one of those - it recovers sub-second connection blips. The
-     * timeout above is what bounds user-visible latency. Set to 0 to disable retries.
+     * recover a request stalled by one of those. The timeout is what bounds user-visible latency.
+     * Set to 0 to disable retries.
      */
     @Valid @NotNull @JsonProperty
     @Min(0)
@@ -98,9 +94,8 @@ public class AuthenticationConfig {
 
     /**
      * Cross-field constraint: a backoff whose minimum exceeds its maximum is contradictory, and
-     * the doubling loop would silently clamp every attempt to the maximum rather than fail.
-     * Validate it at startup so a bad config is a boot failure with a clear message, not a runtime
-     * surprise.
+     * Reactor's {@code Retry.backoff} would clamp it silently rather than fail. Validate it at
+     * startup so a bad config is a boot failure with a clear message, not a runtime surprise.
      */
     @JsonIgnore
     @AssertTrue(message = "authentication.requestRetryMinBackoff must not exceed authentication.requestRetryMaxBackoff") public boolean isRetryBackoffRangeValid() {

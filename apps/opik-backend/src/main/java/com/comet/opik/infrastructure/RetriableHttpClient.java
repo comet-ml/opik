@@ -1,10 +1,13 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.utils.RetryUtils;
+import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.client.InvocationCallback;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
@@ -17,6 +20,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -41,7 +45,16 @@ public class RetriableHttpClient {
     public record Request<T>(
             @NonNull Function<Client, WebTarget> requestFunction,
             @NonNull Retry retryPolicy,
-            @NonNull Entity<?> body,
+            /** Request entity. Required for POST; must be null for GET. */
+            Entity<?> body,
+            /**
+             * Applied to the {@link Invocation.Builder} before the call, for headers, cookies and
+             * {@code accept}/{@code acceptEncoding}. Needed by callers whose request carries
+             * credentials -- an {@code Authorization} header or a session cookie -- which cannot be
+             * expressed through {@code requestFunction}, since that only reaches the {@link WebTarget}.
+             * Re-applied on every attempt, so retries carry the same headers as the first try.
+             */
+            Consumer<Invocation.Builder> requestCustomizer,
             Duration connectTimeout,
             Duration readTimeout,
             @NonNull Function<Response, T> responseFunction) {
@@ -52,7 +65,20 @@ public class RetriableHttpClient {
      * 503/504 according to the supplied policy.
      */
     public <T> Mono<T> executePostWithRetry(@NonNull Request<T> request) {
-        return Mono.defer(() -> performHttpPost(request)
+        Preconditions.checkArgument(request.body() != null, "body is required for POST");
+        return execute(request, HttpMethod.POST);
+    }
+
+    /**
+     * GET variant of {@link #executePostWithRetry}, with the same retry and timeout semantics.
+     */
+    public <T> Mono<T> executeGetWithRetry(@NonNull Request<T> request) {
+        Preconditions.checkArgument(request.body() == null, "body must be null for GET");
+        return execute(request, HttpMethod.GET);
+    }
+
+    private <T> Mono<T> execute(Request<T> request, String method) {
+        return Mono.defer(() -> performHttpRequest(request, method)
                 .flatMap(response -> {
                     int statusCode = response.getStatus();
                     if (isRetryableStatusCode(statusCode)) {
@@ -73,17 +99,20 @@ public class RetriableHttpClient {
         return statusCode == 503 || statusCode == 504;
     }
 
-    private <T> Mono<Response> performHttpPost(Request<T> request) {
+    private <T> Mono<Response> performHttpRequest(Request<T> request, String method) {
         return Mono.create(sink -> {
             var builder = request.requestFunction().apply(client)
                     .request();
+            if (request.requestCustomizer() != null) {
+                request.requestCustomizer().accept(builder);
+            }
             if (request.connectTimeout() != null) {
                 builder.property(ClientProperties.CONNECT_TIMEOUT, (int) request.connectTimeout().toMillis());
             }
             if (request.readTimeout() != null) {
                 builder.property(ClientProperties.READ_TIMEOUT, (int) request.readTimeout().toMillis());
             }
-            builder.async().post(request.body(), new InvocationCallback<Response>() {
+            var callback = new InvocationCallback<Response>() {
                 @Override
                 public void completed(Response response) {
                     sink.success(response);
@@ -93,7 +122,12 @@ public class RetriableHttpClient {
                 public void failed(Throwable throwable) {
                     sink.error(throwable);
                 }
-            });
+            };
+            if (request.body() != null) {
+                builder.async().method(method, request.body(), callback);
+            } else {
+                builder.async().method(method, callback);
+            }
         });
     }
 }

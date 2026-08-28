@@ -9,9 +9,11 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.RemoteWorkspacePermissionsService;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -104,7 +106,7 @@ class RemoteAuthServiceTest {
     void setUpAll() {
         WIRE_MOCK.server().start();
         var client = TestHttpClientUtils.client();
-        remoteAuthService = new RemoteAuthService(client,
+        remoteAuthService = new RemoteAuthService(client, new RetriableHttpClient(client),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
@@ -205,6 +207,7 @@ class RemoteAuthServiceTest {
                 .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
 
         var cachingService = new RemoteAuthService(TestHttpClientUtils.client(),
+                new RetriableHttpClient(TestHttpClientUtils.client()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 mockCache,
@@ -295,6 +298,7 @@ class RemoteAuthServiceTest {
         WIRE_MOCK.server().stubFor(post("/opik/auth").willReturn(okJson(responseJson)));
 
         var gzipEnabledAuthService = new RemoteAuthService(newGzipEnabledClient(),
+                new RetriableHttpClient(newGzipEnabledClient()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
@@ -737,6 +741,7 @@ class RemoteAuthServiceTest {
 
     private RemoteAuthService authServiceWith(Duration timeout, int maxRetries) {
         return new RemoteAuthService(TestHttpClientUtils.client(),
+                new RetriableHttpClient(TestHttpClientUtils.client()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
@@ -887,12 +892,13 @@ class RemoteAuthServiceTest {
     }
 
     /**
-     * Locks in the documented contract that only transport-level failures are retried: an HTTP
-     * error status is mapped to a non-retriable exception by verifyResponse, so a React 503 must
-     * surface on the first attempt rather than multiplying load on an already-struggling service.
+     * 503/504 are retried, because {@link RetriableHttpClient} maps them to
+     * {@code RetryUtils.RetryableHttpException} before the response reaches {@code verifyResponse}.
+     * That is the shared client's contract rather than this service's choice, and it is the useful
+     * behaviour here: React emits 503s while draining during a rolling restart.
      */
     @Test
-    void authRetry__whenReactReturnsServerError__thenNotRetried() {
+    void authRetry__whenReactReturnsServiceUnavailable__thenRetried() {
         WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withStatus(HttpStatus.SC_SERVICE_UNAVAILABLE)));
 
@@ -900,7 +906,27 @@ class RemoteAuthServiceTest {
 
         assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
                 "apiKey-" + UUID.randomUUID()))
-                .isInstanceOf(InternalServerErrorException.class);
+                .isInstanceOf(RetryUtils.RetryableHttpException.class);
+
+        assertThat(authRequestCount()).isEqualTo(3);
+    }
+
+    /**
+     * The complementary invariant, and the one that matters for correctness: a deterministic
+     * failure must not be retried. A 401 is mapped to {@code ClientErrorException}, which is not in
+     * the retriable set, so it surfaces on the first attempt instead of burning the retry budget
+     * and multiplying load on React.
+     */
+    @Test
+    void authRetry__whenReactReturnsUnauthorized__thenNotRetried() {
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)));
+
+        var service = authServiceWith(TEST_AUTH_TIMEOUT, 2);
+
+        assertThatThrownBy(() -> authenticateWith(service, "workspace-" + UUID.randomUUID(),
+                "apiKey-" + UUID.randomUUID()))
+                .isInstanceOf(ClientErrorException.class);
 
         assertThat(authRequestCount()).isEqualTo(1);
     }
@@ -1010,6 +1036,7 @@ class RemoteAuthServiceTest {
 
     private RemoteAuthService serviceResolvingPermissions(boolean resolvePermissions) {
         return new RemoteAuthService(TestHttpClientUtils.client(),
+                new RetriableHttpClient(TestHttpClientUtils.client()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),

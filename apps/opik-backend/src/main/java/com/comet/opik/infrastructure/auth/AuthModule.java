@@ -5,6 +5,7 @@ import com.comet.opik.domain.RemoteWorkspacePermissionsService;
 import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
@@ -60,7 +61,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         // Asking RedactionService rather than the raw config so the request and the thing that acts on the
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
-        return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
+        return new RemoteAuthService(client, new RetriableHttpClient(client), config.getReactService(), requestContext,
+                cacheService,
                 config.getRequestTimeout().toJavaDuration(), config.getRequestMaxRetries(),
                 config.getRequestRetryMinBackoff().toJavaDuration(),
                 config.getRequestRetryMaxBackoff().toJavaDuration(),
