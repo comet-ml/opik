@@ -18,16 +18,15 @@ class HostProviderResolverTest {
 
         @ParameterizedTest(name = "{0} -> {1}")
         @CsvSource({
-            "api.cerebras.ai,   cerebras",
-            "api.x.ai,          xai",
-            "api.deepseek.com,  deepseek",
-            "api.groq.com,      groq",
+            "api.cerebras.ai, cerebras",
+            "api.deepseek.com, deepseek",
+            "api.groq.com, groq",
             "api.perplexity.ai, perplexity",
-            "api.mistral.ai,    mistral",
-            "api.ai21.com,      ai21",
+            "api.mistral.ai, mistral",
+            "api.ai21.com, ai21",
         })
         void resolvesApiPrefixedHostToCanonical(String host, String expected) {
-            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected.trim());
+            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected);
         }
     }
 
@@ -37,14 +36,15 @@ class HostProviderResolverTest {
 
         @ParameterizedTest(name = "{0} -> {1}")
         @CsvSource({
-            // Both "api." and bare forms must resolve via the HOST_ALIASES map
-            "x.ai,          xai",
+            // api.x.ai and x.ai resolve via HOST_ALIASES (label "x" alone is ambiguous)
+            "api.x.ai, xai",
+            "x.ai, xai",
             // Unrelated TLDs must NOT match the alias — only exact hosts are mapped
             "api.x.example, api.x.example",
-            "x.example,     x.example",
+            "x.example, x.example",
         })
         void hostAliasResolution(String host, String expected) {
-            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected.trim());
+            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected);
         }
     }
 
@@ -55,21 +55,25 @@ class HostProviderResolverTest {
         @ParameterizedTest(name = "{0} -> {1}")
         @CsvSource({
             "cerebras.ai, cerebras",
-            "groq.com,    groq",
+            "groq.com, groq",
         })
         void resolvesBareHostToCanonical(String host, String expected) {
-            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected.trim());
+            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected);
         }
     }
 
     @Nested
-    @DisplayName("Already canonical providers pass through unchanged")
-    class CanonicalProvidersPassThrough {
+    @DisplayName("Original casing is preserved for unresolved providers")
+    class CasePreservation {
 
-        @ParameterizedTest(name = "''{0}'' unchanged")
-        @ValueSource(strings = {"openai", "anthropic", "bedrock", "groq", "cerebras", "xai", "deepseek"})
-        void canonicalNameIsReturnedUnchanged(String provider) {
-            assertThat(HostProviderResolver.resolve(provider, null)).isEqualTo(provider);
+        @Test
+        void nonMatchingProviderReturnedWithOriginalCasing() {
+            assertThat(HostProviderResolver.resolve("SomeUnknownProvider", null)).isEqualTo("SomeUnknownProvider");
+        }
+
+        @Test
+        void unknownHostReturnedWithOriginalCasing() {
+            assertThat(HostProviderResolver.resolve("api.SomeUnknown.com", null)).isEqualTo("api.SomeUnknown.com");
         }
     }
 

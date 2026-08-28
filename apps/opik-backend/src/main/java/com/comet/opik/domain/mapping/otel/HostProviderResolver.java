@@ -32,8 +32,7 @@ public class HostProviderResolver {
 
     // Matches optional "api." prefix + label + required ".tld" (e.g. "api.cerebras.ai" or "api.x.ai")
     private static final Pattern HOST_PATTERN = Pattern.compile(
-            "^(?:api\\.)?([a-z0-9][a-z0-9_-]*)(?:\\.[a-z]{2,})$",
-            Pattern.CASE_INSENSITIVE);
+            "^(?:api\\.)?([a-z0-9][a-z0-9_-]*)(?:\\.[a-z]{2,})$");
 
     // Canonical provider names that are known to use host-style identifiers.
     // Only list providers that appear in CostService.PROVIDERS_MAPPING and are
