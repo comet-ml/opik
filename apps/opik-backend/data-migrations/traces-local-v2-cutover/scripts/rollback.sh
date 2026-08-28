@@ -74,6 +74,18 @@
 #                             instance. The scripts cannot read backend config, and a repair run while any instance
 #                             still has it true is not merely incomplete: that instance keeps writing fresh sentinels
 #                             behind the mutation, so the counts can clear and then regress.
+#   --sentinel-window-from TS / --sentinel-window-to TS
+#                             REQUIRED with --sentinel-repair-only. 'YYYY-MM-DD HH:MM:SS[.ffffff]' in UTC, half-open
+#                             [from, to). Both bounds are pinned to UTC in the SQL, so the window means the same thing
+#                             whatever timezone the server runs in.
+#                             The window traceColumnsNonNullable was live in. Only rows written inside it are repaired,
+#                             matched on created_at OR last_updated_at — a row CREATED in the window by the first, a
+#                             pre-existing row UPDATED in it (which is where its sentinel came from) by the second.
+#                             Mandatory because an epoch end_time is not evidence the flag produced it: clients send
+#                             them, and rows predating the flag hold them. An unbounded repair would set those to NULL
+#                             with no way back, since the parked successor encodes an absent end_time as that same
+#                             epoch, and the counts would still report success. Widen rather than guess: a row outside
+#                             the window is simply left alone.
 #   --confirm-flag-was-live   Only for --sentinel-repair-only, and only needed when there is NO parked successor: an
 #                             abandoned pre-EXCHANGE cutover, or an estate finalize.sh has already recycled. Asserts
 #                             traceColumnsNonNullable was live HERE, so the epoch/NaN values in `traces` are sentinels it
@@ -109,6 +121,8 @@ CONFIRM_MAINTENANCE=0
 CONFIRM_FLAG_REVERTED=0
 RECEIVE_TIMEOUT=1800     # seconds tolerated between server packets, not total query time. See --receive-timeout.
 CONFIRM_FLAG_WAS_LIVE=0  # only consulted by --sentinel-repair-only, and only without a parked successor.
+SENTINEL_WINDOW_FROM=""  # required by --sentinel-repair-only; see --sentinel-window-from.
+SENTINEL_WINDOW_TO=""
 SENTINEL_CHECK_FAILED=0  # set by the sentinel postcondition; decides the exit code without cutting the guidance short
 
 while [[ $# -gt 0 ]]; do
@@ -125,6 +139,8 @@ while [[ $# -gt 0 ]]; do
         --confirm-flag-reverted) CONFIRM_FLAG_REVERTED=1; shift ;;
         --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm-flag-was-live) CONFIRM_FLAG_WAS_LIVE=1; shift ;;
+        --sentinel-window-from) SENTINEL_WINDOW_FROM="${2:?"$1 requires a value"}"; shift 2 ;;
+        --sentinel-window-to) SENTINEL_WINDOW_TO="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -137,6 +153,10 @@ done
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+for _w in "$SENTINEL_WINDOW_FROM" "$SENTINEL_WINDOW_TO"; do
+    [[ -z "$_w" || "$_w" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] \
+        || { echo "ERROR: --sentinel-window-from/--sentinel-window-to must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
+done
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # Exactly one mode: --stage A|B|C, --reverse-replay-only, --unwrap-only, or --sentinel-repair-only.
 if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY + SENTINEL_REPAIR_ONLY > 1 )); then
@@ -153,6 +173,10 @@ fi
 # --confirm-flag-reverted asserts a precondition only the sentinel repair has. Reject it elsewhere rather than ignoring
 # it: silently accepting it would let an operator believe a stage B/C run had taken the flag state into account, when
 # stages B/C in fact run BEFORE the revert and print it as their own next step.
+if [[ ( -n "$SENTINEL_WINDOW_FROM" || -n "$SENTINEL_WINDOW_TO" ) && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
+    echo "ERROR: --sentinel-window-from/--sentinel-window-to belong to --sentinel-repair-only and to no other mode." >&2
+    exit 2
+fi
 if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     echo "ERROR: --confirm-flag-was-live belongs to --sentinel-repair-only and to no other mode." >&2
     exit 2
@@ -174,6 +198,19 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "       --confirm-retention-paused / --confirm-maintenance. It repairs column values on the table that is" >&2
         echo "       ALREADY live: nothing is promoted, no delete is replayed, and no table is renamed, so there is" >&2
         echo "       neither a rollback window to bound nor a rename skew to quiesce reads for." >&2
+        exit 2
+    fi
+    if [[ -z "$SENTINEL_WINDOW_FROM" || -z "$SENTINEL_WINDOW_TO" ]]; then
+        echo "ERROR: --sentinel-repair-only requires --sentinel-window-from and --sentinel-window-to: the window" >&2
+        echo "       traceColumnsNonNullable was live in. There is no safe default. An epoch end_time is not evidence" >&2
+        echo "       the flag produced it — clients send them, and rows predating the flag hold them — so an unbounded" >&2
+        echo "       repair would set real values to NULL with no way back: the parked successor encodes an absent" >&2
+        echo "       end_time as that same epoch, so nothing holds the original. Take the bounds from when the flag" >&2
+        echo "       rolled out and when its revert finished landing everywhere; widening is safe, guessing is not." >&2
+        exit 2
+    fi
+    if [[ ! "$SENTINEL_WINDOW_FROM" < "$SENTINEL_WINDOW_TO" ]]; then
+        echo "ERROR: --sentinel-window-from must be strictly before --sentinel-window-to (the window is half-open)." >&2
         exit 2
     fi
     if [[ "$CONFIRM_FLAG_REVERTED" != "1" ]]; then
@@ -461,6 +498,8 @@ sentinel_counts() {
     local file="$SQL_DIR/000004_rollback_verify_sentinels.sql" sql
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${SENTINEL_WINDOW_FROM}'/$SENTINEL_WINDOW_FROM}"
+    sql="${sql//'${SENTINEL_WINDOW_TO}'/$SENTINEL_WINDOW_TO}"
     clickhouse-client "${CH_ARGS[@]}" --query "$sql"
 }
 
@@ -470,6 +509,8 @@ run_file() {
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
+    sql="${sql//'${SENTINEL_WINDOW_FROM}'/$SENTINEL_WINDOW_FROM}"
+    sql="${sql//'${SENTINEL_WINDOW_TO}'/$SENTINEL_WINDOW_TO}"
     clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 

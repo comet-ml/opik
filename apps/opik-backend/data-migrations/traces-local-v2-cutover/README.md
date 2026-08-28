@@ -1036,14 +1036,15 @@ Pick the stage by how far the cutover got:
   `RENAME`, then drops the ex-wrapper — landing in the post-`EXCHANGE`, pre-wrap state. (Guarded: aborts unless `traces`
   is `Distributed` and `traces_local` holds the successor schema.) See "Un-wrap" below for when to prefer it over stage C.
 - **Sentinel repair — after a stage B/C promote, or after abandoning the cutover pre-`EXCHANGE`:**
-  restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. Which
-  invocation depends on whether a promote parked the successor, because that is the only topological proof a cutover ran
-  on this estate:
+  restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. **The
+  window is mandatory** (see below). Which invocation depends on whether a promote parked the successor, because that is
+  the only topological proof a cutover ran on this estate:
   ```bash
+  W=(--sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>')
   # after a stage B/C promote — traces_post_rollback_backup is the proof
-  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted "${W[@]}"
   # no parked successor: abandoned pre-EXCHANGE (incl. after stage A), or finalize.sh has recycled it
-  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live "${W[@]}"
   ```
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
@@ -1198,8 +1199,18 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    `duration`. The promote made them live again and `finalize.sh` discards the successor's healed copy, so repair them
    here, **after** step 1 has landed on every instance or in-flight writes keep minting more:
    ```
-   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted \
+     --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'
    ```
+   **Both window bounds are required, and there is no safe default.** An epoch `end_time` is not evidence the flag
+   produced it: clients send them, and rows predating the flag hold them. Unbounded, the repair would set those to
+   `NULL` with no way back — the parked successor encodes an absent `end_time` as that same epoch, so nothing holds the
+   original — and the counts would still report success. Measured on an internal environment: the unbounded predicate
+   matched 34 keys across 12 workspaces where only 5 came from the flag window. Take the bounds from when the flag
+   rolled out and when its revert finished landing on every instance; widening is safe, guessing is not. Rows are
+   matched on `created_at` **or** `last_updated_at`, so a row created in the window and a pre-existing row updated in it
+   are both caught. Both bounds are interpreted as UTC regardless of the server's timezone.
+
    It reads the counts first and issues no mutation when they are `0`, restores `NULL` in a single mutation
    (`000004_rollback_sentinel_repair.sql`) which recomputes `duration` as it rewrites each row, then asserts the counts
    reached `0` (`000004_rollback_verify_sentinels.sql`). It is idempotent. A bare `MATERIALIZE COLUMN duration` does
