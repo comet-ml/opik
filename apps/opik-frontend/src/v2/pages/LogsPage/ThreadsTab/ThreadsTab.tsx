@@ -86,6 +86,8 @@ import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import { QuickAttributeFilterFactoryProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
+import useLogsQuickAttributeFilter from "@/v2/pages/LogsPage/useLogsQuickAttributeFilter";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import {
@@ -461,6 +463,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const handleChipFiltersChange = useCallback(() => {
     setPage(1);
   }, [setPage]);
+
+  // No local chips: the threads table has no metadata / input / output fields,
+  // so a quick filter here always moves to the Traces or Spans view.
+  const quickAttributeFilterFactory = useLogsQuickAttributeFilter({
+    logsType,
+    onLogsTypeChange,
+  });
 
   const threadScoreOptions = useMemo(
     () => ({
@@ -1029,15 +1038,17 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           />
         </PageBodyStickyContainer>
       </DataTableStateHandler>
-      <TraceDetailsPanel
-        projectId={projectId}
-        traceId={traceId!}
-        spanId={spanId!}
-        setSpanId={setSpanId}
-        setThreadId={setThreadId}
-        open={Boolean(traceId) && !threadId}
-        onClose={handleClose}
-      />
+      <QuickAttributeFilterFactoryProvider value={quickAttributeFilterFactory}>
+        <TraceDetailsPanel
+          projectId={projectId}
+          traceId={traceId!}
+          spanId={spanId!}
+          setSpanId={setSpanId}
+          setThreadId={setThreadId}
+          open={Boolean(traceId) && !threadId}
+          onClose={handleClose}
+        />
+      </QuickAttributeFilterFactoryProvider>
       <ThreadDetailsPanel
         projectId={projectId}
         projectName={projectName}
