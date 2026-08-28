@@ -133,6 +133,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     const { lock_timeout_minutes, ...rest } = formData;
     return {
       ...rest,
+      name: formData.name.trim(),
       project_id: formData.project_id,
       lock_timeout_seconds: lock_timeout_minutes * 60,
     };
