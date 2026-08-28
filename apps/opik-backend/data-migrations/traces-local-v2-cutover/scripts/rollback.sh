@@ -175,10 +175,6 @@ fi
 # --confirm-flag-reverted asserts a precondition only the sentinel repair has. Reject it elsewhere rather than ignoring
 # it: silently accepting it would let an operator believe a stage B/C run had taken the flag state into account, when
 # stages B/C in fact run BEFORE the revert and print it as their own next step.
-if [[ ( -n "$SENTINEL_WINDOW_FROM" || -n "$SENTINEL_WINDOW_TO" ) && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
-    echo "ERROR: --sentinel-window-from/--sentinel-window-to belong to --sentinel-repair-only and to no other mode." >&2
-    exit 2
-fi
 if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     echo "ERROR: --confirm-flag-was-live belongs to --sentinel-repair-only and to no other mode." >&2
     exit 2
@@ -188,6 +184,11 @@ if [[ "$CONFIRM_FLAG_REVERTED" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     echo "       traceColumnsNonNullable is reverted — reverting it is the next step they print — so asserting it here" >&2
     echo "       would assert the opposite of the sequence. Run the stage, land the revert, then re-run with" >&2
     echo "       --sentinel-repair-only --confirm-flag-reverted." >&2
+    exit 2
+fi
+# The window is meaningless outside the repair -- nothing else reads it -- so reject it rather than ignore it.
+if [[ ( -n "$SENTINEL_WINDOW_FROM" || -n "$SENTINEL_WINDOW_TO" ) && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
+    echo "ERROR: --sentinel-window-from/--sentinel-window-to belong to --sentinel-repair-only and to no other mode." >&2
     exit 2
 fi
 # Reject the promote/replay/maintenance flags under --sentinel-repair-only rather than ignoring them, for the same reason
@@ -493,16 +494,19 @@ verify_replay_postcondition() {
     return 1
 }
 
-# Same sourcing contract as run_file (versioned .sql, one placeholder here — it takes no cutover window). Returns the
-# three counts as one tab-separated line so the driver gates on them, instead of leaving numbers on a screen to read.
+# Same sourcing contract as run_file (versioned .sql), with the database and both window bounds substituted. Returns the
+# four counts as one tab-separated line so the driver gates on them, instead of leaving numbers on a screen to read.
+# Bounds default to the operator's window; pass them explicitly to read the same aggregates over a wider range, which is
+# how the unbounded comparison below comes from this one file rather than a second copy of the predicates.
 # Called only inside a command substitution, so it must not try to report its own failures: an exit here ends the
 # subshell, not the script. The caller validates the file up front and treats unusable output as unverified.
 sentinel_counts() {
+    local from="${1:-$SENTINEL_WINDOW_FROM}" to="${2:-$SENTINEL_WINDOW_TO}"
     local file="$SQL_DIR/000004_rollback_verify_sentinels.sql" sql
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
-    sql="${sql//'${SENTINEL_WINDOW_FROM}'/$SENTINEL_WINDOW_FROM}"
-    sql="${sql//'${SENTINEL_WINDOW_TO}'/$SENTINEL_WINDOW_TO}"
+    sql="${sql//'${SENTINEL_WINDOW_FROM}'/$from}"
+    sql="${sql//'${SENTINEL_WINDOW_TO}'/$to}"
     clickhouse-client "${CH_ARGS[@]}" --query "$sql"
 }
 
@@ -652,10 +656,24 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "       Treat this as unverified, not as clean. Fix connectivity and re-run — no mutation was issued." >&2
         exit 1
     fi
-    echo "Sentinels before repair: end_time=$before_end_time ttft=$before_ttft (of those, serving a negative duration: $before_negative)"
+    # Same aggregates over an all-time range. A 0 inside the window against a non-zero total is the signature of a wrong
+    # window -- bounds in local time, a typo -- which otherwise reports as a clean estate and exits 0 over unrepaired rows.
+    if ! sentinel_all="$(sentinel_counts '1970-01-01 00:00:00' '2100-01-01 00:00:00')"; then sentinel_all=""; fi
+    read -r all_end_time all_ttft _ _ <<< "$sentinel_all"
+    [[ "$all_end_time" =~ ^[0-9]+$ ]] || { all_end_time="?"; all_ttft="?"; }
+
+    echo "Sentinels IN WINDOW [$SENTINEL_WINDOW_FROM, $SENTINEL_WINDOW_TO): end_time=$before_end_time ttft=$before_ttft (of those, serving a negative duration: $before_negative)"
+    echo "Same counts with no window, for comparison: end_time=$all_end_time ttft=$all_ttft"
     if (( before_end_time == 0 && before_ttft == 0 )); then
+        if [[ "$all_end_time" != "0" || "$all_ttft" != "0" ]]; then
+            echo "WARNING: nothing matches INSIDE the window, but the table holds end_time=$all_end_time ttft=$all_ttft" >&2
+            echo "         outside it. That is what a wrong window looks like, and bounds in local time rather than UTC is" >&2
+            echo "         the common case. Confirm the bounds are the window the flag was live in, in UTC, before reading" >&2
+            echo "         this as a clean estate. If they are, those rows are not this flag's doing and are correctly" >&2
+            echo "         left alone." >&2
+        fi
         if (( before_stale == 0 )); then
-            echo "Nothing to repair: no row on any replica carries an epoch end_time or a NaN ttft. No mutation issued."
+            echo "Nothing to repair inside the window: no row there carries an epoch end_time or a NaN ttft. No mutation issued."
             exit 0
         fi
         # A negative duration on a row whose end_time is NULL cannot happen while `duration` is MATERIALIZED, and this
@@ -689,7 +707,8 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "         reported success, but treat the repair as unverified: re-run this mode to re-read the counts." >&2
         SENTINEL_CHECK_FAILED=1
     elif (( after_end_time == 0 && after_ttft == 0 && after_stale == 0 )); then
-        echo "Sentinel postcondition OK: end_time=0 ttft=0 stale_duration=0 on every replica."
+        echo "Sentinel postcondition OK: end_time=0 ttft=0 stale_duration=0 on every replica, INSIDE the window"
+        echo "[$SENTINEL_WINDOW_FROM, $SENTINEL_WINDOW_TO). Rows outside it were never in scope."
         echo "Repaired $before_end_time end_time and $before_ttft ttft value(s); 'duration' recomputed from the restored NULL."
         echo "A residual count of negative durations elsewhere in the table is EXPECTED and is not this repair's business:"
         echo "rows whose end_time genuinely precedes start_time are a pre-existing source artifact and stay negative."

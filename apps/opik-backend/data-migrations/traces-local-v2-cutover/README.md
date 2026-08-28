@@ -1207,9 +1207,21 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    `NULL` with no way back — the parked successor encodes an absent `end_time` as that same epoch, so nothing holds the
    original — and the counts would still report success. Measured on an internal environment: the unbounded predicate
    matched 34 keys across 12 workspaces where only 5 came from the flag window. Take the bounds from when the flag
-   rolled out and when its revert finished landing on every instance; widening is safe, guessing is not. Rows are
-   matched on `created_at` **or** `last_updated_at`, so a row created in the window and a pre-existing row updated in it
-   are both caught. Both bounds are interpreted as UTC regardless of the server's timezone.
+   rolled out and when its revert finished landing on every instance. Rows are matched on `created_at` **or**
+   `last_updated_at`. Both bounds are interpreted as UTC regardless of the server's timezone.
+
+   **One case the window cannot catch, and the gate cannot see.** `TraceDAO.UPDATE` re-inserts a version copying
+   `created_at` and — when the patch omits them — `end_time`/`ttft` verbatim, while `last_updated_at` takes
+   `DEFAULT now64(6)`. So a trace created *before* the window, patched *inside* it under the flag, then patched *again*
+   after the revert has a live version carrying a pre-window `created_at` and a post-window `last_updated_at`, matching
+   neither arm. It keeps its epoch `end_time`, and because the repair does clear the older in-window version the counts
+   still reach `0` and report success.
+
+   Extending `--sentinel-window-to` to the moment the repair runs closes that, at a cost worth stating rather than
+   burying: a row holding a **genuine** epoch `end_time` that was merely patched inside the widened range then matches
+   too, and is nulled irrecoverably. `end_time` is carried forward verbatim, so nothing in the data separates the two
+   cases. Neither bound is safe in both directions — choose knowingly, and use the unbounded counts the driver prints
+   alongside to see what a wider window would take in.
 
    It reads the counts first and issues no mutation when they are `0`, restores `NULL` in a single mutation
    (`000004_rollback_sentinel_repair.sql`) which recomputes `duration` as it rewrites each row, then asserts the counts
@@ -1248,10 +1260,13 @@ Treat a stage B/C rollback as complete only when all of these hold:
       `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
       unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
       as `null`.
-- [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` (or reported nothing to
-      repair, which is equally valid) and **exited zero**. The gate is `sentinel_end_time`, `sentinel_ttft` and
-      `stale_duration` all at `0`; a residual `duration < 0` count elsewhere in the table is expected, from rows whose
-      `end_time` genuinely precedes `start_time`.
+- [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` and **exited zero**,
+      **and the window passed is the one the flag was live in, in UTC**. The gate is `sentinel_end_time`,
+      `sentinel_ttft` and `stale_duration` all at `0` *inside that window*; a residual `duration < 0` count elsewhere is
+      expected, from rows whose `end_time` genuinely precedes `start_time`.
+      **"Nothing to repair" is not interchangeable with a completed repair.** It is equally what a wrong window
+      produces — bounds in local time being the common case — so check it against the unbounded counts the driver prints
+      beside it before ticking this. This box gates `finalize.sh`, which truncates the parked successor.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
       of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
 
