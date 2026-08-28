@@ -1036,14 +1036,15 @@ Pick the stage by how far the cutover got:
   `RENAME`, then drops the ex-wrapper — landing in the post-`EXCHANGE`, pre-wrap state. (Guarded: aborts unless `traces`
   is `Distributed` and `traces_local` holds the successor schema.) See "Un-wrap" below for when to prefer it over stage C.
 - **Sentinel repair — after a stage B/C promote, or after abandoning the cutover pre-`EXCHANGE`:**
-  restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. Which
-  invocation depends on whether a promote parked the successor, because that is the only topological proof a cutover ran
-  on this estate:
+  restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. **The
+  window is mandatory** (see below). Which invocation depends on whether a promote parked the successor, because that is
+  the only topological proof a cutover ran on this estate:
   ```bash
+  W=(--sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>')
   # after a stage B/C promote — traces_post_rollback_backup is the proof
-  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted "${W[@]}"
   # no parked successor: abandoned pre-EXCHANGE (incl. after stage A), or finalize.sh has recycled it
-  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live
+  ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live "${W[@]}"
   ```
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
@@ -1198,8 +1199,30 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    `duration`. The promote made them live again and `finalize.sh` discards the successor's healed copy, so repair them
    here, **after** step 1 has landed on every instance or in-flight writes keep minting more:
    ```
-   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted
+   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted \
+     --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'
    ```
+   **Both window bounds are required, and there is no safe default.** An epoch `end_time` is not evidence the flag
+   produced it: clients send them, and rows predating the flag hold them. Unbounded, the repair would set those to
+   `NULL` with no way back — the parked successor encodes an absent `end_time` as that same epoch, so nothing holds the
+   original — and the counts would still report success. Measured on an internal environment: the unbounded predicate
+   matched 34 keys across 12 workspaces where only 5 came from the flag window. Take the bounds from when the flag
+   rolled out and when its revert finished landing on every instance. Rows are matched on `created_at` **or**
+   `last_updated_at`. Both bounds are interpreted as UTC regardless of the server's timezone.
+
+   **One case the window cannot catch, and the gate cannot see.** `TraceDAO.UPDATE` re-inserts a version copying
+   `created_at` and — when the patch omits them — `end_time`/`ttft` verbatim, while `last_updated_at` takes
+   `DEFAULT now64(6)`. So a trace created *before* the window, patched *inside* it under the flag, then patched *again*
+   after the revert has a live version carrying a pre-window `created_at` and a post-window `last_updated_at`, matching
+   neither arm. It keeps its epoch `end_time`, and because the repair does clear the older in-window version the counts
+   still reach `0` and report success.
+
+   Extending `--sentinel-window-to` to the moment the repair runs closes that, at a cost worth stating rather than
+   burying: a row holding a **genuine** epoch `end_time` that was merely patched inside the widened range then matches
+   too, and is nulled irrecoverably. `end_time` is carried forward verbatim, so nothing in the data separates the two
+   cases. Neither bound is safe in both directions — choose knowingly, and use the unbounded counts the driver prints
+   alongside to see what a wider window would take in.
+
    It reads the counts first and issues no mutation when they are `0`, restores `NULL` in a single mutation
    (`000004_rollback_sentinel_repair.sql`) which recomputes `duration` as it rewrites each row, then asserts the counts
    reached `0` (`000004_rollback_verify_sentinels.sql`). It is idempotent. A bare `MATERIALIZE COLUMN duration` does
@@ -1237,10 +1260,17 @@ Treat a stage B/C rollback as complete only when all of these hold:
       `tracesDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
       unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
       as `null`.
-- [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` (or reported nothing to
-      repair, which is equally valid) and **exited zero**. The gate is `sentinel_end_time`, `sentinel_ttft` and
-      `stale_duration` all at `0`; a residual `duration < 0` count elsewhere in the table is expected, from rows whose
-      `end_time` genuinely precedes `start_time`.
+- [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` and **exited zero**,
+      **and the window passed is the one the flag was live in, in UTC**. The gate is `sentinel_end_time`,
+      `sentinel_ttft` and `stale_duration` all at `0` *inside that window*; a residual `duration < 0` count elsewhere is
+      expected, from rows whose `end_time` genuinely precedes `start_time`.
+      **"Nothing to repair" is not interchangeable with a completed repair.** It is equally what a wrong window
+      produces — bounds in local time being the common case — so check it against the unbounded counts the driver prints
+      beside it before ticking this.
+      **`finalize.sh` does not check any of this** — it has no notion of the repair, and reads no marker proving one
+      ran with the right window. This checklist is the only control standing between a wrong-window no-op and
+      `TRUNCATE TABLE traces_post_rollback_backup`, which retires the last reference copy. Treat the box as a human
+      gate, because that is all it is.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
       of the post-cutover writes the rollback discarded, and the only thing that makes a retry cheap.
 
@@ -1410,6 +1440,11 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
 
+> **A version tie can make this gate mismatch, and can also make it pass.** If a key carries two or more rows with an
+> identical `last_updated_at`, `FINAL` has no winner and the comparison for that key is arbitrary in both directions. It
+> is not rollback-specific despite where it is written up: see "a version tie" under *Verifying after a rollback* for the
+> shape and the confirming read, ignoring that section's `cutover_start` test, which has no meaning before the `EXCHANGE`.
+>
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
 > total, so run it under `nohup`/`screen` rather than an interactive shell that may be interrupted. It is
@@ -1479,6 +1514,34 @@ the parked successor **without** a week filter: `last_updated_at >= cutover_star
 from the successor *entirely* is the real signal — that is a copy gap, and it is the one shape worth stopping for. How
 often this bites tracks how much pre-existing data the workload rewrites; for many it is none, which is why the weekly
 bound is still worth passing.
+
+**A third shape, which the confirm-keys re-check cannot resolve: a version tie.** This one is not rollback-specific — it
+can hit the pre-`EXCHANGE` gate too (see "Verifying the migration"), where the `cutover_start` test below does not apply.
+
+Its premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while versions differ.
+`last_updated_at` is the `ReplacingMergeTree` version column, so when two or more rows for a key carry the **same**
+value there is nothing left to rank them by: `FINAL` picks arbitrarily, and because the two tables' part layouts differ,
+each side may or may not land on the same row. **Arbitrary cuts both ways, and the second direction is the dangerous one:**
+
+- the picks differ, and the key is reported in `genuinely_differing_keys` even though both tables hold the same data;
+- the picks coincide, and the key is confirmed as matching **even if one side is missing a version** — a real copy gap.
+  So a `0` from the re-check, and any `OK — superseded-version artifact` verdict built on it, is not conclusive while
+  ties exist.
+
+`--drill-down` cannot show a tie: it reads one `FINAL` row per key and stops at 100. Confirm one by reading the key's
+versions from both tables without `FINAL` — a read-only diagnostic, not a procedure step:
+
+```sql
+SELECT 'src' AS side, created_at, last_updated_at, _part FROM <old-table> WHERE (workspace_id, project_id, id) = (…)
+UNION ALL
+SELECT 'dst' AS side, created_at, last_updated_at, _part FROM <new-table> WHERE (workspace_id, project_id, id) = (…)
+ORDER BY side, created_at;
+```
+
+A **non-unique top `last_updated_at` on either side** means the comparison for that key was arbitrary. Then compare the
+two version sets: identical sets mean the copy is faithful and only the tie-break differed; a version present on one
+side only is the copy gap, whatever the re-check said. If the sets cannot be established, treat the week as unresolved
+and escalate rather than passing it — arbitrary is not the same as benign.
 
 > **The pre-EXCHANGE compare is the gate; the post-EXCHANGE compare has a caveat.** `traces_pre_cutover_backup` is a
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so

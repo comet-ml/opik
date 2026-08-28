@@ -38,7 +38,13 @@
 -- silent false negative on the one gate that decides whether damaged rows get fixed, so it must not depend on host
 -- configuration.
 --
--- KEEP IN STEP WITH 000004_rollback_sentinel_repair.sql: same two predicates, same DateTime64 precision 9, same 'UTC'.
+-- WINDOW-SCOPED, matching the repair exactly. Unbounded, these counts would include epoch/NaN values the flag never
+-- produced — client-sent ones, and rows predating it — so the gate could never reach 0 on an estate that holds any, and
+-- a repair that correctly left them alone would read as a failure. Scoping both to the same window is what makes 0 mean
+-- "the flag's damage is gone" rather than "no such value exists anywhere".
+--
+-- KEEP IN STEP WITH 000004_rollback_sentinel_repair.sql: same two predicates, same window on the same two columns, same
+-- DateTime64 precisions.
 
 SELECT
     uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
@@ -47,4 +53,8 @@ SELECT
                 duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
     uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
 FROM clusterAllReplicas('{cluster}', ${ANALYTICS_DB_DATABASE_NAME}.traces)
+WHERE (   (created_at      >= toDateTime64('${SENTINEL_WINDOW_FROM}', 6, 'UTC')
+       AND created_at      <  toDateTime64('${SENTINEL_WINDOW_TO}', 6, 'UTC'))
+       OR (last_updated_at >= toDateTime64('${SENTINEL_WINDOW_FROM}', 6, 'UTC')
+       AND last_updated_at <  toDateTime64('${SENTINEL_WINDOW_TO}', 6, 'UTC')))
 SETTINGS log_comment = 'traces_local_v2_rollback:verify_sentinels';
