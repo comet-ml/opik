@@ -117,8 +117,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     },
   });
 
-  const { mutate: createMutate } = useAnnotationQueueCreateMutation();
-  const { mutate: updateMutate } = useAnnotationQueueUpdateMutation();
+  const { mutate: createMutate, isPending: isCreatePending } =
+    useAnnotationQueueCreateMutation();
+  const { mutate: updateMutate, isPending: isUpdatePending } =
+    useAnnotationQueueUpdateMutation();
+  const isSubmitting = isCreatePending || isUpdatePending;
 
   const isEdit = Boolean(defaultQueue);
   const title = isEdit
@@ -380,7 +383,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            onClick={form.handleSubmit(onSubmit)}
+          >
             {submitText}
           </Button>
         </DialogFooter>
