@@ -43,7 +43,8 @@
 -- the flip that enabled the wrap. It is the ONLY flag this reverses, and `traceColumnsNonNullable` must stay `true`: the
 -- live table keeps the successor's sentinel schema, which un-wrapping preserves. Contrast stage B/C, which restore the
 -- unpartitioned original and so also revert `traceColumnsNonNullable` (stage C both flags), plus the sentinel/duration
--- repair.
+-- repair. Trace-delete partition pruning is not a flag at all, so no stage of any rollback weighs it — see the runbook's
+-- "Trace-delete partition pruning needs no flip at all".
 
 -- 1. Gapless un-wrap: rotate both names atomically.
 SET log_comment = 'traces_local_v2_rollback:unwrap';

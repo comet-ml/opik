@@ -60,6 +60,19 @@ export const RESERVED_TRACE_EVALUATOR_VARIABLES: Readonly<
 });
 
 /**
+ * Python-metric span-scope reserved variables: there are none. `spans` is
+ * trace-scope only (a span has no sub-spans to inject), and
+ * `PythonCodeDetailsSpanFormSchema` accepts only `input`/`output`/`metadata`
+ * paths. Auto-filling `spans → spans` here would produce a mapping the user
+ * cannot see — `LLMPromptMessagesVariables` hides a variable whose value equals
+ * its sentinel — and cannot submit, because the schema rejects it. An explicit
+ * empty set keeps that pairing visible at the call site.
+ */
+export const RESERVED_SPAN_EVALUATOR_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({});
+
+/**
  * LLM-as-judge trace-scope reserved variables. Superset of
  * {@link RESERVED_TRACE_EVALUATOR_VARIABLES}: adds `{{trace}}`, which injects the
  * trace skeleton (trace id, span ids, attachment file_names) into the prompt and

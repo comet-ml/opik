@@ -255,7 +255,7 @@ test.describe('Dashboard span metrics — data contract', { tag: ['@t2-cuj', '@a
         '@cap:dashboards.metric-date-range',
       ],
     },
-    async ({ tokenUsageSpans, backendClient, page }) => {
+    async ({ tokenUsageSpans, backendClient, registerDashboardCleanup, page }) => {
       const { spanNamePrefix, totals } = tokenUsageSpans;
       const dashboards = new DashboardsPage(page);
       const widgetTitle = 'Span token usage';
@@ -283,7 +283,7 @@ test.describe('Dashboard span metrics — data contract', { tag: ['@t2-cuj', '@a
       await test.step('Open Dashboards and create one', async () => {
         await dashboards.goto();
         await dashboards.waitForReady();
-        await dashboards.createDashboard(`${spanNamePrefix}-dash`);
+        registerDashboardCleanup(await dashboards.createDashboard(`${spanNamePrefix}-dash`));
       });
 
       await test.step('Add the workspace-scoped Span token usage widget', async () => {

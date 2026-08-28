@@ -307,6 +307,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
   INCLUSIONAI_LING_3_0_FLASH = "inclusionai/ling-3.0-flash",
+  INCLUSIONAI_LING_3_0_FLASH_FIN_FREE = "inclusionai/ling-3.0-flash-fin:free",
   INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
   INCLUSIONAI_LING_3_0_TINY_FREE = "inclusionai/ling-3.0-tiny:free",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
@@ -797,6 +798,7 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_3_5_FLASH = "gemini-3.5-flash",
   GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
+  GEMINI_3_5_TRANSCRIBE = "gemini-3.5-transcribe",
   GEMINI_3_6_FLASH = "gemini-3.6-flash",
   GEMINI_3_7_FLASH = "gemini-3.7-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
@@ -807,7 +809,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_5_TRANSCRIBE = "gemini-3.5-transcribe",
+  GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
