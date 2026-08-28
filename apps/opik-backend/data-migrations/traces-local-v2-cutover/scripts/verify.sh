@@ -28,15 +28,13 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
-#   --receive-timeout N       seconds clickhouse-client waits for the NEXT packet from the server before giving up
-#                             (SETTINGS receive_timeout). Default 1800, well above ClickHouse's own 300. This bounds
-#                             SILENCE, not query duration: a long compare stays alive because the server keeps sending
-#                             progress packets. What overruns 300 is a query with a long quiet phase — the post-mismatch
-#                             confirm-keys re-check, which builds its candidate-key set before emitting anything, and on a
-#                             multi-million-row week can exceed it. That aborts the whole compare on the first mismatching
-#                             week, so the default here is deliberately generous. The cost is that a genuinely dead
-#                             connection now takes this long to surface; for a read-only, resumable compare that runs for
-#                             hours, losing the run to a transient quiet phase is the worse failure.
+#   --receive-timeout N       seconds clickhouse-client waits for the next packet from the server before giving up
+#                             (SETTINGS receive_timeout). Default 1800, against ClickHouse's own 300. It bounds the GAP
+#                             between packets, not total query time: a window compare running well past 300s does not
+#                             trip it, while the post-mismatch confirm-keys re-check can — so under the stock default the
+#                             first mismatching week aborts the whole run. The cost of a generous value is that a
+#                             genuinely dead connection takes that long to surface; for a read-only, resumable compare,
+#                             losing a long run to a transient stall is the worse failure.
 #   --old-table NAME    old-schema table (Nullable, nanosecond). Default traces. After the EXCHANGE: traces_pre_cutover_backup.
 #   --new-table NAME    new-schema table (sentinels, microsecond). Default traces_local_v2. After the EXCHANGE: traces.
 #                       After a stage B/C ROLLBACK the defaults do not apply at all — traces_local_v2 no longer exists, so a
@@ -69,7 +67,7 @@ FROM_WEEK=0
 TO_WEEK=""
 WEEKS_STRIDE=1              # 1 = every week; S skips to every S-th weekly partition for a quick, pruned pass
 DRILL_DOWN=0
-RECEIVE_TIMEOUT=1800        # seconds of SILENCE tolerated from the server, not query duration. See --receive-timeout.
+RECEIVE_TIMEOUT=1800        # seconds tolerated between server packets, not total query time. See --receive-timeout.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

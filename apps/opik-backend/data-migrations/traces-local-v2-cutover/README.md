@@ -466,8 +466,8 @@ the `traceColumnsNonNullable` flip").
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
 **Trace-delete partition pruning needs no flip at all (OPIK-6901).** A trace `DELETE` binds itself to the weekly
-partitions its own ids resolve to instead of being planned against every part of the table — on prod-test, 12 ids
-rewrote 3,928 parts / 5.40 TiB before this. There is **no flag, no ordering constraint, and nothing to revert on
+partitions its own ids resolve to instead of being planned against every part of the table, so a handful of ids no
+longer rewrites the whole table. There is **no flag, no ordering constraint, and nothing to revert on
 rollback**: the predicate is emitted unconditionally, and one rendered statement is correct against the original and
 against the successor alike.
 
@@ -1403,17 +1403,18 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > read-only and idempotent, so an interruption cannot damage anything, and because the bound is fixed by
 > `cutover_start` it covers the same windows whenever it is re-run.
 >
-> **Resume with `--from-week`; do not restart from 0.** Idempotent does not mean free: on a large table a
-> restart repeats hours of scanning. Every window either reports a line or did not run, so the resume point
-> is the last reported week plus one. The offsets are anchored on `toMonday(min(created_at))` of the
-> old-schema table, so confirm a resumed run's first window is the one you expect before treating its output
-> as continuous with an earlier log.
+> **Resume with `--from-week`; do not restart from 0.** Idempotent does not mean free: a restart repeats
+> every window already compared. Each window either reports a line or has not run, so the resume point is
+> the last reported week plus the **stride** — plus one only at the default `--weeks-stride 1` — and the same
+> stride must be passed again, or the resumed run samples different windows than the run it continues. The
+> offsets are anchored on `toMonday(min(created_at))` of the old-schema table, so confirm a resumed run's
+> first window is the one you expect before treating its output as continuous with an earlier log.
 >
-> **A mismatching week costs a second, quieter query.** On `ok=0` the driver re-checks the differing keys on
-> the sorting key to separate a real mismatch from a superseded-version artifact, and that query builds its
-> candidate set before emitting anything. On a multi-million-row week the silence can exceed ClickHouse's
-> 300s `receive_timeout` default, which aborts the whole compare at the first mismatching week. `verify.sh`
-> therefore defaults to `1800`; raise it further with `--receive-timeout` if a window still trips it.
+> **A mismatching week costs a second, slower query.** On `ok=0` the driver re-checks the differing keys on
+> the sorting key to separate a real mismatch from a superseded-version artifact. That re-check can stall for
+> longer than ClickHouse's 300s `receive_timeout` default even where the window compare did not, which aborts
+> the whole compare at the first mismatching week. `verify.sh` therefore defaults to `1800`; raise it with
+> `--receive-timeout` if a window still trips it.
 >
 > **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
 > because both surface at the end when the pressure is highest:
