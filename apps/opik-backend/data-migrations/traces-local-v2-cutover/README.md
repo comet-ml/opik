@@ -1413,10 +1413,11 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > output as continuous with an earlier log — if the anchor has moved, the logs describe different windows and must not be
 > read as one run.
 >
-> **A resumed run does not by itself discharge the pre-`EXCHANGE` gate.** That gate (see the exit checklist) requires a
-> full compare with no narrowing, and each `PASSED` line reports only the windows *that run* compared. Split runs satisfy
-> it only if their windows together cover every week **and** the anchor held throughout; if either is in doubt, re-run
-> whole. Resuming is for the long post-rollback compare, where the bound is deliberately partial anyway.
+> **Never resume the pre-`EXCHANGE` gate run — restart it.** That gate (see the exit checklist) requires one full compare
+> with no narrowing, and it is the last backstop before an irreversible step. Two runs whose windows happen to add up are
+> only equivalent if the anchor held throughout, which is not something anyone can confirm under pressure; a `PASSED`
+> line now states the range it covered, so a stitched-together pass is visible rather than arguable. Resume is for the
+> exploratory compares and the long post-rollback one, where the bound is deliberately partial anyway.
 >
 > **A mismatching week costs a second, slower query.** On `ok=0` the driver re-checks the differing keys on
 > the sorting key to separate a real mismatch from a superseded-version artifact. That re-check can stall for
