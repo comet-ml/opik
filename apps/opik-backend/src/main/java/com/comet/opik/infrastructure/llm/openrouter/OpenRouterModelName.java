@@ -211,6 +211,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     INCLUSIONAI_LING_2_6_FLASH("inclusionai/ling-2.6-flash"),
     INCLUSIONAI_LING_2_6_FLASH_FREE("inclusionai/ling-2.6-flash:free"),
     INCLUSIONAI_LING_3_0_FLASH("inclusionai/ling-3.0-flash"),
+    INCLUSIONAI_LING_3_0_FLASH_FIN_FREE("inclusionai/ling-3.0-flash-fin:free"),
     INCLUSIONAI_LING_3_0_FLASH_FREE("inclusionai/ling-3.0-flash:free"),
     INCLUSIONAI_LING_3_0_TINY_FREE("inclusionai/ling-3.0-tiny:free"),
     INCLUSIONAI_RING_2_6_1T("inclusionai/ring-2.6-1t"),
