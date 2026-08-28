@@ -18,9 +18,10 @@ import java.util.regex.Pattern;
  * When an OpenAI-compatible SDK is pointed at a provider via its base URL, some
  * instrumentations emit the host in {@code gen_ai.system} rather than the canonical
  * LiteLLM provider name. {@code CostService.findModelPrice} keys on the canonical name,
- * so the lookup fails and the span is billed at zero. This resolver strips the
- * {@code api.} prefix and public-suffix tail from hostnames whose second-level domain
- * label matches a known canonical provider, replacing the host with the canonical name.
+ * so the lookup fails and the span is billed at zero. This resolver normalizes host-style
+ * values to canonical provider names via two paths: an exact host-alias map for hosts whose
+ * second-level domain label differs from the canonical name (e.g. {@code api.x.ai} → {@code xai}),
+ * and a second-level domain label match for hosts whose label directly equals a known provider.
  * <p>
  * Only providers already registered in {@code CostService.PROVIDERS_MAPPING} are
  * recognized. Unknown hosts are returned unchanged.
@@ -29,7 +30,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public class HostProviderResolver {
 
-    // Matches optional "api." prefix + label + optional ".tld" (e.g. "api.cerebras.ai" or "api.x.ai")
+    // Matches optional "api." prefix + label + required ".tld" (e.g. "api.cerebras.ai" or "api.x.ai")
     private static final Pattern HOST_PATTERN = Pattern.compile(
             "^(?:api\\.)?([a-z0-9][a-z0-9_-]*)(?:\\.[a-z]{2,})$",
             Pattern.CASE_INSENSITIVE);
@@ -54,8 +55,8 @@ public class HostProviderResolver {
     );
 
     // Full-host aliases for providers whose canonical name cannot be inferred from the
-    // second-level domain label alone. Keyed on the normalized hostname (lower-case,
-    // with or without the "api." prefix stripped). Only exact-match entries are applied.
+    // second-level domain label alone. Keyed on the full normalized hostname (lower-case);
+    // both "api.provider.tld" and "provider.tld" forms are registered as separate explicit keys.
     private static final java.util.Map<String, String> HOST_ALIASES = java.util.Map.of(
             "api.x.ai", "xai",
             "x.ai", "xai"

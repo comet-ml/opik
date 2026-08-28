@@ -1539,24 +1539,15 @@ class OpenTelemetryMapperTest {
             return spanBuilder.build();
         }
 
-        @Test
-        void apiCerebrasHostNormalizedToCerebras() {
-            assertThat(mapWithProvider("api.cerebras.ai").provider()).isEqualTo("cerebras");
-        }
-
-        @Test
-        void apiXAiHostNormalizedToXai() {
-            assertThat(mapWithProvider("api.x.ai").provider()).isEqualTo("xai");
-        }
-
-        @Test
-        void unknownHostPassesThroughUnchanged() {
-            assertThat(mapWithProvider("api.unknownvendor.io").provider()).isEqualTo("api.unknownvendor.io");
-        }
-
-        @Test
-        void canonicalProviderNamePassesThroughUnchanged() {
-            assertThat(mapWithProvider("openai").provider()).isEqualTo("openai");
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource({
+            "api.cerebras.ai,      cerebras",
+            "api.x.ai,             xai",
+            "api.unknownvendor.io, api.unknownvendor.io",
+            "openai,               openai",
+        })
+        void hostProviderResolution(String input, String expected) {
+            assertThat(mapWithProvider(input).provider()).isEqualTo(expected.trim());
         }
     }
 
