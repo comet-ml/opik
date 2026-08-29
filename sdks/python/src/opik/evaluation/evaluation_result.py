@@ -85,6 +85,19 @@ def normalize_experiment_score(
             metadata={**(base_metadata or {}), "_fabricated": True},
         )
 
+    if score.metadata is not None and not isinstance(score.metadata, Mapping):
+        return score_result.ScoreResult(
+            name=effective_name,
+            value=0.0,
+            reason=(
+                "ScoreResult.metadata must be a mapping or None, got "
+                f"{type(score.metadata).__name__}."
+            ),
+            scoring_failed=True,
+            category_name=score.category_name,
+            metadata={"_fabricated": True},
+        )
+
     if score.scoring_failed:
         value = (
             score.value

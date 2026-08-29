@@ -796,6 +796,21 @@ def test_normalize_experiment_score__invalid_metadata_type(bad_metadata):
     assert res.metadata == {"_fabricated": True}
 
 
+@pytest.mark.parametrize("bad_metadata", ["invalid_str", [1, 2], 123, ("a", "b")])
+def test_normalize_experiment_score__valid_score_with_invalid_metadata(bad_metadata):
+    score = score_result.ScoreResult(
+        name="accuracy",
+        value=0.5,
+        metadata=bad_metadata,  # type: ignore
+    )
+    res = evaluation_result.normalize_experiment_score(score, default_name="fallback")
+    assert res.name == "accuracy"
+    assert res.value == 0.0
+    assert res.scoring_failed is True
+    assert res.metadata == {"_fabricated": True}
+    assert "metadata must be a mapping" in res.reason
+
+
 @pytest.mark.parametrize("bad_flag", ["false", "true", 0, 1, None, []])
 def test_normalize_experiment_score__invalid_scoring_failed_flag(bad_flag):
     score = score_result.ScoreResult(

@@ -5,7 +5,12 @@ import pytest
 
 from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
-from opik.evaluation import metrics, rest_operations, test_case
+from opik.evaluation import (
+    evaluator as evaluator_module,
+    metrics,
+    rest_operations,
+    test_case,
+)
 from opik.evaluation.engine import engine
 from opik.evaluation.metrics import score_result
 
@@ -346,6 +351,33 @@ def test_evaluate_experiment__deduplicates_duplicate_score_names(fake_backend):
         score_results=result.experiment_scores,
         preserve_unrelated=True,
     )
+
+
+@pytest.mark.parametrize(
+    "scores, expected",
+    [
+        (
+            [
+                score_result.ScoreResult(name="accuracy", value=0.5),
+                score_result.ScoreResult(
+                    name="accuracy", value=0.0, scoring_failed=True
+                ),
+            ],
+            [score_result.ScoreResult(name="accuracy", value=0.0, scoring_failed=True)],
+        ),
+        (
+            [
+                score_result.ScoreResult(
+                    name="accuracy", value=0.0, scoring_failed=True
+                ),
+                score_result.ScoreResult(name="accuracy", value=0.9),
+            ],
+            [score_result.ScoreResult(name="accuracy", value=0.9)],
+        ),
+    ],
+)
+def test_deduplicate_experiment_scores__last_result_wins(scores, expected):
+    assert evaluator_module._deduplicate_experiment_scores(scores) == expected
 
 
 def test_evaluate_experiment__with_experiment_id__uses_get_by_id(fake_backend):

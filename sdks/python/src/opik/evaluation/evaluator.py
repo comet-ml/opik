@@ -65,7 +65,7 @@ def _deduplicate_experiment_scores(
     scores: List[object],
 ) -> List[score_result.ScoreResult]:
     deduplicated: List[score_result.ScoreResult] = []
-    successful_positions: Dict[str, int] = {}
+    score_positions: Dict[str, int] = {}
     for raw_score in scores:
         if not isinstance(raw_score, score_result.ScoreResult):
             LOGGER.warning(
@@ -75,12 +75,9 @@ def _deduplicate_experiment_scores(
         score = evaluation_result.normalize_experiment_score(
             raw_score, default_name="invalid_experiment_score"
         )
-        if score.scoring_failed:
-            deduplicated.append(score)
-            continue
-        position = successful_positions.get(score.name)
+        position = score_positions.get(score.name)
         if position is None:
-            successful_positions[score.name] = len(deduplicated)
+            score_positions[score.name] = len(deduplicated)
             deduplicated.append(score)
         else:
             deduplicated[position] = score
