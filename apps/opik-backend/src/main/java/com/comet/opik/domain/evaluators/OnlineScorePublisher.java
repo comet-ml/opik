@@ -60,6 +60,19 @@ public interface OnlineScorePublisher {
     Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type);
 
     /**
+     * Whether this message is too large for the consumer to decode, and so would be dropped by
+     * {@link #enqueueMessage(List, AutomationRuleEvaluatorType)} rather than published.
+     *
+     * <p>Callers that keep their own bookkeeping against an enqueued message - a per-experiment assertion
+     * counter, a sampling decision metric - must check this first and compensate, because the enqueue
+     * itself completes successfully whether or not the message was actually written.
+     *
+     * @param message the message that would be enqueued
+     * @return true when the message exceeds the payload limit
+     */
+    boolean exceedsPayloadLimit(Object message);
+
+    /**
      * Enqueues a thread message for scoring based on the provided rule. The returned publisher must be subscribed
      * for the enqueue to happen.
      *
@@ -206,6 +219,11 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 // Run the enqueue (Redis stream writes) off the caller's thread — e.g. the EventBus thread for
                 // the samplers — on a bounded worker pool.
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public boolean exceedsPayloadLimit(@NonNull Object message) {
+        return maxPayloadBytes != Long.MAX_VALUE && serializedSize(message) > maxPayloadBytes;
     }
 
     /**

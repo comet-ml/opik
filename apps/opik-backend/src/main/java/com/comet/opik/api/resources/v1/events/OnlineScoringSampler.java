@@ -73,6 +73,7 @@ public class OnlineScoringSampler {
     private static final String DECISION_SKIPPED_DISABLED = "skipped_disabled";
     private static final String DECISION_SKIPPED_FILTER = "skipped_filter";
     private static final String DECISION_SKIPPED_SAMPLING = "skipped_sampling";
+    private static final String DECISION_SKIPPED_TOO_LARGE = "skipped_too_large";
 
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final TraceFilterEvaluationService filterEvaluationService;
@@ -259,10 +260,11 @@ public class OnlineScoringSampler {
                         .filter(trace -> shouldSampleTrace(evaluator, workspaceId, workspaceName, trace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
-                        var messages = samples
+                        List<TraceToScoreLlmAsJudge> messages = samples
                                 .map(trace -> toLlmAsJudgeMessage(workspaceId, userName, workspaceName,
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
+                        messages = dropOversized(messages, workspaceId, workspaceName, evaluator);
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
                             recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED, messages.size());
@@ -272,10 +274,11 @@ public class OnlineScoringSampler {
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
                         if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
-                            var messages = samples
+                            List<TraceToScoreUserDefinedMetricPython> messages = samples
                                     .map(trace -> toScoreUserDefinedMetricPython(workspaceId, userName, workspaceName,
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
+                            messages = dropOversized(messages, workspaceId, workspaceName, evaluator);
                             logSampledTrace(evaluator, messages, scorableTraces.size());
                             if (!messages.isEmpty()) {
                                 recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED,
@@ -377,9 +380,30 @@ public class OnlineScoringSampler {
                     trace.id(), evaluator.getName(), evaluator.getSamplingRate());
         }
 
-        // The DECISION_SAMPLED metric is recorded at enqueue time (see sampleAndScore), so it
-        // reflects messages actually published to Redis rather than the sampling roll alone.
+        // The DECISION_SAMPLED metric is recorded in sampleAndScore, after oversized messages have been
+        // dropped, so it reflects messages actually published to Redis rather than the sampling roll alone.
         return true;
+    }
+
+    /**
+     * Drops messages the publisher would refuse as too large, recording them as their own decision.
+     *
+     * <p>The publisher silently skips such a message and still completes successfully, so counting it as
+     * DECISION_SAMPLED would claim a scoring message that was never published. Filtering here keeps the
+     * sampling funnel honest and gives the oversized case a distinct outcome to alert on.
+     */
+    private <T> List<T> dropOversized(List<T> messages, String workspaceId, String workspaceName,
+            AutomationRuleEvaluator<?, ?> evaluator) {
+        var retained = messages.stream()
+                .filter(message -> !onlineScorePublisher.exceedsPayloadLimit(message))
+                .toList();
+        int dropped = messages.size() - retained.size();
+        if (dropped > 0) {
+            recordDecision(workspaceId, workspaceName, evaluator, DECISION_SKIPPED_TOO_LARGE, dropped);
+            log.error("Dropped '{}' oversized message(s) for rule '{}', workspaceId '{}'",
+                    dropped, evaluator.getName(), workspaceId);
+        }
+        return retained;
     }
 
     private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName, String workspaceName,
