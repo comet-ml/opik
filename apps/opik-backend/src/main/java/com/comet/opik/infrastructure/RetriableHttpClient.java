@@ -110,7 +110,9 @@ public class RetriableHttpClient {
                                 .formatted(statusCode, abbreviatedBody(response)),
                         statusCode));
             }
-            return Mono.just(request.responseFunction().apply(response));
+            // justOrEmpty, not just: the previous Mono.fromCallable completed empty when the
+            // transform returned null, and Mono.just would turn that into a NullPointerException.
+            return Mono.justOrEmpty(request.responseFunction().apply(response));
         }
     }
 
