@@ -154,6 +154,8 @@ public interface TraceDAO {
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
+    Flux<UUID> getTraceIdsByProjectId(UUID projectId, Connection connection);
+
     Mono<Trace> getPartialById(UUID id);
 
     Flux<Trace> search(int limit, TraceSearchCriteria criteria);
@@ -3158,6 +3160,14 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    private static final String SELECT_TRACE_IDS_BY_PROJECT_ID = """
+            SELECT DISTINCT id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
             SELECT
                 count(distinct id) as count
@@ -4949,6 +4959,27 @@ class TraceDAOImpl implements TraceDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
                     .collect(toSet());
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<UUID> getTraceIdsByProjectId(@NonNull UUID projectId, @NonNull Connection connection) {
+        log.info("Getting trace IDs by project id '{}'", projectId);
+
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_PROJECT_ID, "get_trace_ids_by_project_id",
+                    workspaceId, userName, "");
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
+
+            Segment segment = startSegment("traces", "Clickhouse", "getTraceIdsByProjectId");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)));
         });
     }
 
