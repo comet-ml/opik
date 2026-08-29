@@ -104,7 +104,8 @@ public class OnlineScoringSampler {
         Meter meter = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE);
         this.samplingDecisions = meter.counterBuilder("online_scoring_sampler_decisions_total")
                 .setDescription("Online-scoring sampling decisions, by workspace, evaluator type and outcome "
-                        + "(sampled / skipped_disabled / skipped_filter / skipped_sampling)")
+                        + "(sampled / skipped_disabled / skipped_filter / skipped_sampling / "
+                        + "skipped_too_large)")
                 .build();
     }
 

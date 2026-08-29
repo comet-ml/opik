@@ -70,7 +70,7 @@ public interface OnlineScorePublisher {
      * @param message the message that would be enqueued
      * @return true when the message exceeds the payload limit
      */
-    boolean exceedsPayloadLimit(Object message);
+    boolean exceedsPayloadLimit(@NonNull Object message);
 
     /**
      * Enqueues a thread message for scoring based on the provided rule. The returned publisher must be subscribed
@@ -143,7 +143,9 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
-                        + "result (success|error). result=error counts publish failures that were previously only logged.")
+                        + "result (success|error|skipped_too_large). result=error counts publish failures that "
+                        + "were previously only logged; result=skipped_too_large counts messages refused because "
+                        + "they exceed what the consumer can decode.")
                 .build();
         this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {

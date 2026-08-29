@@ -151,12 +151,12 @@ public class TestSuiteAssertionSampler {
                     // completes successfully. Nothing would then decrement this experiment's assertion
                     // counter - that only happens when the message is consumed - so the counter would never
                     // reach zero and the experiment would stay incomplete forever. Compensate here instead.
-                    var oversized = messages.stream()
-                            .filter(onlineScorePublisher::exceedsPayloadLimit)
-                            .toList();
-                    var publishable = messages.stream()
-                            .filter(message -> !onlineScorePublisher.exceedsPayloadLimit(message))
-                            .toList();
+                    // Partition in one pass: exceedsPayloadLimit serializes the message to measure it, so
+                    // checking each message twice would double that cost on the large-payload path.
+                    var byOversized = messages.stream()
+                            .collect(Collectors.partitioningBy(onlineScorePublisher::exceedsPayloadLimit));
+                    var oversized = byOversized.get(true);
+                    var publishable = byOversized.get(false);
                     Mono<Void> compensate = Flux.fromIterable(oversized)
                             .doOnNext(message -> log.error(
                                     "Test suite assertion message too large to score, experimentId '{}'",
