@@ -17,18 +17,15 @@ LOGGER = logging.getLogger(__name__)
 
 def _safe_str(obj: object) -> str:
     try:
-        return str(obj)
+        return str(obj)[:200]
     except Exception:
-        return f"<{type(obj).__name__}>"
+        return ""
 
 
 def _sanitize_error_reason(exception: Exception, context: str) -> str:
     """Format an exception message capping length and retaining exception type."""
     exc_type = type(exception).__name__
-    try:
-        raw_msg = str(exception).strip()
-    except Exception:
-        raw_msg = ""
+    raw_msg = _safe_str(exception).strip()
 
     if raw_msg:
         clean_msg = raw_msg[:200]

@@ -880,3 +880,9 @@ def test_compute_experiment_scores__unstringifiable_exception():
         scores[0].reason
         == "Experiment scoring function 'broken_scorer' failed with UnstringifiableError."
     )
+
+
+def test_safe_str__truncates_long_messages():
+    message = "x" * 300
+
+    assert evaluation_result._safe_str(RuntimeError(message)) == "x" * 200
