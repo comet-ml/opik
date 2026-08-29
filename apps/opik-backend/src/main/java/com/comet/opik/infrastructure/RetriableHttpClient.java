@@ -83,20 +83,35 @@ public class RetriableHttpClient {
 
     private <T> Mono<T> execute(Request<T> request, String method) {
         return Mono.defer(() -> performHttpRequest(request, method)
-                .flatMap(response -> {
-                    int statusCode = response.getStatus();
-                    if (isRetryableStatusCode(statusCode)) {
-                        response.bufferEntity(); // Buffer the entity to allow multiple reads
-                        return Mono.error(new RetryUtils.RetryableHttpException(
-                                "Service temporarily unavailable (HTTP %s): %s"
-                                        .formatted(statusCode, abbreviatedBody(response)),
-                                statusCode));
-                    }
-                    return Mono.just(response);
-                })
-                .flatMap(value -> Mono.fromCallable(() -> request.responseFunction().apply(value))))
+                .flatMap(response -> transformAndClose(request, response)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(request.retryPolicy());
+    }
+
+    /**
+     * Applies the caller's transform and closes the response on every path.
+     * <p>
+     * All three exits used to leak: a retryable status returned {@code Mono.error} without closing,
+     * a transform that threw unwound past the close, and the success path left it to the caller.
+     * Under the retry this compounds -- each attempt leaks another pooled connection against a
+     * service that is already failing, which is exactly when the pool can least afford it.
+     * <p>
+     * The transform is evaluated eagerly inside the try block rather than deferred with
+     * {@code Mono.fromCallable}, because a deferred callable would run after the resource had
+     * already been closed.
+     */
+    private <T> Mono<T> transformAndClose(Request<T> request, Response response) {
+        try (response) {
+            int statusCode = response.getStatus();
+            if (isRetryableStatusCode(statusCode)) {
+                response.bufferEntity(); // Buffer the entity to allow multiple reads
+                return Mono.error(new RetryUtils.RetryableHttpException(
+                        "Service temporarily unavailable (HTTP %s): %s"
+                                .formatted(statusCode, abbreviatedBody(response)),
+                        statusCode));
+            }
+            return Mono.just(request.responseFunction().apply(response));
+        }
     }
 
     /**

@@ -645,11 +645,12 @@ class RemoteAuthService implements AuthService {
             // verifyResponse, so an exhausted retry would otherwise surface a different error shape
             // than every other upstream failure on this path, and its message carries the upstream
             // body -- which must not reach the caller of a credential-bearing request. Collapse it
-            // onto the same public error unexpectedRemoteError produces, keeping the detail in the
-            // log and the cause rather than in what the caller sees.
-            log.error("Unexpected error while {}, retries exhausted against the auth service",
-                    operation, retriesExhausted);
-            throw new InternalServerErrorException("Unexpected error while " + operation);
+            // onto the same public error unexpectedRemoteError produces, keeping the status and
+            // body in the log and on the cause rather than in what the caller sees.
+            log.error("Auth service call failed: retries exhausted operation='{}'", operation,
+                    retriesExhausted);
+            throw new InternalServerErrorException("Unexpected error while " + operation,
+                    retriesExhausted);
         }
     }
 
