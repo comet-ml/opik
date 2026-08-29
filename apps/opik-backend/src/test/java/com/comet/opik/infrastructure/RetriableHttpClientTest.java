@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -103,18 +102,33 @@ class RetriableHttpClientTest {
 
     /**
      * The retryable path used to return {@code Mono.error} without closing, so each attempt leaked a
-     * pooled connection. One close per attempt is the property that matters.
+     * pooled connection.
+     * <p>
+     * Each attempt gets its <em>own</em> {@code Response} here, as it would in production. A single
+     * shared mock would let this pass while a later response leaked -- code that closed the first
+     * response three times would be indistinguishable from code that closed each of three. Verifying
+     * every instance individually is what makes the assertion mean "no attempt leaks".
      */
     @Test
-    void executePostWithRetry__whenRetryableStatusRetried__thenEveryAttemptClosesItsResponse() {
-        when(response.getStatus()).thenReturn(503);
-        when(response.bufferEntity()).thenReturn(true);
-        when(response.readEntity(String.class)).thenReturn("unavailable");
+    void executePostWithRetry__whenRetryableStatusRetried__thenEveryAttemptClosesItsOwnResponse() {
+        var perAttemptResponses = new java.util.ArrayList<Response>();
+        when(asyncInvoker.method(anyString(), any(Entity.class), any(InvocationCallback.class)))
+                .thenAnswer(invocation -> {
+                    var attemptResponse = org.mockito.Mockito.mock(Response.class);
+                    when(attemptResponse.getStatus()).thenReturn(503);
+                    when(attemptResponse.bufferEntity()).thenReturn(true);
+                    when(attemptResponse.readEntity(String.class)).thenReturn("unavailable");
+                    perAttemptResponses.add(attemptResponse);
+                    InvocationCallback<Response> callback = invocation.getArgument(2);
+                    callback.completed(attemptResponse);
+                    return null;
+                });
 
         assertThatThrownBy(() -> retriableHttpClient.executePostWithRetry(request(2)).block())
                 .isInstanceOf(RetryUtils.RetryableHttpException.class);
 
-        verify(response, times(3)).close(); // 1 initial attempt + 2 retries
+        assertThat(perAttemptResponses).hasSize(3); // 1 initial attempt + 2 retries
+        perAttemptResponses.forEach(attemptResponse -> verify(attemptResponse).close());
     }
 
     @Test
