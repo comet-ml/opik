@@ -991,7 +991,7 @@ def evaluate_experiment(
     effective_experiment_scores = computed_experiment_scores
     if computed_experiment_scores:
         has_fabricated_scores = any(
-            bool(isinstance(score.metadata, dict) and score.metadata.get("_fabricated"))
+            evaluation_result._is_fabricated_score(score)
             for score in computed_experiment_scores
         )
         persisted_scores = experiment.log_experiment_scores(
@@ -1683,8 +1683,7 @@ def evaluate_resume(
     )
     if merged_scores:
         has_fabricated_scores = any(
-            bool(isinstance(score.metadata, dict) and score.metadata.get("_fabricated"))
-            for score in merged_scores
+            evaluation_result._is_fabricated_score(score) for score in merged_scores
         )
         persisted_scores = context.experiment.log_experiment_scores(
             score_results=merged_scores,

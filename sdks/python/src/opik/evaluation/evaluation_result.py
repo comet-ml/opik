@@ -6,6 +6,8 @@ import math
 
 import dataclasses
 
+from .. import exceptions
+from ..decorator import error_info_collector
 from . import score_statistics, test_result
 from .metrics import score_result
 
@@ -33,21 +35,61 @@ def _sanitize_error_reason(exception: Exception, context: str) -> str:
     return f"{context} failed with {exc_type}."
 
 
+_FABRICATED_SCORE_ATTRIBUTE = "_opik_fabricated"
+
+
+def _mark_fabricated(score: score_result.ScoreResult) -> score_result.ScoreResult:
+    setattr(score, _FABRICATED_SCORE_ATTRIBUTE, True)
+    return score
+
+
+def _is_fabricated_score(score: score_result.ScoreResult) -> bool:
+    return bool(getattr(score, _FABRICATED_SCORE_ATTRIBUTE, False))
+
+
+def _build_failed_score_result(
+    name: str,
+    exception: Exception,
+    *,
+    reason: Optional[str] = None,
+    category_name: Optional[str] = None,
+    fabricated: bool = False,
+) -> score_result.ScoreResult:
+    """Build a failed score with structured exception details."""
+    metadata: Dict[str, object] = {
+        "error_info": error_info_collector.collect(exception)
+    }
+    if fabricated:
+        metadata["_fabricated"] = True
+
+    result = score_result.ScoreResult(
+        name=name,
+        value=0.0,
+        reason=_safe_str(exception) if reason is None else reason,
+        category_name=category_name,
+        metadata=metadata,
+        scoring_failed=True,
+    )
+    return _mark_fabricated(result) if fabricated else result
+
+
 def normalize_experiment_score(
     score: object,
     default_name: str,
 ) -> score_result.ScoreResult:
     """Normalize raw values or malformed ScoreResult instances into a valid ScoreResult."""
     if not isinstance(score, score_result.ScoreResult):
-        return score_result.ScoreResult(
-            name=default_name,
-            value=0.0,
-            reason=(
-                "Experiment scoring function returned "
-                f"{type(score).__name__}; expected ScoreResult."
-            ),
-            scoring_failed=True,
-            metadata={"_fabricated": True},
+        return _mark_fabricated(
+            score_result.ScoreResult(
+                name=default_name,
+                value=0.0,
+                reason=(
+                    "Experiment scoring function returned "
+                    f"{type(score).__name__}; expected ScoreResult."
+                ),
+                scoring_failed=True,
+                metadata={"_fabricated": True},
+            )
         )
 
     base_metadata: Optional[Dict[str, object]] = (
@@ -60,7 +102,7 @@ def normalize_experiment_score(
 
     if not isinstance(score.scoring_failed, bool):
         meta = {**(base_metadata or {}), "_fabricated": not is_valid_name}
-        return score_result.ScoreResult(
+        result = score_result.ScoreResult(
             name=effective_name,
             value=0.0,
             reason=(
@@ -71,31 +113,39 @@ def normalize_experiment_score(
             category_name=score.category_name,
             metadata=meta,
         )
+        return _mark_fabricated(result) if not is_valid_name else result
 
     if not is_valid_name:
-        return score_result.ScoreResult(
-            name=default_name,
-            value=0.0,
-            reason=(
-                "Expected non-empty string score name, got "
-                f"{type(name).__name__ if not isinstance(name, str) else 'empty string'}."
-            ),
-            scoring_failed=True,
-            category_name=score.category_name,
-            metadata={**(base_metadata or {}), "_fabricated": True},
+        return _mark_fabricated(
+            score_result.ScoreResult(
+                name=default_name,
+                value=0.0,
+                reason=(
+                    "Expected non-empty string score name, got "
+                    f"{type(name).__name__ if not isinstance(name, str) else 'empty string'}."
+                ),
+                scoring_failed=True,
+                category_name=score.category_name,
+                metadata={**(base_metadata or {}), "_fabricated": True},
+            )
         )
 
     if score.metadata is not None and not isinstance(score.metadata, Mapping):
-        return score_result.ScoreResult(
-            name=effective_name,
-            value=0.0,
-            reason=(
-                "ScoreResult.metadata must be a mapping or None, got "
-                f"{type(score.metadata).__name__}."
-            ),
-            scoring_failed=True,
+        metadata_error = exceptions.EvaluationError(
+            "ScoreResult.metadata must be a mapping or None, got "
+            f"{type(score.metadata).__name__}."
+        )
+        LOGGER.warning(
+            "Failed to normalize score result from %s: %s",
+            effective_name,
+            _safe_str(metadata_error),
+        )
+        return _build_failed_score_result(
+            effective_name,
+            metadata_error,
+            reason=_safe_str(metadata_error),
             category_name=score.category_name,
-            metadata={"_fabricated": True},
+            fabricated=True,
         )
 
     if score.scoring_failed:
@@ -170,15 +220,17 @@ def compute_experiment_scores(
                             exc_info=True,
                         )
                         all_scores.append(
-                            score_result.ScoreResult(
-                                name=default_name,
-                                value=0.0,
-                                reason=_sanitize_error_reason(
-                                    elem_err,
-                                    f"Scoring function '{default_name}' item",
-                                ),
-                                scoring_failed=True,
-                                metadata={"_fabricated": True},
+                            _mark_fabricated(
+                                score_result.ScoreResult(
+                                    name=default_name,
+                                    value=0.0,
+                                    reason=_sanitize_error_reason(
+                                        elem_err,
+                                        f"Scoring function '{default_name}' item",
+                                    ),
+                                    scoring_failed=True,
+                                    metadata={"_fabricated": True},
+                                )
                             )
                         )
             else:
@@ -192,15 +244,17 @@ def compute_experiment_scores(
                 exc_info=True,
             )
             all_scores.append(
-                score_result.ScoreResult(
-                    name=default_name,
-                    value=0.0,
-                    reason=_sanitize_error_reason(
-                        e,
-                        f"Experiment scoring function '{default_name}'",
-                    ),
-                    scoring_failed=True,
-                    metadata={"_fabricated": True},
+                _mark_fabricated(
+                    score_result.ScoreResult(
+                        name=default_name,
+                        value=0.0,
+                        reason=_sanitize_error_reason(
+                            e,
+                            f"Experiment scoring function '{default_name}'",
+                        ),
+                        scoring_failed=True,
+                        metadata={"_fabricated": True},
+                    )
                 )
             )
 

@@ -136,7 +136,9 @@ def test_evaluate_experiment__returns_preserved_scores(fake_backend):
     mock_dataset = _make_mock_dataset()
     test_cases = [_make_test_case()]
     mock_test_results = [mock.Mock(score_results=[])]
-    computed_score = score_result.ScoreResult(name="accuracy", value=0.9)
+    computed_score = score_result.ScoreResult(
+        name="accuracy", value=0.9, metadata={"_fabricated": True}
+    )
     effective_scores = [
         score_result.ScoreResult(name="existing", value=0.4),
         computed_score,
