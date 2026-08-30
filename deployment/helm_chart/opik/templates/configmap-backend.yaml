@@ -46,7 +46,10 @@ data:
          -- so injecting a non-SemVer tag (stable, latest, a digest) would point at a JAR that does
          not exist and crash-loop the pod. Leaving it unset keeps the image's own value, which
          matches its JAR. A non-SemVer value would fail the SDK's parse anyway, so nothing is lost. */}}
-  {{- $version := default $.Chart.AppVersion $value.image.tag }}
+  {{- /* toString because a tag written unquoted in values.yaml arrives typed -- `tag: 2` is an
+         int64 and `tag: true` a bool, and regexMatch raises a type error on either, failing the
+         whole render rather than just omitting the key. */}}
+  {{- $version := default $.Chart.AppVersion $value.image.tag | toString }}
   {{- if and (not (hasKey $env "OPIK_VERSION")) (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+" $version) }}
   OPIK_VERSION: {{ $version | quote }}
   {{- end }}

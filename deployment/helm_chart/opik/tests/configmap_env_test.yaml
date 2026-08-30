@@ -252,6 +252,29 @@ tests:
       - notExists:
           path: data.OPIK_VERSION
 
+  # A tag written unquoted in values.yaml arrives typed -- `tag: 2` is an int64, `tag: true` a
+  # bool -- and regexMatch raises a type error on a non-string, which fails the whole render
+  # rather than just omitting the key. These pin the toString guard.
+  - it: renders without error for a numeric image tag
+    set:
+      component.backend.image.tag: 2
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: data.OPIK_VERSION
+
+  - it: renders without error for a boolean image tag
+    set:
+      component.backend.image.tag: true
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: data.OPIK_VERSION
+
   # An explicit env override is the operator's deliberate choice and is passed through untouched,
   # including a non-SemVer one -- the generic env loop already emits it, and the SemVer gate must
   # not silently drop it.
