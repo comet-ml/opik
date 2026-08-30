@@ -20,6 +20,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
@@ -53,6 +54,8 @@ public abstract sealed class FeedbackScoreItem {
 
     private final UUID sourceQueueId;
 
+    private final Map<String, Object> metadata;
+
     public abstract UUID id();
 
     public abstract String threadId();
@@ -77,10 +80,11 @@ public abstract sealed class FeedbackScoreItem {
         @NotNull private UUID id;
 
         @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "source",
-                "author", "sourceQueueId", "id"})
+                "author", "sourceQueueId", "metadata", "id"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String author, UUID sourceQueueId, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId);
+                BigDecimal value, String reason, ScoreSource source, String author, UUID sourceQueueId,
+                Map<String, Object> metadata, UUID id) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId, metadata);
             this.id = id;
         }
 
@@ -106,11 +110,11 @@ public abstract sealed class FeedbackScoreItem {
         private UUID id;
 
         @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason",
-                "source", "author", "sourceQueueId", "threadId"})
+                "source", "author", "sourceQueueId", "metadata", "threadId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, String author, UUID sourceQueueId,
-                String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId);
+                Map<String, Object> metadata, String threadId) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author, sourceQueueId, metadata);
             this.threadId = threadId;
         }
 

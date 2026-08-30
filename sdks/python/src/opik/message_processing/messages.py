@@ -249,6 +249,7 @@ class FeedbackScoreMessage(BaseMessage):
     source: str
     reason: Optional[str] = None
     category_name: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
     message_type = "FeedbackScoreMessage"
 

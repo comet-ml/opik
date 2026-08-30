@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { FeedbackScoreBatchItemThreadSource } from "./FeedbackScoreBatchItemThreadSource.js";
+import { JsonNode } from "./JsonNode.js";
 
 export const FeedbackScoreBatchItemThread: core.serialization.ObjectSchema<
     serializers.FeedbackScoreBatchItemThread.Raw,
@@ -19,6 +20,7 @@ export const FeedbackScoreBatchItemThread: core.serialization.ObjectSchema<
     author: core.serialization.string().optional(),
     sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
     threadId: core.serialization.property("thread_id", core.serialization.string()),
+    metadata: JsonNode.optional(),
 });
 
 export declare namespace FeedbackScoreBatchItemThread {
@@ -33,5 +35,6 @@ export declare namespace FeedbackScoreBatchItemThread {
         author?: string | null;
         source_queue_id?: string | null;
         thread_id: string;
+        metadata?: JsonNode.Raw | null;
     }
 }
