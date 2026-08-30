@@ -1624,20 +1624,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     UUID batchGroupId = batch.batchGroupId();
 
                     if (batchGroupId == null) {
-                        // No batch_group_id: mutate the latest version (backwards compatibility).
-                        // This reads and re-points the dataset's mutable 'latest' pointer, which is
-                        // exactly what withDatasetVersionLock exists to serialize (OPIK-7264).
+                        // No batch_group_id: mutate the latest version (backwards compatibility)
                         log.info("Mutating latest version for dataset '{}' (no batch_group_id)", datasetId);
-                        // Mono.defer is load-bearing: mutateLatestVersionWithInsert reads 'latest'
-                        // eagerly in its method body, so passing the call directly would perform that
-                        // read BEFORE the lock is acquired and reintroduce the OPIK-7264 race.
                         return withDatasetVersionLock(datasetId, Mono.defer(
                                 () -> mutateLatestVersionWithInsert(batch, datasetId, workspaceId, userName)));
                     }
 
-                    // batch_group_id provided: only the first batch of the group mints a version and
-                    // touches 'latest'. handleGroupedInsertion takes the lock for that branch alone, so
-                    // the appends that follow are not serialized behind it (OPIK-7708).
+                    // batch_group_id provided: create new version with batch grouping
                     log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
                             batchGroupId);
                     return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
@@ -2335,27 +2328,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return findGroupVersion(batchGroupId, datasetId, workspaceId)
                 .flatMap(optionalVersion -> {
                     if (optionalVersion.isPresent()) {
-                        // Version exists - append items to it.
-                        //
-                        // OPIK-7708: this branch runs WITHOUT withDatasetVersionLock. Appending into a
-                        // version an earlier batch of the same group already created neither reads nor
-                        // re-points the dataset's mutable 'latest' pointer, which is the only thing that
-                        // lock exists to serialize (OPIK-7264). The version counters it touches are
-                        // applied as signed deltas in a single atomic statement (OPIK-7707), so they do
-                        // not depend on the lock for mutual exclusion either.
-                        //
-                        // Holding the lock here serialized every batch of a multi-batch upload behind the
-                        // first one: for a 119k-row single insert() that is 119 of 120 batches queued for
-                        // no reason. Measured: uploading the same rows across 4 datasets (4 independent
-                        // lock keys) was 2.03x faster than into 1, which is the cost this removes.
+                        // Version exists - append items to it
                         var existingVersion = optionalVersion.get();
                         log.info("Appending '{}' items to existing version '{}' for batch_group_id '{}'",
                                 batch.items().size(), existingVersion.id(), batchGroupId);
                         return appendToGroupVersion(batch, datasetId, existingVersion.id(), workspaceId, userName);
                     }
-                    // First batch of the group mints the version and flips 'latest', so it must be
-                    // serialized. Re-check inside the lock: without it two concurrent first-batches
-                    // could both observe "absent" above and mint two versions for one batch_group_id.
                     return withDatasetVersionLock(datasetId,
                             findGroupVersion(batchGroupId, datasetId, workspaceId)
                                     .flatMap(recheck -> {
@@ -2381,15 +2359,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /**
-     * Appends items into a version that already exists for this batch group, completing empty because the
-     * caller only mints a {@link DatasetVersion} on the create path.
-     * <p>
-     * Deferred on purpose: every current caller invokes this inside a {@code flatMap}, but returning an
-     * eagerly-assembled Mono is the shape that put the {@code latest} read outside the lock in
-     * {@code mutateLatestVersionWithInsert}. Deferring keeps this safe if it is ever passed directly to
-     * {@code withDatasetVersionLock}.
-     */
     private Mono<DatasetVersion> appendToGroupVersion(DatasetItemBatch batch, UUID datasetId, UUID versionId,
             String workspaceId, String userName) {
         return Mono.defer(() -> insertItemsIntoVersion(batch, datasetId, versionId, workspaceId, userName))
