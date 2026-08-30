@@ -227,3 +227,42 @@ tests:
       - equal:
           path: data.OPIK_VERSION
           value: "1.2.3"
+
+  # This ConfigMap reaches the container through envFrom, which overrides the OPIK_VERSION baked
+  # into the image -- and entrypoint.sh boots opik-backend-$OPIK_VERSION.jar. Emitting a non-SemVer
+  # tag would name a JAR that does not exist and crash-loop the pod, so the key must be omitted
+  # entirely and the image's own value left to stand.
+  - it: omits OPIK_VERSION for a non-SemVer image tag rather than breaking the JAR name
+    set:
+      component.backend.image.tag: stable
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: data.OPIK_VERSION
+
+  - it: omits OPIK_VERSION for a digest-style image tag
+    set:
+      component.backend.image.tag: sha-a1b2c3d
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: data.OPIK_VERSION
+
+  # An explicit env override is the operator's deliberate choice and is passed through untouched,
+  # including a non-SemVer one -- the generic env loop already emits it, and the SemVer gate must
+  # not silently drop it.
+  - it: passes through an explicit non-SemVer env OPIK_VERSION untouched
+    set:
+      component.backend.image.tag: stable
+      component.backend.env.OPIK_VERSION: stable
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.OPIK_VERSION
+          value: stable

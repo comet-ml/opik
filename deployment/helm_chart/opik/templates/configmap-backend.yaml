@@ -39,9 +39,16 @@ data:
          parallel dataset upload. Left unset it falls back to the literal "latest" (config.yml),
          which fails to parse and silently downgrades num_threads to 1. Derived from the image tag
          so there is no second source of truth, defaulting to the chart's AppVersion exactly as the
-         image reference itself does in deployment.yaml. */}}
-  {{- if not (hasKey $env "OPIK_VERSION") }}
-  OPIK_VERSION: {{ default $.Chart.AppVersion $value.image.tag | quote }}
+         image reference itself does in deployment.yaml.
+
+         Only emitted when the tag is SemVer. This ConfigMap arrives via envFrom, which overrides
+         the OPIK_VERSION baked into the image, and entrypoint.sh boots opik-backend-$OPIK_VERSION.jar
+         -- so injecting a non-SemVer tag (stable, latest, a digest) would point at a JAR that does
+         not exist and crash-loop the pod. Leaving it unset keeps the image's own value, which
+         matches its JAR. A non-SemVer value would fail the SDK's parse anyway, so nothing is lost. */}}
+  {{- $version := default $.Chart.AppVersion $value.image.tag }}
+  {{- if and (not (hasKey $env "OPIK_VERSION")) (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+" $version) }}
+  OPIK_VERSION: {{ $version | quote }}
   {{- end }}
   {{- $da := $.Values.databaseAnalytics }}
   {{- $dm := $.Values.databaseAnalyticsDataModel }}
