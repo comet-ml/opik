@@ -1064,36 +1064,27 @@ class CostServiceTest {
     }
 
     /**
-     * Covers registering {@code replicate} as a canonical provider so that the 40 non-zero-cost
-     * entries in {@code model_prices_and_context_window.json} tagged with
-     * {@code litellm_provider: "replicate"} are no longer silently dropped at load time. No Replicate
-     * model publishes cache rates today, so all Replicate requests route through
-     * {@link SpanCostCalculator#textGenerationCost}.
+     * Covers registering {@code replicate} and {@code watsonx} as canonical providers so that their
+     * token-priced entries in {@code model_prices_and_context_window.json} are no longer silently
+     * dropped at load time. Each case exercises a representative token-priced model routed through
+     * {@link SpanCostCalculator#textGenerationCost}. Per-second-priced models under these providers
+     * (for example Watsonx transcription) use a pricing shape this calculator does not cover and
+     * stay out of scope here.
      */
-    @Test
-    void calculateCostHandlesReplicateModels() {
-        // replicate/openai/o1: input 1.5e-05, output 6e-05
-        // 1000 * 1.5e-05 + 200 * 6e-05 = 0.027
-        BigDecimal cost = CostService.calculateCost("replicate/openai/o1", "replicate",
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideReplicateWatsonxProviderCases")
+    void calculateCostHandlesReplicateAndWatsonxModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
                 Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
 
-        assertThat(cost).isEqualByComparingTo("0.027");
+        assertThat(cost).isEqualByComparingTo(expectedCost);
     }
 
-    /**
-     * Covers registering {@code watsonx} as a canonical provider so that the 28 non-zero-cost
-     * entries in {@code model_prices_and_context_window.json} tagged with
-     * {@code litellm_provider: "watsonx"} are no longer silently dropped at load time. No Watsonx
-     * model publishes cache rates today, so all Watsonx requests route through
-     * {@link SpanCostCalculator#textGenerationCost}.
-     */
-    @Test
-    void calculateCostHandlesWatsonxModels() {
-        // watsonx/openai/gpt-oss-120b: input 1.5e-07, output 6e-07
-        // 1000 * 1.5e-07 + 200 * 6e-07 = 0.00027
-        BigDecimal cost = CostService.calculateCost("watsonx/openai/gpt-oss-120b", "watsonx",
-                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
-
-        assertThat(cost).isEqualByComparingTo("0.00027");
+    private static Stream<Arguments> provideReplicateWatsonxProviderCases() {
+        return Stream.of(
+                // replicate/openai/o1: input 1.5e-05, output 6e-05 -> 1000*1.5e-05 + 200*6e-05 = 0.027
+                Arguments.of("replicate", "replicate/openai/o1", "0.027"),
+                // watsonx/openai/gpt-oss-120b: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("watsonx", "watsonx/openai/gpt-oss-120b", "0.00027"));
     }
 }
