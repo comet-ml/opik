@@ -2360,7 +2360,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             findGroupVersion(batchGroupId, datasetId, workspaceId)
                                     .flatMap(recheck -> {
                                         if (recheck.isPresent()) {
-                                            log.info(
+                                            log.debug(
                                                     "Version for batch_group_id '{}' was created concurrently; appending '{}' items",
                                                     batchGroupId, batch.items().size());
                                             return appendToGroupVersion(batch, datasetId, recheck.get().id(),
@@ -2381,9 +2381,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    /**
+     * Appends items into a version that already exists for this batch group, completing empty because the
+     * caller only mints a {@link DatasetVersion} on the create path.
+     * <p>
+     * Deferred on purpose: every current caller invokes this inside a {@code flatMap}, but returning an
+     * eagerly-assembled Mono is the shape that put the {@code latest} read outside the lock in
+     * {@code mutateLatestVersionWithInsert}. Deferring keeps this safe if it is ever passed directly to
+     * {@code withDatasetVersionLock}.
+     */
     private Mono<DatasetVersion> appendToGroupVersion(DatasetItemBatch batch, UUID datasetId, UUID versionId,
             String workspaceId, String userName) {
-        return insertItemsIntoVersion(batch, datasetId, versionId, workspaceId, userName)
+        return Mono.defer(() -> insertItemsIntoVersion(batch, datasetId, versionId, workspaceId, userName))
                 .then(Mono.<DatasetVersion>empty());
     }
 
