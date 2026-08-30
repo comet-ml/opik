@@ -503,6 +503,7 @@ areas:
       - datasets/dataset-items.spec.ts
       - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-version-counters.spec.ts
+      - datasets/dataset-version-concurrent-batches.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }

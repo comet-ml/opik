@@ -1,4 +1,4 @@
-export { test, expect } from './dashboard-cleanup.fixture';
+export { test, expect } from './concurrent-batch-dataset.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -105,4 +105,9 @@ export type {
   TraceAttachmentsFixtures,
 } from './trace-attachments.fixture';
 export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type {
+  ConcurrentBatchDatasetRef,
+  ConcurrentBatchDatasetFixtures,
+} from './concurrent-batch-dataset.fixture';
+export { BASELINE_ITEM_COUNT } from './concurrent-batch-dataset.fixture';
 export type { ProjectRef } from '../core/backend';
