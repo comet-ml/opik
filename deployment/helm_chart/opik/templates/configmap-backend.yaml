@@ -35,6 +35,14 @@ data:
          image's built-in default, and every downstream slice has a flag to flip without a chart
          change. An explicit key under component.backend.env wins over anything derived here. */}}
   {{- $env := $value.env | default dict }}
+  {{- /* The backend serves this at /is-alive/ver, and the Python SDK parses it as SemVer to gate
+         parallel dataset upload. Left unset it falls back to the literal "latest" (config.yml),
+         which fails to parse and silently downgrades num_threads to 1. Derived from the image tag
+         so there is no second source of truth, defaulting to the chart's AppVersion exactly as the
+         image reference itself does in deployment.yaml. */}}
+  {{- if not (hasKey $env "OPIK_VERSION") }}
+  OPIK_VERSION: {{ default $.Chart.AppVersion $value.image.tag | quote }}
+  {{- end }}
   {{- $da := $.Values.databaseAnalytics }}
   {{- $dm := $.Values.databaseAnalyticsDataModel }}
   {{- $pm := $.Values.partitionMetrics }}

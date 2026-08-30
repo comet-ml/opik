@@ -190,3 +190,40 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # OPIK_VERSION is served by the backend at /is-alive/ver and parsed as SemVer by the Python SDK
+  # to gate parallel dataset upload. Unset, it falls back to the literal "latest" (config.yml),
+  # which fails to parse and silently downgrades num_threads to 1. The assertion is deliberately a
+  # shape check rather than a literal: Chart.yaml bumps every release, so pinning the number here
+  # would turn each bump into a false failure.
+  - it: renders a parseable SemVer OPIK_VERSION by default
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - matchRegex:
+          path: data.OPIK_VERSION
+          pattern: ^[0-9]+\.[0-9]+\.[0-9]+
+
+  - it: derives OPIK_VERSION from an overridden backend image tag
+    set:
+      component.backend.image.tag: 9.8.7
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.OPIK_VERSION
+          value: "9.8.7"
+
+  - it: an explicit env OPIK_VERSION wins over the derived value
+    set:
+      component.backend.image.tag: 9.8.7
+      component.backend.env.OPIK_VERSION: 1.2.3
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.OPIK_VERSION
+          value: "1.2.3"
