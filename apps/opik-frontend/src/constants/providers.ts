@@ -104,7 +104,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "CUSTOM_PROVIDER_API_KEY",
     defaultModel: "",
     description:
-      "You can configure any OpenAI API-compatible provider (vLLM, \nOllama, etc.) using the standardized OpenAI API interface.",
+      "Any OpenAI-compatible Chat Completions host (e.g. vLLM). Use base URL ending in /v1 and model id custom-llm/<provider>/<model>.",
   },
 };
 
