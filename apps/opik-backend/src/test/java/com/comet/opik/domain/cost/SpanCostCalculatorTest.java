@@ -118,6 +118,33 @@ class SpanCostCalculatorTest {
                         noReasoningRate,
                         Map.of("prompt_tokens", 1000, "completion_tokens", 500,
                                 "completion_tokens_details.reasoning_tokens", 200),
+                        "20.00"),
+                // reasoning rate set but no reasoning_tokens key: reasoning is 0, all completion standard
+                // input = 10.00; completion = 500 * 0.02 = 10.00; total = 20.00
+                Arguments.of("reasoning rate set: reasoning_tokens key absent bills zero reasoning",
+                        withReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500),
+                        "20.00"),
+                // reasoning tokens equal to completion tokens: standard bucket clamps to 0
+                // input = 10.00; standard = 500 - 500 = 0; reasoning = 500 * 0.003 = 1.50; total = 11.50
+                Arguments.of("reasoning tokens equal completion tokens: standard bucket empties",
+                        withReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "completion_tokens_details.reasoning_tokens", 500),
+                        "11.50"),
+                // over-reported reasoning (200 > 100 completion): reasoning is clamped to the completion
+                // total so billing never exceeds it. input = 10.00; standard = 0; reasoning = 100 * 0.003 = 0.30
+                Arguments.of("over-reported reasoning tokens are clamped to the completion total",
+                        withReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "completion_tokens_details.reasoning_tokens", 200),
+                        "10.30"),
+                // negative reasoning is clamped to 0: no negative reasoning charge, completion stays whole
+                // input = 10.00; standard = 500 * 0.02 = 10.00; reasoning = 0; total = 20.00
+                Arguments.of("negative reasoning tokens are clamped to zero",
+                        withReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "completion_tokens_details.reasoning_tokens", -10),
                         "20.00"));
     }
 
