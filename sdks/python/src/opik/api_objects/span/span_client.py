@@ -292,6 +292,7 @@ class Span:
         value: float,
         category_name: Optional[str] = None,
         reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Log a feedback score for the span.
@@ -301,6 +302,7 @@ class Span:
             value: The value of the feedback score.
             category_name: The category name for the feedback score.
             reason: The reason for the feedback score.
+            metadata: Optional metadata persisted with the score (e.g. evaluator provenance).
 
         Returns:
             None
@@ -315,6 +317,7 @@ class Span:
                     reason=reason,
                     source=constants.FEEDBACK_SCORE_SOURCE_SDK,
                     project_name=self._project_name,
+                    metadata=metadata,
                 )
             ],
         )
