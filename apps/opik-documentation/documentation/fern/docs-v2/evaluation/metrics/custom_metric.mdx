@@ -372,6 +372,12 @@ For evaluating multi-turn conversations and dialogue systems, you'll need specia
 
 Learn how to create custom conversation metrics in the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric).
 
+## Using your custom metric in production
+
+Custom metrics are not limited to offline evaluation. Once a custom metric scores your production traces, you can also **alert** on it: Opik's feedback score alerts threshold on a score *name*, and any score logged to a project is eligible, whether Opik computed it or you did.
+
+You can either run your metric as a custom [online evaluation rule](/production/online-evaluation/rules), or keep the metric code in your own pipeline and push the score to the trace with `client.log_traces_feedback_scores(...)`. Either way, the score name becomes selectable when you configure a feedback score alert. See [Alerting on custom metrics](/production/alerts/alerts#alerting-on-custom-metrics).
+
 ## What's next
 
 Creating custom metrics is just the beginning of building a comprehensive evaluation system for your LLM applications. In this guide, you've learned how to create custom metrics using different approaches, from simple metrics to sophisticated LLM-as-a-judge implementations, including specialized conversation thread metrics for multi-turn dialogue evaluation.
@@ -381,3 +387,4 @@ From here, you might want to:
 - **Evaluate your LLM application** following the [Evaluate your LLM application](/evaluation/advanced/evaluate_your_llm) guide
 - **Evaluate conversation threads** using the [Evaluate Threads guide](/evaluation/evaluate_threads)
 - **Explore built-in metrics** in the [Metrics overview](/evaluation/metrics/overview)
+- **Alert on your custom metric in production** with [feedback score alerts](/production/alerts/alerts#alerting-on-custom-metrics)

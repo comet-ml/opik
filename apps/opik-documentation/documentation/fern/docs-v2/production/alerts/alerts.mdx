@@ -69,7 +69,7 @@ Opik provides three destination types for alerts:
      - **Threshold**: Set the threshold value that triggers the alert
      - **Operator**: Choose comparison operator (`>`, `<`) for feedback score alerts
      - **Window**: Configure the time window in seconds for metric aggregation
-     - **Feedback Score Name**: Select which feedback score to monitor (for feedback score alerts only)
+     - **Feedback Score Name**: Select which feedback score to monitor (for feedback score alerts only). This list is not limited to Opik's built-in metrics — it contains every feedback score name logged to the project, so you can alert on your own custom metrics in exactly the same way. See [Alerting on custom metrics](#alerting-on-custom-metrics).
 
 6. **Test your configuration**
    - Click "Test connection" to send a sample webhook
@@ -326,6 +326,37 @@ Opik supports ten types of alert events:
 - **Configuration**: Requires feedback score name, threshold value, operator (`>`, `<`), and time window
 - **Payload**: Metrics alert payload with average feedback score details
 - **Use case**: Monitor conversation quality, track multi-turn interactions, detect thread satisfaction issues
+
+#### Alerting on custom metrics
+
+The two feedback score events above are not restricted to Opik's built-in metrics. They threshold on a feedback score **name**, and any score logged to your project is eligible — including custom metrics you define yourself. Opik does not care which system produced the score.
+
+There are two ways to get a custom metric's scores onto your production traces:
+
+1. **Run it as an [online evaluation rule](/production/online-evaluation/rules).** Custom LLM as a Judge and custom Python code metrics both write feedback scores under the name you give them, which then becomes selectable in the alert's **Feedback Score Name** field.
+2. **Score in your own pipeline and push the result to Opik.** Keep your [custom metric](/evaluation/metrics/custom_metric) code wherever you like — your application, a scheduled job, your CI — and attach the score to the trace, span or thread:
+
+   ```python
+   metric = MyCustomMetric()
+   result = metric.score(input=..., output=...)
+
+   client.log_traces_feedback_scores(
+       [{"id": trace_id, "name": "policy_compliance", "value": result.value, "reason": result.reason}]
+   )
+   ```
+
+   `log_spans_feedback_scores` and `log_threads_feedback_scores` do the same for spans and threads, and `opik_context.update_current_trace(feedback_scores=[...])` works inline inside a tracked function. From any other language, use the `PUT /v1/private/traces/feedback-scores` REST endpoint. Use this path when you want full control over the metric logic, the model it uses (if any), and its cost.
+
+Scores added by human review — in the traces sidebar or through an annotation queue — are also feedback scores, and are alertable in exactly the same way.
+
+<Note>
+  A feedback score name only appears in the **Feedback Score Name** dropdown once at least one score with that name has been logged to the project. If you have just defined a custom metric, log one score before creating the alert.
+</Note>
+
+Two limits are worth knowing when planning an alert on a custom metric:
+
+- **The score must be attached to a trace, span or thread.** Metrics computed purely offline as part of an experiment (via `evaluate()`) cannot be thresholded — the only experiment-related event is `experiment:finished`, which reports completion and carries no threshold. To alert on a metric value, the metric has to score production data.
+- **Set the time window wider than your scoring cadence.** Alerts are evaluated on a recurring job and compare the *average* score within the window. If a window contains no scores the alert is skipped rather than fired, so a nightly batch scoring job paired with a one-hour window will rarely fire.
 
 **Guardrails triggered**
 - **Event type**: `trace:guardrails_triggered`
