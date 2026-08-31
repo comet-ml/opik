@@ -151,7 +151,9 @@
 #                             source's. The whole-node --min-free-factor check cannot see per-volume headroom, and new
 #                             parts land on the hot volume before they tier; this asserts the operator validated hot
 #                             headroom out of band. (No effect on a single-volume/default policy.)
-#   --state-file PATH         file the captured backfill_start is written to and reused from. On resume the ORIGINAL
+#   --state-file PATH         file the captured backfill_start is written to and reused from, stored with an explicit
+#                             ' UTC' marker and only accepted with it — step 2 parses the anchor as UTC, so one captured
+#                             in another zone would shift it silently. On resume the ORIGINAL
 #                             anchor is kept; re-minting a later one would miss deletes that fired during the first run
 #                             against already-copied rows. Default ./traces_cutover_backfill_start — note this is
 #                             CWD-RELATIVE, so resuming from a different directory would not find it; pass an absolute
@@ -550,9 +552,29 @@ preflight_capacity
 if [[ "$DRY_RUN" != "1" ]]; then
     if [[ -s "$STATE_FILE" ]]; then
         BACKFILL_START="$(cat "$STATE_FILE")"
-        # Validate the resumed content: the state file is operator-owned, so a corrupted or wrong file would otherwise
-        # feed a garbage anchor forward to step 2. Fail fast unless it is a well-formed timestamp.
-        [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff]')." >&2; exit 1; }
+        # The anchor is stored with an explicit ' UTC' marker and is only accepted with it. The marker is not
+        # decoration: step 2 parses this value AS UTC, so a value captured in some other zone silently shifts the
+        # anchor, and a LATER anchor drops the writes and deletes in the gap from both the delta and the replay.
+        # A file without the marker cannot be attributed to a timezone, so it is refused rather than reinterpreted.
+        case "$BACKFILL_START" in
+            *" UTC")
+                BACKFILL_START="${BACKFILL_START% UTC}"
+                ;;
+            *)
+                echo "ERROR: $STATE_FILE holds an anchor with no ' UTC' marker, so the timezone it was captured in" >&2
+                echo "       cannot be established. Step 2 reads it as UTC; if it was captured server-local on a" >&2
+                echo "       non-UTC server, the anchor moves by that offset and the delta and deletion replay both" >&2
+                echo "       miss the rows written in the gap." >&2
+                echo "       If you can confirm it was taken on a UTC server, re-record it explicitly:" >&2
+                echo "         printf '%s UTC' '<anchor>' > '$STATE_FILE'" >&2
+                echo "       Otherwise restart the copy cleanly (discards the partial shadow):" >&2
+                echo "         ./rollback.sh --database $DATABASE --stage A" >&2
+                exit 1
+                ;;
+        esac
+        # Shape check, after the marker: the file is operator-owned, so a corrupted value would otherwise feed a
+        # garbage anchor forward to step 2.
+        [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff] UTC')." >&2; exit 1; }
         log "REUSING backfill_start=$BACKFILL_START from $STATE_FILE (resume: original anchor kept)"
     else
         # Refuse to mint a FRESH anchor onto a destination that already holds rows. That combination is contradictory:
@@ -578,7 +600,7 @@ if [[ "$DRY_RUN" != "1" ]]; then
         # other timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
         # This is also why the persisted anchor is only reusable by this same revision of the driver.
         BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
-        printf '%s' "$BACKFILL_START" > "$STATE_FILE"
+        printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE"
         log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this to step 2: 000002_delta_and_deletion_replay.sql)"
     fi
 fi

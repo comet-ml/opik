@@ -1475,6 +1475,45 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * The tie aggregate's POSITIVE branch: a key whose newest version is shared by more than one row is counted, and one
+     * whose newest version is unique is not, however many older versions it has.
+     *
+     * <p>Evaluated over a literal relation rather than a table, which is the only way this branch can be reached
+     * deterministically. Holding two rows with an identical version needs a {@code ReplacingMergeTree} not to merge
+     * them, and nothing here can guarantee that: {@code traces} is unpartitioned, and the successor's partition key is
+     * {@code MATERIALIZED} from the row's own id, so two rows for one key always share a partition and stay merge
+     * candidates. The relation stands in for the per-version row counts the shipped block derives from the table; the
+     * scan that produces them, and its scoping, is covered against the real tables by
+     * {@link #versionTiesDoesNotCountAKeyWhoseNewestVersionIsUnique()}.
+     *
+     * <p>The three keys separate ranking from totalling: {@code tied} has two rows at its newest version, {@code deep}
+     * has more rows overall but only one at its newest, and {@code single} has one row. Only {@code tied} counts, so
+     * summing or taking a plain maximum instead of {@code argMax} over the version fails here.
+     */
+    @Test
+    void versionTieAggregateCountsOnlyASharedNewestVersion() {
+        var ties = scalar("""
+                SELECT count() AS c
+                FROM (
+                    SELECT key, argMax(rows_at_version, version) AS rows_at_newest
+                    FROM (
+                        SELECT key, version, count() AS rows_at_version
+                        FROM VALUES('key String, version UInt32',
+                                    ('tied', 2), ('tied', 2), ('tied', 1),
+                                    ('deep', 2), ('deep', 1), ('deep', 1),
+                                    ('single', 1))
+                        GROUP BY key, version
+                    )
+                    GROUP BY key
+                )
+                WHERE rows_at_newest > 1
+                """, statement -> {
+        });
+
+        assertThat(ties).as("only the key whose NEWEST version is shared counts as tied").isEqualTo(1);
+    }
+
+    /**
      * The {@code version-ties} block must not count a key merely because it has SEVERAL versions — only one whose NEWEST
      * version is shared by more than one row. That distinction is the whole content of the aggregate: ranking by version
      * rather than totalling rows. A key written twice with distinct {@code last_updated_at} exercises it, on both sides

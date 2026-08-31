@@ -376,15 +376,20 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- every key had a unique winner, so FINAL's choice was forced and the artifact verdict stands. Non-zero means FINAL
 -- chose arbitrarily somewhere in this window, and ../verify.sh reports it as INCONCLUSIVE instead of passing it.
 --
--- A SEPARATE statement, and scoped to the WINDOW rather than to confirm-keys' differing keys, which would be the
--- tighter question. Both follow from the same constraint: confirm-keys builds its answer from CTEs that ClickHouse
--- inlines rather than materializes, so referencing them from an aggregate here re-runs its FULL OUTER JOIN per
--- reference, and that plan does not complete. Keeping this independent also means it is only paid for when it is
--- needed, which is when confirm-keys returns 0.
+-- SCOPING MATTERS, and it has to match confirm-keys. That block picks candidate keys from the window but then reads
+-- each key's versions with NO window at all, so FINAL there ranks every version of the key wherever it landed. The
+-- tie that can mislead it is therefore any tie among a candidate key's versions -- not only the ones inside this
+-- window. A key re-sent far enough apart lands equal-version rows in different created_at weeks, so a window-scoped
+-- version scan would see one row per version, report no tie, and certify a verdict FINAL had in fact drawn
+-- arbitrarily. So candidates come from the window and the sample; the version scan does not.
 --
--- The counts are therefore an UPPER BOUND: a tie elsewhere in the window counts too, and can make a window
--- undecidable whose differing keys were all decidable. That direction is the safe one, and a tie requires a key
--- written twice with an identical last_updated_at.
+-- A SEPARATE statement rather than extra columns on confirm-keys: that block builds its answer from CTEs ClickHouse
+-- inlines rather than materializes, so an aggregate referencing them re-runs its FULL OUTER JOIN per reference.
+-- Deriving candidates directly here keeps this self-contained, and it is only paid for when confirm-keys returns 0.
+--
+-- The counts remain an UPPER BOUND on ties among the DIFFERING keys, since the candidates are every key in the
+-- window rather than only those that differed. That direction is the safe one: it can refuse to certify a window
+-- whose differing keys were all decidable, and never the reverse.
 --
 -- NO FINAL, deliberately: the question is how many physical rows share the newest version, which is precisely what
 -- FINAL would have to choose between -- under FINAL they collapse to one and every count reads 0. The deleted-row mask
@@ -401,9 +406,13 @@ SELECT
                     last_updated_at AS version,
                     count() AS rows_at_version
                 FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
-                WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
-                  AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-                  AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                WHERE (workspace_id, project_id, id) IN (
+                    SELECT (workspace_id, project_id, id)
+                    FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+                    WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+                      AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
+                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                )
                 GROUP BY key, version
             )
             GROUP BY key
@@ -420,9 +429,13 @@ SELECT
                     last_updated_at AS version,
                     count() AS rows_at_version
                 FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
-                WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
-                  AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
-                  AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                WHERE (workspace_id, project_id, id) IN (
+                    SELECT (workspace_id, project_id, id)
+                    FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
+                    WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+                      AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
+                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                )
                 GROUP BY key, version
             )
             GROUP BY key
