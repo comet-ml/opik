@@ -787,3 +787,15 @@ For large bulk operations:
   For very large datasets, bulk operations are processed in batches. The UI remains
   responsive during processing, and you'll see progress indicators for long-running operations.
 </Tip>
+<Tip>
+  **Recommended if you build with an AI coding assistant.** Assembling a dataset by hand is the
+  slowest part of setting up an evaluation. One command — `opik configure` — installs both the
+  [MCP server](/mcp-server) and the Opik skills, and your assistant can then create the dataset and
+  fill it in for you — writing the first cases from scratch, or, if you are already logging traces,
+  pulling them from the ones that scored badly.
+
+  An example prompt:
+
+  *"Build an Opik dataset from the traces scored below 0.7 on answer relevance, fill in the expected
+  answers, then evaluate my agent against it."*
+</Tip>
