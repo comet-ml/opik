@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
+import com.comet.opik.infrastructure.bundle.JsonUtilsConfigurationBundle;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.cache.CacheModule;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
@@ -50,7 +51,6 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
-import io.dropwizard.core.ConfiguredBundle;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 import io.dropwizard.forms.MultiPartBundle;
@@ -95,21 +95,10 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .migrationsFileName(DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME)
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
-        // MUST run before the GuiceBundle below. Redisson's codecs capture JsonUtils' mapper while the
-        // Guice injector is built, which happens in the bundle run phase — before Application.run().
-        // RedisConfig holds it by reference and RedisStreamCodec memoizes a copy, while
-        // JsonUtils.configure() *replaces* the static mapper, so a holder that captured it earlier keeps
-        // Jackson's defaults (maxStringLength 20_000_000) for the life of the process no matter what
-        // JACKSON_MAX_STRING_LENGTH says. An entry over that default can be written to a Redis stream but
-        // never read back, and the decode fails inside Redisson below our error handling — no messageId,
-        // so the entry is never acked or removed and the stream wedges permanently.
-        bootstrap.addBundle(new ConfiguredBundle<OpikConfiguration>() {
-            @Override
-            public void run(OpikConfiguration configuration, Environment environment) {
-                JsonUtils.configure(configuration.getJacksonConfig().getMaxStringLength(),
-                        configuration.getJacksonConfig().getMaxDocumentLength());
-            }
-        });
+        // MUST be registered before the GuiceBundle below: the Redisson codecs capture JsonUtils'
+        // mapper while the Guice injector is built, and configure() replaces that mapper rather than
+        // mutating it. See JsonUtilsConfigurationBundle for the full reasoning.
+        bootstrap.addBundle(new JsonUtilsConfigurationBundle());
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle
                         .<OpikConfiguration>forDatabase(
