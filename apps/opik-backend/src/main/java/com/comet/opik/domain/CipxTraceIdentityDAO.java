@@ -52,6 +52,12 @@ public class CipxTraceIdentityDAO {
             int schemaVersion,
             @NonNull String billingMode,
             @NonNull String plan,
+            /** The proxy's reduced subscription usage state: 'within' | 'over' | 'blocked' | ''.
+             * 'over' is a spent rate-limit window the org IS billed for as overage; 'blocked' is a
+             * spent window it is NOT billed for (throttled, never charged), so it is seat-covered
+             * exactly like 'within'. Readers must therefore match 'over' alone — a "not within"
+             * test prices throttled calls as overage. Migration 000104 documents the pre-'blocked'
+             * list and cannot be corrected (Liquibase checksum), so this is the current one. */
             @NonNull String planUsageStatus,
             @NonNull String organizationType,
             @NonNull String seatTier,
