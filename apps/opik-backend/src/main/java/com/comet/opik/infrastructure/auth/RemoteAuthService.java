@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -117,7 +118,8 @@ class RemoteAuthService implements AuthService {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record WorkspaceIdNameResponse(String workspaceId, String workspaceName) {
+    record WorkspaceIdNameResponse(String workspaceId, String workspaceName,
+            @JsonProperty("default") boolean isDefault) {
     }
 
     @Builder(toBuilder = true)
@@ -224,6 +226,7 @@ class RemoteAuthService implements AuthService {
                     .map(workspace -> WorkspaceInfo.builder()
                             .id(workspace.workspaceId())
                             .name(workspace.workspaceName())
+                            .isDefault(workspace.isDefault())
                             .build())
                     .toList();
         }

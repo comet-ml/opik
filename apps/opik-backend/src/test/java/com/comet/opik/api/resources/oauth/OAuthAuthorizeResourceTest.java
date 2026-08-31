@@ -216,6 +216,27 @@ class OAuthAuthorizeResourceTest {
     }
 
     @Test
+    @DisplayName("GET /authorize/context: exposes the default workspace flag the consent UI preselects on")
+    void context_exposesDefaultWorkspaceFlag() {
+        mockClientResolution();
+        when(authService.listEligibleWorkspaces(any())).thenReturn(List.of(
+                WorkspaceInfo.builder().id("ws-1").name("staging").isDefault(false).build(),
+                WorkspaceInfo.builder().id("ws-2").name("production").isDefault(true).build()));
+
+        try (Response response = EXT.target(CONTEXT_PATH)
+                .queryParam(PARAM_CLIENT_ID, CLIENT_ID)
+                .queryParam(PARAM_REDIRECT_URI, REDIRECT_URI)
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, "sess")
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
+            assertThat(response.readEntity(String.class))
+                    .contains("\"id\":\"ws-1\"", "\"id\":\"ws-2\"", "\"is_default\":false", "\"is_default\":true");
+        }
+    }
+
+    @Test
     @DisplayName("GET /authorize/context: secure cookie flag tracks baseUrl scheme (http → false)")
     void context_httpBaseUrl_setsSecureCookieFalse() {
         opikConfig.getMcpOAuth().setBaseUrl("http://localhost:5173");

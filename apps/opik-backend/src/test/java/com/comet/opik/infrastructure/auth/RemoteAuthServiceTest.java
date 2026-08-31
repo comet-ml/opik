@@ -606,12 +606,12 @@ class RemoteAuthServiceTest {
     @Test
     void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
-        var production = podamFactory.manufacturePojo(WorkspaceInfo.class);
-        var staging = podamFactory.manufacturePojo(WorkspaceInfo.class);
+        var production = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(false).build();
+        var staging = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(true).build();
         var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
-                Map.of("workspaceId", production.id(), "workspaceName", production.name()),
-                Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME),
-                Map.of("workspaceId", staging.id(), "workspaceName", staging.name())));
+                Map.of("workspaceId", production.id(), "workspaceName", production.name(), "default", false),
+                Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME, "default", false),
+                Map.of("workspaceId", staging.id(), "workspaceName", staging.name(), "default", true)));
         WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
                 .withQueryParam("withoutExtendedData", equalTo("true"))
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
@@ -620,6 +620,22 @@ class RemoteAuthServiceTest {
         var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
 
         assertThat(result).containsExactly(production, staging);
+    }
+
+    @Test
+    void testListEligibleWorkspaces__whenDefaultFlagIsAbsent__thenNoWorkspaceIsDefault()
+            throws JsonProcessingException {
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        var workspace = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(false).build();
+        var responseJson = OBJECT_MAPPER.writeValueAsString(List.of(
+                Map.of("workspaceId", workspace.id(), "workspaceName", workspace.name())));
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
+                .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
+                .willReturn(okJson(responseJson)));
+
+        var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
+
+        assertThat(result).containsExactly(workspace);
     }
 
     @Test
