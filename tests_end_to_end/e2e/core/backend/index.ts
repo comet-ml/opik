@@ -7,6 +7,7 @@ export {
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
   type DatasetVersionRef,
+  type CompareItemRef,
   type RawApiResult,
   type BackendSort,
   type MetricSeries,
@@ -33,6 +34,7 @@ export {
   type StatPercentiles,
   type ThreadStatValue,
   numericStat,
+  requireTimestamp,
   type BackendFilter,
   type ReadWindow,
 } from './client';
