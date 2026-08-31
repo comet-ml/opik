@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.infrastructure.JacksonConfig;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
@@ -83,7 +84,8 @@ class OnlineScorePublisherTest {
         when(redisClient.getStream(anyString(), any())).thenReturn(stream);
         when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(System.currentTimeMillis(), 0)));
         return new OnlineScorePublisherImpl(
-                onlineScoringConfig, serviceTogglesConfig, redisClient, automationRuleEvaluatorService);
+                onlineScoringConfig, serviceTogglesConfig, new JacksonConfig(), redisClient,
+                automationRuleEvaluatorService);
     }
 
     private StreamAddParams<Object, Object> captureStreamAddParams() {

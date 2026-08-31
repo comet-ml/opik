@@ -7,11 +7,15 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.infrastructure.JacksonConfig;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -56,6 +60,22 @@ public interface OnlineScorePublisher {
     Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type);
 
     /**
+     * Whether this message is too large for the consumer to decode, and so would be dropped by
+     * {@link #enqueueMessage(List, AutomationRuleEvaluatorType)} rather than published.
+     *
+     * <p>Callers that keep their own bookkeeping against an enqueued message - a per-experiment assertion
+     * counter, a sampling decision metric - must check this first and compensate, because the enqueue
+     * itself completes successfully whether or not the message was actually written.
+     *
+     * <p>Always false unless {@code onlineScoring.dropOversizedPayloads} is enabled: with the guard off
+     * nothing is dropped, so there is nothing to compensate for.
+     *
+     * @param message the message that would be enqueued
+     * @return true when the message exceeds the payload limit
+     */
+    boolean exceedsPayloadLimit(@NonNull Object message);
+
+    /**
      * Enqueues a thread message for scoring based on the provided rule. The returned publisher must be subscribed
      * for the enqueue to happen.
      *
@@ -97,19 +117,39 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     private final Map<AutomationRuleEvaluatorType, OnlineScoringStreamConfigurationAdapter> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final LongCounter enqueueCounter;
+    private final long maxPayloadBytes;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
+            @NonNull @Config("jacksonConfig") JacksonConfig jacksonConfig,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        // Ceiling for the oversized-payload guard. maxDocumentLength <= 0 means unlimited, in which case
+        // the consumer's reader has no document limit either.
+        long configuredLimit = jacksonConfig.getMaxDocumentLength() > 0
+                ? jacksonConfig.getMaxDocumentLength()
+                : Long.MAX_VALUE;
+        // Long.MAX_VALUE means "no guard", the default: dropping a message costs an evaluation, so it is
+        // opt-in and enqueue behaviour is unchanged until an operator turns it on.
+        // When on, hold the conservative bound. A consumer still running a build without the codec-init fix
+        // decodes at Jackson's default, and a message above that default strands on such a pod exactly as
+        // before this fix - it fails inside Redisson, no messageId reaches processMessage, and it can never
+        // be acked or removed. Measuring total serialized size also bounds every individual string in the
+        // message, so nothing we write can trip either reader constraint.
+        this.maxPayloadBytes = config.isDropOversizedPayloads()
+                ? Math.min(configuredLimit, StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
+                : Long.MAX_VALUE;
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
-                        + "result (success|error). result=error counts publish failures that were previously only logged.")
+                        + "result (success|error|skipped_too_large). result=error counts publish failures that "
+                        + "were previously only logged; result=skipped_too_large counts messages refused because "
+                        + "they exceed what the consumer can decode, and is only ever non-zero when "
+                        + "onlineScoring.dropOversizedPayloads is enabled.")
                 .build();
         this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
@@ -139,6 +179,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
+            var tooLargeAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
+                    WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "skipped_too_large");
             return Flux.fromIterable(messages)
                     // Stamp the workspace name resolved from the reactive context onto messages that don't
                     // already carry one, so async consumers and their per-workspace metrics get a real name.
@@ -149,6 +191,26 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             && StringUtils.isNotBlank(ctxWorkspaceName)
                                     ? scoped.withWorkspaceName(ctxWorkspaceName)
                                     : message)
+                    // When onlineScoring.dropOversizedPayloads is on, refuse to enqueue anything the consumer
+                    // could not read back. Jackson has no serialization-side limit, so without this check an
+                    // oversized message is written happily and then fails to decode on read — inside Redisson,
+                    // with no messageId, which means it can never be acked or removed and wedges the stream for
+                    // good. Skipping one evaluation is strictly better than losing the stream.
+                    .filterWhen(message -> Mono.fromCallable(() -> {
+                        if (maxPayloadBytes == Long.MAX_VALUE) {
+                            return true; // guard off; don't pay for serializing to measure
+                        }
+                        long size = serializedSize(message);
+                        if (size <= maxPayloadBytes) {
+                            return true;
+                        }
+                        enqueueCounter.add(1, tooLargeAttrs);
+                        log.error(
+                                "Skipping online scoring: payload of '{}' bytes exceeds the '{}' byte payload "
+                                        + "limit, evaluatorType '{}', workspaceId '{}'",
+                                size, maxPayloadBytes, type.getType(), workspaceId);
+                        return false;
+                    }))
                     .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> {
@@ -163,6 +225,26 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 // Run the enqueue (Redis stream writes) off the caller's thread — e.g. the EventBus thread for
                 // the samplers — on a bounded worker pool.
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public boolean exceedsPayloadLimit(@NonNull Object message) {
+        return maxPayloadBytes != Long.MAX_VALUE && serializedSize(message) > maxPayloadBytes;
+    }
+
+    /**
+     * Serialized size of a message as the stream codec would write it. Returns 0 when the message can't be
+     * serialized at all, so the enqueue proceeds and fails (and is counted) on the normal error path rather
+     * than being silently dropped here.
+     */
+    private long serializedSize(Object message) {
+        try {
+            return JsonUtils.getMapper().writeValueAsBytes(message).length;
+        } catch (JsonProcessingException exception) {
+            // Deliberately not logged: the enqueue proceeds and the same failure surfaces once, at error
+            // level with the counter incremented, from stream.add's doOnError below.
+            return 0L;
+        }
     }
 
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,
