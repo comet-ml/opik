@@ -14,6 +14,7 @@ import {
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
 } from './poll-optimization-status';
+import { uuidV7 } from './ids';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -276,6 +277,32 @@ export interface OptimizationRef {
    */
   baselineObjectiveScore: number | null;
   bestObjectiveScore: number | null;
+  /**
+   * Whole-run spend: the trial experiments' cost plus optimizer-internal traces
+   * attributed to the run by tag, deduplicated against the trials
+   * (`Optimization.total_optimization_cost`). This is the figure the run page's
+   * "Optimization cost" card and the runs list's "Opt. cost" column render, and
+   * it can legitimately exceed the sum of the run's trials. `null` only when the
+   * backend omits it (a build older than 2.2.28); the aggregate itself answers 0
+   * rather than null when there is nothing to report.
+   */
+  totalOptimizationCost: number | null;
+}
+
+/** The experiment fields the optimization cost aggregate is built out of. */
+export interface ExperimentDetail {
+  id: string;
+  name: string;
+  /** `regular` | `trial` | `mini-batch` | `mutation` — trials are what an optimization rolls up. */
+  type: string | null;
+  optimizationId: string | null;
+  totalEstimatedCost: number | null;
+}
+
+/** One experiment item, linking a dataset item to the trace that answered it. */
+export interface ExperimentItemLink {
+  datasetItemId: string;
+  traceId: string;
 }
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
@@ -402,21 +429,39 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     apiUrl: env.apiBaseUrl,
   });
 
+  /**
+   * Shared by the getById and the list read paths on purpose: the backend
+   * computes the same fields through two different queries (`FIND` vs
+   * `FIND_WITHOUT_EXPERIMENTS`), and a spec comparing them must not be comparing
+   * two different mappings as well.
+   */
+  const toOptimizationRef = (o: {
+    id?: string;
+    name?: string;
+    status: unknown;
+    objectiveName?: string;
+    datasetName?: string;
+    numTrials?: number;
+    baselineObjectiveScore?: number;
+    bestObjectiveScore?: number;
+    totalOptimizationCost?: number;
+  }): OptimizationRef => ({
+    id: String(o.id),
+    name: o.name ?? '',
+    status: String(o.status) as OptimizationStatus,
+    objectiveName: o.objectiveName ?? null,
+    datasetName: o.datasetName ?? null,
+    numTrials: Number(o.numTrials ?? 0),
+    baselineObjectiveScore: o.baselineObjectiveScore ?? null,
+    bestObjectiveScore: o.bestObjectiveScore ?? null,
+    totalOptimizationCost: o.totalOptimizationCost ?? null,
+  });
+
   // Hoisted so the poll helpers (free functions) can call it without depending
   // on the not-yet-constructed return object.
   const localGetOptimization = async (id: string): Promise<OptimizationRef | null> => {
     try {
-      const o = await opik.api.optimizations.getOptimizationById(id);
-      return {
-        id: String(o.id),
-        name: o.name ?? '',
-        status: String(o.status) as OptimizationStatus,
-        objectiveName: o.objectiveName ?? null,
-        datasetName: o.datasetName ?? null,
-        numTrials: Number(o.numTrials ?? 0),
-        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
-        bestObjectiveScore: o.bestObjectiveScore ?? null,
-      };
+      return toOptimizationRef(await opik.api.optimizations.getOptimizationById(id));
     } catch (err) {
       if (isNotFoundError(err)) return null;
       throw err;
@@ -1266,6 +1311,67 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
+    /**
+     * Create an experiment directly, and return its id. `type: 'trial'` plus an
+     * `optimizationId` is what makes it one of an optimization run's trials, and
+     * therefore what the run's cost aggregate sums over.
+     *
+     * The experiment carries no cost of its own — its `totalEstimatedCost` is
+     * derived from the spans of the traces linked to it, so seeding a priced
+     * trial means creating a priced trace and calling `linkExperimentItems`.
+     */
+    async createExperiment(args: {
+      name: string;
+      datasetName: string;
+      projectId: string;
+      optimizationId?: string;
+      type?: 'regular' | 'trial' | 'mini-batch' | 'mutation';
+      status?: 'running' | 'completed' | 'cancelled';
+    }): Promise<string> {
+      const id = uuidV7();
+      await opik.api.experiments.createExperiment({
+        id,
+        name: args.name,
+        datasetName: args.datasetName,
+        projectId: args.projectId,
+        ...(args.optimizationId ? { optimizationId: args.optimizationId } : {}),
+        type: (args.type ?? 'regular') as never,
+        status: (args.status ?? 'completed') as never,
+      });
+      return id;
+    },
+
+    /** Link traces to an experiment as its items — one item per dataset item answered. */
+    async linkExperimentItems(args: {
+      experimentId: string;
+      links: ExperimentItemLink[];
+    }): Promise<void> {
+      await opik.api.experiments.createExperimentItems({
+        experimentItems: args.links.map((link) => ({
+          id: uuidV7(),
+          experimentId: args.experimentId,
+          datasetItemId: link.datasetItemId,
+          traceId: link.traceId,
+        })),
+      });
+    },
+
+    async getExperiment(id: string): Promise<ExperimentDetail | null> {
+      try {
+        const e = await opik.api.experiments.getExperimentById(id);
+        return {
+          id: String(e.id),
+          name: e.name ?? '',
+          type: e.type ? String(e.type) : null,
+          optimizationId: e.optimizationId ? String(e.optimizationId) : null,
+          totalEstimatedCost: e.totalEstimatedCost ?? null,
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
     async deleteExperiment(id: string): Promise<void> {
       try {
         await opik.api.experiments.deleteExperimentsById({ ids: [id] });
@@ -1748,6 +1854,56 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     getOptimization: localGetOptimization,
+
+    /**
+     * Create an optimization run directly, and return its id.
+     *
+     * `projectId` is not optional here even though the API allows omitting it:
+     * the cost aggregate prunes its span scan to the project ids of the
+     * optimizations in scope, so a run written without one reads back a cost of
+     * 0 whatever its traces cost — a seed that silently asserts nothing.
+     */
+    async createOptimization(args: {
+      name: string;
+      datasetName: string;
+      projectId: string;
+      objectiveName?: string;
+      status?: OptimizationStatus;
+    }): Promise<string> {
+      const id = uuidV7();
+      await opik.api.optimizations.createOptimization({
+        id,
+        name: args.name,
+        datasetName: args.datasetName,
+        projectId: args.projectId,
+        objectiveName: args.objectiveName ?? 'equals',
+        status: (args.status ?? 'completed') as never,
+      });
+      return id;
+    },
+
+    /**
+     * Optimization runs matching a scope — the read path behind the runs list.
+     * `projectId` narrows to one project's runs (`?project_id=`), `name` matches
+     * a substring of the run name across the workspace; passing neither lists
+     * the workspace.
+     *
+     * Worth knowing when asserting on the result: the backend answers a
+     * project-scoped read with a *different query* depending on whether any run
+     * in scope has an experiment, and only one of those two queries is the one
+     * `getOptimization` uses. That divergence is exactly what a spec should be
+     * checking, so this deliberately does not paper over it.
+     */
+    async listOptimizations(
+      args: { projectId?: string; name?: string; size?: number } = {},
+    ): Promise<OptimizationRef[]> {
+      const page = await opik.api.optimizations.findOptimizations({
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+        ...(args.name ? { name: args.name } : {}),
+        size: args.size ?? 100,
+      });
+      return (page.content ?? []).map(toOptimizationRef);
+    },
 
     async pollOptimizationStatus(
       optimizationId: string,
