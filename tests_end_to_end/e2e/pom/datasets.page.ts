@@ -28,6 +28,35 @@ export class DatasetsPage {
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
   }
 
+  /** Every rendered dataset row — the count a spec asserts the page is complete by. */
+  get datasetRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /**
+   * A row addressed by dataset id (the DataTable's `data-row-id`) rather than
+   * by name. Preferred when the spec already holds the id from a fixture: it
+   * cannot match a second dataset whose name merely contains this one.
+   */
+  datasetRowById(datasetId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${datasetId}"]`);
+  }
+
+  columnHeader(label: string): Locator {
+    return this.page.getByRole('columnheader', { name: label, exact: true });
+  }
+
+  /**
+   * The "Item count" cell of a dataset's row, addressed by the table's own
+   * `data-cell-id` (`<rowId>_<columnId>`). The rows carry no per-cell testid
+   * and column order is user-configurable and persisted in localStorage, so a
+   * positional nth() would be neither stable nor portable. `dataset_items_count`
+   * is the column id DatasetListPage.tsx declares for it.
+   */
+  itemCountCell(datasetId: string): Locator {
+    return this.datasetRowById(datasetId).locator('[data-cell-id$="_dataset_items_count"]');
+  }
+
   async openDatasetByName(name: string): Promise<DatasetItemsPage> {
     if (!this.projectId) {
       throw new Error('DatasetsPage.openDatasetByName: call goto(projectId) first');

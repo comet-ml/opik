@@ -50,6 +50,32 @@ export class TestSuitesPage {
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
   }
 
+  /** Every rendered suite row — the count a spec asserts the page is complete by. */
+  get testSuiteRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /**
+   * A row addressed by suite id (the DataTable's `data-row-id`) rather than by
+   * name, so it cannot match a second suite whose name merely contains this one.
+   */
+  testSuiteRowById(suiteId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${suiteId}"]`);
+  }
+
+  columnHeader(label: string): Locator {
+    return this.page.getByRole('columnheader', { name: label, exact: true });
+  }
+
+  /**
+   * The "Item count" cell of a suite's row, addressed by the table's own
+   * `data-cell-id` (`<rowId>_<columnId>`). Test suites render through the same
+   * shared grid as datasets, so the column id is `dataset_items_count` here too.
+   */
+  itemCountCell(suiteId: string): Locator {
+    return this.testSuiteRowById(suiteId).locator('[data-cell-id$="_dataset_items_count"]');
+  }
+
   async openTestSuiteByName(name: string): Promise<TestSuiteItemsPage> {
     return test.step(`Open test suite "${name}"`, async () => {
       const projectId = this.resolveProjectId();

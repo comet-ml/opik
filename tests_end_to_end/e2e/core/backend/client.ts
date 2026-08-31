@@ -40,6 +40,24 @@ export interface DatasetItemRef {
 }
 
 /**
+ * One row of the Datasets / Test suites grid, as those grids read it from
+ * `GET /v1/private/projects/{projectId}/datasets`.
+ *
+ * `itemsCount` is `dataset_items_count` — the field rendered as the "Item
+ * count" column. The backend answers it from the latest dataset version's
+ * `items_total` where there is one, and only falls back to an O(N) scan of
+ * `dataset_items` for the rows that have none; `latestVersionName` says which
+ * of those two a given row went through, so a spec can prove its seed really
+ * contains both kinds.
+ */
+export interface DatasetListRowRef {
+  id: string;
+  name: string;
+  itemsCount: number;
+  latestVersionName: string | null;
+}
+
+/**
  * A dataset item read back with its tags. Separate from `DatasetItemRef`
  * because a filter-scoped batch update is asserted on exactly which rows did
  * and did not gain a tag, so `tags` must be present on every row rather than
@@ -394,6 +412,34 @@ function toMetricSeries(json: unknown): MetricSeries[] {
   }));
 }
 
+/**
+ * A dataset list row, with `dataset_items_count` required rather than defaulted.
+ *
+ * The generated REST type marks it optional. Defaulting a missing value to 0
+ * would be indistinguishable from a genuinely empty dataset — which is the one
+ * answer the item-count specs most need to tell apart — so fail loudly instead.
+ */
+function toDatasetListRow(dataset: {
+  id?: string;
+  name?: string;
+  datasetItemsCount?: number;
+  latestVersion?: { versionName?: string };
+}): DatasetListRowRef {
+  const name = dataset.name ?? '';
+  if (typeof dataset.datasetItemsCount !== 'number' || Number.isNaN(dataset.datasetItemsCount)) {
+    throw new Error(
+      `listProjectDatasets: row '${name}' returned no dataset_items_count — ` +
+        'cannot assert on the number the "Item count" column renders.',
+    );
+  }
+  return {
+    id: String(dataset.id),
+    name,
+    itemsCount: dataset.datasetItemsCount,
+    latestVersionName: dataset.latestVersion?.versionName ?? null,
+  };
+}
+
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
@@ -703,6 +749,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return null;
         throw err;
       }
+    },
+
+    /**
+     * One page of the project-scoped dataset list — `GET /v1/private/projects/
+     * {projectId}/datasets`, the exact read both the Datasets grid and the Test
+     * suites grid issue. Datasets and test suites share a table and are
+     * discriminated by `type`, so `type` here is the same filter the Test
+     * suites page sends.
+     *
+     * `page`/`size` are exposed because the item count is enriched per response
+     * page: the backend decides which rows need the fallback scan from the rows
+     * in the page it is answering, so re-reading the same datasets at a
+     * different page size is a different code path, not a repeat.
+     */
+    async listProjectDatasets(args: {
+      projectId: string;
+      page?: number;
+      size?: number;
+      type?: 'dataset' | 'evaluation_suite';
+    }): Promise<{ rows: DatasetListRowRef[]; total: number }> {
+      const filters: BackendFilter[] = args.type
+        ? [{ field: 'type', type: 'string', operator: '=', value: args.type }]
+        : [];
+      const page = await opik.api.projects.findDatasetsByProject(args.projectId, {
+        page: args.page ?? 1,
+        size: args.size ?? 100,
+        ...(filters.length ? { filters: JSON.stringify(filters) } : {}),
+      });
+      if (typeof page.total !== 'number' || Number.isNaN(page.total)) {
+        throw new Error(
+          `listProjectDatasets: project ${args.projectId} returned no total — ` +
+            'cannot assert the page holds every row it should.',
+        );
+      }
+      return { rows: (page.content ?? []).map(toDatasetListRow), total: page.total };
+    },
+
+    /** `dataset_items_count` from `GET /v1/private/datasets/{id}`. */
+    async getDatasetItemsCount(datasetId: string): Promise<number> {
+      const dataset = await opik.api.datasets.getDatasetById(datasetId);
+      return toDatasetListRow(dataset).itemsCount;
+    },
+
+    /** `dataset_items_count` from `POST /v1/private/datasets/retrieve`. */
+    async retrieveDatasetItemsCountByName(args: {
+      name: string;
+      projectName?: string;
+    }): Promise<number> {
+      const dataset = await opik.api.datasets.getDatasetByIdentifier({
+        datasetName: args.name,
+        ...(args.projectName ? { projectName: args.projectName } : {}),
+      });
+      return toDatasetListRow(dataset).itemsCount;
     },
 
     async deleteDataset(id: string): Promise<void> {
