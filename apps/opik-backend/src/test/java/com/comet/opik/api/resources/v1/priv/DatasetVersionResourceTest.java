@@ -3791,6 +3791,125 @@ class DatasetVersionResourceTest {
     class BatchVersioningTests {
 
         @Test
+        @DisplayName("Success: Duplicate stable id in the version-creating batch counts once (OPIK-7891)")
+        void putItems__whenCreatingBatchRepeatsStableId__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // The SDK's parallel upload sends every batch under one batch_group_id. The batch that
+            // arrives first CREATES the version, and that path derives itemsTotal from insertItems.
+            // That used to return items.size() -- the raw list length, deliberately not a DB row count
+            // (ClickHouse async inserts report 0 before commit) -- so a stable id repeated inside the
+            // first batch was counted twice while ClickHouse collapsed it to one row. It now counts
+            // distinct dataset_item_ids, which is what this test pins.
+            var duplicatedId = TestIdGeneratorFactory.create().generateId();
+            var distinctId = TestIdGeneratorFactory.create().generateId();
+
+            var distinctItem = DatasetItem.builder()
+                    .id(distinctId)
+                    .datasetItemId(distinctId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"third\"")))
+                    .build();
+
+            var items = List.of(
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                            .build(),
+                    distinctItem);
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(UUID.randomUUID())
+                    .items(items)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version = getLatestVersion(datasetId);
+            var stored = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Which revision of the repeated id survives is deliberately NOT asserted: every row in a
+            // batch is written with the same now64(9), and the read dedupes with
+            // `ORDER BY dataset_item_id DESC, last_updated_at DESC LIMIT 1 BY dataset_item_id` -- no
+            // tie-breaker, so either payload may win. Pinning "second" would be asserting an accident.
+            // What is guaranteed, and what the fix is about: exactly one row per distinct id, and a
+            // counter that agrees with it.
+            assertThat(stored).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(duplicatedId, distinctId);
+            assertThat(stored)
+                    .filteredOn(item -> distinctId.equals(item.id()))
+                    .singleElement()
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .isEqualTo(distinctItem);
+
+            // items_total must agree with what is actually stored.
+            assertThat(version.itemsTotal()).isEqualTo(stored.size());
+        }
+
+        @Test
+        @DisplayName("Success: Duplicate stable id across batches in one group counts once (OPIK-7891)")
+        void putItems__whenDuplicateStableIdSpansBatchesInGroup__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batchGroupId = UUID.randomUUID();
+
+            // Mirrors the SDK's parallel upload: several batches under one batch_group_id fold into
+            // one version. The first batch creates it, later batches append. A stable id present in
+            // both must contribute exactly one item to the total.
+            var sharedId = TestIdGeneratorFactory.create().generateId();
+            var otherId = TestIdGeneratorFactory.create().generateId();
+
+            var otherItem = DatasetItem.builder()
+                    .id(otherId)
+                    .datasetItemId(otherId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"other\"")))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(batchGroupId)
+                    .items(List.of(
+                            DatasetItem.builder()
+                                    .id(sharedId)
+                                    .source(DatasetItemSource.SDK)
+                                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                                    .build(),
+                            otherItem))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            // The second batch re-sends the shared id with new content, so it is an update:
+            // one row, holding the later revision.
+            var updatedShared = DatasetItem.builder()
+                    .id(sharedId)
+                    .datasetItemId(sharedId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"updated\"")))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(batchGroupId)
+                    .items(List.of(updatedShared))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version = getLatestVersion(datasetId);
+            var stored = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            assertThat(stored)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyInAnyOrder(updatedShared, otherItem);
+            assertThat(version.itemsTotal()).isEqualTo(stored.size());
+        }
+
+        @Test
         @DisplayName("Success: Multiple INSERT batches with same batch_group_id create single version")
         void putItems_whenSameBatchId_thenSingleVersion() {
             // Given - Create dataset
