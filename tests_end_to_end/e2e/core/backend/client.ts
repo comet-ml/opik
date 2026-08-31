@@ -51,6 +51,17 @@ export interface DatasetItemWithTagsRef {
   tags: string[];
 }
 
+/**
+ * One row of a `PUT /v1/private/datasets/items` batch, in the shape the REST
+ * body wants it — `id` is the upsert key, so re-sending it with different
+ * `data` is what the backend counts as a modification rather than an addition.
+ */
+export interface DatasetItemWriteBody {
+  id: string;
+  source: 'manual';
+  data: Record<string, unknown>;
+}
+
 /** A raw REST answer, kept as status + message so a negative path can assert both. */
 export interface RawApiResult {
   status: number;
@@ -434,7 +445,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -793,6 +804,44 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ids.push(...content.map((item) => String(item.id)));
         if (content.length < pageSize) return ids;
       }
+    },
+
+    /**
+     * Release every batch in `batches` at `PUT /v1/private/datasets/items` at
+     * once, all carrying the same `batchGroupId`, and answer what each one
+     * returned.
+     *
+     * The concurrency is the point, so the requests are all built in one
+     * synchronous pass before any of them is awaited: node's fetch dispatcher
+     * has no per-origin connection cap, so N in-flight requests take N sockets
+     * and the backend sees them arrive together rather than in a queue. Driving
+     * the endpoint here rather than through `Dataset.insert(num_threads=N)`
+     * makes that a property of the test: the SDK only parallelises when the
+     * backend's `/is-alive/ver` parses as semver >= 2.2.8, and silently uploads
+     * sequentially otherwise — so a spec that raced through the SDK would stop
+     * racing, without failing, on any estate whose OPIK_VERSION is `latest`.
+     *
+     * Statuses come back rather than being thrown on, because "every batch was
+     * accepted" is part of the contract: a losing racer answering 409 or 500 is
+     * exactly the regression a caller is looking for, and the pinned SDK would
+     * surface it as an opaque throw with no body.
+     */
+    async putDatasetItemBatchesConcurrently(args: {
+      datasetId: string;
+      batchGroupId: string;
+      batches: DatasetItemWriteBody[][];
+    }): Promise<RawApiResult[]> {
+      const inFlight = args.batches.map((items) =>
+        rawFetch('PUT', '/v1/private/datasets/items', {
+          body: {
+            dataset_id: args.datasetId,
+            batch_group_id: args.batchGroupId,
+            items,
+          },
+        }),
+      );
+      const settled = await Promise.all(inFlight);
+      return settled.map((r) => ({ status: r.status, message: r.message }));
     },
 
     /**

@@ -157,6 +157,23 @@ export class DatasetItemsPage {
     return this.versionHistoryRow(versionName).locator('[data-cell-id$="_items_total"]');
   }
 
+  /**
+   * The "Changes" cell of a version row — the added / modified / deleted chips,
+   * as one locator so a caller can assert the whole cell rather than hunting
+   * for the chip it expects. An extra chip is as wrong as a missing one: a
+   * version that reports a deletion it never made is a counter bug, and a
+   * per-chip assertion would pass straight through it.
+   *
+   * Addressed by the table's `data-cell-id` for the same reason as
+   * `versionItemCount`, and at cell rather than chip level because the chips
+   * are bare `Tag` divs with no testid and no accessible name. Unlike "Item
+   * count" these numbers are NOT thousands-separated — the cell prints the raw
+   * counters — so callers should match on a regex over the cell's text.
+   */
+  versionChangeSummary(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_change_summary"]');
+  }
+
   async search(term: string): Promise<void> {
     return test.step(`Search items for "${term}"`, async () => {
       await this.page.getByTestId('search-input').fill(term);
