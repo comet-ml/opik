@@ -83,7 +83,7 @@ class RedisStreamCodecTest {
     }
 
     @Test
-    @DisplayName("Should use configured JsonUtils mapper with 100MB limit")
+    @DisplayName("Freshly built stream mapper carries the configured 100MB limit")
     void shouldUseConfiguredMapper() throws Exception {
         // Given: Configure JsonUtils with 100MB limit (simulating OpikApplication.run())
         JsonUtils.configure(CONFIGURED_LIMIT, -1L);
@@ -98,12 +98,20 @@ class RedisStreamCodecTest {
         Codec codec = RedisStreamCodec.JAVA.getCodec();
         assertThat(codec).isNotNull();
 
-        // Then: the codec's OWN mapper carries the configured limit. Asserting on JsonUtils.getMapper()
-        // instead would prove nothing about the codec - that is what let the codec run on Jackson's
-        // default for as long as it did.
-        int codecLimit = RedisStreamCodec.buildStreamMapper().getFactory().streamReadConstraints()
-                .getMaxStringLength();
-        assertThat(codecLimit).isEqualTo(CONFIGURED_LIMIT);
+        // Then: a mapper from the codec's own builder carries the configured limit - not
+        // JsonUtils.getMapper(), which would prove nothing about what buildStreamMapper produces.
+        //
+        // Deliberately a FRESH mapper, not the one inside RedisStreamCodec.JAVA's memoized codec. That
+        // instance is built once per JVM and forced by whichever caller gets there first - eight
+        // production *Config.getCodec() call sites and TestStreamConfiguration's field initializer - so
+        // under surefire's shared JVM its limit depends on test execution order, not on this test.
+        // (CompositeCodec also exposes no accessor for its constituent codecs, so reaching the inner
+        // JsonJacksonCodec.getObjectMapper() would need reflection on top of that.) What production
+        // actually depends on is the *ordering* - that JsonUtils is configured before anything builds a
+        // codec - and that is pinned deterministically by JsonUtilsConfigurationBundleTest.
+        int freshStreamMapperLimit = RedisStreamCodec.buildStreamMapper().getFactory()
+                .streamReadConstraints().getMaxStringLength();
+        assertThat(freshStreamMapperLimit).isEqualTo(CONFIGURED_LIMIT);
 
         // And it can actually decode a string the default limit would reject.
         int testStringSize = 25 * MB; // Between 20MB and 100MB
@@ -112,8 +120,8 @@ class RedisStreamCodecTest {
 
         Object result = RedisStreamCodec.buildStreamMapper().readValue(jsonWithLargeString, Object.class);
         assertThat(result).isNotNull();
-        log.info("SUCCESS: codec mapper decoded a {}MB string at the configured {}MB limit",
-                testStringSize / MB, codecLimit / MB);
+        log.info("SUCCESS: freshly built stream mapper decoded a {}MB string at the configured {}MB limit",
+                testStringSize / MB, freshStreamMapperLimit / MB);
     }
 
     @Test
