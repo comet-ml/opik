@@ -168,10 +168,9 @@ for _w in "$SENTINEL_WINDOW_FROM" "$SENTINEL_WINDOW_TO"; do
     [[ -z "$_w" || "$_w" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] \
         || { echo "ERROR: --sentinel-window-from/--sentinel-window-to must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 done
-# The anchor carries an explicit ' UTC' marker and is required to. The SQL below parses it AS UTC, so a value captured
-# in another zone shifts the bound silently -- and for these bounds a LATER value drops rows rather than failing. A bare
-# timestamp cannot be attributed to a timezone, so it is refused rather than assumed. The drivers print their anchors
-# with the marker, so a pasted value already carries it.
+# Strip the ' UTC' marker the flag is required to carry (see its option doc). For these bounds a wrong zone is worse
+# than a wrong shape: the statements parse the anchor as UTC, so one captured elsewhere shifts silently, and a LATER
+# value drops rows from the delta and the replay rather than failing.
 case "$CUTOVER_START" in
     *" UTC") CUTOVER_START="${CUTOVER_START% UTC}" ;;
         "") ;;                      # not supplied; the caller decides whether that is allowed
