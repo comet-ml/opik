@@ -14,9 +14,11 @@ import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
@@ -25,13 +27,13 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Reactive HTTP POST helper with retry semantics over a JAX-RS {@link Client}. Returns a cold
+ * Reactive HTTP helper with retry semantics over a JAX-RS {@link Client}. Returns a cold
  * {@link Mono} so callers compose into a non-blocking pipeline; safe to subscribe from any thread.
  * <p>
- * Subscribed on {@link Schedulers#boundedElastic()} so any incidental subscribe-side work
- * is isolated from caller threads. This keeps the client
- * encapsulated regardless of how callers invoke it.
+ * Subscribe-side work runs on {@link Schedulers#boundedElastic()}, or on
+ * {@link Request#scheduler()} when a caller supplies one, so it is isolated from caller threads.
  */
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RetriableHttpClient {
@@ -61,6 +63,12 @@ public class RetriableHttpClient {
             Consumer<Invocation.Builder> requestCustomizer,
             Duration connectTimeout,
             Duration readTimeout,
+            /**
+             * Scheduler for subscribe-side work. Defaults to {@link Schedulers#boundedElastic()};
+             * a caller that blocks on the result should supply its own so a retry storm on its hop
+             * cannot queue behind — or ahead of — unrelated work on the shared scheduler.
+             */
+            Scheduler scheduler,
             @NonNull Function<Response, T> responseFunction) {
     }
 
@@ -75,16 +83,17 @@ public class RetriableHttpClient {
 
     /**
      * GET variant of {@link #executePostWithRetry}, with the same retry and timeout semantics.
+     * Any {@code body} on the request is ignored rather than rejected.
      */
     public <T> Mono<T> executeGetWithRetry(@NonNull Request<T> request) {
-        Preconditions.checkArgument(request.body() == null, "body must be null for GET");
         return execute(request, HttpMethod.GET);
     }
 
     private <T> Mono<T> execute(Request<T> request, String method) {
+        var scheduler = request.scheduler() != null ? request.scheduler() : Schedulers.boundedElastic();
         return Mono.defer(() -> performHttpRequest(request, method)
                 .flatMap(response -> transformAndClose(request, response)))
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(scheduler)
                 .retryWhen(request.retryPolicy());
     }
 
@@ -104,10 +113,9 @@ public class RetriableHttpClient {
         try (response) {
             int statusCode = response.getStatus();
             if (isRetryableStatusCode(statusCode)) {
-                response.bufferEntity(); // Buffer the entity to allow multiple reads
                 return Mono.error(new RetryUtils.RetryableHttpException(
                         "Service temporarily unavailable (HTTP %s): %s"
-                                .formatted(statusCode, abbreviatedBody(response)),
+                                .formatted(statusCode, diagnosticBody(response)),
                         statusCode));
             }
             // justOrEmpty, not just: the previous Mono.fromCallable completed empty when the
@@ -119,17 +127,23 @@ public class RetriableHttpClient {
     /**
      * The upstream body, truncated to {@link #MAX_DIAGNOSTIC_BODY_LENGTH}.
      * <p>
-     * This string ends up in {@code RetryableHttpException}'s message, which
-     * {@code RetryUtils.handleHttpErrors} logs before every retry and which propagates to the
-     * caller on exhaustion. A 503/504 body is arbitrary upstream content -- a proxy error page, a
-     * stack trace, or on a credential-bearing call whatever the upstream chose to echo back -- so
-     * it must not be able to flood the logs or carry an unbounded amount of upstream detail into
-     * them. Mirrors the same bound in {@code RemoteAuthService.readErrorMessage}.
+     * The result reaches {@code RetryableHttpException}'s message, which is logged before every
+     * retry and propagates to the caller on exhaustion. A 503/504 body is arbitrary upstream
+     * content, so it must not be able to flood the logs. Mirrors the bound in
+     * {@code RemoteAuthService.readErrorMessage}.
+     * <p>
+     * Both guards are required before the entity can be read: {@code hasEntity} for a response
+     * without one, and {@code bufferEntity}'s return value because a stream already consumed or
+     * closed cannot be buffered for the re-read.
      */
-    private String abbreviatedBody(Response response) {
+    private String diagnosticBody(Response response) {
         try {
+            if (!response.hasEntity() || !response.bufferEntity()) {
+                return "<no body>";
+            }
             return StringUtils.abbreviate(response.readEntity(String.class), MAX_DIAGNOSTIC_BODY_LENGTH);
         } catch (RuntimeException unreadable) {
+            log.warn("Failed to read upstream error body for diagnostics", unreadable);
             return "<unreadable body>";
         }
     }
@@ -162,7 +176,9 @@ public class RetriableHttpClient {
                     sink.error(throwable);
                 }
             };
-            if (request.body() != null) {
+            // Branch on the method, not on body presence: a GET must not carry an entity even if
+            // the caller set one.
+            if (HttpMethod.POST.equals(method)) {
                 builder.async().method(method, request.body(), callback);
             } else {
                 builder.async().method(method, callback);

@@ -32,57 +32,41 @@ public class AuthenticationConfig {
     /**
      * Per-call read timeout for auth requests to the React service, overriding the shared
      * jerseyClient timeout (30s) for this hop only. Sized from measured production latency of
-     * successful auth calls: p50 22ms, p99 147ms, p99.9 305ms, p99.99 1.15s. 3s is ~2.6x p99.99,
-     * so normal calls never reach it, while a stalled attempt fails in 3s instead of 30s.
-     * Set to 0 to disable the override and inherit the shared client timeout.
+     * successful auth calls: p99.99 is 1.15s, so 3s is ~2.6x and normal calls never reach it.
+     * Set to 0 to inherit the shared client timeout.
      * <p>
-     * This bounds a single <em>attempt</em>, not the whole operation. With retries enabled the
-     * end-to-end worst case is {@code (requestMaxRetries + 1) * requestTimeout} plus the backoff
-     * between attempts -- ~6.4s at the shipped values (2 attempts, 250ms backoff plus Reactor's
-     * jitter). That is still
-     * well under the 30s shared timeout it replaces, but callers that need a hard sub-3s ceiling
-     * must set {@link #requestMaxRetries} to 0.
+     * Bounds a single <em>attempt</em>, not the operation: with retries the worst case is
+     * {@code (requestMaxRetries + 1) * requestTimeout} plus backoff. Set {@link #requestMaxRetries}
+     * to 0 for a hard sub-timeout ceiling.
+     * <p>
+     * The 30s ceiling mirrors the shipped jerseyClient.timeout as a literal, because jerseyClient
+     * is bound on a different configuration class. This is an override, not a clamp: lowering
+     * jerseyClient.timeout does not cap this hop.
      */
-    // No Java-side default: config.yml is the single source for these values, so there is nothing
-    // to keep in sync. @NotNull turns a missing key into a boot failure naming the property rather
-    // than a silent fallback. Note this means a configuration file must carry the `authentication:`
-    // block; omitting it entirely fails validation, because OpikConfiguration cascades @Valid into
-    // its default AuthenticationConfig instance.
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
-    // Bounded by the shipped jerseyClient.timeout (30s). Note this is an override, not a clamp:
-    // ClientProperties.READ_TIMEOUT wins over the client's configured timeout in both directions,
-    // so lowering jerseyClient.timeout below this value does NOT cap the auth hop -- this setting
-    // has to be lowered too. The ceiling is a literal rather than a cross-object constraint
-    // because jerseyClient is bound on a different configuration class; if that default ever
-    // changes, this bound must change with it.
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
     private Duration requestTimeout;
 
     /**
      * Maximum number of <em>retries</em> for a failed auth request: additional attempts after the
-     * first, not a total attempt budget. The default of 1 therefore permits 2 outbound calls.
+     * first, not a total attempt budget. The shipped 1 therefore permits 2 outbound calls.
      * <p>
-     * The call goes through the shared {@code RetriableHttpClient}, which owns retry and timeout
-     * policy for outbound calls in this service, so nothing bespoke is implemented for this hop.
      * Retried: transport failures per {@code RetryUtils.handleHttpErrors}, plus HTTP 503/504, which
-     * the client maps to {@code RetryUtils.RetryableHttpException} -- React emits 503s while
-     * draining during a rolling restart. Not retried: any other HTTP error status, since
-     * {@code verifyResponse} maps 4xx to {@code ClientErrorException}, which is not retriable.
+     * {@code RetriableHttpClient} maps to {@code RetryUtils.RetryableHttpException} -- React emits
+     * 503s while draining during a rolling restart. Not retried: any other HTTP status, since
+     * {@code verifyResponse} maps 4xx to {@code ClientErrorException}.
      * <p>
-     * Note: React CPU brownouts observed in production last 1-3 minutes, so a retry will not
-     * recover a request stalled by one of those. The timeout is what bounds user-visible latency.
-     * Set to 0 to disable retries.
+     * Capped at 5: each retry re-issues a call against a React service that may already be
+     * CPU-starved, and the brownouts observed in production last 1-3 minutes, so retries cannot
+     * recover one. Set to 0 to disable retries.
      */
-    @Valid @NotNull @JsonProperty
-    @Min(0)
-    // Capped deliberately: each retry re-issues an auth call against a React service that may
-    // already be CPU-starved, and retries cannot recover a multi-minute brownout anyway.
-    @Max(5) private Integer requestMaxRetries;
+    @JsonProperty
+    @Min(0) @Max(5) private int requestMaxRetries;
 
     /**
-     * Minimum backoff between auth request attempts. Deliberately non-zero: an immediate retry
-     * adds load to a React service that may already be CPU-starved.
+     * Minimum backoff between auth request attempts. Non-zero deliberately: an immediate retry adds
+     * load to a React service that may already be CPU-starved.
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)

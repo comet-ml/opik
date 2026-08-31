@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,6 +87,7 @@ class RetriableHttpClientTest {
     void executePostWithRetry__whenRetryableStatus__thenBodyBoundedAndResponseClosed(int status) {
         var oversizedBody = "x".repeat(4_000);
         when(response.getStatus()).thenReturn(status);
+        when(response.hasEntity()).thenReturn(true);
         when(response.bufferEntity()).thenReturn(true);
         when(response.readEntity(String.class)).thenReturn(oversizedBody);
 
@@ -116,6 +119,7 @@ class RetriableHttpClientTest {
                 .thenAnswer(invocation -> {
                     var attemptResponse = org.mockito.Mockito.mock(Response.class);
                     when(attemptResponse.getStatus()).thenReturn(503);
+                    when(attemptResponse.hasEntity()).thenReturn(true);
                     when(attemptResponse.bufferEntity()).thenReturn(true);
                     when(attemptResponse.readEntity(String.class)).thenReturn("unavailable");
                     perAttemptResponses.add(attemptResponse);
@@ -134,6 +138,7 @@ class RetriableHttpClientTest {
     @Test
     void executePostWithRetry__whenBodyUnreadable__thenFallsBackWithoutThrowingFromErrorHandling() {
         when(response.getStatus()).thenReturn(503);
+        when(response.hasEntity()).thenReturn(true);
         when(response.bufferEntity()).thenReturn(true);
         when(response.readEntity(String.class)).thenThrow(new ProcessingException("stream closed"));
 
@@ -142,6 +147,52 @@ class RetriableHttpClientTest {
                 .hasMessageContaining("<unreadable body>");
 
         verify(response).close();
+    }
+
+    /**
+     * A 503 need not carry a body, and a stream already consumed or closed cannot be buffered for
+     * the re-read. Both are checked before the entity is touched, so neither turns a retryable
+     * status into a read failure.
+     */
+    @ParameterizedTest
+    @CsvSource({
+            "false, true", // no entity at all
+            "true, false", // has one, but it cannot be buffered
+    })
+    void executePostWithRetry__whenBodyCannotBeBuffered__thenNoBodyReportedAndEntityNotRead(
+            boolean hasEntity, boolean buffered) {
+        when(response.getStatus()).thenReturn(503);
+        when(response.hasEntity()).thenReturn(hasEntity);
+        when(response.bufferEntity()).thenReturn(buffered);
+
+        assertThatThrownBy(() -> retriableHttpClient.executePostWithRetry(request(0)).block())
+                .isInstanceOf(RetryUtils.RetryableHttpException.class)
+                .hasMessageContaining("<no body>");
+
+        verify(response, never()).readEntity(String.class);
+        verify(response).close();
+    }
+
+    /**
+     * A GET carrying a body must ignore it rather than fail: the method decides whether an entity is
+     * sent, so the no-entity overload is the one invoked.
+     */
+    @Test
+    void executeGetWithRetry__whenRequestCarriesBody__thenBodyIgnoredAndGetIssued() {
+        when(asyncInvoker.method(anyString(), any(InvocationCallback.class)))
+                .thenAnswer(invocation -> {
+                    InvocationCallback<Response> callback = invocation.getArgument(1);
+                    callback.completed(response);
+                    return null;
+                });
+        when(response.getStatus()).thenReturn(200);
+        when(response.readEntity(String.class)).thenReturn("payload");
+
+        var result = retriableHttpClient.executeGetWithRetry(request(0)).block();
+
+        assertThat(result).isEqualTo("payload");
+        verify(asyncInvoker).method(eq("GET"), any(InvocationCallback.class));
+        verify(asyncInvoker, never()).method(anyString(), any(Entity.class), any(InvocationCallback.class));
     }
 
     @Test
