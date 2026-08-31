@@ -169,7 +169,7 @@ you change something.
 
 ### The tools you'll have
 
-Your assistant gets six tools. It picks between them on its own — this is here so
+Your assistant gets five tools. It picks between them on its own — this is here so
 you know what it can reach for:
 
 | Tool | What your assistant can do with it |
@@ -178,7 +178,6 @@ you know what it can reach for:
 | `list` | Page through any of those, optionally filtered by name. |
 | `write` | Log traces and spans, score, comment, save prompt versions, manage test suites and experiments. |
 | `schema` | Look up the exact payload shape for a write, so it constructs valid ones. |
-| `ask_ollie` | Investigate or synthesize across entities via Opik's in-product assistant. |
 | `run_experiment` | Run an evaluation experiment end to end. |
 
 To see a payload shape yourself, ask **"show me the schema for trace.create"** —
@@ -401,8 +400,8 @@ connect to a named cloud workspace.
 
     <Tip>
     **Cursor 60s timeout.** Cursor enforces a hard tool-call timeout that does
-    not reset on progress notifications. Long `ask_ollie` turns will fail on
-    Cursor — see [Known client limits](#known-client-limits).
+    not reset on progress notifications. Long-running tool calls (for example a
+    large `run_experiment`) can fail on Cursor — see [Known client limits](#known-client-limits).
     </Tip>
 
     </Tab>
@@ -507,31 +506,17 @@ connect to a named cloud workspace.
 
 <Tip>
 **Self-hosted Opik.** Add `COMET_URL_OVERRIDE` to the `env` block (and `OPIK_URL`
-if Opik lives at a non-default path). `ask_ollie` and `run_experiment` are
-available on Comet Cloud only — on self-hosted those calls fail at dispatch;
-use `read` / `list` / `write` directly.
+if Opik lives at a non-default path). `run_experiment` is available on Comet
+Cloud only — on self-hosted that call fails at dispatch; use `read` / `list` /
+`write` directly.
 </Tip>
-
-## Ollie & auto-approve
-
-By default, writes that Ollie performs mid-stream (scores, comments, prompt
-versions, test-suite items) execute without a per-action confirmation step.
-Each auto-approved write is logged as a JSON audit row on the `opik_mcp.audit`
-Python logger.
-
-To require manual confirmation instead, set `OPIK_MCP_AUTO_APPROVE=disabled` in
-the server's `env` block. Ollie's confirmation requests then surface as typed
-errors that you can re-issue manually.
-
-`ask_ollie` and `run_experiment` are available on Comet Cloud only — on
-self-hosted those calls fail at dispatch; use `read` / `list` / `write`
-directly.
 
 ## Known client limits
 
 - **Cursor enforces a 60-second hard tool-call timeout** that does not reset on
-  progress notifications. Long `ask_ollie` turns will fail on Cursor. For
-  long-running investigations, use Claude Code or VS Code Copilot.
+  progress notifications. Long-running tool calls (for example a large
+  `run_experiment`) will fail on Cursor. For long-running investigations, use
+  Claude Code or VS Code Copilot.
 
 ## Example conversation
 
@@ -539,7 +524,7 @@ A typical investigative loop using Claude Code:
 
 > **You:** Why did the experiment "gpt-4o-rerank-v3" regress on factuality?
 >
-> **Claude:** *(calls `ask_ollie`)* Three traces failed because the reranker
+> **Claude:** *(calls `list` and `read`)* Three traces failed because the reranker
 > dropped the system message. The remaining 12 traces scored above 0.8…
 >
 > **You:** Score the bottom 3 traces 0.2 with reason "dropped system message".
