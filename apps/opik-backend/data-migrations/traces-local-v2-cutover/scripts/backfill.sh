@@ -591,7 +591,7 @@ if [[ "$DRY_RUN" != "1" ]]; then
             log "       original backfill_start was lost, and minting a fresh (later) anchor would make the delta and the" >&2
             log "       deletion replay blind to deletes in the gap, leaking them across the EXCHANGE. Recover the original" >&2
             log "       anchor, then either point --state-file at the file holding it or write it back:" >&2
-            log "         printf '%s' '<original backfill_start>' > '$STATE_FILE'" >&2
+            log "         printf '%s UTC' '<original backfill_start>' > '$STATE_FILE'" >&2
             log "       If it is unrecoverable, restart the copy cleanly instead (discards the partial shadow):" >&2
             log "         ./rollback.sh --database $DATABASE --stage A" >&2
             exit 1
