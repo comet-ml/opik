@@ -1,4 +1,4 @@
-import { test as baseTest } from './json-output-experiment.fixture';
+import { test as baseTest } from './long-value-experiment.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 
 /** The `data` key the filter scopes on. */
@@ -120,4 +120,4 @@ export const test = baseTest.extend<GroupedDatasetFixtures>({
   },
 });
 
-export { expect } from './json-output-experiment.fixture';
+export { expect } from './long-value-experiment.fixture';
