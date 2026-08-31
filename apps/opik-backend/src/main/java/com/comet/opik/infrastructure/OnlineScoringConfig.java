@@ -58,15 +58,19 @@ public class OnlineScoringConfig {
     @Min(0) @Max(10_000) private int streamTrimLimit;
 
     /**
-     * Whether the publisher may enqueue messages larger than Jackson's default maxStringLength.
+     * Whether the publisher drops messages too large for a consumer to decode instead of enqueueing them.
      *
-     * <p>Leave false during a rolling upgrade. Consumers on a build without the codec-init fix still
-     * decode with Jackson's default limit, so a message above it that they receive fails inside
-     * Redisson before {@code BaseRedisSubscriber} sees a messageId - it can never be acked or removed,
-     * and the stream wedges. Only enable once every consumer is upgraded.
+     * <p>Off by default: dropping costs an evaluation, so it stays opt-in and the default keeps the
+     * existing enqueue-everything behaviour. Enable it to trade one evaluation for the stream: a message
+     * the consumer's reader rejects fails inside Redisson before {@code BaseRedisSubscriber} sees a
+     * messageId, so it can never be acked, retried or removed and the stream wedges permanently.
+     *
+     * <p>When enabled the ceiling is the lower of {@code jacksonConfig.maxDocumentLength} and Jackson's
+     * default {@code maxStringLength} - the conservative bound, so a consumer still on a build without
+     * the codec-init fix can decode what we write during a rolling upgrade.
      */
     @JsonProperty
-    private boolean allowOversizedPayloads;
+    private boolean dropOversizedPayloads;
 
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;

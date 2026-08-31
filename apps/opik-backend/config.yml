@@ -795,12 +795,15 @@ onlineScoring:
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: ${REDIS_SCORING_STREAM_TRIM_LIMIT:-100}
   # Default: false
-  # Description: Whether the publisher may enqueue online-scoring messages larger than Jackson's default
-  #   maxStringLength (20000000). Leave false during a rolling upgrade: consumers on an older build still
-  #   decode with that default, and a larger message they receive fails inside Redisson before the
-  #   subscriber sees a messageId, so it can never be acked or removed and the stream wedges. Enable only
-  #   once every consumer is upgraded.
-  allowOversizedPayloads: ${REDIS_SCORING_ALLOW_OVERSIZED_PAYLOADS:-false}
+  # Description: Whether the publisher drops online-scoring messages that are too large for a consumer to
+  #   decode, instead of enqueueing them. Off by default, so enqueue behaviour is unchanged unless you opt
+  #   in. Enable it when you would rather lose one evaluation than risk wedging the stream: a message the
+  #   consumer's Jackson reader rejects fails inside Redisson before the subscriber sees a StreamMessageId,
+  #   so it can never be acked, retried or removed and the stream stalls permanently. When enabled the
+  #   ceiling is the lower of jacksonConfig.maxDocumentLength and Jackson's default maxStringLength
+  #   (20000000) - the conservative bound, so a consumer still on a build without the codec-init fix can
+  #   decode what we write during a rolling upgrade.
+  dropOversizedPayloads: ${REDIS_SCORING_DROP_OVERSIZED_PAYLOADS:-false}
   # Default: 50000
   # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes through the
   #   agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the threshold the inline

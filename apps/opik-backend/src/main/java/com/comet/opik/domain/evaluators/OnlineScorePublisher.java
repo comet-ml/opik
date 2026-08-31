@@ -67,6 +67,9 @@ public interface OnlineScorePublisher {
      * counter, a sampling decision metric - must check this first and compensate, because the enqueue
      * itself completes successfully whether or not the message was actually written.
      *
+     * <p>Always false unless {@code onlineScoring.dropOversizedPayloads} is enabled: with the guard off
+     * nothing is dropped, so there is nothing to compensate for.
+     *
      * @param message the message that would be enqueued
      * @return true when the message exceeds the payload limit
      */
@@ -125,27 +128,28 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
-        // Mirror the document-level constraint the consumer's Jackson reader enforces. Per-string length
-        // needs no guard here: the HTTP mapper already rejects an oversized string at ingest with the same
-        // maxStringLength the stream reader applies, so the two are aligned by configuration.
-        // maxDocumentLength <= 0 means unlimited, in which case the reader has no document limit either.
+        // Ceiling for the oversized-payload guard. maxDocumentLength <= 0 means unlimited, in which case
+        // the consumer's reader has no document limit either.
         long configuredLimit = jacksonConfig.getMaxDocumentLength() > 0
                 ? jacksonConfig.getMaxDocumentLength()
                 : Long.MAX_VALUE;
-        // During a rolling upgrade the consumer that picks a message up may still be running a build
-        // without the codec-init fix, and so still decoding at Jackson's default. Writing above that
-        // default would strand the entry on such a pod exactly as before this fix - it fails inside
-        // Redisson, no messageId reaches processMessage, and it can never be acked or removed. Stay at
-        // the legacy ceiling until an operator confirms the whole fleet is upgraded.
-        this.maxPayloadBytes = config.isAllowOversizedPayloads()
-                ? configuredLimit
-                : Math.min(configuredLimit, StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
+        // Long.MAX_VALUE means "no guard", the default: dropping a message costs an evaluation, so it is
+        // opt-in and enqueue behaviour is unchanged until an operator turns it on.
+        // When on, hold the conservative bound. A consumer still running a build without the codec-init fix
+        // decodes at Jackson's default, and a message above that default strands on such a pod exactly as
+        // before this fix - it fails inside Redisson, no messageId reaches processMessage, and it can never
+        // be acked or removed. Measuring total serialized size also bounds every individual string in the
+        // message, so nothing we write can trip either reader constraint.
+        this.maxPayloadBytes = config.isDropOversizedPayloads()
+                ? Math.min(configuredLimit, StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
+                : Long.MAX_VALUE;
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
                         + "result (success|error|skipped_too_large). result=error counts publish failures that "
                         + "were previously only logged; result=skipped_too_large counts messages refused because "
-                        + "they exceed what the consumer can decode.")
+                        + "they exceed what the consumer can decode, and is only ever non-zero when "
+                        + "onlineScoring.dropOversizedPayloads is enabled.")
                 .build();
         this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
@@ -187,14 +191,14 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             && StringUtils.isNotBlank(ctxWorkspaceName)
                                     ? scoped.withWorkspaceName(ctxWorkspaceName)
                                     : message)
-                    // Refuse to enqueue anything the consumer could not read back. Jackson has no
-                    // serialization-side limit, so without this check an oversized message is written happily
-                    // and then fails to decode on read — inside Redisson, with no messageId, which means it
-                    // can never be acked or removed and wedges the stream for good. Skipping one evaluation
-                    // is strictly better than losing the stream.
+                    // When onlineScoring.dropOversizedPayloads is on, refuse to enqueue anything the consumer
+                    // could not read back. Jackson has no serialization-side limit, so without this check an
+                    // oversized message is written happily and then fails to decode on read — inside Redisson,
+                    // with no messageId, which means it can never be acked or removed and wedges the stream for
+                    // good. Skipping one evaluation is strictly better than losing the stream.
                     .filterWhen(message -> Mono.fromCallable(() -> {
                         if (maxPayloadBytes == Long.MAX_VALUE) {
-                            return true; // no document limit configured; don't pay for serializing to measure
+                            return true; // guard off; don't pay for serializing to measure
                         }
                         long size = serializedSize(message);
                         if (size <= maxPayloadBytes) {
@@ -202,7 +206,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                         }
                         enqueueCounter.add(1, tooLargeAttrs);
                         log.error(
-                                "Skipping online scoring: payload of '{}' bytes exceeds the '{}' byte document "
+                                "Skipping online scoring: payload of '{}' bytes exceeds the '{}' byte payload "
                                         + "limit, evaluatorType '{}', workspaceId '{}'",
                                 size, maxPayloadBytes, type.getType(), workspaceId);
                         return false;
