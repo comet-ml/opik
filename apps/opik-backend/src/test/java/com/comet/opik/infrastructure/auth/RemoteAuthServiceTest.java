@@ -39,8 +39,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.SocketTimeoutException;
@@ -85,9 +83,6 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RemoteAuthServiceTest {
 
-    /** Production supplies a scheduler dedicated to the auth hop; the tests only need any scheduler. */
-    private static final Scheduler TEST_SCHEDULER = Schedulers.boundedElastic();
-
     // Auth-call timeout/retry knobs (see AuthenticationConfig, applied in authCall). Retries are
     // disabled for the shared service so the assertions below observe exactly one request per call;
     // the retry and timeout behaviour itself is covered by the dedicated tests near the bottom of
@@ -112,7 +107,7 @@ class RemoteAuthServiceTest {
     void setUpAll() {
         WIRE_MOCK.server().start();
         var client = TestHttpClientUtils.client();
-        remoteAuthService = new RemoteAuthService(client, new RetriableHttpClient(client), TEST_SCHEDULER,
+        remoteAuthService = new RemoteAuthService(client, new RetriableHttpClient(client),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
@@ -213,7 +208,7 @@ class RemoteAuthServiceTest {
                 .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
 
         var cachingService = new RemoteAuthService(TestHttpClientUtils.client(),
-                new RetriableHttpClient(TestHttpClientUtils.client()), TEST_SCHEDULER,
+                new RetriableHttpClient(TestHttpClientUtils.client()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 mockCache,
@@ -304,7 +299,7 @@ class RemoteAuthServiceTest {
         WIRE_MOCK.server().stubFor(post("/opik/auth").willReturn(okJson(responseJson)));
 
         var gzipEnabledAuthService = new RemoteAuthService(newGzipEnabledClient(),
-                new RetriableHttpClient(newGzipEnabledClient()), TEST_SCHEDULER,
+                new RetriableHttpClient(newGzipEnabledClient()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
@@ -748,7 +743,7 @@ class RemoteAuthServiceTest {
 
     private RemoteAuthService authServiceWith(Duration timeout, int maxRetries) {
         return new RemoteAuthService(TestHttpClientUtils.client(),
-                new RetriableHttpClient(TestHttpClientUtils.client()), TEST_SCHEDULER,
+                new RetriableHttpClient(TestHttpClientUtils.client()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),
@@ -1097,7 +1092,7 @@ class RemoteAuthServiceTest {
 
     private RemoteAuthService serviceResolvingPermissions(boolean resolvePermissions) {
         return new RemoteAuthService(TestHttpClientUtils.client(),
-                new RetriableHttpClient(TestHttpClientUtils.client()), TEST_SCHEDULER,
+                new RetriableHttpClient(TestHttpClientUtils.client()),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
                 new NoopCacheService(),

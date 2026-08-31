@@ -18,7 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
@@ -30,8 +29,9 @@ import java.util.function.Function;
  * Reactive HTTP helper with retry semantics over a JAX-RS {@link Client}. Returns a cold
  * {@link Mono} so callers compose into a non-blocking pipeline; safe to subscribe from any thread.
  * <p>
- * Subscribe-side work runs on {@link Schedulers#boundedElastic()}, or on
- * {@link Request#scheduler()} when a caller supplies one, so it is isolated from caller threads.
+ * Subscribe-side work runs on {@link Schedulers#boundedElastic()}, so it is isolated from caller
+ * threads. That work is submit-only -- build the target and hand the request to
+ * {@code builder.async()} -- so a worker is not held for the round trip.
  */
 @Slf4j
 @Singleton
@@ -63,12 +63,6 @@ public class RetriableHttpClient {
             Consumer<Invocation.Builder> requestCustomizer,
             Duration connectTimeout,
             Duration readTimeout,
-            /**
-             * Scheduler for subscribe-side work. Defaults to {@link Schedulers#boundedElastic()};
-             * a caller that blocks on the result should supply its own so a retry storm on its hop
-             * cannot queue behind — or ahead of — unrelated work on the shared scheduler.
-             */
-            Scheduler scheduler,
             @NonNull Function<Response, T> responseFunction) {
     }
 
@@ -90,10 +84,9 @@ public class RetriableHttpClient {
     }
 
     private <T> Mono<T> execute(Request<T> request, String method) {
-        var scheduler = request.scheduler() != null ? request.scheduler() : Schedulers.boundedElastic();
         return Mono.defer(() -> performHttpRequest(request, method)
                 .flatMap(response -> transformAndClose(request, response)))
-                .subscribeOn(scheduler)
+                .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(request.retryPolicy());
     }
 

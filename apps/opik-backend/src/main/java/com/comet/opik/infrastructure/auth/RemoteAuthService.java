@@ -29,7 +29,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.util.retry.Retry;
 
 import java.net.URI;
@@ -99,7 +98,6 @@ class RemoteAuthService implements AuthService {
 
     private final @NonNull Client client;
     private final @NonNull RetriableHttpClient retriableHttpClient;
-    private final @NonNull Scheduler authScheduler;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
@@ -125,7 +123,6 @@ class RemoteAuthService implements AuthService {
 
     RemoteAuthService(@NonNull Client client,
             @NonNull RetriableHttpClient retriableHttpClient,
-            @NonNull Scheduler authScheduler,
             @NonNull AuthenticationConfig.UrlConfig reactServiceUrl,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull CacheService cacheService,
@@ -137,7 +134,6 @@ class RemoteAuthService implements AuthService {
             boolean resolvePermissions) {
         this.client = client;
         this.retriableHttpClient = retriableHttpClient;
-        this.authScheduler = authScheduler;
         this.reactServiceUrl = reactServiceUrl;
         this.requestContext = requestContext;
         this.cacheService = cacheService;
@@ -626,9 +622,9 @@ class RemoteAuthService implements AuthService {
      * <p>
      * {@code block()} is deliberate: authentication runs in a JAX-RS request filter that returns
      * {@code void}, so there is no reactive pipeline to compose into. It blocks the request thread
-     * that was already going to wait for this call. Subscribe-side work goes to a scheduler
-     * dedicated to this hop rather than the shared {@code boundedElastic}, so a retry burst here
-     * cannot contend with unrelated work.
+     * that was already going to wait for this call -- not a Reactor worker: {@link RetriableHttpClient}
+     * subscribes on {@code boundedElastic}, and that subscribe-side work is submit-only, so no
+     * scheduler thread is held for the round trip.
      * <p>
      * A {@code requestTimeout} of zero means "inherit the shared client timeout", expressed by
      * leaving {@code readTimeout} unset rather than sending a zero.
@@ -639,7 +635,6 @@ class RemoteAuthService implements AuthService {
             return execute.apply(request
                     .retryPolicy(retryPolicy)
                     .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
-                    .scheduler(authScheduler)
                     .build())
                     .block();
         } catch (RetryUtils.RetryableHttpException retriesExhausted) {

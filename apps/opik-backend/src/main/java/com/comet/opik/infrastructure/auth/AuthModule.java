@@ -16,8 +16,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -25,16 +23,6 @@ import java.util.Objects;
 
 @Slf4j
 public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
-
-    /**
-     * Subscribe-side work for the auth hop is brief and non-blocking -- build the target, submit the
-     * async JAX-RS call -- so a small pool is enough. It is separate from
-     * {@link Schedulers#boundedElastic()} so that a retry burst on this hop, which every Opik
-     * request passes through, cannot queue behind unrelated blocking work on the shared scheduler.
-     */
-    private static final int AUTH_SCHEDULER_THREAD_CAP = 16;
-    private static final int AUTH_SCHEDULER_QUEUED_TASK_CAP = 10_000;
-    private static final int AUTH_SCHEDULER_TTL_SECONDS = 60;
 
     @Provides
     @Singleton
@@ -44,7 +32,6 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             @NonNull RedissonReactiveClient redissonClient,
             @NonNull Client client,
             @NonNull RetriableHttpClient retriableHttpClient,
-            @NonNull @AuthHttpScheduler Scheduler authScheduler,
             @NonNull RedactionService redactionService,
             @NonNull WorkspacePermissionsService workspacePermissionsService) {
 
@@ -75,28 +62,12 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         // Asking RedactionService rather than the raw config so the request and the thing that acts on the
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
-        return new RemoteAuthService(client, retriableHttpClient, authScheduler, config.getReactService(),
+        return new RemoteAuthService(client, retriableHttpClient, config.getReactService(),
                 requestContext, cacheService,
                 config.getRequestTimeout().toJavaDuration(), config.getRequestMaxRetries(),
                 config.getRequestRetryMinBackoff().toJavaDuration(),
                 config.getRequestRetryMaxBackoff().toJavaDuration(),
                 workspacePermissionsService, redactionService.isEnabled());
-    }
-
-    /**
-     * Dedicated scheduler for the auth hop's subscribe-side work. Daemon threads, so it does not
-     * hold up JVM shutdown.
-     */
-    @Provides
-    @Singleton
-    @AuthHttpScheduler
-    public Scheduler authHttpScheduler() {
-        return Schedulers.newBoundedElastic(
-                AUTH_SCHEDULER_THREAD_CAP,
-                AUTH_SCHEDULER_QUEUED_TASK_CAP,
-                "auth-http-scheduler",
-                AUTH_SCHEDULER_TTL_SECONDS,
-                true);
     }
 
     @Provides
