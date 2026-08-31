@@ -1,4 +1,4 @@
-export { test, expect } from './dashboard-cleanup.fixture';
+export { test, expect } from './enriched-datasets.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -105,4 +105,9 @@ export type {
   TraceAttachmentsFixtures,
 } from './trace-attachments.fixture';
 export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type {
+  EnrichedDatasetSeedRef,
+  EnrichedDatasetsRef,
+  EnrichedDatasetsFixtures,
+} from './enriched-datasets.fixture';
 export type { ProjectRef } from '../core/backend';

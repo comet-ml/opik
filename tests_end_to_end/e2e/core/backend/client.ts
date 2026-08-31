@@ -75,6 +75,35 @@ export interface DatasetVersionRef {
   isLatest: boolean;
 }
 
+/**
+ * One row of the Datasets (or Test suites) list, carrying only the fields
+ * `enrichDatasetWithAdditionalInformation` adds on top of the stored dataset —
+ * the numbers and timestamps the list page renders per row.
+ *
+ * Every field is `| null` rather than defaulted to 0 / '' on purpose. The
+ * failure this shape exists to catch is enrichment quietly dropping a value,
+ * and a mapper that turned an absent `dataset_items_count` into `0` would make
+ * that indistinguishable from a genuinely empty dataset.
+ */
+export interface EnrichedDatasetRef {
+  id: string;
+  name: string;
+  datasetItemsCount: number | null;
+  experimentCount: number | null;
+  optimizationCount: number | null;
+  /** ISO-8601, or null when the dataset has never been used by an experiment. */
+  mostRecentExperimentAt: string | null;
+  mostRecentOptimizationAt: string | null;
+  /** `latest_version.version_name` — 'v1', 'v2', … — or null when unversioned. */
+  latestVersionName: string | null;
+}
+
+/** A page of enriched rows plus the `total` the pagination reads. */
+export interface EnrichedDatasetPage {
+  total: number;
+  rows: EnrichedDatasetRef[];
+}
+
 /** The windowed stats one row of the Projects table renders. */
 export interface ProjectStatsRef {
   projectId: string;
@@ -392,6 +421,48 @@ function toMetricSeries(json: unknown): MetricSeries[] {
       value: p.value ?? null,
     })),
   }));
+}
+
+/**
+ * The enriched fields of one dataset, mapped identically for the multi-row list
+ * and the single-dataset read.
+ *
+ * One mapper on purpose: the two reads take the same enrichment path with
+ * different `ids` sets, so a spec comparing them is only meaningful if it is
+ * not comparing two different mappings of the same answer.
+ *
+ * `null` for anything the payload did not carry as the expected type — never a
+ * zero or an empty string. See `EnrichedDatasetRef`.
+ */
+function toEnrichedDataset(dataset: unknown): EnrichedDatasetRef {
+  const d = dataset as {
+    id?: unknown;
+    name?: unknown;
+    datasetItemsCount?: unknown;
+    experimentCount?: unknown;
+    optimizationCount?: unknown;
+    mostRecentExperimentAt?: unknown;
+    mostRecentOptimizationAt?: unknown;
+    latestVersion?: { versionName?: unknown } | null;
+  };
+  const asNumber = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+  // The SDK deserializes date-typed fields to Date; keep the raw string form
+  // for the ones it leaves alone, so neither read is normalised away.
+  const asInstant = (v: unknown): string | null => {
+    if (v instanceof Date) return v.toISOString();
+    return typeof v === 'string' && v.length > 0 ? v : null;
+  };
+  return {
+    id: String(d.id ?? ''),
+    name: String(d.name ?? ''),
+    datasetItemsCount: asNumber(d.datasetItemsCount),
+    experimentCount: asNumber(d.experimentCount),
+    optimizationCount: asNumber(d.optimizationCount),
+    mostRecentExperimentAt: asInstant(d.mostRecentExperimentAt),
+    mostRecentOptimizationAt: asInstant(d.mostRecentOptimizationAt),
+    latestVersionName:
+      typeof d.latestVersion?.versionName === 'string' ? d.latestVersion.versionName : null,
+  };
 }
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
@@ -746,6 +817,39 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * The Datasets list exactly as the page asks for it — `GET /v1/private/
+     * datasets?project_id=…` — reduced to the enriched fields it renders.
+     *
+     * `total` travels with the rows because a spec asserting per-row
+     * enrichment has to be able to assert *which* rows came back, not just that
+     * its own are among them: a project scoped read that leaked a sibling's
+     * datasets would otherwise pass.
+     */
+    async listEnrichedDatasets(args: {
+      projectId: string;
+      size?: number;
+    }): Promise<EnrichedDatasetPage> {
+      const page = await opik.api.datasets.findDatasets({
+        projectId: args.projectId,
+        page: 1,
+        size: args.size ?? 100,
+      });
+      return {
+        total: Number(page.total ?? 0),
+        rows: (page.content ?? []).map(toEnrichedDataset),
+      };
+    },
+
+    /**
+     * The same enriched fields for one dataset — `GET /v1/private/datasets/{id}`.
+     * Single-element enrichment, so comparing it to the row the list returned
+     * for the same dataset is what catches enrichment cross-wiring rows at width.
+     */
+    async getEnrichedDataset(datasetId: string): Promise<EnrichedDatasetRef> {
+      return toEnrichedDataset(await opik.api.datasets.getDatasetById(datasetId));
     },
 
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
