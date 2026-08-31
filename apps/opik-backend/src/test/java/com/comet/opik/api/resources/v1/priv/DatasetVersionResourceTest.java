@@ -1268,7 +1268,7 @@ class DatasetVersionResourceTest {
 
             var addedItemId = v2Items.stream()
                     .filter(item -> !v1ItemIds.contains(item.datasetItemId()))
-                    .map(DatasetItem::datasetItemId)
+                    .map(DatasetItem::id)
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Added item not found in v2"));
 
@@ -5989,6 +5989,65 @@ class DatasetVersionResourceTest {
             // The winner created exactly one new version on top of the seed; its 3 rows landed in latest.
             assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total()).isEqualTo(2L);
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
+        }
+
+        @Test
+        @DisplayName("Concurrent appends sharing a stable id: itemsTotal matches the rows actually stored")
+        void concurrentAppendsSharingStableId__thenItemsTotalMatchesStoredRows() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Establish the group version and get a server-issued stable id to re-send. Seeding first
+            // means every racing batch below takes the unlocked append branch.
+            UUID sharedBatchGroupId = UUID.randomUUID();
+            var seedBatch = buildBatch(datasetId, sharedBatchGroupId, 1, "seed");
+            try (var response = datasetResourceClient.callCreateDatasetItems(seedBatch, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            var seeded = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+            UUID sharedItemId = seeded.stream()
+                    .filter(item -> "seed-input-0".equals(item.data().get("input").asText()))
+                    .map(DatasetItem::id)
+                    .findFirst()
+                    .orElseThrow();
+
+            long rowsBefore = latestItemCount(datasetId);
+
+            // Every writer re-sends the SAME stable id (the documented upsert key). This is the SDK-retry shape the
+            // reviewer flagged: with the append unlocked, each batch can classify the id as new
+            // (countExistingItemIds sees the pre-existing row, but concurrent siblings do not see each
+            // other) and each increments items_total, while ReplacingMergeTree keeps a single row.
+            int writers = 6;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemBatch.builder()
+                            .datasetId(datasetId)
+                            .batchGroupId(sharedBatchGroupId)
+                            .items(List.of(DatasetItem.builder()
+                                    .id(sharedItemId)
+                                    .source(DatasetItemSource.MANUAL)
+                                    .traceId(null)
+                                    .spanId(null)
+                                    .data(Map.of(
+                                            "input", JsonUtils.getJsonNodeFromString("\"retry-input\""),
+                                            "output", JsonUtils.getJsonNodeFromString("\"retry-output-" + i + "\"")))
+                                    .build()))
+                            .build())
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+            assertThat(statuses).allMatch(status -> status == 204);
+
+            // Re-sending an existing id is an update, not an insert, so the row count must not move.
+            long rowsAfter = latestItemCount(datasetId);
+            assertThat(rowsAfter).isEqualTo(rowsBefore);
+
+            // The stored rows are ground truth: itemsTotal on the group's version must agree with them.
+            DatasetVersion groupVersion = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content().stream()
+                    .max(Comparator.comparing(DatasetVersion::createdAt))
+                    .orElseThrow();
+            assertThat(groupVersion.itemsTotal()).isEqualTo((int) rowsAfter);
         }
     }
 
