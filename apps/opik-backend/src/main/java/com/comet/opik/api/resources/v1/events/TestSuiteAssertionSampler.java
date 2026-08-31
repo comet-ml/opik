@@ -147,33 +147,11 @@ public class TestSuiteAssertionSampler {
                     if (messages.isEmpty()) {
                         return Mono.empty();
                     }
-                    // The publisher silently drops a message the consumer could not decode, and still
-                    // completes successfully. Nothing would then decrement this experiment's assertion
-                    // counter - that only happens when the message is consumed - so the counter would never
-                    // reach zero and the experiment would stay incomplete forever. Compensate here instead.
-                    // Partition in one pass: exceedsPayloadLimit serializes the message to measure it, so
-                    // checking each message twice would double that cost on the large-payload path.
-                    var byOversized = messages.stream()
-                            .collect(Collectors.partitioningBy(onlineScorePublisher::exceedsPayloadLimit));
-                    var oversized = byOversized.get(true);
-                    var publishable = byOversized.get(false);
-                    Mono<Void> compensate = Flux.fromIterable(oversized)
-                            .doOnNext(message -> log.warn(
-                                    "Test suite assertion message too large to score, experimentId '{}', "
-                                            + "workspaceId '{}'",
-                                    message.experimentId(), message.workspaceId()))
-                            .concatMap(message -> decrementAssertionCounter(message.experimentId(),
-                                    message.workspaceId()))
-                            .then();
-                    if (publishable.isEmpty()) {
-                        return compensate;
-                    }
-                    log.info("Enqueuing '{}' test suite assertion messages", publishable.size());
-                    return compensate.then(onlineScorePublisher
-                            .enqueueMessage(publishable, AutomationRuleEvaluatorType.LLM_AS_JUDGE))
+                    log.info("Enqueuing '{}' test suite assertion messages", messages.size());
+                    return onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE)
                             .onErrorResume(error -> {
                                 log.error("Error enqueueing '{}' test suite assertion messages into redis",
-                                        publishable.size(), error);
+                                        messages.size(), error);
                                 return Mono.empty();
                             });
                 })
