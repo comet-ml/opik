@@ -401,7 +401,9 @@ public class OnlineScoringSampler {
         int dropped = messages.size() - retained.size();
         if (dropped > 0) {
             recordDecision(workspaceId, workspaceName, evaluator, DECISION_SKIPPED_TOO_LARGE, dropped);
-            log.error("Dropped '{}' oversized message(s) for rule '{}', workspaceId '{}'",
+            // WARN, not ERROR: an oversized trace is expected input the operator asked us to drop, there is
+            // no throwable, and the DECISION_SKIPPED_TOO_LARGE metric is what an alert should watch.
+            log.warn("Dropped '{}' oversized message(s) for rule '{}', workspaceId '{}'",
                     dropped, evaluator.getName(), workspaceId);
         }
         return retained;

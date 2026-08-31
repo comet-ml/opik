@@ -455,6 +455,11 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: 100
+  # Default: false
+  # Description: Whether the publisher drops online-scoring messages too large for a consumer to decode,
+  #   instead of enqueueing them. Held at the production default here so the integration suite exercises
+  #   the shipped behaviour; OnlineScorePublisherTest covers the enabled path.
+  dropOversizedPayloads: false
   # Default: 50000
   # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes
   #   through the agentic-tools path. Below the threshold the inline path is used.

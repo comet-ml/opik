@@ -158,9 +158,10 @@ public class TestSuiteAssertionSampler {
                     var oversized = byOversized.get(true);
                     var publishable = byOversized.get(false);
                     Mono<Void> compensate = Flux.fromIterable(oversized)
-                            .doOnNext(message -> log.error(
-                                    "Test suite assertion message too large to score, experimentId '{}'",
-                                    message.experimentId()))
+                            .doOnNext(message -> log.warn(
+                                    "Test suite assertion message too large to score, experimentId '{}', "
+                                            + "workspaceId '{}'",
+                                    message.experimentId(), message.workspaceId()))
                             .concatMap(message -> decrementAssertionCounter(message.experimentId(),
                                     message.workspaceId()))
                             .then();

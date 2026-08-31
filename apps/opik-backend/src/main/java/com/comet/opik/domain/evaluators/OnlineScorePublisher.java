@@ -205,7 +205,9 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             return true;
                         }
                         enqueueCounter.add(1, tooLargeAttrs);
-                        log.error(
+                        // WARN, not ERROR: this is the configured behaviour on expected input, with no
+                        // throwable. result=skipped_too_large on the counter is the signal to alert on.
+                        log.warn(
                                 "Skipping online scoring: payload of '{}' bytes exceeds the '{}' byte payload "
                                         + "limit, evaluatorType '{}', workspaceId '{}'",
                                 size, maxPayloadBytes, type.getType(), workspaceId);
