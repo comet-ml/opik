@@ -713,11 +713,6 @@ class DatasetServiceImpl implements DatasetService {
                 .toStream()
                 .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
 
-        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                .toStream()
-                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
-
         Map<UUID, OptimizationDAO.OptimizationSummary> optimizationSummaryMap = optimizationDAO
                 .findOptimizationSummaryByDatasetIds(ids)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
@@ -726,23 +721,29 @@ class DatasetServiceImpl implements DatasetService {
 
         Map<UUID, DatasetVersion> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
 
+        // The dataset_items count is O(N) in the dataset's item count, so only pay it for the datasets whose
+        // count cannot come from their latest version.
+        Set<UUID> idsNeedingItemCount = datasets.stream()
+                .map(Dataset::id)
+                .filter(id -> versionItemsTotal(latestVersionsByDatasetId.get(id)) == null)
+                .collect(toSet());
+
+        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = fetchDatasetItemSummaries(idsNeedingItemCount);
+
         return datasets.stream()
                 .map(dataset -> {
                     var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
-                    var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(),
-                            DatasetItemSummary::empty);
                     var optimizationSummary = optimizationSummaryMap.computeIfAbsent(dataset.id(),
                             OptimizationDAO.OptimizationSummary::empty);
                     var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
-                    // When versioning is enabled and a latest version exists, use itemsTotal from the version
-                    // Otherwise, fall back to the legacy dataset_items count
-                    Long itemsCount;
-                    if (featureFlags.isDatasetVersioningEnabled() && latestVersion != null
-                            && latestVersion.itemsTotal() != null) {
-                        itemsCount = latestVersion.itemsTotal().longValue();
-                    } else {
-                        itemsCount = datasetItemSummary.datasetItemsCount();
+                    // When versioning is enabled and a latest version supplies itemsTotal, use it.
+                    // Otherwise, fall back to the legacy dataset_items count.
+                    Long itemsCount = versionItemsTotal(latestVersion);
+                    if (itemsCount == null) {
+                        itemsCount = datasetItemSummaryMap
+                                .getOrDefault(dataset.id(), DatasetItemSummary.empty(dataset.id()))
+                                .datasetItemsCount();
                     }
 
                     return dataset.toBuilder()
@@ -755,6 +756,25 @@ class DatasetServiceImpl implements DatasetService {
                             .build();
                 })
                 .toList();
+    }
+
+    private Long versionItemsTotal(DatasetVersion latestVersion) {
+        if (!featureFlags.isDatasetVersioningEnabled() || latestVersion == null
+                || latestVersion.itemsTotal() == null) {
+            return null;
+        }
+        return latestVersion.itemsTotal().longValue();
+    }
+
+    private Map<UUID, DatasetItemSummary> fetchDatasetItemSummaries(Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return datasetItemDAO.findDatasetItemSummaryByDatasetIds(datasetIds)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                .toStream()
+                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
     }
 
     private Map<UUID, DatasetVersion> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
