@@ -437,7 +437,7 @@ def test_get_prompt__chat_prompt__returns_none(
 
     # Try to retrieve it with get_prompt() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
-        opik_client.get_prompt(name=prompt_name)
+        opik_client.get_prompt(name=prompt_name, project_name=temporary_project_name)
 
     # Verify the chat prompt remains unchanged
     retrieved_chat_prompt = opik_client.get_chat_prompt(
@@ -500,7 +500,9 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(
 
     # Try to get history with get_prompt_history() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
-        opik_client.get_prompt_history(name=prompt_name)
+        opik_client.get_prompt_history(
+            name=prompt_name, project_name=temporary_project_name
+        )
 
     # Verify the chat prompt remains unchanged
     retrieved_chat_prompt = opik_client.get_chat_prompt(

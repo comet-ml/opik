@@ -24,7 +24,7 @@ jobs:
     # If the PR has the "update readme" label, generate and commit
     - name: Generate and commit helm docs
       if: contains(github.event.pull_request.labels.*.name, 'update readme')
-      uses: losisin/helm-docs-github-action@v1
+      uses: losisin/helm-docs-github-action@v2
       with:
         chart-search-root: deployment/helm_chart/opik
         git-push: true
@@ -35,7 +35,7 @@ jobs:
     # If the PR does NOT have the label, just validate that docs are up-to-date
     - name: Validate helm docs are up-to-date
       if: "!contains(github.event.pull_request.labels.*.name, 'update readme')"
-      uses: losisin/helm-docs-github-action@v1
+      uses: losisin/helm-docs-github-action@v2
       with:
         chart-search-root: deployment/helm_chart/opik
         git-push: false

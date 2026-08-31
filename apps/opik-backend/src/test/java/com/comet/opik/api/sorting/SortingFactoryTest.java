@@ -54,11 +54,29 @@ class SortingFactoryTest {
 
     @Test
     void newSorting__whenNullFieldOnDatasetsFactory__ignoresItWithoutThrowing() {
-        // Regression: the null field reaches SortingFactoryDatasets.processFields -> ensureBindKeyParam,
-        // which called field.startsWith(...) and NPE'd before the validity filter ran.
+        // Regression: a null/blank field must be dropped by newSorting's blank-field filter before any
+        // per-field processing, so it never reaches field.startsWith(...) / field.contains(...).
         var datasetsFactory = new SortingFactoryDatasets();
 
         assertThatCode(() -> datasetsFactory.newSorting("[{\"direction\":\"DESC\"}]")).doesNotThrowAnyException();
         assertThat(datasetsFactory.newSorting("[{\"direction\":\"DESC\"}]")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("bindKeyParam is generated server-side for dynamic fields and not taken from input")
+    void newSorting__generatesBindKeyParamServerSide() {
+        var datasetsFactory = new SortingFactoryDatasets();
+
+        // bindKeyParam is an internal value that builds the SQL parameter placeholder name (bindKey()).
+        // A value supplied in the request JSON must be ignored: the placeholder name must always be a
+        // safe, server-generated identifier.
+        var result = datasetsFactory
+                .newSorting("[{\"field\":\"output.foo\",\"bind_key_param\":\"clientProvided123\"}]");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).bindKeyParam())
+                .isNotEqualTo("clientProvided123")
+                .matches("[A-Za-z0-9_]+");
+        assertThat(result.get(0).bindKey()).matches("sorting_param_[A-Za-z0-9_]+");
     }
 }

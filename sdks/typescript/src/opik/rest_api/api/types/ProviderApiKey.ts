@@ -12,6 +12,7 @@ export interface ProviderApiKey {
     headers?: Record<string, string>;
     configuration?: Record<string, string>;
     baseUrl?: string;
+    authConfig?: OpikApi.ProviderAuthConfig;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

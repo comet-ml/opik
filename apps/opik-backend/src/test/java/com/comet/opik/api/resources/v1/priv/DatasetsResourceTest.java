@@ -2045,6 +2045,137 @@ class DatasetsResourceTest {
     }
 
     @Nested
+    @DisplayName("Experiment Summary Enrichment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentSummaryEnrichment {
+
+        private UUID createExperimentWithItems(Dataset dataset, int itemCount, String apiKey, String workspaceName) {
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, itemCount)
+                    .mapToObj(i -> {
+                        var trace = factory.manufacturePojo(Trace.class);
+                        createTrace(trace, apiKey, workspaceName);
+                        return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                                .experimentId(experimentId)
+                                .traceId(trace.id())
+                                .build();
+                    })
+                    .collect(toUnmodifiableSet());
+
+            createAndAssert(ExperimentItemsBatch.builder().experimentItems(experimentItems).build(), apiKey,
+                    workspaceName);
+
+            return experimentId;
+        }
+
+        private Map<String, Dataset> getDatasetsByName(String workspaceName, String apiKey) {
+            return datasetResourceClient.getDatasets(workspaceName, apiKey).content().stream()
+                    .collect(toMap(Dataset::name, Function.identity()));
+        }
+
+        @Test
+        @DisplayName("when dataset has experiments spread across many experiment ids, then count every experiment")
+        void experimentSummary__whenExperimentsSpreadAcrossManyIds__thenCountEveryExperiment() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var dataset = buildDataset();
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            int experimentCount = 12;
+            Instant beforeCreateExperimentItems = Instant.now();
+            IntStream.range(0, experimentCount)
+                    .forEach(i -> createExperimentWithItems(dataset, 2, apiKey, workspaceName));
+
+            var actualDataset = getDatasetsByName(workspaceName, apiKey).get(dataset.name());
+
+            assertThat(actualDataset.experimentCount()).isEqualTo(experimentCount);
+            assertThat(actualDataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
+        }
+
+        @Test
+        @DisplayName("when workspace experiments belong to other datasets, then dataset without experiments stays empty")
+        void experimentSummary__whenExperimentsBelongToOtherDatasets__thenDatasetWithoutExperimentsStaysEmpty() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var busyDataset = buildDataset();
+            createAndAssert(busyDataset, apiKey, workspaceName);
+            IntStream.range(0, 5).forEach(i -> createExperimentWithItems(busyDataset, 4, apiKey, workspaceName));
+
+            var emptyDataset = buildDataset();
+            createAndAssert(emptyDataset, apiKey, workspaceName);
+
+            var datasetsByName = getDatasetsByName(workspaceName, apiKey);
+
+            assertThat(datasetsByName.get(emptyDataset.name()).experimentCount()).isZero();
+            assertThat(datasetsByName.get(emptyDataset.name()).mostRecentExperimentAt()).isNull();
+            assertThat(datasetsByName.get(busyDataset.name()).experimentCount()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("when batch mixes datasets with and without experiments, then each gets its own summary")
+        void experimentSummary__whenBatchMixesDatasetsWithAndWithoutExperiments__thenEachGetsItsOwnSummary() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetWithThree = buildDataset();
+            createAndAssert(datasetWithThree, apiKey, workspaceName);
+            IntStream.range(0, 3).forEach(i -> createExperimentWithItems(datasetWithThree, 2, apiKey, workspaceName));
+
+            var datasetWithOne = buildDataset();
+            createAndAssert(datasetWithOne, apiKey, workspaceName);
+            createExperimentWithItems(datasetWithOne, 1, apiKey, workspaceName);
+
+            var datasetWithNone = buildDataset();
+            createAndAssert(datasetWithNone, apiKey, workspaceName);
+
+            var datasetsByName = getDatasetsByName(workspaceName, apiKey);
+
+            assertThat(datasetsByName.get(datasetWithThree.name()).experimentCount()).isEqualTo(3);
+            assertThat(datasetsByName.get(datasetWithOne.name()).experimentCount()).isEqualTo(1);
+            assertThat(datasetsByName.get(datasetWithNone.name()).experimentCount()).isZero();
+            assertThat(datasetsByName.get(datasetWithNone.name()).mostRecentExperimentAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("when another workspace has experiments for a same-named dataset, then counts stay isolated")
+        void experimentSummary__whenAnotherWorkspaceHasExperiments__thenCountsStayIsolated() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String otherWorkspaceName = UUID.randomUUID().toString();
+            String otherApiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+
+            String sharedDatasetName = "shared-dataset-" + UUID.randomUUID();
+
+            var dataset = buildDataset().toBuilder().name(sharedDatasetName).build();
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            var otherDataset = buildDataset().toBuilder().name(sharedDatasetName).build();
+            createAndAssert(otherDataset, otherApiKey, otherWorkspaceName);
+
+            IntStream.range(0, 4)
+                    .forEach(i -> createExperimentWithItems(otherDataset, 3, otherApiKey, otherWorkspaceName));
+
+            var actualDataset = getDatasetsByName(workspaceName, apiKey).get(sharedDatasetName);
+
+            assertThat(actualDataset.experimentCount()).isZero();
+            assertThat(actualDataset.mostRecentExperimentAt()).isNull();
+
+            var actualOtherDataset = getDatasetsByName(otherWorkspaceName, otherApiKey).get(sharedDatasetName);
+
+            assertThat(actualOtherDataset.experimentCount()).isEqualTo(4);
+        }
+    }
+
+    @Nested
     @DisplayName("Get:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindDatasets {
@@ -5118,6 +5249,42 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("Error: batch update with an operator the field's type does not support")
+        void batchUpdateDatasetItems__whenFilterOperatorUnsupportedForFieldType__thenBadRequest() {
+            // The dataset has to exist, or the request is refused before it ever reaches the query builder.
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var datasetId = datasetResourceClient.getDatasetItem(item.id(), API_KEY, TEST_WORKSPACE).datasetId();
+
+            // STARTS_WITH has no template for a LIST field, so nothing renders it into the update query.
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.STARTS_WITH, null, "tag");
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                                filter.operator().getQueryParamOperator(),
+                                filter.field().getQueryParamField(),
+                                filter.field().getType()));
+            }
+        }
+
+        @Test
         @DisplayName("Error: batch update exceeds max size")
         void batchUpdateDatasetItems__whenExceedsMaxSize__thenBadRequest() {
             // Create more than 1000 IDs
@@ -5569,6 +5736,47 @@ class DatasetsResourceTest {
                     .post(Entity.json(deleteRequest))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: delete with an operator the field's type does not support")
+        void deleteDatasetItems__whenFilterOperatorUnsupportedForFieldType__thenBadRequest() {
+            // These body filters used to skip FiltersFactory validation, so the pair reached the query builder
+            // with no operator template behind it and failed as a 500 instead of naming the bad filter.
+            // The dataset has to exist, or the request is refused before it ever reaches the query builder.
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var datasetId = datasetResourceClient.getDatasetItem(item.id(), API_KEY, TEST_WORKSPACE).datasetId();
+
+            // STARTS_WITH has no template for a LIST field, so nothing renders it into the delete query.
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.STARTS_WITH, null, "tag");
+
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of(filter))
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                                filter.operator().getQueryParamOperator(),
+                                filter.field().getQueryParamField(),
+                                filter.field().getType()));
             }
         }
 
@@ -8750,6 +8958,148 @@ class DatasetsResourceTest {
 
             // Verify sorting is deterministic - both fetches should return the same order
             assertThat(firstFetchIds).containsExactlyElementsOf(secondFetchIds);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "output.x'",
+                "output.a'b",
+                "input.k\"v",
+                "metadata.m\\path",
+                "output.o';"
+        })
+        @DisplayName("when sorting by a JSON key containing special characters, then items are sorted by that key")
+        void findDatasetItemsWithExperimentItems__whenSortingByJsonKeyWithSpecialCharacters__thenSortedByThatKey(
+                String jsonKeyField) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset().toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Namespace (output/input/metadata) and the JSON key (with special characters) being sorted on.
+            String namespace = jsonKeyField.substring(0, jsonKeyField.indexOf('.'));
+            String jsonKey = jsonKeyField.substring(jsonKeyField.indexOf('.') + 1);
+
+            // Seed each trace with a DISTINCT, sortable value stored under exactly that key, so the
+            // assertions below prove the key is actually used for ordering (not ignored/missing/constant).
+            // Values 10..50 are assigned to item indices 0..4 (equal-length numeric strings sort in
+            // numeric order under JSONExtractRaw's raw-string comparison).
+            String projectName = GENERATOR.generate().toString();
+            int count = 5;
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        var value = JsonUtils.valueToTree(Map.of(jsonKey, (i + 1) * 10));
+                        var builder = factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName);
+                        switch (namespace) {
+                            case "output" -> builder.output(value);
+                            case "input" -> builder.input(value);
+                            case "metadata" -> builder.metadata(value);
+                            default -> throw new IllegalStateException("Unexpected namespace: " + namespace);
+                        }
+                        return builder.build();
+                    })
+                    .toList();
+
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(traces.stream()
+                            .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                                    .datasetId(datasetId)
+                                    .traceId(trace.id())
+                                    .spanId(null)
+                                    .source(DatasetItemSource.TRACE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id())
+                            .traceId(traces.get(i).id())
+                            .build())
+                    .collect(Collectors.toSet());
+
+            createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
+
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            // Baseline fetch (no sorting) to capture the full DatasetItem objects exactly as the API returns them.
+            List<DatasetItem> baselineItems = fetchDatasetItems(datasetId, experimentIdsParam, null, null,
+                    apiKey, workspaceName);
+            assertThat(baselineItems).hasSize(count);
+
+            // Item index i was seeded with value (i+1)*10; order the full objects by that value.
+            Map<UUID, Integer> valueByItemId = IntStream.range(0, count).boxed()
+                    .collect(Collectors.toMap(i -> datasetItemBatch.items().get(i).id(), i -> (i + 1) * 10));
+
+            List<DatasetItem> expectedAsc = baselineItems.stream()
+                    .sorted(Comparator.comparingInt(item -> valueByItemId.get(item.id())))
+                    .toList();
+            List<DatasetItem> expectedDesc = baselineItems.stream()
+                    .sorted(Comparator.comparingInt((DatasetItem item) -> valueByItemId.get(item.id())).reversed())
+                    .toList();
+
+            assertSortedByKey(datasetId, experimentIdsParam, jsonKeyField, Direction.ASC, apiKey, workspaceName,
+                    expectedAsc);
+            assertSortedByKey(datasetId, experimentIdsParam, jsonKeyField, Direction.DESC, apiKey, workspaceName,
+                    expectedDesc);
+        }
+
+        private void assertSortedByKey(UUID datasetId, String experimentIdsParam, String sortField,
+                Direction direction, String apiKey, String workspaceName, List<DatasetItem> expectedItems) {
+            List<DatasetItem> actualItems = fetchDatasetItems(datasetId, experimentIdsParam, sortField, direction,
+                    apiKey, workspaceName);
+
+            // Compare the whole DatasetItem objects, in order - not just their ids - so the assertion proves
+            // the bound key actually drives the ordering. Volatile/derived fields are ignored per suite convention.
+            assertThat(actualItems)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expectedItems);
+        }
+
+        private List<DatasetItem> fetchDatasetItems(UUID datasetId, String experimentIdsParam, String sortField,
+                Direction direction, String apiKey, String workspaceName) {
+            var target = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam);
+
+            if (sortField != null) {
+                var sorting = SortingField.builder().field(sortField).direction(direction).build();
+                var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                        StandardCharsets.UTF_8);
+                target = target.queryParam("sorting", sortingParam);
+            }
+
+            try (var actualResponse = target
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                return actualResponse.readEntity(DatasetItemPage.class).content();
+            }
         }
 
         private Stream<Arguments> findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields() {

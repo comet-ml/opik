@@ -12,6 +12,7 @@ from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import span, trace
 
 from . import event_parsing_utils
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             project_name: Project name for trace/span context.
             skip_index_construction_trace: Whether to skip index construction traces.
         """
+        analytics.track_event("integration", "llama_index")
         event_starts_to_ignore = (
             event_starts_to_ignore if event_starts_to_ignore else []
         )

@@ -77,6 +77,9 @@ public class OpikConfiguration extends JobConfiguration {
     private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
 
     @Valid @NotNull @JsonProperty
+    private LlmProviderTokenAuthConfig llmProviderTokenAuth = new LlmProviderTokenAuthConfig();
+
+    @Valid @NotNull @JsonProperty
     private CacheConfiguration cacheManager = new CacheConfiguration();
 
     @Valid @NotNull @JsonProperty
@@ -187,4 +190,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private RedactionConfig redaction = new RedactionConfig();
 }

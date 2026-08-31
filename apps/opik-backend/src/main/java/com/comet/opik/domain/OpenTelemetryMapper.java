@@ -4,9 +4,9 @@ import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
-import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
+import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
-import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
+import com.comet.opik.domain.mapping.otel.ProviderResolvers;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -167,6 +167,9 @@ public class OpenTelemetryMapper {
         // Claude Code is Anthropic-only and never sends a provider attribute, so set it directly.
         String model = null;
         String provider = isClaudeCode ? "anthropic" : null;
+        // Provider reported via the current `gen_ai.provider.name`, held separately so the
+        // deprecated `gen_ai.system` stays authoritative. See the PROVIDER case below.
+        String providerName = null;
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
@@ -202,7 +205,17 @@ public class OpenTelemetryMapper {
                     break;
 
                 case PROVIDER :
-                    provider = value.getStringValue();
+                    // Two attributes carry the provider: the deprecated `gen_ai.system` and its
+                    // replacement `gen_ai.provider.name`. Instrumentations mid-migration emit both,
+                    // and their vocabularies differ (e.g. `xai` vs `x_ai`), so pin which one wins
+                    // rather than letting OTLP attribute order decide. `gen_ai.system` stays
+                    // authoritative; the newer attribute only fills in when it is absent, which
+                    // keeps this strictly additive for every span that already resolves a provider.
+                    if (GenAIMappingRules.PROVIDER_NAME_ATTR.equals(rule.getRule())) {
+                        providerName = value.getStringValue();
+                    } else {
+                        provider = value.getStringValue();
+                    }
                     break;
 
                 case USAGE :
@@ -265,16 +278,22 @@ public class OpenTelemetryMapper {
             extractToolOutputEvent(events, output);
         }
 
-        // Rewrite Elastic Inference Service model/provider into the underlying provider so
-        // that cost lookup and provider-based filtering see the real upstream. Records the
-        // original values in metadata for traceability. Returns the (possibly unchanged) pair.
-        var resolved = ElasticInferenceServiceResolver.resolve(model, provider, metadata);
+        // Fall back to the current `gen_ai.provider.name` only when the deprecated `gen_ai.system`
+        // did not report a provider.
+        // Both sides must be non-blank: a non-string or empty `gen_ai.provider.name` yields ""
+        // from getStringValue(), and assigning that would persist an empty provider where the
+        // span previously carried none at all.
+        if (StringUtils.isBlank(provider) && StringUtils.isNotBlank(providerName)) {
+            provider = providerName;
+        }
+
+        // Normalize the reported model/provider onto Opik's canonical vocabulary — gateway
+        // rewrites, semconv aliases and backend disambiguation — otherwise cost lookup and
+        // provider-based filtering see a name that matches no price row. See ProviderResolvers
+        // for the steps and why their order matters.
+        var resolved = ProviderResolvers.resolve(model, provider, metadata);
         model = resolved.model();
         provider = resolved.provider();
-
-        // Disambiguate the generic 'google' provider (PydanticAI / google-genai) into the Vertex AI
-        // vs Gemini API canonical name using server.address, so cost lookup can match a price row.
-        provider = GoogleProviderResolver.resolve(provider, metadata);
 
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.

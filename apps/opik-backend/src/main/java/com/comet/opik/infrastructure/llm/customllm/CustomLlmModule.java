@@ -15,8 +15,9 @@ public class CustomLlmModule extends AbstractModule {
     @Singleton
     @Named("customLlmGenerator")
     public CustomLlmClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new CustomLlmClientGenerator(config);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull AuthTokenProvider authTokenProvider) {
+        return new CustomLlmClientGenerator(config, authTokenProvider);
     }
 
     @Provides

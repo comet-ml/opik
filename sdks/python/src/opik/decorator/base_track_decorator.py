@@ -14,7 +14,7 @@ from typing import (
     NamedTuple,
 )
 
-from .. import context_storage, logging_messages, tracing_runtime_config
+from .. import analytics, context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
 from ..runner import registry
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType, TraceSource
@@ -109,6 +109,8 @@ class BaseTrackDecorator(abc.ABC):
             began while tracing was enabled will still be logged even if
             tracing is disabled before it returns.
         """
+        analytics.track_event("client", "track")
+
         track_options = arguments_helpers.TrackOptions(
             name=None,
             type=type,

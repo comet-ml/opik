@@ -128,6 +128,7 @@ databaseAnalyticsDataModel:
   #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
   tracesDistributedWrapEnabled: false
+  #  Default: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -204,6 +205,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-cold-storage-disk
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-traces-topology
       critical: true
       type: ready
       initialState: false
@@ -400,6 +406,17 @@ cors:
   # Description: Whether or not to allow cross site scripting
   enabled: false
 
+# Read-time redaction configuration
+redaction:
+  # Default: false
+  # Description: Master switch. Off here so the suite exercises the shipped default; the tests that need it on
+  # override redaction.enabled and redaction.rules per application, which is what keeps this file honest about
+  # the keys existing.
+  enabled: false
+  # Default: [] - valid only while enabled=false, since an empty set with enabled=true fails startup.
+  # Description: JSON array of {"regex", "replace"} applied to every string in a response.
+  rules: '[]'
+
 # Encryption related configuration
 encryption:
   # Default: GiTHubiLoVeYouAA
@@ -553,6 +570,10 @@ datasetExport:
   cleanupTimeout: 5m
   cleanupLockWaitTime: 1s
   cleanupBatchSize: 100
+
+# Dynamic token auth for custom LLM providers: tests hit localhost token endpoints over http
+llmProviderTokenAuth:
+  destinationGuard: "relaxed"
 
 # LLM providers client configuration
 llmProviderClient:
@@ -822,9 +843,6 @@ serviceToggles:
   #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
-  # Default: false
-  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
-  agenticToolsEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
