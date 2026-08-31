@@ -2330,8 +2330,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     if (optionalVersion.isPresent()) {
                         // Version exists - append items to it
                         var existingVersion = optionalVersion.get();
-                        log.info("Appending '{}' items to existing version '{}' for batch_group_id '{}'",
-                                batch.items().size(), existingVersion.id(), batchGroupId);
+                        log.info("Appending items to existing group version; batchGroupId='{}' versionId='{}' "
+                                + "itemCount='{}'", batchGroupId, existingVersion.id(), batch.items().size());
                         return appendToGroupVersion(batch, datasetId, existingVersion.id(), workspaceId, userName);
                     }
                     return withDatasetVersionLock(datasetId,
@@ -2339,12 +2339,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                     .flatMap(recheck -> {
                                         if (recheck.isPresent()) {
                                             log.debug(
-                                                    "Version for batch_group_id '{}' was created concurrently; appending '{}' items",
+                                                    "Concurrent group version creation detected; batchGroupId='{}' itemCount='{}'",
                                                     batchGroupId, batch.items().size());
                                             return appendToGroupVersion(batch, datasetId, recheck.get().id(),
                                                     workspaceId, userName);
                                         }
-                                        log.info("Creating new version with batch_group_id '{}' for dataset '{}'",
+                                        log.info("Creating new group version; batchGroupId='{}' datasetId='{}'",
                                                 batchGroupId, datasetId);
                                         return saveItemsWithVersion(batch, datasetId, batchGroupId)
                                                 .contextWrite(ctx -> ctx
