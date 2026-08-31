@@ -22,6 +22,7 @@ export {
   type TestSuiteItemRef,
   type FeedbackScoreRef,
   type TraceDetail,
+  type SpanDetail,
   type AutomationRuleRef,
   type AutomationRuleDetail,
   type AutomationRuleLogRef,

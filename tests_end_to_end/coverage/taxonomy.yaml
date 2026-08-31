@@ -642,14 +642,19 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-oversized-payload.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections, and the 400-class classification of a metric that exits 0 without a result line" }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections, and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring after a 25MB span (OPIK-8164)" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
+      # Still false, and deliberately. online-evaluation-oversized-payload.spec.ts
+      # does create and drive a span-scope rule end to end, but this key covers
+      # BOTH the span and thread scope flags and nothing exercises thread scope.
+      # Flipping it on the span half would retire the thread half untested.
+      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags; span scope is now driven incidentally by online-evaluation-oversized-payload.spec.ts, thread scope is untouched" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
