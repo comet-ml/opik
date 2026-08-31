@@ -8,6 +8,8 @@ export {
   type DatasetItemWithTagsRef,
   type DatasetSummaryRef,
   type DatasetVersionRef,
+  type EnrichedDatasetRef,
+  type EnrichedDatasetPage,
   type RawApiResult,
   type BackendSort,
   type MetricSeries,
