@@ -1467,12 +1467,12 @@ class SpansLocalV2BenchmarkTest {
                     metadata_length UInt64 MATERIALIZED length(metadata) CODEC(T64, ZSTD(1)),
                     truncated_input String MATERIALIZED if(length(input) >= truncation_threshold, substring(input, 1, truncation_threshold), input) CODEC(ZSTD(3)),
                     truncated_output String MATERIALIZED if(length(output) >= truncation_threshold, substring(output, 1, truncation_threshold), output) CODEC(ZSTD(3)),
-                    duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
+                    duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6, 'UTC') OR start_time = toDateTime64('1970-01-01 00:00:00', 6, 'UTC'), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
                     id_at DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(ZSTD(1))
                 """;
-        // NEW spans_local_v2 format = the live table's codecs after migrations 000115 (create) and 000116 (the
-        // real-data refinements: usage and error_info on ZSTD(3), start_time / created_at / id_at off Delta), matching
-        // the pin map above.
+        // NEW spans_local_v2 format = the live table's codecs after migrations 000115 (create), 000116 (the real-data
+        // refinements: usage and error_info on ZSTD(3), start_time / created_at / id_at off Delta) and 000119 (the epoch
+        // sentinel pinned to UTC), matching the pin map above.
         execute(("""
                 CREATE TABLE {db}.spans_full_after
                 (

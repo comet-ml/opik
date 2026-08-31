@@ -255,8 +255,9 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
                 inconclusive=$((inconclusive + 1))
                 log "INCONCLUSIVE week $week ($LO .. $HI): src_rows=$src_rows dst_rows=$dst_rows version_ties=src:$src_ties/dst:$dst_ties" >&2
                 log "  Every differing key's live row matched, but this window holds keys whose newest last_updated_at is" >&2
-                log "  shared by more than one row, so FINAL chose among them arbitrarily and may have landed on the same" >&2
-                log "  row on both sides by luck — including where one side is missing a version. NOT certified either way." >&2
+                log "  carried by MORE THAN ONE DISTINCT ROW, so FINAL chose between rows that actually differ and may have" >&2
+                log "  landed on the same one on both sides by luck — including where one side is missing a version." >&2
+                log "  NOT certified either way." >&2
             fi
         else
             mismatches=$((mismatches + 1))
