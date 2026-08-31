@@ -33,6 +33,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -604,14 +605,21 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
+    void testListEligibleWorkspaces__filtersDefaultAndInternalWorkspacesAndMapsToWorkspaceInfo()
+            throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var production = podamFactory.manufacturePojo(WorkspaceInfo.class);
         var staging = podamFactory.manufacturePojo(WorkspaceInfo.class);
+        // only the full wrapping marks a workspace internal, a lone prefix or suffix does not
+        var prefixed = WorkspaceInfo.builder().id("ws-prefixed").name("__prefixed").build();
+        var suffixed = WorkspaceInfo.builder().id("ws-suffixed").name("suffixed__").build();
         var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
-                Map.of("workspaceId", production.id(), "workspaceName", production.name()),
+                workspaceEntry(production),
                 Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME),
-                Map.of("workspaceId", staging.id(), "workspaceName", staging.name())));
+                Map.of("workspaceId", "ws-internal", "workspaceName", "__internal__"),
+                workspaceEntry(prefixed),
+                workspaceEntry(suffixed),
+                workspaceEntry(staging)));
         WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
                 .withQueryParam("withoutExtendedData", equalTo("true"))
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
@@ -619,7 +627,7 @@ class RemoteAuthServiceTest {
 
         var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
 
-        assertThat(result).containsExactly(production, staging);
+        assertThat(result).containsExactly(production, prefixed, suffixed, staging);
     }
 
     @Test
@@ -676,12 +684,13 @@ class RemoteAuthServiceTest {
                 .hasMessage(NOT_LOGGED_USER);
     }
 
-    @Test
-    void testAuthorizeWorkspace__whenDefaultWorkspace__thenForbidden() {
+    @ParameterizedTest
+    @ValueSource(strings = {DEFAULT_WORKSPACE_NAME, "__internal__", "__a__", "  "})
+    void testAuthorizeWorkspace__whenNotEligible__thenForbidden(String workspaceName) {
         var sessionTokenValue = "session-" + UUID.randomUUID();
 
         assertThatThrownBy(() -> remoteAuthService.authorizeWorkspace(
-                sessionCookie(sessionTokenValue), DEFAULT_WORKSPACE_NAME))
+                sessionCookie(sessionTokenValue), workspaceName))
                 .isExactlyInstanceOf(ClientErrorException.class)
                 .hasMessage(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
     }
@@ -710,6 +719,10 @@ class RemoteAuthServiceTest {
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
+    }
+
+    private static Map<String, String> workspaceEntry(WorkspaceInfo workspace) {
+        return Map.of("workspaceId", workspace.id(), "workspaceName", workspace.name());
     }
 
     private static Cookie sessionCookie(String value) {
