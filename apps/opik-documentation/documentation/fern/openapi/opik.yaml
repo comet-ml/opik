@@ -21258,7 +21258,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -21330,8 +21329,6 @@ components:
         ollieEnabled:
           type: boolean
         projectHomepageEnabled:
-          type: boolean
-        agenticToolsEnabled:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean
