@@ -1062,4 +1062,32 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code anyscale}, {@code scaleway} and {@code ovhcloud} as canonical
+     * providers so that their token-priced entries in {@code model_prices_and_context_window.json}
+     * are no longer silently dropped at load time. Each case exercises a representative token-priced
+     * model routed through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideTokenPricedProviderCases")
+    void calculateCostHandlesTokenPricedProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideTokenPricedProviderCases() {
+        return Stream.of(
+                // anyscale/HuggingFaceH4/zephyr-7b-beta: input 1.5e-07, output 1.5e-07
+                // 1000*1.5e-07 + 200*1.5e-07 = 0.00018
+                Arguments.of("anyscale", "anyscale/HuggingFaceH4/zephyr-7b-beta", "0.00018"),
+                // scaleway/qwen/qwen3.5-397b-a17b: input 6e-07, output 3.6e-06
+                // 1000*6e-07 + 200*3.6e-06 = 0.00132
+                Arguments.of("scaleway", "scaleway/qwen/qwen3.5-397b-a17b", "0.00132"),
+                // ovhcloud/DeepSeek-R1-Distill-Llama-70B: input 6.7e-07, output 6.7e-07
+                // 1000*6.7e-07 + 200*6.7e-07 = 0.000804
+                Arguments.of("ovhcloud", "ovhcloud/DeepSeek-R1-Distill-Llama-70B", "0.000804"));
+    }
 }
