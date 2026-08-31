@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -29,7 +30,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -235,6 +239,57 @@ class DatasetServiceEnrichmentTest {
         service.findById(datasetId);
 
         assertThat(observedWorkspaces).containsExactly(WORKSPACE_ID);
+    }
+
+    @Test
+    @DisplayName("The three ClickHouse lookups are in flight simultaneously, not one after another")
+    void enrichmentIssuesLookupsConcurrently() throws Exception {
+        var datasetId = UUID.randomUUID();
+        stubDataset(datasetId);
+
+        // Each lookup counts itself in, then blocks until all three have arrived. A serial implementation
+        // parks on the first lookup and never reaches the second, so the latch times out and the test fails.
+        var allSubscribed = new CountDownLatch(3);
+        var released = new CountDownLatch(1);
+
+        Runnable gate = () -> {
+            allSubscribed.countDown();
+            try {
+                if (!released.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("lookups were not released: enrichment is not concurrent");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        };
+
+        when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.defer(() -> {
+                    gate.run();
+                    return Flux.just(new ExperimentItemDAO.ExperimentSummary(datasetId, 1, Instant.now()));
+                }).subscribeOn(Schedulers.boundedElastic()));
+        when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.defer(() -> {
+                    gate.run();
+                    return Flux.just(new DatasetItemSummary(datasetId, 1));
+                }).subscribeOn(Schedulers.boundedElastic()));
+        when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.defer(() -> {
+                    gate.run();
+                    return Flux.just(new OptimizationDAO.OptimizationSummary(datasetId, 1, Instant.now()));
+                }).subscribeOn(Schedulers.boundedElastic()));
+        when(datasetVersionDAO.findLatestVersionsByDatasetIds(anySet(), any())).thenReturn(List.of());
+
+        var enrichment = CompletableFuture.supplyAsync(() -> service.findById(datasetId));
+
+        assertThat(allSubscribed.await(5, TimeUnit.SECONDS))
+                .as("all three ClickHouse lookups should be subscribed before any of them completes")
+                .isTrue();
+        released.countDown();
+
+        var actual = enrichment.get(10, TimeUnit.SECONDS);
+        assertThat(actual.experimentCount()).isEqualTo(1);
     }
 
     @Test

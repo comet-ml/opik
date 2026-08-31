@@ -737,14 +737,15 @@ class DatasetServiceImpl implements DatasetService {
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 
-        Map<UUID, ExperimentSummary> experimentSummary = enrichmentData.getT1();
+        Map<UUID, ExperimentSummary> experimentSummaryMap = enrichmentData.getT1();
         Map<UUID, DatasetItemSummary> datasetItemSummaryMap = enrichmentData.getT2();
         Map<UUID, OptimizationDAO.OptimizationSummary> optimizationSummaryMap = enrichmentData.getT3();
         Map<UUID, DatasetVersion> latestVersionsByDatasetId = enrichmentData.getT4();
 
         return datasets.stream()
                 .map(dataset -> {
-                    var resume = experimentSummary.getOrDefault(dataset.id(), ExperimentSummary.empty(dataset.id()));
+                    var experimentSummary = experimentSummaryMap.getOrDefault(dataset.id(),
+                            ExperimentSummary.empty(dataset.id()));
                     var datasetItemSummary = datasetItemSummaryMap.getOrDefault(dataset.id(),
                             DatasetItemSummary.empty(dataset.id()));
                     var optimizationSummary = optimizationSummaryMap.getOrDefault(dataset.id(),
@@ -762,10 +763,10 @@ class DatasetServiceImpl implements DatasetService {
                     }
 
                     return dataset.toBuilder()
-                            .experimentCount(resume.experimentCount())
+                            .experimentCount(experimentSummary.experimentCount())
                             .datasetItemsCount(itemsCount)
                             .optimizationCount(optimizationSummary.optimizationCount())
-                            .mostRecentExperimentAt(resume.mostRecentExperimentAt())
+                            .mostRecentExperimentAt(experimentSummary.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
                             .latestVersion(DatasetVersionMapper.INSTANCE.toDatasetVersionSummary(latestVersion))
                             .build();
