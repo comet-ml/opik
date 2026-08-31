@@ -867,8 +867,14 @@ does the same for `cutover_start`.
 
 Both halves have to agree. Pinning only the literal reinterprets a server-local wall clock as UTC and moves the anchor
 by the server's offset — and a *later* anchor silently drops the rows written in the gap, which the delta and the
-deletion replay both miss because they share that bound. One consequence worth knowing: a `backfill_start` persisted in
-`--state-file` is only reusable by the driver revision that wrote it.
+deletion replay both miss because they share that bound.
+
+Because that failure is silent, the persisted anchor carries the claim rather than relying on it: `backfill.sh` writes
+`--state-file` with an explicit ` UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
+attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
+rejected with the two ways out — re-record it with the marker if it is known to have been taken on a UTC server, or
+restart the copy cleanly. The same reasoning is why both drivers now print their anchors labelled `UTC`: the value an
+operator pastes into `--backfill-start` or `--cutover-start` says which zone it is in.
 
 ### Required privileges (provision these before the window)
 

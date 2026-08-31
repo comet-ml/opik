@@ -349,7 +349,7 @@ fi
 
 # Captured in UTC; the reverse replay and its postcondition parse it as UTC (000004_rollback_reverse_replay.sql).
 CUTOVER_START="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6, 'UTC'))")"
-echo "RECORD cutover_start=$CUTOVER_START  (pass to rollback.sh --cutover-start if you roll back after this point)"
+echo "RECORD cutover_start=$CUTOVER_START UTC  (pass the timestamp to rollback.sh --cutover-start if you roll back after this point)"
 
 echo "Final deletion replay: masking deletes bridged since the last delta_replay so none leak across the swap..."
 run_final_deletion_replay
