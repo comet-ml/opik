@@ -2,6 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
 import {
+  pollSpanForFeedbackScore,
   pollTraceForFeedbackScore,
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
@@ -122,6 +123,21 @@ export interface TraceDetail {
   input: Record<string, unknown> | null;
 }
 
+/**
+ * One span as `GET /v1/private/spans/{id}` answers it.
+ *
+ * `output` is deliberately untyped, the same reasoning as `getTraceSections`:
+ * the only caller asserts on the size of what came back, and a shaped type
+ * would force a cast at every read without buying anything.
+ */
+export interface SpanDetail {
+  id: string;
+  name: string;
+  traceId: string;
+  feedbackScores: FeedbackScoreRef[];
+  output: unknown;
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -157,6 +173,14 @@ export interface AutomationRuleDetail {
   samplingRate: number;
   /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
   triggerScope: string;
+  /**
+   * `user_defined_metric_python` | `span_user_defined_metric_python` | … — the
+   * discriminator that decides which entity the rule scores and, with it, which
+   * Redis stream carries its messages. A spec about span-scope behaviour that
+   * silently got a trace-scope rule would be exercising the wrong stream, so
+   * this is read back rather than assumed from the create payload.
+   */
+  type: string;
 }
 
 /** One line of a rule's user-facing log stream. */
@@ -465,6 +489,44 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
+  /**
+   * A seed write whose id the caller chose, expecting 201, retrying 5xx.
+   *
+   * The ingress in front of the ingest endpoints intermittently answers 502 or
+   * 500 in short bursts — roughly 1 write in 20, uncorrelated with payload size
+   * (a 0-byte span fails as readily as a 25MB one), and clearing within a few
+   * seconds. Without this, every spec that seeds through REST inherits that as
+   * flake, and the failure it reports names the suite rather than the burst.
+   *
+   * Retrying is safe only because these writes are keyed on a caller-supplied
+   * id and are upserts on it: a request that actually landed before the gateway
+   * gave up is overwritten, not duplicated. Only 5xx is retried — a 4xx is this
+   * suite sending something the API rejects, and repeating it would just delay
+   * the message that says so.
+   *
+   * The backoff exists because retrying instantly is no retry at all: the three
+   * attempts land inside the same burst and all fail.
+   */
+  const postSeedWrite = async (path: string, describe: string, body: unknown): Promise<void> => {
+    const backoffMs = [1_000, 3_000, 8_000];
+    let last: RawApiResult = { status: 0, message: '<no response>', location: null };
+
+    for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+      const { status, message, location } = await rawFetch('POST', path, { body });
+      if (status === 201) return;
+      last = { status, message, location };
+      if (status < 500) break;
+      if (attempt < backoffMs.length) {
+        await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+      }
+    }
+
+    const attempted = last.status >= 500 ? backoffMs.length + 1 : 1;
+    throw new Error(
+      `${describe}: expected 201, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
+    );
+  };
+
   /** Authorization + workspace headers, for calls that bypass `rawFetch`. */
   const workspaceHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Comet-Workspace': env.workspace };
@@ -515,6 +577,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           source: String(fs.source),
         })),
         input: (t.input as Record<string, unknown> | undefined) ?? null,
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  };
+
+  // Hoisted for the same reason as `localGetTrace`: the span poller is a free
+  // function and cannot reach the not-yet-constructed return object.
+  const localGetSpan = async (spanId: string): Promise<SpanDetail | null> => {
+    try {
+      const s = await withReadRetry(() => opik.api.spans.getSpanById(spanId));
+      return {
+        id: String(s.id),
+        name: s.name ?? '',
+        traceId: String(s.traceId ?? ''),
+        feedbackScores: (s.feedbackScores ?? []).map((fs) => ({
+          name: fs.name,
+          value: Number(fs.value),
+          reason: fs.reason ?? null,
+          source: String(fs.source),
+        })),
+        output: s.output ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -1365,6 +1450,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
     },
 
+    /** One span by id, or null while it is not yet readable. */
+    async getSpan(spanId: string): Promise<SpanDetail | null> {
+      return localGetSpan(spanId);
+    },
+
+    async pollSpanForFeedbackScore(
+      spanId: string,
+      scoreName: string,
+      opts: PollFeedbackScoreOpts = {},
+    ): Promise<FeedbackScoreRef> {
+      return pollSpanForFeedbackScore(localGetSpan, spanId, scoreName, opts);
+    },
+
     async waitForTraceScoresSettled(
       traceId: string,
       opts: WaitForScoresSettledOpts = {},
@@ -1411,6 +1509,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       metric: string;
       /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
       arguments: Record<string, string>;
+      /**
+       * Which entity the rule scores. Defaults to the trace-scope evaluator.
+       * `span_user_defined_metric_python` is the same metric contract applied to
+       * spans — and, because scope decides the Redis stream, the only way to
+       * assert on span-scope online scoring at all.
+       */
+      type?: 'user_defined_metric_python' | 'span_user_defined_metric_python';
       triggerScope?: 'production' | 'experiment' | 'both';
       enabled?: boolean;
     }): Promise<string> {
@@ -1419,7 +1524,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         '/v1/private/automations/evaluators/',
         {
           body: {
-            type: 'user_defined_metric_python',
+            type: args.type ?? 'user_defined_metric_python',
             action: 'evaluator',
             name: args.name,
             project_ids: [args.projectId],
@@ -1460,6 +1565,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         enabled?: boolean;
         sampling_rate?: number;
         trigger_scope?: string;
+        type?: string;
       };
       // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
       // scope would present as the server's default, which is exactly the value
@@ -1470,12 +1576,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (typeof rule.trigger_scope !== 'string') {
         throw new Error(`getAutomationRule: ${ruleId} returned no trigger_scope`);
       }
+      if (typeof rule.type !== 'string') {
+        throw new Error(`getAutomationRule: ${ruleId} returned no type`);
+      }
       return {
         id: String(rule.id ?? ruleId),
         name: String(rule.name ?? ''),
         enabled: rule.enabled ?? true,
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
+        type: rule.type,
       };
     },
 
@@ -1659,24 +1769,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        */
       endTime?: Date;
     }): Promise<string> {
-      const { status, message } = await rawFetch('POST', '/v1/private/traces', {
-        body: {
-          id: args.id,
-          project_name: args.projectName,
-          name: args.name,
-          source: args.source,
-          start_time: (args.startTime ?? new Date()).toISOString(),
-          ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
-          ...(args.input === undefined ? {} : { input: args.input }),
-          ...(args.output === undefined ? {} : { output: args.output }),
-          ...(args.metadata ? { metadata: args.metadata } : {}),
-        },
+      await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
+        id: args.id,
+        project_name: args.projectName,
+        name: args.name,
+        source: args.source,
+        start_time: (args.startTime ?? new Date()).toISOString(),
+        ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+        ...(args.input === undefined ? {} : { input: args.input }),
+        ...(args.output === undefined ? {} : { output: args.output }),
+        ...(args.metadata ? { metadata: args.metadata } : {}),
       });
-      if (status !== 201) {
-        throw new Error(
-          `createTraceWithSource: expected 201 for '${args.name}', got ${status}: ${message}`,
-        );
-      }
+      return args.id;
+    },
+
+    /**
+     * Create one span under an existing trace, with an explicit id and `source`.
+     *
+     * There is no span equivalent of the `trace` fixture because the estate's
+     * only span seeder is `sdkClient.python.createNestedTrace`, which writes a
+     * whole trace and its spans in one call. A spec whose subject is the ORDER
+     * in which spans reach the online-scoring stream needs them written one at a
+     * time, each with its own confirmed 201.
+     *
+     * `source: 'sdk'` is mandatory for online scoring: `OnlineScoringSpanSampler`
+     * keeps only spans whose source `isLoggingSource`, so a span written without
+     * it is dropped before any rule sees it — silently, which is exactly how a
+     * scoring spec ends up asserting nothing.
+     */
+    async createSpan(args: {
+      id: string;
+      traceId: string;
+      projectName: string;
+      name: string;
+      source: 'sdk' | 'experiment' | 'playground' | 'optimization';
+      type?: 'general' | 'llm' | 'tool';
+      input?: TraceJsonSection;
+      output?: TraceJsonSection;
+      startTime?: Date;
+      endTime?: Date;
+    }): Promise<string> {
+      const now = new Date();
+      await postSeedWrite('/v1/private/spans', `createSpan '${args.name}'`, {
+        id: args.id,
+        trace_id: args.traceId,
+        project_name: args.projectName,
+        name: args.name,
+        type: args.type ?? 'general',
+        source: args.source,
+        start_time: (args.startTime ?? now).toISOString(),
+        end_time: (args.endTime ?? now).toISOString(),
+        ...(args.input === undefined ? {} : { input: args.input }),
+        ...(args.output === undefined ? {} : { output: args.output }),
+      });
       return args.id;
     },
 
@@ -1844,6 +1989,39 @@ async function fetchAllPages<T>(
     all.push(...content);
     if (content.length < pageSize || (res.total !== undefined && all.length >= res.total)) {
       return all;
+    }
+  }
+}
+
+/** The HTTP status the pinned SDK stamps on a thrown error, when it has one. */
+function statusCodeOf(err: unknown): number | null {
+  if (typeof err !== 'object' || err === null || !('statusCode' in err)) return null;
+  const code = (err as { statusCode: unknown }).statusCode;
+  return typeof code === 'number' ? code : null;
+}
+
+/**
+ * Run an idempotent read, retrying a 5xx with a short backoff.
+ *
+ * The mirror image of `postSeedWrite`, for the same reason: the ingress in
+ * front of a deployed environment answers 502 in short bursts, and a read that
+ * gives up on the first one turns infrastructure noise into a test failure that
+ * names the suite. A read is idempotent, so a retry cannot change any state.
+ *
+ * A persistent 5xx still throws — this hides a blip, not an outage. Applied
+ * here to the span read only, because that is the read this change introduces;
+ * whether the suite's other reads should get the same treatment is a call for
+ * the estate's owners, not a decision to smuggle in with one spec.
+ */
+async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
+  const backoffMs = [1_000, 3_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (err) {
+      const status = statusCodeOf(err);
+      if (status === null || status < 500 || attempt >= backoffMs.length) throw err;
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]));
     }
   }
 }
