@@ -496,6 +496,14 @@ class ExperimentItemDAO {
             ;
             """;
 
+    /**
+     * The 'experiment_id IN (...)' predicate is what restricts the 'experiment_items' scan. Without it, the only
+     * predicate on the large table is 'workspace_id': 'experiment_items' has no 'dataset_id' column, so a
+     * 'dataset_id' filter on the joined side can only discard rows after they have been read, making the cost scale
+     * with total workspace experiment volume rather than with the requested datasets. 'experiment_id' is the second
+     * column of the sort key '(workspace_id, experiment_id, dataset_item_id, trace_id, id)', so filtering on it
+     * directly lets ClickHouse prune granules. The join is retained solely to project 'dataset_id' for the grouping.
+     */
     private static final String FIND_EXPERIMENT_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 e.dataset_id,
@@ -503,8 +511,14 @@ class ExperimentItemDAO {
                 max(ei.last_updated_at) as most_recent_experiment_at
             FROM experiment_items ei
             JOIN experiments e ON ei.experiment_id = e.id AND e.workspace_id = ei.workspace_id
-            WHERE e.dataset_id in :dataset_ids
-            AND ei.workspace_id = :workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id IN (
+                SELECT id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id IN :dataset_ids
+            )
+            AND e.dataset_id in :dataset_ids
             GROUP BY
                 e.dataset_id
             SETTINGS log_comment = '<log_comment>'
