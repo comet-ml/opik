@@ -35,6 +35,10 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
+#                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
+#                             than total query time — so a step that goes quiet while the server works trips it while
+#                             healthy. Trade-off and shared rationale: ../../README.md.
 #   --dry-run                 print the window plan and per-window source counts; do not INSERT.
 #   --from-week N             start at week offset N (0-based from the anchor Monday). Default 0.
 #   --to-week M               stop after week offset M (inclusive). Default: last week with data.
@@ -167,6 +171,7 @@ DST_TABLE="traces_local_v2"
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
+RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total query time. See --receive-timeout.
 DRY_RUN=0
 FROM_WEEK=0
 TO_WEEK=""
@@ -211,6 +216,7 @@ while [[ $# -gt 0 ]]; do
         --state-file) STATE_FILE="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -220,6 +226,14 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+
+# One place for the connection and client-side options, so every call site below carries the same host, port,
+# database, log_comment and receive_timeout, and cannot drift from the others.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comment 'traces_local_v2_cutover:backfill')
 # --state-file is an operator-owned path read with cat and written with > (both quoted); reject a blank or multi-line
 # value so the single-line anchor round-trips cleanly.
 [[ -n "$STATE_FILE" && "$STATE_FILE" != *$'\n'* ]] || { echo "ERROR: --state-file must be a non-empty single-line path." >&2; exit 2; }
@@ -308,7 +322,7 @@ mit_require_one_assignment "$(cat "$BACKFILL_SQL")" "$BACKFILL_SQL" || exit 2
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:backfill' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --query "$1"
 }
 
 log() {
@@ -430,7 +444,7 @@ run_backfill_window() {
         exit 2
     fi
     # <<< END max_insert_threads rendering
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Insert one window whose physical row count is already within the per-statement bound. Reconciliation is dedup-aware
@@ -560,9 +574,12 @@ if [[ "$DRY_RUN" != "1" ]]; then
             log "         ./rollback.sh --database $DATABASE --stage A" >&2
             exit 1
         fi
-        BACKFILL_START="$(ch "SELECT toString(now64(6))")"
+        # Captured in UTC because step 2 parses it as UTC (see 000002). The two halves must agree: read back in the
+        # other timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
+        # This is also why the persisted anchor is only reusable by this same revision of the driver.
+        BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
         printf '%s' "$BACKFILL_START" > "$STATE_FILE"
-        log "RECORD backfill_start=$BACKFILL_START  (saved to $STATE_FILE; pass this to step 2: 000002_delta_and_deletion_replay.sql)"
+        log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this to step 2: 000002_delta_and_deletion_replay.sql)"
     fi
 fi
 

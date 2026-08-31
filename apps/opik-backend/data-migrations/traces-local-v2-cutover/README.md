@@ -850,6 +850,25 @@ Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOU
 > `readonly = 2` for a read-only assessor (it permits `SET` but no writes), and a non-readonly profile for the migration
 > user. This is worth checking before the window: an ops account that can happily run ad-hoc `SELECT`s may still fail
 > every driver on the first query.
+>
+> **Every driver takes `--receive-timeout` (default 1800s).** ClickHouse's own `receive_timeout` is 300s and bounds the
+> **gap between packets**, not total query time — so a long statement does not trip it on its own, but a step that goes
+> quiet while the server works does, and the client then gives up on a healthy statement. That is why the default is
+> raised across the board rather than per driver. The cost of a generous value is that a genuinely dead connection takes
+> that long to surface; for resumable, idempotent steps that is the better trade.
+
+### Timezones: every datetime literal pins `'UTC'`
+
+The `traces` timestamp columns are `DateTime64(n, 'UTC')`, but a literal written without a timezone is parsed in the
+**server** timezone — so on a non-UTC server the same statement means something different. Every literal in the
+reference SQL therefore pins `'UTC'`, and where a bound is a value a driver captured, **the capture pins it too**:
+`backfill.sh` mints `backfill_start` with `now64(6, 'UTC')` and `000002` reads it back as `'UTC'`; `exchange_and_wrap.sh`
+does the same for `cutover_start`.
+
+Both halves have to agree. Pinning only the literal reinterprets a server-local wall clock as UTC and moves the anchor
+by the server's offset — and a *later* anchor silently drops the rows written in the gap, which the delta and the
+deletion replay both miss because they share that bound. One consequence worth knowing: a `backfill_start` persisted in
+`--state-file` is only reusable by the driver revision that wrote it.
 
 ### Required privileges (provision these before the window)
 
@@ -1049,7 +1068,11 @@ Pick the stage by how far the cutover got:
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
   table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
-  a multi-shard cluster and must be run once per shard. Separate from the stages by necessity, not
+  a multi-shard cluster and must be run once per shard. It also refuses when the shard count is **unreadable** — the
+  postcondition reads `clusterAllReplicas('{cluster}', …)` and needs the same `system.macros` the count does, so a
+  session that cannot read one cannot verify with the other, and proceeding would risk a whole-table rewrite that can
+  never be certified. Where those reads are genuinely unavailable and the topology is known, `--confirm-single-shard`
+  asserts it; it does **not** override a count that came back greater than 1. Separate from the stages by necessity, not
   preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
   the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
   behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
@@ -1440,10 +1463,13 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
 
-> **A version tie can make this gate mismatch, and can also make it pass.** If a key carries two or more rows with an
-> identical `last_updated_at`, `FINAL` has no winner and the comparison for that key is arbitrary in both directions. It
-> is not rollback-specific despite where it is written up: see "a version tie" under *Verifying after a rollback* for the
-> shape and the confirming read, ignoring that section's `cutover_start` test, which has no meaning before the `EXCHANGE`.
+> **A version tie makes a window undecidable, and the gate now says so rather than guessing.** If a key carries two or
+> more rows with an identical `last_updated_at`, `FINAL` has no winner and the comparison for that key is arbitrary in
+> both directions. Where the re-check would otherwise call the window an artifact, `verify.sh` counts those keys per
+> side with the `version-ties` block and reports the window **INCONCLUSIVE**, exiting non-zero: not a mismatch, and
+> explicitly not a pass. Resolving one is still manual — see "a version tie" under
+> *Verifying after a rollback* for the version-set read, ignoring that section's `cutover_start` test, which has no
+> meaning before the `EXCHANGE`.
 >
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
@@ -1515,21 +1541,27 @@ from the successor *entirely* is the real signal — that is a copy gap, and it 
 often this bites tracks how much pre-existing data the workload rewrites; for many it is none, which is why the weekly
 bound is still worth passing.
 
-**A third shape, which the confirm-keys re-check cannot resolve: a version tie.** This one is not rollback-specific — it
+**A third shape, which is detected but not resolved: a version tie.** This one is not rollback-specific — it
 can hit the pre-`EXCHANGE` gate too (see "Verifying the migration"), where the `cutover_start` test below does not apply.
 
-Its premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while versions differ.
-`last_updated_at` is the `ReplacingMergeTree` version column, so when two or more rows for a key carry the **same**
-value there is nothing left to rank them by: `FINAL` picks arbitrarily, and because the two tables' part layouts differ,
-each side may or may not land on the same row. **Arbitrary cuts both ways, and the second direction is the dangerous one:**
+The re-check's premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while
+versions differ. `last_updated_at` is the `ReplacingMergeTree` version column, so when two or more rows for a key carry
+the **same** value there is nothing left to rank them by: `FINAL` picks arbitrarily, and because the two tables' part
+layouts differ, each side may or may not land on the same row. **Arbitrary cuts both ways, and the second direction is
+the dangerous one:**
 
 - the picks differ, and the key is reported in `genuinely_differing_keys` even though both tables hold the same data;
 - the picks coincide, and the key is confirmed as matching **even if one side is missing a version** — a real copy gap.
-  So a `0` from the re-check, and any `OK — superseded-version artifact` verdict built on it, is not conclusive while
-  ties exist.
 
-`--drill-down` cannot show a tie: it reads one `FINAL` row per key and stops at 100. Confirm one by reading the key's
-versions from both tables without `FINAL` — a read-only diagnostic, not a procedure step:
+So a `0` from the re-check is conclusive only where no tie exists. `verify.sh` therefore asks exactly there: on a `0` it
+runs the `version-ties` block, which counts per side how many keys in the window have a **non-unique newest
+`last_updated_at`**, prints them as `version_ties=src:N/dst:N`, and reports the window **INCONCLUSIVE** (exit non-zero)
+rather than as an artifact if either is non-zero. The counts are an upper bound — they cover the whole window, not only
+the differing keys — which errs toward refusing to certify.
+
+Deciding such a window is still manual, and `--drill-down` will not do it: it reads one `FINAL` row per key, so it shows
+the arbitrary pick rather than the tie. Read the key's versions from both tables without `FINAL` — a read-only
+diagnostic, not a procedure step:
 
 ```sql
 SELECT 'src' AS side, created_at, last_updated_at, _part FROM <old-table> WHERE (workspace_id, project_id, id) = (…)
@@ -1564,9 +1596,10 @@ infeasible, sample and still get high confidence:
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
   `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 
-`verify.sh` exits non-zero if any window mismatches and prints the window bounds; re-run with `--drill-down` to list the
-keys that differ or exist on one side only (it runs the `drill-down` block of `000005_verify_migration.sql` for each
-mismatched window).
+`verify.sh` exits non-zero if any window **mismatches or is INCONCLUSIVE**, and prints the window bounds either way;
+re-run with `--drill-down` to list the keys that differ or exist on one side only (it runs the `drill-down` block of
+`000005_verify_migration.sql` for every differing window, artifact and inconclusive verdicts included — those are the
+ones most often worth reading).
 
 ## Verification — the automated test
 

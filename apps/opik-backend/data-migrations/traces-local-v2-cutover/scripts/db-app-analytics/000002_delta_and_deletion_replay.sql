@@ -90,7 +90,7 @@ SELECT
     project_id,
     name,
     start_time,
-    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6)) AS end_time,
+    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6, 'UTC')) AS end_time,
     input,
     output,
     metadata,
@@ -109,8 +109,11 @@ SELECT
     source,
     environment
 FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
-WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
-   OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
+-- ${BACKFILL_START} is half of a pair: backfill.sh captures it with now64(6, 'UTC') and every bound below parses it
+-- as 'UTC'. Pinning only one half shifts the anchor by the server's offset, and a LATER anchor silently drops the
+-- rows written in the gap — the delta and the deletion replay share this bound, so neither would see them.
+WHERE created_at >= toDateTime64('${BACKFILL_START}', 6, 'UTC')
+   OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6, 'UTC')
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
          max_insert_threads = ${MAX_INSERT_THREADS},
@@ -155,7 +158,7 @@ WHERE (
             toFixedString(deleted_id, 36)
         FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
         WHERE source_table = 'traces'
-          AND event_time >= toDateTime64('${BACKFILL_START}', 6)
+          AND event_time >= toDateTime64('${BACKFILL_START}', 6, 'UTC')
           AND project_id != ''
           AND length(project_id) = 36
           AND length(deleted_id) = 36
@@ -170,7 +173,7 @@ WHERE (
             SELECT toFixedString(deleted_id, 36)
             FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
             WHERE source_table = 'traces'
-              AND event_time >= toDateTime64('${BACKFILL_START}', 6)
+              AND event_time >= toDateTime64('${BACKFILL_START}', 6, 'UTC')
               AND length(deleted_id) = 36
         )
     )

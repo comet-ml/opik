@@ -69,6 +69,12 @@
 #   --sentinel-repair-only    repair ONLY the epoch/NaN sentinels on the restored original (no promote, no replay, no
 #                             rename). Requires --confirm-flag-reverted. Mutually exclusive with --stage,
 #                             --reverse-replay-only and --unwrap-only.
+#   --confirm-single-shard    Accepted only with --sentinel-repair-only, the only mode that asserts the shard count.
+#                             Asserts this cluster has ONE shard where that count cannot be READ; it does NOT override a
+#                             count that came back greater than 1, which stays fatal. Use it only where
+#                             system.clusters / system.macros are genuinely unreadable and the topology is known, and
+#                             note that the repair's postcondition reads clusterAllReplicas('{cluster}', ...), which
+#                             needs the same macro — so it will not run either.
 #   --confirm-flag-reverted   REQUIRED with --sentinel-repair-only, and accepted by no other mode. Asserts
 #                             databaseAnalyticsDataModel.traceColumnsNonNullable=false is live on EVERY backend
 #                             instance. The scripts cannot read backend config, and a repair run while any instance
@@ -121,6 +127,7 @@ UNWRAP_ONLY=0
 SENTINEL_REPAIR_ONLY=0
 CONFIRM_MAINTENANCE=0
 CONFIRM_FLAG_REVERTED=0
+CONFIRM_SINGLE_SHARD=0
 RECEIVE_TIMEOUT=1800     # seconds tolerated between server packets, not total query time. See --receive-timeout.
 CONFIRM_FLAG_WAS_LIVE=0  # only consulted by --sentinel-repair-only, and only without a parked successor.
 SENTINEL_WINDOW_FROM=""  # required by --sentinel-repair-only; see --sentinel-window-from.
@@ -138,6 +145,7 @@ while [[ $# -gt 0 ]]; do
         --unwrap-only) UNWRAP_ONLY=1; shift ;;
         --sentinel-repair-only) SENTINEL_REPAIR_ONLY=1; shift ;;
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
+        --confirm-single-shard) CONFIRM_SINGLE_SHARD=1; shift ;;
         --confirm-flag-reverted) CONFIRM_FLAG_REVERTED=1; shift ;;
         --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm-flag-was-live) CONFIRM_FLAG_WAS_LIVE=1; shift ;;
@@ -177,6 +185,12 @@ fi
 # stages B/C in fact run BEFORE the revert and print it as their own next step.
 if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     echo "ERROR: --confirm-flag-was-live belongs to --sentinel-repair-only and to no other mode." >&2
+    exit 2
+fi
+# Only --sentinel-repair-only asserts the shard count, so the flag would be inert anywhere else. Reject it rather than
+# accept it: an operator who passed it would reasonably believe the topology had been taken into account.
+if [[ "$CONFIRM_SINGLE_SHARD" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
+    echo "ERROR: --confirm-single-shard belongs to --sentinel-repair-only and to no other mode." >&2
     exit 2
 fi
 if [[ "$CONFIRM_FLAG_REVERTED" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
@@ -375,9 +389,23 @@ assert_single_shard() {
         echo "       satisfied only after the last one clears." >&2
         exit 1
     fi
-    # Not fatal when unreadable: the count needs system.clusters/system.macros, which a narrower grant may withhold, and
-    # single-shard is the documented topology. Say so rather than blocking on a check that is advisory here.
-    [[ "$shards" =~ ^[0-9]+$ ]] || echo "NOTE: could not read the shard count; assuming a single shard, as the runbook documents." >&2
+    # Unreadable is fatal unless the operator asserts the topology. Assuming the safe case defeats the point of the
+    # check: it exists to stop a whole-table rewrite whose postcondition cannot be satisfied, and that is exactly the
+    # run that would proceed. Nor does proceeding buy anything — the postcondition reads
+    # clusterAllReplicas('{cluster}', ...), which needs the same system.macros this count needs, so a session that
+    # cannot read the shard count cannot verify the repair either.
+    if ! [[ "$shards" =~ ^[0-9]+$ ]]; then
+        if [[ "$CONFIRM_SINGLE_SHARD" == "1" ]]; then
+            echo "NOTE: could not read the shard count; proceeding on --confirm-single-shard. If the cluster in fact has" >&2
+            echo "      more than one shard, this rewrites only the shard you are connected to." >&2
+            return 0
+        fi
+        echo "ERROR: could not read the shard count (needs SELECT on system.clusters and system.macros), so this cluster's" >&2
+        echo "       topology is unknown. This mode reaches only the shard you are connected to while its postcondition" >&2
+        echo "       reads every shard, so on more than one shard it would rewrite one and then report failure." >&2
+        echo "       Grant the reads, or pass --confirm-single-shard to assert the topology yourself." >&2
+        exit 1
+    fi
 }
 
 assert_sentinel_repair_state() {
