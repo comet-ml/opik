@@ -16,6 +16,13 @@
 --                                          SETTINGS line when --max-insert-threads is unset, so the server's
 --                                          value is inherited; an explicit 0 forces no parallel execution.
 --
+-- EVERY DateTime64 LITERAL IN THIS RUNBOOK PINS 'UTC', including the epoch sentinel below. Unpinned, a literal is
+-- parsed in the SERVER timezone, and these columns are DateTime64(n, 'UTC') — so on a non-UTC server the sentinel
+-- written here would be the instant "1970-01-01 00:00:00 local", not epoch 0. Nothing would fail at write time: the
+-- rollback's sentinel repair matches epoch 0 exactly, so it would silently match nothing and report a clean table,
+-- and the fidelity compare (000005) normalizes an absent end_time to 0 and would flag every such row instead. Where
+-- a bound is a value the driver captured, the capture pins 'UTC' too — see ${BACKFILL_START} in 000002.
+--
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
 --   * The SOURCE is sliced by created_at (immutable across upserts, backed by a minmax skip index). The DESTINATION's
@@ -78,7 +85,7 @@ SELECT
     project_id,
     name,
     start_time,
-    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6)) AS end_time,
+    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6, 'UTC')) AS end_time,
     input,
     output,
     metadata,

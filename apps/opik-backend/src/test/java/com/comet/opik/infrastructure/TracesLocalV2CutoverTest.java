@@ -210,7 +210,7 @@ class TracesLocalV2CutoverTest {
             project_id,
             name,
             start_time,
-            coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6)) AS end_time,
+            coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6, 'UTC')) AS end_time,
             input,
             output,
             metadata,
@@ -228,6 +228,14 @@ class TracesLocalV2CutoverTest {
             coalesce(ttft, toFloat64('nan')) AS ttft,
             source,
             environment""";
+
+    /**
+     * A {@code SETTINGS} fragment putting the session WEST of UTC, for the tests that pin datetime literals. The
+     * direction is load-bearing: an unpinned literal read in a westward zone resolves LATER in absolute terms, so a
+     * bound moves past rows that belong inside it — which is the silent failure. An eastward zone moves bounds earlier
+     * and would let an unpinned literal pass, so it would not discriminate.
+     */
+    private static final String WESTWARD_SESSION = ", session_timezone = 'America/New_York'";
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
@@ -1399,6 +1407,106 @@ class TracesLocalV2CutoverTest {
      * {@code traces}, and that {@code traces_local_v2} mirrors them plus only the {@code is_deleted} meta-column. Adding
      * a stored column to either table fails this until it is added to {@code COPIED_COLUMNS} (and thus to the copy).
      */
+    /**
+     * A {@code DateTime64} literal carrying no timezone is parsed in the SESSION's, while every column it meets is
+     * {@code DateTime64(n, 'UTC')} — so on a non-UTC session an unpinned literal silently means something else. An
+     * unpinned literal only diverges where the session is not UTC, so the session is set explicitly here. The backfill
+     * has two such literals and this pins both:
+     * <ul>
+     *   <li>the WINDOW bounds. The row is seeded an hour into the week, so a bound read in a westward zone starts the
+     *   window after it and the copy silently skips it — a hole in the migration, in the week the driver reported as
+     *   done;</li>
+     *   <li>the epoch SENTINEL the projection writes for an absent {@code end_time}. Unpinned it becomes a non-zero
+     *   instant, and nothing fails at write time: the rollback's sentinel repair matches epoch exactly, so it would
+     *   match nothing and report a clean table, while the fidelity compare normalizes an absent {@code end_time} to 0
+     *   and would instead flag every migrated row that had one.</li>
+     * </ul>
+     *
+     * <p>The sentinel is read back as {@code toUnixTimestamp64Micro}, so the assertion cannot depend on the same
+     * parsing it exists to pin.
+     */
+    @Test
+    void backfillIsUnaffectedByTheSessionTimezone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        insertShapedTrace(workspaceId, projectId, "absent-both", weekInstant(0, 0), null, null);
+
+        backfillWeek(0, WESTWARD_SESSION);
+
+        var copied = copiedRow(workspaceId, "absent-both");
+        assertThat(copied.rows()).as("the week's window still selects the row").isEqualTo(1);
+        assertThat(copied.endTimeMicros()).as("epoch sentinel").isZero();
+        assertThat(copied.ttftIsNaN()).as("NaN ttft sentinel").isTrue();
+    }
+
+    /**
+     * The {@code event_time} bound that decides which bridged deletions the replay applies. This is the
+     * highest-consequence datetime literal in the runbook: a lightweight DELETE does not bump the version column, so the
+     * delta cannot see it, and the replay is the only thing that stops the deletion leaking across the swap. A bound
+     * resolved in a westward zone lands AFTER the recorded event, the replay matches nothing, and the deleted row stays
+     * live on the successor — the exact leak the bridge exists to close, reported by a driver that exited 0.
+     *
+     * <p>Asserted on the bound's SELECTION rather than by driving the replay: {@code session_timezone} does not reach a
+     * mutation's literal parsing, so a {@code DELETE} cannot be made to exhibit the shift, while the predicate it
+     * filters on can. So the coverage splits: the deletion tests running under the container's own session cover the
+     * replay end to end, and this covers its window not moving with the session.
+     *
+     * <p>The reverse replay and its postcondition carry the same bound against {@code cutover_start}, so this pins the
+     * form all three share. The anchor is captured the way the drivers capture it — in UTC — so the pairing under test
+     * is the real one.
+     */
+    @Test
+    void deletionReplayWindowIsUnaffectedByTheSessionTimezone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var id = ID_GENERATOR.generateId().toString();
+        var at = weekInstant(0, 0);
+        insertShapedTrace(id, workspaceId, projectId, "deleted-during-window", at, at, 1.0, at, at);
+
+        var backfillStart = nowMicros();
+        // Deleted after the anchor, with the bridge event the replay reads. event_time defaults to the server clock, so
+        // it sits just after the anchor — inside the window by a margin far smaller than any timezone offset.
+        lightweightDelete(Set.of(id), workspaceId);
+        recordDeletionEvents(Set.of(id), workspaceId, projectId.toString(), "user");
+
+        assertThat(bridgedDeletionsSince(backfillStart, WESTWARD_SESSION))
+                .as("the replay's window still selects the bridged deletion")
+                .isEqualTo(1);
+    }
+
+    /**
+     * The {@code version-ties} block must not count a key merely because it has SEVERAL versions — only one whose NEWEST
+     * version is shared by more than one row. That distinction is the whole content of the aggregate: ranking by version
+     * rather than totalling rows. A key written twice with distinct {@code last_updated_at} exercises it, on both sides
+     * of the copy, and is the case that must report zero.
+     *
+     * <p>The opposite case — a key whose newest version IS shared — is deliberately not constructed. Holding two rows
+     * with an identical version in a {@code ReplacingMergeTree} means racing a background merge, so a test built on it
+     * would be timing-dependent rather than strict; the same reason {@code sentinelCounts} does not pin superseded
+     * versions either. The consequence is a known boundary: this pins that the aggregate ranks by version, and the
+     * absence of {@code FINAL} — which would collapse the very rows the count exists to see — is argued in the
+     * {@code version-ties} block itself rather than asserted here.
+     */
+    @Test
+    void versionTiesDoesNotCountAKeyWhoseNewestVersionIsUnique() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = weekInstant(0, 0);
+        var id = ID_GENERATOR.generateId().toString();
+
+        // Two versions of one key: whether or not a merge has collapsed them, the newest is unique either way.
+        insertShapedTrace(id, workspaceId, projectId, "older", at, at, 1.0, at, at);
+        insertShapedTrace(id, workspaceId, projectId, "newer", at, at, 2.0, at, at.plusSeconds(1));
+        backfillWeek(0);
+
+        assertThat(versionTies("traces", workspaceId))
+                .as("a multi-version key is not a tie on the source")
+                .isZero();
+        assertThat(versionTies("traces_local_v2", workspaceId))
+                .as("a multi-version key is not a tie on the successor")
+                .isZero();
+    }
+
     @Test
     void cutoverCopiesEveryBaseColumn() {
         var tracesBase = baseColumns("traces");
@@ -1465,6 +1573,13 @@ class TracesLocalV2CutoverTest {
      * column defaults to 0. {@code apply_deleted_mask} stays at its default 1, so masked source rows are skipped.
      */
     private void backfillWeek(int week) {
+        backfillWeek(week, "");
+    }
+
+    /**
+     * As above with extra session settings appended; see {@link #WESTWARD_SESSION}.
+     */
+    private void backfillWeek(int week, String extraSettings) {
         var weekLo = ClickHouseDateTimeFormat.formatMicros(weekInstant(week, 0));
         var weekHi = ClickHouseDateTimeFormat.formatMicros(weekInstant(week + 1, 0));
         execute("""
@@ -1476,8 +1591,8 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:week_lo, 9, 'UTC')
                   AND created_at < toDateTime64(:week_hi, 9, 'UTC')
-                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
-                """.formatted(COPIED_COLUMNS, COPIED_SELECT),
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000%s
+                """.formatted(COPIED_COLUMNS, COPIED_SELECT, extraSettings),
                 statement -> statement.bind("week_lo", weekLo).bind("week_hi", weekHi));
     }
 
@@ -1494,8 +1609,8 @@ class TracesLocalV2CutoverTest {
                 SELECT
                 %s
                 FROM traces
-                WHERE created_at >= toDateTime64(:backfill_start, 6)
-                   OR last_updated_at >= toDateTime64(:backfill_start, 6)
+                WHERE created_at >= toDateTime64(:backfill_start, 6, 'UTC')
+                   OR last_updated_at >= toDateTime64(:backfill_start, 6, 'UTC')
                 SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("backfill_start", backfillStart));
@@ -1510,6 +1625,11 @@ class TracesLocalV2CutoverTest {
      * the wall time so the runbook can size it against the buffer window.
      */
     private long replayDeletions(String backfillStart) {
+        return replayDeletions(backfillStart, "");
+    }
+
+    /** As above with extra session settings appended; see {@link #WESTWARD_SESSION}. */
+    private long replayDeletions(String backfillStart, String extraSettings) {
         var start = System.nanoTime();
         // allow_nondeterministic_mutations: a lightweight DELETE with a cross-table subquery is flagged
         // nondeterministic, but deletion_events_local is replicated and identical on every node and the window
@@ -1525,7 +1645,7 @@ class TracesLocalV2CutoverTest {
                             toFixedString(deleted_id, 36)
                         FROM deletion_events_local
                         WHERE source_table = 'traces'
-                          AND event_time >= toDateTime64(:backfill_start, 6)
+                          AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
                           AND project_id != ''
                           AND length(project_id) = 36
                           AND length(deleted_id) = 36
@@ -1540,14 +1660,14 @@ class TracesLocalV2CutoverTest {
                             SELECT toFixedString(deleted_id, 36)
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
-                              AND event_time >= toDateTime64(:backfill_start, 6)
+                              AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
                               AND length(deleted_id) = 36
                         )
                     )
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
-                         lightweight_deletes_sync = 2
-                """, statement -> statement.bind("backfill_start", backfillStart));
+                         lightweight_deletes_sync = 2%s
+                """.formatted(extraSettings), statement -> statement.bind("backfill_start", backfillStart));
         return (System.nanoTime() - start) / 1_000_000L;
     }
 
@@ -1665,7 +1785,7 @@ class TracesLocalV2CutoverTest {
                         toFixedString(deleted_id, 36)
                     FROM deletion_events_local
                     WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND event_time >= toDateTime64(:cutover_start, 6, 'UTC')
                       AND project_id != ''
                       AND length(project_id) = 36
                       AND length(deleted_id) = 36
@@ -1942,7 +2062,7 @@ class TracesLocalV2CutoverTest {
                         toFixedString(deleted_id, 36)
                     FROM %s.deletion_events_local
                     WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND event_time >= toDateTime64(:cutover_start, 6, 'UTC')
                       AND project_id != ''
                       AND length(project_id) = 36
                       AND length(deleted_id) = 36
@@ -2087,6 +2207,95 @@ class TracesLocalV2CutoverTest {
      * Distinct keys in the live {@code traces} matching a raw predicate. No {@code FINAL}, matching the scope of the
      * repair mutation and of the counts that gate it.
      */
+    /**
+     * What the copy landed on the successor for one named row: whether it arrived at all, and the two denullified
+     * columns. {@code end_time} is read as microseconds since the epoch so the assertion needs no datetime literal of
+     * its own — it must not depend on the parsing it exists to pin. One query, so {@code any()} over a single-row match
+     * is that row; callers assert {@code rows} first, so an empty match cannot be mistaken for a value.
+     */
+    private CopiedRow copiedRow(String workspaceId, String name) {
+        var sql = """
+                SELECT
+                    count() AS rows,
+                    any(toUnixTimestamp64Micro(end_time)) AS end_time_micros,
+                    any(isNaN(ttft)) AS ttft_is_nan
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id AND name = :name
+                """;
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("workspace_id", workspaceId)
+                                .bind("name", name)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> new CopiedRow(
+                                row.get("rows", Long.class),
+                                row.get("end_time_micros", Long.class),
+                                row.get("ttft_is_nan", Boolean.class))))))
+                .block();
+    }
+
+    private record CopiedRow(long rows, long endTimeMicros, boolean ttftIsNaN) {
+    }
+
+    /**
+     * Bridge events the deletion replay's window selects, mirroring the {@code event_time} bound of 000002's replay
+     * subquery — the same bound the rollback's reverse replay carries against {@code cutover_start}.
+     */
+    private long bridgedDeletionsSince(String backfillStart, String extraSettings) {
+        return scalar("""
+                SELECT count() AS c
+                FROM deletion_events_local
+                WHERE source_table = 'traces'
+                  AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
+                  AND project_id != ''
+                  AND length(project_id) = 36
+                  AND length(deleted_id) = 36
+                %s
+                """.formatted(extraSettings.replaceFirst("^, ", "SETTINGS ")),
+                statement -> statement.bind("backfill_start", backfillStart));
+    }
+
+    /**
+     * The {@code version-ties} block, reimplemented inline like the rest of this class: keys whose newest
+     * {@code last_updated_at} is shared by more than one row. No {@code FINAL} — the question is how many physical rows
+     * share the newest version, which is exactly what {@code FINAL} would have to choose between.
+     *
+     * <p>Takes the table name because the shipped block reads both sides. That block selects its candidates by the
+     * compare's window and sample predicates; this substitutes a per-workspace filter, the candidate set not being what
+     * is under test.
+     */
+    private long versionTies(String table, String workspaceId) {
+        return scalar("""
+                SELECT count() AS c
+                FROM (
+                    SELECT key, argMax(rows_at_version, version) AS rows_at_newest
+                    FROM (
+                        SELECT
+                            (workspace_id, project_id, id) AS key,
+                            last_updated_at AS version,
+                            count() AS rows_at_version
+                        FROM %s
+                        WHERE workspace_id = :workspace_id
+                        GROUP BY key, version
+                    )
+                    GROUP BY key
+                )
+                WHERE rows_at_newest > 1
+                """.formatted(table), statement -> statement.bind("workspace_id", workspaceId));
+    }
+
+    private long scalar(String sql, Consumer<Statement> binder) {
+        return template
+                .nonTransaction(connection -> {
+                    var statement = connection.createStatement(sql);
+                    binder.accept(statement);
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class))));
+                })
+                .block();
+    }
+
     private long countMatching(String workspaceId, String predicate) {
         var sql = """
                 SELECT uniqExact(workspace_id, project_id, id) AS c
@@ -2189,7 +2398,7 @@ class TracesLocalV2CutoverTest {
 
     private String nowMicros() {
         return template.nonTransaction(connection -> Mono.from(connection.createStatement(
-                "SELECT toString(now64(6)) AS n")
+                "SELECT toString(now64(6, 'UTC')) AS n")
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("n", String.class)))))
                 .block();

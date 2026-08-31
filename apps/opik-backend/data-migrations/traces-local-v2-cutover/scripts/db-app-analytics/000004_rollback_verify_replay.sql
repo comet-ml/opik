@@ -32,7 +32,7 @@ WHERE (workspace_id, project_id, id) IN (
         toFixedString(deleted_id, 36)
     FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
     WHERE source_table = 'traces'
-      AND event_time >= toDateTime64('${CUTOVER_START}', 6)
+      AND event_time >= toDateTime64('${CUTOVER_START}', 6, 'UTC')
       AND project_id != ''
       AND length(project_id) = 36
       AND length(deleted_id) = 36
