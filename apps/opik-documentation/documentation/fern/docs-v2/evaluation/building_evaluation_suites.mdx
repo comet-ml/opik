@@ -7,7 +7,7 @@ og:title: Building Test Suites — Opik
 title: Building Test Suites
 ---
 
-Test suites grow as you debug and improve your agent. There are three ways to build them: with Ollie, through the UI, or via the SDK.
+Test suites grow as you debug and improve your agent. There are three ways to build them: with Ollie, through the UI, or via the SDK — and if you build with an AI coding assistant, it can drive any of them for you.
 
 ## With Ollie
 
@@ -306,3 +306,15 @@ You can also override the policy for individual items:
   }]);
   ```
 </CodeBlocks>
+
+<Tip>
+  **Recommended if you build with an AI coding assistant.** One command — `opik configure` —
+  installs both the [MCP server](/mcp-server) and the Opik skills, and your assistant can then run
+  the suite itself between development iterations: change the prompt, run the suite, read the
+  scores, change again — instead of you doing that loop by hand.
+
+  An example prompt:
+
+  *"Add this failing trace to my customer-support-qa suite, then iterate on the prompt until the
+  suite passes — run the suite after each change and show me the scores."*
+</Tip>
