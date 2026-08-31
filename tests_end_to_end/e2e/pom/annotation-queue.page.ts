@@ -2,6 +2,94 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 
+/**
+ * The create/edit annotation queue dialog — one component
+ * (`AddEditAnnotationQueueDialog`) reached from three entry points: the queues
+ * list "Create queue" button, a queue row's Edit action, and the queue-detail
+ * "Edit" button. Only the title and submit label differ between modes, so the
+ * mode is a constructor argument rather than two near-identical classes.
+ */
+export class AnnotationQueueDialog {
+  private static readonly TITLES = {
+    create: 'Create a new annotation queue',
+    edit: 'Edit annotation queue',
+  } as const;
+
+  private static readonly SUBMIT_LABELS = {
+    create: 'Create annotation queue',
+    edit: 'Update annotation queue',
+  } as const;
+
+  constructor(
+    private readonly page: Page,
+    private readonly mode: 'create' | 'edit',
+  ) {}
+
+  /**
+   * Scoped by its own title so the two modes never resolve to each other's
+   * dialog — the row-actions cell mounts an edit dialog on every row, and the
+   * list page mounts a create dialog, so `getByRole('dialog')` alone is
+   * ambiguous the moment either is open.
+   */
+  get root(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', {
+        name: AnnotationQueueDialog.TITLES[this.mode],
+        exact: true,
+      }),
+    });
+  }
+
+  /** `exact` matters: "Number of annotators per item" also contains "Name". */
+  get nameInput(): Locator {
+    return this.root.getByLabel('Name', { exact: true });
+  }
+
+  get submitButton(): Locator {
+    return this.root.getByRole('button', {
+      name: AnnotationQueueDialog.SUBMIT_LABELS[this.mode],
+      exact: true,
+    });
+  }
+
+  /** The zod `.trim().min(1)` message, rendered by the Name field's FormMessage. */
+  get nameRequiredError(): Locator {
+    return this.root.getByText('Name is required', { exact: true });
+  }
+
+  async waitForReady(): Promise<void> {
+    return test.step(`Wait for the ${this.mode} annotation queue dialog`, async () => {
+      await this.nameInput.waitFor({ state: 'visible' });
+    });
+  }
+
+  async fillName(name: string): Promise<void> {
+    return test.step(`Set the queue name to "${name}"`, async () => {
+      await this.nameInput.fill(name);
+    });
+  }
+
+  async submit(): Promise<void> {
+    return test.step(`Submit the ${this.mode} annotation queue dialog`, async () => {
+      await this.submitButton.click();
+    });
+  }
+
+  /**
+   * Submit, then wait for the dialog to go away.
+   *
+   * The dialog now closes only in the mutation's `onSuccess` (opik#8056), so
+   * "hidden" is a real signal that the write landed — not, as before, a
+   * synchronous close that happened whatever the server answered.
+   */
+  async submitAndExpectClosed(): Promise<void> {
+    return test.step(`Submit the ${this.mode} dialog and wait for it to close`, async () => {
+      await this.submitButton.click();
+      await expect(this.root).toBeHidden();
+    });
+  }
+}
+
 /** The project-scoped queues list at /projects/$projectId/annotation-queues. */
 export class AnnotationQueuesPage {
   constructor(private readonly page: Page) {}
@@ -41,6 +129,36 @@ export class AnnotationQueuesPage {
 
   get emptyState(): Locator {
     return this.page.getByText('No annotation queues yet');
+  }
+
+  /**
+   * The header "Create queue" button, which renders whether or not the project
+   * already has queues — unlike the empty state's "Create your first queue",
+   * which disappears as soon as one exists.
+   */
+  async openCreateDialog(): Promise<AnnotationQueueDialog> {
+    return test.step('Open the create annotation queue dialog', async () => {
+      await this.page.getByRole('button', { name: 'Create queue', exact: true }).click();
+      const dialog = new AnnotationQueueDialog(this.page, 'create');
+      await dialog.waitForReady();
+      return dialog;
+    });
+  }
+
+  /**
+   * Open a queue's edit dialog from its row kebab menu. Scoped by row first, the
+   * same way `deleteQueue` is, so the menu belongs to the queue under test.
+   */
+  async openEditDialog(queueId: string): Promise<AnnotationQueueDialog> {
+    return test.step(`Open the edit dialog for annotation queue ${queueId}`, async () => {
+      const row = this.queueRow(queueId);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      const dialog = new AnnotationQueueDialog(this.page, 'edit');
+      await dialog.waitForReady();
+      return dialog;
+    });
   }
 
   /**
@@ -101,6 +219,32 @@ export class AnnotationQueuePage {
    */
   get queueItemsTab(): Locator {
     return this.page.getByRole('tab', { name: 'Queue items' });
+  }
+
+  /**
+   * The page's `<h1>`, which renders the queue name in full.
+   *
+   * This is the only place in the UI that does: the list's Name column
+   * truncates the text server-side of the ellipsis, so a padded name and its
+   * trimmed twin render identically there and the row label cannot tell them
+   * apart.
+   */
+  get queueNameHeading(): Locator {
+    return this.page.getByRole('heading', { level: 1 });
+  }
+
+  /**
+   * Open the edit dialog from the detail page's own Edit button — a second
+   * mount of the same dialog as the list's row action, and a separate entry
+   * point that can regress on its own.
+   */
+  async openEditDialog(): Promise<AnnotationQueueDialog> {
+    return test.step('Open the edit dialog from the queue detail page', async () => {
+      await this.page.getByRole('button', { name: 'Edit', exact: true }).click();
+      const dialog = new AnnotationQueueDialog(this.page, 'edit');
+      await dialog.waitForReady();
+      return dialog;
+    });
   }
 
   /**

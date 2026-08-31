@@ -1794,6 +1794,53 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Every annotation queue in one project — the exact read the queues list
+     * page performs, with the same `project_id` filter the FE builds in
+     * `generateProjectFilters`.
+     *
+     * Goes through `rawFetch` rather than the pinned SDK because
+     * `findAnnotationQueues` exposes only `name`/`page`/`size`. A name search
+     * cannot answer "did a queue get created under a name I did NOT choose",
+     * which is precisely what a create-validation test has to assert: a
+     * whitespace-only submit that leaks through would land a queue named
+     * `"   "`, and any prefix search would report it as absent.
+     *
+     * Returns `total` alongside the rows so a caller can assert the whole
+     * answer (count AND collection length), not just that its own queue is
+     * somewhere in it.
+     */
+    async listAnnotationQueuesForProject(
+      projectId: string,
+    ): Promise<{ total: number; queues: ProjectRef[] }> {
+      const filters: BackendFilter[] = [
+        { field: 'project_id', type: 'string', operator: '=', key: '', value: projectId },
+      ];
+      const query = new URLSearchParams({
+        size: '500',
+        filters: JSON.stringify(filters),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/annotation-queues',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listAnnotationQueuesForProject(${projectId}) failed: ${status} ${message}`,
+        );
+      }
+      const body = (json ?? {}) as { total?: unknown; content?: unknown };
+      const content = Array.isArray(body.content) ? body.content : [];
+      return {
+        total: typeof body.total === 'number' ? body.total : content.length,
+        queues: content.map((q) => {
+          const row = q as { id?: unknown; name?: unknown };
+          return { id: String(row.id), name: String(row.name) };
+        }),
+      };
+    },
+
+    /**
      * Fetch the studio run's logs. The backend returns a presigned URL to a
      * gzipped log object (the optimizer subprocess stdout); this resolves it and
      * gunzips the content.
