@@ -51,7 +51,12 @@ public class RetriableHttpClient {
     public record Request<T>(
             @NonNull Function<Client, WebTarget> requestFunction,
             @NonNull Retry retryPolicy,
-            /** Request entity. Required for POST; must be null for GET. */
+            /**
+             * Request entity. Required for POST -- {@link #executePostWithRetry} rejects a null
+             * body, since a POST with nothing to send is a caller error. Ignored for GET: the HTTP
+             * method decides whether an entity is written, so a body set here is silently dropped
+             * rather than rejected.
+             */
             Entity<?> body,
             /**
              * Applied to the {@link Invocation.Builder} before the call, for headers, cookies and
