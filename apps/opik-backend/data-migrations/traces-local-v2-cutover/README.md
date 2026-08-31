@@ -68,8 +68,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 5. **`databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled = true`** deployed and live before the backfill
    begins, and kept on for the entire backfill→EXCHANGE window. On docker-compose set
    `ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED=true` (the backend service forwards it) and restart the
-   backend. `backfill.sh` captures the `backfill_start` anchor (a `now64(6)` taken just before the first INSERT) and
-   prints it — the delta and the replay both key off it.
+   backend. `backfill.sh` captures the `backfill_start` anchor (a `now64(6, 'UTC')` taken just before the first INSERT)
+   and prints it — the delta and the replay both key off it.
 6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
    `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
    `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
@@ -132,11 +132,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     WHERE source_table = 'traces' AND project_id = '';
     ```
     If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
-14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, with `--backfill-start` set to
-    `now()`.** Both statements execute but match nothing (no row has `created_at`/`last_updated_at` in the future, and
-    the bridge holds no events after that instant), so it is a functional no-op against the data — while still proving
-    the migration user can actually perform every kind of statement the cutover needs. Do this on a least-privilege user
-    and you catch grant gaps in seconds instead of mid-window.
+14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, anchored at the current instant.** The
+    driver takes a literal timestamp carrying the ` UTC` marker, so read the clock first and pass what it printed:
+    `SELECT toString(now64(6, 'UTC'))`, then `--backfill-start '<that value> UTC'`. Both statements execute but match
+    nothing (no row has `created_at`/`last_updated_at` in the future, and the bridge holds no events after that instant),
+    so it is a functional no-op against the data — while still proving the migration user can actually perform every kind
+    of statement the cutover needs. Do this on a least-privilege user and you catch grant gaps in seconds instead of
+    mid-window.
     > This is not hypothetical. On the first real-cluster run the deletion replay failed with
     > `Code: 497 … necessary to have the grant ALTER UPDATE(_row_exists)`: ClickHouse implements a lightweight `DELETE`
     > as `ALTER UPDATE _row_exists = 0`, so it authorises it as **`ALTER UPDATE` on that hidden column, not
@@ -1078,8 +1080,12 @@ Pick the stage by how far the cutover got:
   a multi-shard cluster and must be run once per shard. It also refuses when the shard count is **unreadable** — the
   postcondition reads `clusterAllReplicas('{cluster}', …)` and needs the same `system.macros` the count does, so a
   session that cannot read one cannot verify with the other, and proceeding would risk a whole-table rewrite that can
-  never be certified. Where those reads are genuinely unavailable and the topology is known, `--confirm-single-shard`
-  asserts it; it does **not** override a count that came back greater than 1. Separate from the stages by necessity, not
+  never be certified. The primary fix is to grant `SELECT ON system.clusters` and `system.macros`. Where that is
+  genuinely unavailable and the topology is known, `--confirm-single-shard` unblocks the shard-count guard **only** —
+  the postcondition needs the same macro, so it still cannot be evaluated, the driver reports the repair as unverified
+  and exits non-zero, and the exit-checklist item below ("printed `Sentinel postcondition OK` and exited zero") cannot
+  be ticked from such a run. It does **not** override a count that came back greater than 1, and it is accepted only
+  with `--sentinel-repair-only`, `--reverse-replay-only` and stages B and C. Separate from the stages by necessity, not
   preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
   the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
   behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
@@ -1340,8 +1346,8 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: trace-delete
    partition pruning carries no flag, so the retry's `EXCHANGE` needs no pruning step in either direction — see
    "Trace-delete partition pruning needs no flip at all".
-5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
-   every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
+5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor, marker included (the
+   shadow still holds every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
    data "was already verified once".
 

@@ -255,6 +255,25 @@ class TracesLocalV2CutoverTest {
      */
     private static final String WESTWARD_SESSION = ", session_timezone = 'America/New_York'";
 
+    /**
+     * The bridge-window predicate, shared verbatim by the four statements that read {@code deletion_events_local} over
+     * the full key: the forward deletion replay, the rollback's reverse replay, the rollback postcondition, and the
+     * count the timezone test compares against. One definition, so a test cannot pass against a predicate the replay
+     * does not use. The bind is named {@code since} because the callers disagree on what the instant means
+     * ({@code backfill_start} forward, {@code cutover_start} in reverse) while the predicate does not.
+     *
+     * <p>The 36-length and non-empty guards are the shipped ones: {@code deleted_id} and {@code project_id} are
+     * {@code String} on the bridge but {@code FixedString(36)} on the trace tables, so a malformed event would make
+     * {@code toFixedString} throw rather than simply not match. The replay's resurrection guard reads the same bridge
+     * through a deliberately reduced form — it needs {@code deleted_id} only — so it is not this constant.
+     */
+    private static final String BRIDGE_WINDOW_PREDICATE = """
+            WHERE source_table = 'traces'
+              AND event_time >= toDateTime64(:since, 6, 'UTC')
+              AND project_id != ''
+              AND length(project_id) = 36
+              AND length(deleted_id) = 36""";
+
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final Network network = Network.newNetwork();
@@ -1455,6 +1474,40 @@ class TracesLocalV2CutoverTest {
         assertThat(copied.rows()).as("the week's window still selects the row").isEqualTo(1);
         assertThat(copied.endTimeMicros()).as("epoch sentinel").isZero();
         assertThat(copied.ttftIsNaN()).as("NaN ttft sentinel").isTrue();
+        // duration is MATERIALIZED by the shipped DDL, whose "not ended yet" branch compares end_time against its own
+        // epoch literal. The sentinel the backfill wrote must satisfy that comparison, independently of the session.
+        assertThat(copied.durationIsNaN()).as("NaN duration, so the DDL's epoch literal matched the one written")
+                .isTrue();
+    }
+
+    /**
+     * The delta's own pair of unpinned-literal sites: it re-reads the source for everything touched at or after the
+     * anchor, on {@code created_at} OR {@code last_updated_at}. Both bounds parse the same value, so a westward session
+     * moves them together and the delta silently narrows to rows touched after the shifted instant. That loses exactly
+     * the updates the delta exists to carry — those made while the backfill ran — and, unlike a missed deletion, they
+     * are invisible to the fidelity compare once the successor holds a row for the key at all.
+     *
+     * <p>Driven end to end rather than by counting the predicate: an INSERT SELECT reads through the session, so the
+     * shift is observable in the copy itself, which the deletion replay's mutation cannot show.
+     *
+     * @see #deletionReplayWindowIsUnaffectedByTheSessionTimezone for the bound the session cannot reach
+     */
+    @Test
+    void deltaIsUnaffectedByTheSessionTimezone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        // The row the delta exists to carry: created before the anchor, so the backfill already copied it, then updated
+        // after it. Only the OR's last_updated_at arm can select it. Anchor and update come from the same clock, so
+        // their ordering is exact; the margin between them is minutes, orders of magnitude below any zone offset.
+        var anchor = Instant.now();
+        insertShapedTrace(ID_GENERATOR.generateId().toString(), workspaceId, projectId, "touched-during-backfill",
+                weekInstant(0, 0), null, null, weekInstant(0, 0), anchor.plusSeconds(60));
+
+        deltaInsert(ClickHouseDateTimeFormat.formatMicros(anchor), WESTWARD_SESSION);
+
+        assertThat(copiedRow(workspaceId, "touched-during-backfill").rows())
+                .as("the delta's window still selects the row")
+                .isEqualTo(1);
     }
 
     /**
@@ -1698,6 +1751,11 @@ class TracesLocalV2CutoverTest {
      * {@code last_updated_at} on the batch-ingest path (see class Javadoc).
      */
     private void deltaInsert(String backfillStart) {
+        deltaInsert(backfillStart, "");
+    }
+
+    /** As above with extra session settings appended; see {@link #WESTWARD_SESSION}. */
+    private void deltaInsert(String backfillStart, String extraSettings) {
         execute("""
                 INSERT INTO traces_local_v2 (
                 %s
@@ -1707,8 +1765,8 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:backfill_start, 6, 'UTC')
                    OR last_updated_at >= toDateTime64(:backfill_start, 6, 'UTC')
-                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
-                """.formatted(COPIED_COLUMNS, COPIED_SELECT),
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000%s
+                """.formatted(COPIED_COLUMNS, COPIED_SELECT, extraSettings),
                 statement -> statement.bind("backfill_start", backfillStart));
     }
 
@@ -1721,11 +1779,6 @@ class TracesLocalV2CutoverTest {
      * the wall time so the runbook can size it against the buffer window.
      */
     private long replayDeletions(String backfillStart) {
-        return replayDeletions(backfillStart, "");
-    }
-
-    /** As above with extra session settings appended; see {@link #WESTWARD_SESSION}. */
-    private long replayDeletions(String backfillStart, String extraSettings) {
         var start = System.nanoTime();
         // allow_nondeterministic_mutations: a lightweight DELETE with a cross-table subquery is flagged
         // nondeterministic, but deletion_events_local is replicated and identical on every node and the window
@@ -1740,11 +1793,7 @@ class TracesLocalV2CutoverTest {
                             toFixedString(project_id, 36),
                             toFixedString(deleted_id, 36)
                         FROM deletion_events_local
-                        WHERE source_table = 'traces'
-                          AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
-                          AND project_id != ''
-                          AND length(project_id) = 36
-                          AND length(deleted_id) = 36
+                %s
                     )
                     AND (workspace_id, project_id, id) NOT IN (
                         SELECT
@@ -1756,14 +1805,14 @@ class TracesLocalV2CutoverTest {
                             SELECT toFixedString(deleted_id, 36)
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
-                              AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
+                              AND event_time >= toDateTime64(:since, 6, 'UTC')
                               AND length(deleted_id) = 36
                         )
                     )
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
-                         lightweight_deletes_sync = 2%s
-                """.formatted(extraSettings), statement -> statement.bind("backfill_start", backfillStart));
+                         lightweight_deletes_sync = 2
+                """.formatted(bridgeWindow(24)), statement -> statement.bind("since", backfillStart));
         return (System.nanoTime() - start) / 1_000_000L;
     }
 
@@ -1880,15 +1929,11 @@ class TracesLocalV2CutoverTest {
                         toFixedString(project_id, 36),
                         toFixedString(deleted_id, 36)
                     FROM deletion_events_local
-                    WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6, 'UTC')
-                      AND project_id != ''
-                      AND length(project_id) = 36
-                      AND length(deleted_id) = 36
+                %s
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
                          lightweight_deletes_sync = 2
-                """, statement -> statement.bind("cutover_start", cutoverStart));
+                """.formatted(bridgeWindow(20)), statement -> statement.bind("since", cutoverStart));
     }
 
     private boolean isDistributed(String table) {
@@ -2157,17 +2202,13 @@ class TracesLocalV2CutoverTest {
                         toFixedString(project_id, 36),
                         toFixedString(deleted_id, 36)
                     FROM %s.deletion_events_local
-                    WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6, 'UTC')
-                      AND project_id != ''
-                      AND length(project_id) = 36
-                      AND length(deleted_id) = 36
+                %s
                 )
-                """.formatted(DATABASE_NAME, DATABASE_NAME);
+                """.formatted(DATABASE_NAME, DATABASE_NAME, bridgeWindow(20));
         return template
                 .nonTransaction(connection -> Mono
                         .from(connection.createStatement(sql)
-                                .bind("cutover_start", cutoverStart)
+                                .bind("since", cutoverStart)
                                 .execute())
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
                 .block();
@@ -2314,7 +2355,8 @@ class TracesLocalV2CutoverTest {
                 SELECT
                     count() AS rows,
                     any(toUnixTimestamp64Micro(end_time)) AS end_time_micros,
-                    any(isNaN(ttft)) AS ttft_is_nan
+                    any(isNaN(ttft)) AS ttft_is_nan,
+                    any(isNaN(duration)) AS duration_is_nan
                 FROM traces_local_v2
                 WHERE workspace_id = :workspace_id AND name = :name
                 """;
@@ -2327,11 +2369,12 @@ class TracesLocalV2CutoverTest {
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> new CopiedRow(
                                 row.get("rows", Long.class),
                                 row.get("end_time_micros", Long.class),
-                                row.get("ttft_is_nan", Boolean.class))))))
+                                row.get("ttft_is_nan", Boolean.class),
+                                row.get("duration_is_nan", Boolean.class))))))
                 .block();
     }
 
-    private record CopiedRow(long rows, long endTimeMicros, boolean ttftIsNaN) {
+    private record CopiedRow(long rows, long endTimeMicros, boolean ttftIsNaN, boolean durationIsNaN) {
     }
 
     /**
@@ -2342,14 +2385,10 @@ class TracesLocalV2CutoverTest {
         return scalar("""
                 SELECT count() AS c
                 FROM deletion_events_local
-                WHERE source_table = 'traces'
-                  AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
-                  AND project_id != ''
-                  AND length(project_id) = 36
-                  AND length(deleted_id) = 36
                 %s
-                """.formatted(extraSettings.replaceFirst("^, ", "SETTINGS ")),
-                statement -> statement.bind("backfill_start", backfillStart));
+                %s
+                """.formatted(bridgeWindow(16), extraSettings.replaceFirst("^, ", "SETTINGS ")),
+                statement -> statement.bind("since", backfillStart));
     }
 
     /**
@@ -2644,6 +2683,15 @@ class TracesLocalV2CutoverTest {
             Map.entry("ttft", "if(isNaN(ttft), 'nan', toString(ttft))"),
             Map.entry("source", "toString(source)"),
             Map.entry("environment", "toString(environment)"));
+
+    /**
+     * {@link #BRIDGE_WINDOW_PREDICATE} with every line after the first indented by {@code spaces}, so it can be
+     * interpolated into a nested subquery and still read as SQL. The first line is left bare: the {@code %s} it
+     * replaces already sits at the right column.
+     */
+    private static String bridgeWindow(int spaces) {
+        return BRIDGE_WINDOW_PREDICATE.replace("\n", "\n" + " ".repeat(spaces));
+    }
 
     /**
      * The per-row fidelity hash for a shape, generated from {@link #COPIED_COLUMNS} in order so every copied column is

@@ -1077,11 +1077,12 @@ class TracesLocalV2BenchmarkTest {
                     truncated_input String MATERIALIZED if(length(input) >= truncation_threshold, substring(input, 1, truncation_threshold), input) CODEC(ZSTD(3)),
                     truncated_output String MATERIALIZED if(length(output) >= truncation_threshold, substring(output, 1, truncation_threshold), output) CODEC(ZSTD(3)),
                     output_keys Array(Tuple(key String, type String)) MATERIALIZED arrayMap(key -> (key, toString(JSONType(JSONExtractRaw(output, key)))), JSONExtractKeys(output)) CODEC(ZSTD(3)),
-                    duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
+                    duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6, 'UTC') OR start_time = toDateTime64('1970-01-01 00:00:00', 6, 'UTC'), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
                     id_at DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1))
                 """;
-        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create), 000106 and 000107 (the
-        // benchmark-driven refinements), matching the pin map above: the variable-length String/Array columns
+        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create), 000106 and 000107
+        // (the benchmark-driven refinements) and 000119 (the epoch sentinel pinned to UTC), matching the pin map
+        // above: the variable-length String/Array columns
         // (workspace_id, name, tags, created_by, last_updated_by, thread_id, output_keys) on ZSTD(3); end_time /
         // last_updated_at on Delta + ZSTD(1); visibility_mode / source / environment on ZSTD(1). The headline is the
         // deployed format: tuned per-column codecs, DateTime64(6), epoch/NaN sentinels, is_deleted.
