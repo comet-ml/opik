@@ -729,8 +729,11 @@ class DatasetServiceImpl implements DatasetService {
                         .collectMap(DatasetItemSummary::datasetId, Function.identity()),
                 optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
                         .collectMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()),
+                // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all,
+                // which would turn an absent-versions result into a null and NPE below.
                 Mono.fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))
-                        .subscribeOn(Schedulers.boundedElastic()))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .defaultIfEmpty(Map.of()))
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 

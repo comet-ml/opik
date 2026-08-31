@@ -35,7 +35,10 @@ import java.util.function.Function;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -257,5 +260,71 @@ class DatasetServiceEnrichmentTest {
 
         assertThat(actual.datasetItemsCount()).isEqualTo(42);
         assertThat(actual.latestVersion()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("A mixed page keeps dataset order and maps each row to its own summaries")
+    void enrichmentOnPageKeepsOrderAndPerRowSummaries() {
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        var third = UUID.randomUUID();
+
+        var page = List.of(
+                Dataset.builder().id(first).name("first").build(),
+                Dataset.builder().id(second).name("second").build(),
+                Dataset.builder().id(third).name("third").build());
+
+        when(sortingQueryBuilder.toOrderBySql(any())).thenReturn(null);
+        when(sortingFactory.getSortableFields()).thenReturn(List.of());
+        when(datasetDAO.findCount(anyString(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any()))
+                .thenReturn(3L);
+        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), anyBoolean(), anyBoolean(), any(), any(),
+                any(), any())).thenReturn(page);
+
+        var experimentAt = Instant.now().minusSeconds(90);
+        var optimizationAt = Instant.now().minusSeconds(45);
+
+        // Only the first and third datasets have summaries; the second must fall back to zeroes.
+        when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.just(new ExperimentItemDAO.ExperimentSummary(third, 11, experimentAt)));
+        when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.just(new DatasetItemSummary(first, 5)));
+        when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.just(new OptimizationDAO.OptimizationSummary(third, 2, optimizationAt)));
+        when(datasetVersionDAO.findLatestVersionsByDatasetIds(anySet(), any())).thenReturn(List.of());
+
+        var actual = service.find(1, 10, DatasetCriteria.builder().build(), List.of());
+
+        assertThat(actual.content()).extracting(Dataset::id).containsExactly(first, second, third);
+        assertThat(actual.total()).isEqualTo(3L);
+
+        assertThat(actual.content().get(0).datasetItemsCount()).isEqualTo(5);
+        assertThat(actual.content().get(0).experimentCount()).isZero();
+
+        assertThat(actual.content().get(1).datasetItemsCount()).isZero();
+        assertThat(actual.content().get(1).experimentCount()).isZero();
+        assertThat(actual.content().get(1).optimizationCount()).isZero();
+        assertThat(actual.content().get(1).mostRecentExperimentAt()).isNull();
+
+        assertThat(actual.content().get(2).experimentCount()).isEqualTo(11);
+        assertThat(actual.content().get(2).mostRecentExperimentAt()).isEqualTo(experimentAt);
+        assertThat(actual.content().get(2).optimizationCount()).isEqualTo(2);
+        assertThat(actual.content().get(2).mostRecentOptimizationAt()).isEqualTo(optimizationAt);
+    }
+
+    @Test
+    @DisplayName("Enrichment returns the datasets untouched when the page is empty")
+    void enrichmentOnEmptyPageReturnsEmptyContent() {
+        when(sortingQueryBuilder.toOrderBySql(any())).thenReturn(null);
+        when(sortingFactory.getSortableFields()).thenReturn(List.of());
+        when(datasetDAO.findCount(anyString(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any()))
+                .thenReturn(0L);
+        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), anyBoolean(), anyBoolean(), any(), any(),
+                any(), any())).thenReturn(List.of());
+
+        var actual = service.find(1, 10, DatasetCriteria.builder().build(), List.of());
+
+        assertThat(actual.content()).isEmpty();
+        assertThat(actual.total()).isZero();
     }
 }
