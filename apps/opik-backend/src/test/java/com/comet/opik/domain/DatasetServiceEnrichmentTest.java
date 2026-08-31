@@ -43,6 +43,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -86,10 +87,16 @@ class DatasetServiceEnrichmentTest {
     @Mock
     private DatasetDAO datasetDAO;
 
+    private static final long SUBSCRIBE_TIMEOUT_SECONDS = 5;
+    // Generous relative to SUBSCRIBE_TIMEOUT_SECONDS so a slow-but-correct run fails the assertion
+    // rather than tripping the workers' own deadline under CI scheduler load.
+    private static final long WORKER_RELEASE_TIMEOUT_SECONDS = 60;
+
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER_NAME = "test-user";
 
     private DatasetService service;
+    private Handle handle;
 
     @BeforeEach
     void setUp() {
@@ -98,7 +105,7 @@ class DatasetServiceEnrichmentTest {
         when(requestContext.getUserName()).thenReturn(USER_NAME);
         when(requestContext.getVisibility()).thenReturn(Visibility.PRIVATE);
 
-        var handle = mock(Handle.class);
+        handle = mock(Handle.class);
         when(handle.attach(DatasetDAO.class)).thenReturn(datasetDAO);
         when(handle.attach(DatasetVersionDAO.class)).thenReturn(datasetVersionDAO);
         when(template.inTransaction(any(), any())).thenAnswer(invocation -> {
@@ -109,6 +116,9 @@ class DatasetServiceEnrichmentTest {
         service = new DatasetServiceImpl(idGenerator, template, requestContextProvider, experimentItemDAO,
                 datasetItemDAO, experimentDAO, sortingQueryBuilder, filterQueryBuilder, sortingFactory,
                 batchOperationsConfig, optimizationDAO, eventBus, featureFlags, projectService);
+    }
+
+    private static final class VersionLookupShortCircuit extends RuntimeException {
     }
 
     private Dataset stubDataset(UUID id) {
@@ -248,15 +258,18 @@ class DatasetServiceEnrichmentTest {
         stubDataset(datasetId);
 
         // Each lookup counts itself in, then blocks until all three have arrived. A serial implementation
-        // parks on the first lookup and never reaches the second, so the latch times out and the test fails.
+        // parks on the first lookup and never reaches the second, so SUBSCRIBE_TIMEOUT expires and the
+        // assertion below fails. The worker deadline is deliberately much longer than the assertion
+        // deadline: the two run concurrently, so a shared budget would let a slow-but-correct run exhaust
+        // the workers' wait and throw from a worker thread instead of failing the assertion cleanly.
         var allSubscribed = new CountDownLatch(3);
         var released = new CountDownLatch(1);
 
         Runnable gate = () -> {
             allSubscribed.countDown();
             try {
-                if (!released.await(5, TimeUnit.SECONDS)) {
-                    throw new IllegalStateException("lookups were not released: enrichment is not concurrent");
+                if (!released.await(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("lookups were never released");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -283,13 +296,56 @@ class DatasetServiceEnrichmentTest {
 
         var enrichment = CompletableFuture.supplyAsync(() -> service.findById(datasetId));
 
-        assertThat(allSubscribed.await(5, TimeUnit.SECONDS))
-                .as("all three ClickHouse lookups should be subscribed before any of them completes")
-                .isTrue();
-        released.countDown();
+        try {
+            assertThat(allSubscribed.await(SUBSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    .as("all three ClickHouse lookups should be subscribed before any of them completes")
+                    .isTrue();
+        } finally {
+            // Always release, so a failed assertion reports the real cause instead of being masked by
+            // workers timing out and throwing.
+            released.countDown();
+        }
 
-        var actual = enrichment.get(10, TimeUnit.SECONDS);
+        var actual = enrichment.get(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         assertThat(actual.experimentCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("An empty version lookup yields empty versions rather than failing the whole enrichment")
+    void enrichmentWhenVersionLookupEmitsNothingStillReturnsDataset() {
+        var datasetId = UUID.randomUUID();
+        stubDataset(datasetId);
+
+        when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.just(new ExperimentItemDAO.ExperimentSummary(datasetId, 3, null)));
+        when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.just(new DatasetItemSummary(datasetId, 7)));
+        when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet())).thenReturn(Flux.empty());
+
+        // Drive the version lookup to produce no value at all. The handle is prepared outside the answer
+        // (nested stubbing would corrupt the outer stub), and only the DatasetVersionDAO attach is
+        // short-circuited, so the dataset lookup itself is untouched. Mono.zip drops a source that
+        // completes empty and then emits nothing itself, so without defaultIfEmpty the block() in
+        // enrichment returns null and NPEs instead of reporting a dataset with no version.
+        var versionLookupHandle = mock(Handle.class);
+        when(versionLookupHandle.attach(DatasetDAO.class)).thenReturn(datasetDAO);
+        when(versionLookupHandle.attach(DatasetVersionDAO.class)).thenThrow(new VersionLookupShortCircuit());
+
+        doAnswer(invocation -> {
+            TxAction<?> callback = invocation.getArgument(1);
+            try {
+                return callback.execute(versionLookupHandle);
+            } catch (VersionLookupShortCircuit e) {
+                return null;
+            }
+        }).when(template).inTransaction(any(), any());
+
+        var actual = service.findById(datasetId);
+
+        assertThat(actual.latestVersion()).isNull();
+        assertThat(actual.experimentCount()).isEqualTo(3);
+        assertThat(actual.datasetItemsCount()).isEqualTo(7);
+        assertThat(actual.optimizationCount()).isZero();
     }
 
     @Test
