@@ -37,7 +37,7 @@
 #   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
 #                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
 #                             than total query time — so a step that goes quiet while the server works trips it while
-#                             healthy. Trade-off and shared rationale: ../../README.md.
+#                             healthy. Trade-off and shared rationale: ../README.md.
 #   --max-rows-per-insert R    the value you will pass to backfill.sh; sets how many windows the copy splits into.
 #                              Default 2000000 (matches backfill.sh).
 #   --pause-seconds S          backfill.sh --pause-seconds; added once per window as merge-catch-up idle time. Default 0.

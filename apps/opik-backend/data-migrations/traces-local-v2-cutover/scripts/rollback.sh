@@ -172,7 +172,12 @@ done
 # than a wrong shape: the statements parse the anchor as UTC, so one captured elsewhere shifts silently, and a LATER
 # value drops rows from the delta and the replay rather than failing.
 case "$CUTOVER_START" in
-    *" UTC") CUTOVER_START="${CUTOVER_START% UTC}" ;;
+    *" UTC")
+        CUTOVER_START="${CUTOVER_START% UTC}"
+        # A bare marker strips to empty, which elsewhere means "not supplied" — two meanings for one value, and
+        # the later "required" diagnostic would point away from the actual mistake.
+        [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start has no timestamp before the ' UTC' marker." >&2; exit 2; }
+        ;;
         "") ;;                      # not supplied; the caller decides whether that is allowed
     *)
         echo "ERROR: --cutover-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
@@ -201,10 +206,13 @@ if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     echo "ERROR: --confirm-flag-was-live belongs to --sentinel-repair-only and to no other mode." >&2
     exit 2
 fi
-# Only --sentinel-repair-only asserts the shard count, so the flag would be inert anywhere else. Reject it rather than
-# accept it: an operator who passed it would reasonably believe the topology had been taken into account.
-if [[ "$CONFIRM_SINGLE_SHARD" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
-    echo "ERROR: --confirm-single-shard belongs to --sentinel-repair-only and to no other mode." >&2
+# The flag is inert in modes that do not assert the shard count, and an operator who passed it there would reasonably
+# believe the topology had been taken into account. The modes that do assert it are the two that mutate a table the
+# driver is connected to: --sentinel-repair-only, --reverse-replay-only, and stages B and C, which run the reverse replay.
+if [[ "$CONFIRM_SINGLE_SHARD" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" && "$REVERSE_REPLAY_ONLY" != "1" \
+      && "$STAGE" != "B" && "$STAGE" != "C" ]]; then
+    echo "ERROR: --confirm-single-shard applies to --sentinel-repair-only, --reverse-replay-only and stages B and C," >&2
+    echo "       the modes that assert the shard count, and to no other mode." >&2
     exit 2
 fi
 if [[ "$CONFIRM_FLAG_REVERTED" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
@@ -386,12 +394,14 @@ assert_post_promote_state() {
 # asserts it, and only where the proof is unavailable: --confirm-flag-was-live.
 #
 # The reverse replay cannot accept the pre-EXCHANGE state at all: without a completed promote it masks live rows.
-# The repair mutates the shard it is connected to (it deliberately avoids ON CLUSTER, so it travels by replication,
-# which spans a shard's replicas and not other shards), while its postcondition reads clusterAllReplicas, which spans
-# every shard. On more than one shard those two scopes disagree: the mutation would fix one shard and the check would
-# keep failing, after a whole-table rewrite that could not have satisfied it. Refuse up front instead — the wasted work
-# is the point, not the confusing verdict. The reverse replay shares the single-shard assumption; this is the mode where
-# the mismatch became observable, because it is the one that verifies across the cluster.
+#
+# BOTH mutating modes carry the same scope mismatch, so both assert the shard count. The repair and the reverse replay
+# each mutate only the shard they are connected to — deliberately not ON CLUSTER, so the change travels by replication,
+# which spans a shard's replicas and not other shards — while each has a postcondition reading clusterAllReplicas, which
+# spans every shard. On more than one shard those scopes disagree: the mutation fixes one shard and the check keeps
+# failing, after work that could not have satisfied it. Refuse up front instead; the wasted work is the point, not the
+# confusing verdict. For the reverse replay the failure is worse than a confusing verdict, because the rows left
+# unmasked on the other shards are user-deleted traces resurrected by the rollback.
 assert_single_shard() {
     local shards
     shards="$(ch "SELECT uniqExact(shard_num) FROM system.clusters
@@ -408,14 +418,18 @@ assert_single_shard() {
     # run that would proceed. Nor does proceeding buy anything — the postcondition reads
     # clusterAllReplicas('{cluster}', ...), which needs the same system.macros this count needs, so a session that
     # cannot read the shard count cannot verify the repair either.
-    if ! [[ "$shards" =~ ^[0-9]+$ ]]; then
+    # Zero is not one shard: the scalar subquery over an empty system.macros match yields a default, so a missing
+    # 'cluster' macro or a cluster absent from this node's system.clusters returns 0. That is the unknown-topology state
+    # this guard exists for, and it also guarantees the postcondition's clusterAllReplicas('{cluster}', ...) cannot run.
+    if ! [[ "$shards" =~ ^[0-9]+$ ]] || (( shards == 0 )); then
         if [[ "$CONFIRM_SINGLE_SHARD" == "1" ]]; then
             echo "NOTE: could not read the shard count; proceeding on --confirm-single-shard. If the cluster in fact has" >&2
             echo "      more than one shard, this rewrites only the shard you are connected to." >&2
             return 0
         fi
-        echo "ERROR: could not read the shard count (needs SELECT on system.clusters and system.macros), so this cluster's" >&2
-        echo "       topology is unknown. This mode reaches only the shard you are connected to while its postcondition" >&2
+        echo "ERROR: the shard count came back unusable ('${shards:-<empty>}'), so this cluster's topology is unknown. It" >&2
+        echo "       needs SELECT on system.clusters and system.macros, and a 0 means the 'cluster' macro did not resolve." >&2
+        echo "       This mode reaches only the shard you are connected to while its postcondition" >&2
         echo "       reads every shard, so on more than one shard it would rewrite one and then report failure." >&2
         echo "       Grant the reads, or pass --confirm-single-shard to assert the topology yourself." >&2
         exit 1
@@ -661,6 +675,7 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
         "B/C promote succeeded but its replay did not."
     echo "NOTE: re-applying the reverse deletion replay only (no table swap) for deletes since cutover_start" >&2
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
+    assert_single_shard
     run_file 000004_rollback_reverse_replay.sql
     echo "Reverse-replay-only done: bridged deletes since cutover_start re-applied to the live 'traces'."
     verify_replay_postcondition || REPLAY_CHECK_FAILED=1
@@ -835,14 +850,16 @@ case "$STAGE" in
     B)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
         run_file 000004_rollback_stage_b_exchange_back.sql
-        run_file 000004_rollback_reverse_replay.sql
+        assert_single_shard
+    run_file 000004_rollback_reverse_replay.sql
         verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
         ;;
     C)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
         run_file 000004_rollback_stage_c_promote_original.sql
-        run_file 000004_rollback_reverse_replay.sql
+        assert_single_shard
+    run_file 000004_rollback_reverse_replay.sql
         verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
         ;;

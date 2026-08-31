@@ -40,10 +40,12 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
-#   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
-#                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
-#                             than total query time — so a step that goes quiet while the server works trips it while
-#                             healthy. Trade-off and shared rationale: ../../README.md.
+#   --receive-timeout N       seconds tolerated between server packets (receive_timeout), default 1800 against
+#                             ClickHouse's own 300. In this driver it also sets distributed_ddl_task_timeout, which
+#                             is the binding limit: the DROP/TRUNCATE here are ON CLUSTER, and that wait is capped
+#                             server-side (180s by default), so raising only the client timeout would leave a
+#                             multi-TB DROP failing at the cap while it kept running in the background.
+#                             Trade-off and shared rationale: ../README.md.
 #   --confirm         actually run the drop/recycle; without it, prints what would happen and exits (dry run).
 
 set -euo pipefail
@@ -77,7 +79,13 @@ done
 CH_ARGS=()
 [[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
-CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comment 'traces_local_v2_cutover:finalize')
+# distributed_ddl_task_timeout as well as receive_timeout, and here it is the binding one: this driver runs no long
+# SELECT, and its DROP/TRUNCATE are ON CLUSTER, whose wait is capped server-side at 180s by default with
+# distributed_ddl_output_mode = 'throw'. A multi-TB DROP ... SYNC would raise TIMEOUT_EXCEEDED at that cap however
+# high the client timeout is, while the DDL kept running in the background — and on the recycle path that aborts
+# between the TRUNCATE and the RENAME.
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" \
+          --distributed_ddl_task_timeout="$RECEIVE_TIMEOUT" --log_comment 'traces_local_v2_cutover:finalize')
 
 ch() {
     clickhouse-client "${CH_ARGS[@]}" --query "$1"

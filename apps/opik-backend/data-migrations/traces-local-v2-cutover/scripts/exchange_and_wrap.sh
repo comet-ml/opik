@@ -35,7 +35,7 @@
 #   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
 #                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
 #                             than total query time — so a step that goes quiet while the server works trips it while
-#                             healthy. Trade-off and shared rationale: ../../README.md.
+#                             healthy. Trade-off and shared rationale: ../README.md.
 #   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
 #                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
 #                             UTC, so without it the zone it was captured in is unknown.
@@ -137,7 +137,12 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
 # than a wrong shape: the statements parse the anchor as UTC, so one captured elsewhere shifts silently, and a LATER
 # value drops rows from the delta and the replay rather than failing.
 case "$BACKFILL_START" in
-    *" UTC") BACKFILL_START="${BACKFILL_START% UTC}" ;;
+    *" UTC")
+        BACKFILL_START="${BACKFILL_START% UTC}"
+        # A bare marker strips to empty, which elsewhere means "not supplied" — two meanings for one value, and
+        # the later "required" diagnostic would point away from the actual mistake.
+        [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start has no timestamp before the ' UTC' marker." >&2; exit 2; }
+        ;;
         "") ;;                      # not supplied; the caller decides whether that is allowed
     *)
         echo "ERROR: --backfill-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
