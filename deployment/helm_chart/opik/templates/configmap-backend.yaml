@@ -9,7 +9,6 @@ metadata:
     {{- include "opik.labels" $ | nindent 4 }}
 data:
   {{- if eq $key "backend" }}
-  OPIK_VERSION: {{ .Values.component.backend.image.tag }}
   {{- if $.Values.minio.enabled }}
   AWS_ACCESS_KEY_ID: {{ $.Values.minio.auth.rootUser | quote }}
   AWS_SECRET_ACCESS_KEY: {{ $.Values.minio.auth.rootPassword | quote }}
