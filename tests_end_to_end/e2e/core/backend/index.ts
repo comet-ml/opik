@@ -18,6 +18,7 @@ export {
   type AttachmentRef,
   type ProjectStatsRef,
   type ExperimentRefDetail,
+  type OptimizationRef,
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
   type FeedbackScoreRef,

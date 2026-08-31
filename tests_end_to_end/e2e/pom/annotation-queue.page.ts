@@ -74,6 +74,123 @@ export class AnnotationQueuesPage {
       has: this.page.getByRole('heading', { name: 'Delete annotation queue?' }),
     });
   }
+
+  /** Open the create dialog from the page's "Create queue" button. */
+  async openCreateDialog(): Promise<AnnotationQueueFormDialog> {
+    return test.step('Open the create-queue dialog', async () => {
+      await this.page.getByRole('button', { name: 'Create queue' }).click();
+      const dialog = new AnnotationQueueFormDialog(this.page, 'create');
+      await dialog.waitForReady();
+      return dialog;
+    });
+  }
+
+  /**
+   * Open the edit dialog from a row's kebab menu. Same menu as `deleteQueue`,
+   * so the confirm-dialog caveat there applies: scope to the row first, then use
+   * the accessible names from `AnnotationQueueRowActionsCell`.
+   */
+  async openEditDialog(queueId: string): Promise<AnnotationQueueFormDialog> {
+    return test.step(`Open the edit dialog for queue ${queueId}`, async () => {
+      const row = this.queueRow(queueId);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      const dialog = new AnnotationQueueFormDialog(this.page, 'edit');
+      await dialog.waitForReady();
+      return dialog;
+    });
+  }
+}
+
+/**
+ * The shared create/edit annotation-queue dialog (`AddEditAnnotationQueueDialog`).
+ *
+ * Create and edit are one component with two sets of copy, so the mode picks the
+ * title and the submit label — note the submit button is "Create annotation
+ * queue" / "Update annotation queue", not "Create"/"Save". Fields are addressed
+ * by their form labels, which is the stable handle here: the dialog carries no
+ * data-testids and its inputs are plain shadcn `FormField`s.
+ */
+export class AnnotationQueueFormDialog {
+  constructor(
+    private readonly page: Page,
+    private readonly mode: 'create' | 'edit',
+  ) {}
+
+  private get title(): string {
+    return this.mode === 'edit' ? 'Edit annotation queue' : 'Create a new annotation queue';
+  }
+
+  /** Scoped to this dialog's own title, so it can never resolve to another one. */
+  get root(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByText(this.title, { exact: true }),
+    });
+  }
+
+  async waitForReady(): Promise<void> {
+    return test.step(`Wait for the ${this.mode} annotation-queue dialog`, async () => {
+      await this.nameInput.waitFor({ state: 'visible' });
+    });
+  }
+
+  get nameInput(): Locator {
+    return this.root.getByLabel('Name', { exact: true });
+  }
+
+  /** The annotator-instructions textarea — the dialog's free-text field. */
+  get instructionsInput(): Locator {
+    return this.root.getByLabel('Instructions', { exact: true });
+  }
+
+  get submitButton(): Locator {
+    return this.root.getByRole('button', {
+      name: this.mode === 'edit' ? 'Update annotation queue' : 'Create annotation queue',
+      exact: true,
+    });
+  }
+
+  /** The name field's validation message, shown when the trimmed name is empty. */
+  get nameRequiredMessage(): Locator {
+    return this.root.getByText('Name is required', { exact: true });
+  }
+
+  async fill(fields: { name?: string; instructions?: string }): Promise<void> {
+    return test.step('Fill the annotation-queue dialog', async () => {
+      if (fields.name !== undefined) await this.nameInput.fill(fields.name);
+      if (fields.instructions !== undefined) {
+        await this.instructionsInput.fill(fields.instructions);
+      }
+    });
+  }
+
+  async submit(): Promise<void> {
+    return test.step(`Submit the ${this.mode} annotation-queue dialog`, async () => {
+      await this.submitButton.click();
+    });
+  }
+
+  /**
+   * Double-click submit, as a user with a heavy hand does.
+   *
+   * `dblclick` sends two real clicks milliseconds apart — well inside the create
+   * request's round trip — so the second lands while the first is still in
+   * flight. That is the state `disabled={isSubmitting}` exists to cover, and it
+   * is asserted through its outcome (how many queues exist) rather than by
+   * catching the button mid-flip, which would be a race against the network.
+   */
+  async doubleSubmit(): Promise<void> {
+    return test.step('Double-click submit', async () => {
+      await this.submitButton.dblclick();
+    });
+  }
+
+  async expectClosed(): Promise<void> {
+    return test.step(`Expect the ${this.mode} annotation-queue dialog to close`, async () => {
+      await this.root.waitFor({ state: 'hidden' });
+    });
+  }
 }
 
 export class AnnotationQueuePage {

@@ -1,4 +1,4 @@
-export { test, expect } from './dashboard-cleanup.fixture';
+export { test, expect } from './export-search-traces.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -105,4 +105,19 @@ export type {
   TraceAttachmentsFixtures,
 } from './trace-attachments.fixture';
 export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type {
+  RollupCandidateSeed,
+  RollupCandidateRef,
+  OptimizationRollupRef,
+  OptimizationRollupFixtures,
+} from './optimization-rollup.fixture';
+export type {
+  AnnotationQueueSweep,
+  AnnotationQueueCleanupFixtures,
+} from './annotation-queue-cleanup.fixture';
+export type {
+  ExportSearchTraceRef,
+  ExportSearchTracesRef,
+  ExportSearchTracesFixtures,
+} from './export-search-traces.fixture';
 export type { ProjectRef } from '../core/backend';

@@ -276,6 +276,26 @@ export interface OptimizationRef {
    */
   baselineObjectiveScore: number | null;
   bestObjectiveScore: number | null;
+  /**
+   * Per-trace duration (seconds) and cost (USD) of the run's baseline candidate
+   * and of the candidate the backend rolls up as "best". The `best_*` pair is
+   * gated on a candidate having evaluated at least as many items as the
+   * baseline did, so a half-evaluated trial cannot win them (OPIK-8060).
+   */
+  baselineDuration: number | null;
+  bestDuration: number | null;
+  baselineCost: number | null;
+  bestCost: number | null;
+  /** Whole-run spend, summed over every trial's traces. */
+  totalOptimizationCost: number | null;
+  /**
+   * The run's feedback-score rollup — `maxMap(feedback_scores)` in
+   * `OptimizationDAO`, i.e. a plain max across every candidate with NO
+   * partial-evaluation gate. Deliberately exposed next to `bestObjectiveScore`
+   * (which is gated) because the runs list reads this one for dataset runs, so
+   * a spec asserting the two views agree has to be able to see both.
+   */
+  feedbackScores: Array<{ name: string; value: number }>;
 }
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
@@ -416,6 +436,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         numTrials: Number(o.numTrials ?? 0),
         baselineObjectiveScore: o.baselineObjectiveScore ?? null,
         bestObjectiveScore: o.bestObjectiveScore ?? null,
+        baselineDuration: o.baselineDuration ?? null,
+        bestDuration: o.bestDuration ?? null,
+        baselineCost: o.baselineCost ?? null,
+        bestCost: o.bestCost ?? null,
+        totalOptimizationCost: o.totalOptimizationCost ?? null,
+        feedbackScores: (o.feedbackScores ?? []).map((s) => ({
+          name: s.name,
+          value: Number(s.value),
+        })),
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;

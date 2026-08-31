@@ -257,26 +257,46 @@ export class OptimizationStudioPage {
    *
    * Returns the trial side panel's locator so callers can scope to it.
    */
+  /**
+   * A trial row addressed by the label its "Trial" column renders.
+   *
+   * Matches the Trial cell EXACTLY, and identifies that cell by COLUMN rather
+   * than by position. Two failure modes to avoid:
+   *   * a substring match over the row's text makes "Trial #1" also select
+   *     "Trial #10", and collides with the label appearing in another cell;
+   *   * a positional match (`td:first-child`) inspects the wrong cell once a
+   *     user reorders columns — the Trial column is offered in the column
+   *     selector and is not pinned, so it does move.
+   * `DataTable` stamps each cell `data-cell-id="<rowId>_<columnId>"`, and the
+   * Trial column's id is `COLUMN_NAME_ID` ("name"), so a `_name` suffix match
+   * follows the column wherever it sits. `TrialNumberCell` renders the label as
+   * that cell's full text, so the anchored match is exact.
+   *
+   * Callers assert `toHaveCount(1)` before acting, so an ambiguous match fails
+   * loudly instead of silently testing the wrong row.
+   */
+  trialRowByLabel(label: string): Locator {
+    return this.trialsTable()
+      .locator('tbody tr[data-row-id]')
+      .filter({
+        has: this.page.locator('td[data-cell-id$="_name"]').filter({
+          hasText: new RegExp(`^\\s*${escapeForRegExp(label)}\\s*$`),
+        }),
+      });
+  }
+
+  /**
+   * One cell of a labelled trial's row, by column id (see
+   * `useOptimizationColumns.ts`): `trial_status`, `objective_name`, `latency`,
+   * `runtime_cost`, `trace_count`, …
+   */
+  trialCell(label: string, columnId: string): Locator {
+    return this.trialRowByLabel(label).locator(`td[data-cell-id$="_${columnId}"]`);
+  }
+
   async openTrialByLabel(label: string): Promise<Locator> {
     return test.step(`Open trial "${label}"`, async () => {
-      // Match the Trial cell EXACTLY, and identify that cell by COLUMN rather
-      // than by position. Two failure modes to avoid:
-      //   * a substring match over the row's text makes "Trial #1" also select
-      //     "Trial #10", and collides with the label appearing in another cell;
-      //   * a positional match (`td:first-child`) inspects the wrong cell once a
-      //     user reorders columns — the Trial column is offered in the column
-      //     selector and is not pinned, so it does move.
-      // `DataTable` stamps each cell `data-cell-id="<rowId>_<columnId>"`, and the
-      // Trial column's id is `COLUMN_NAME_ID` ("name"), so a `_name` suffix
-      // match follows the column wherever it sits. `TrialNumberCell` renders the
-      // label as that cell's full text, so the anchored match is exact.
-      const row = this.trialsTable()
-        .locator('tbody tr[data-row-id]')
-        .filter({
-          has: this.page.locator('td[data-cell-id$="_name"]').filter({
-            hasText: new RegExp(`^\\s*${escapeForRegExp(label)}\\s*$`),
-          }),
-        });
+      const row = this.trialRowByLabel(label);
       await expect(row, `exactly one trial row labelled "${label}"`).toHaveCount(1);
       await row.click();
       const panel = this.trialSidebar();

@@ -1,3 +1,5 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
@@ -174,6 +176,113 @@ export class LogsPage {
       await dialog.waitFor({ state: 'visible' });
       await dialog.getByRole('button', { name: 'Delete traces' }).click();
       await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Search, columns and export ---
+
+  /**
+   * The Logs "Search by anything" box.
+   *
+   * Scoped to `main` because the Columns dropdown renders its own filter box
+   * with the same `search-input` testid; that content is portaled to the body,
+   * so scoping to the page's own content keeps this unambiguous whichever menus
+   * happen to be open.
+   */
+  get searchInput(): Locator {
+    return this.page.locator('main').getByTestId('search-input');
+  }
+
+  /**
+   * Type a term into the Logs search box. The input debounces for 300ms before
+   * it writes the `<type>_search` query param, so callers must wait on the
+   * resulting rows (not on the keystroke) before reading the table.
+   */
+  async search(term: string): Promise<void> {
+    return test.step(`Search Logs for "${term}"`, async () => {
+      await this.searchInput.fill(term);
+    });
+  }
+
+  /**
+   * Turn on a column that is not selected by default, through the Columns picker.
+   *
+   * Needed for anything that has to line the table up against an export: the
+   * export payload is built from the *selected* columns, and the Logs table
+   * ships with neither ID nor Name selected, so a default view exports rows with
+   * no identifying field in them at all.
+   */
+  async showColumn(label: string): Promise<void> {
+    return test.step(`Show the "${label}" column`, async () => {
+      await this.page.getByTestId('columns-button').click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      // Each column toggle renders as a button wrapping its own checkbox, so the
+      // button carries the label and the checkbox carries the state. Toggling is
+      // conditional: this is "make sure the column is on", and an unconditional
+      // click would turn off a column that was already selected.
+      const item = menu.getByRole('button', { name: label, exact: true });
+      await expect(item, `exactly one "${label}" column toggle`).toHaveCount(1);
+      const checkbox = item.getByRole('checkbox');
+      if (!(await checkbox.isChecked())) {
+        await item.click();
+      }
+      await expect(checkbox).toBeChecked();
+      await this.page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /** Tick the selection checkbox on every currently rendered trace row. */
+  async selectAllRenderedTraces(traceIds: string[]): Promise<void> {
+    return test.step(`Select ${traceIds.length} trace rows`, async () => {
+      for (const id of traceIds) {
+        await this.selectTrace(id);
+      }
+    });
+  }
+
+  /**
+   * The export (download) button in the selection actions bar.
+   *
+   * It is an icon-only dropdown trigger with no accessible name and no testid,
+   * and it is not the only menu trigger in that bar ("Add to …" is another), so
+   * neither a role+name nor `aria-haspopup` lookup can single it out. It sits
+   * immediately before the bulk-delete button, which *does* carry a testid, so
+   * that button is the anchor.
+   *
+   * A `data-testid` on `ExportToButton` would be the better handle and is worth
+   * adding — but it would only exist in builds newer than the one this spec was
+   * written and verified against, so the spec could not be run.
+   */
+  get exportButton(): Locator {
+    return this.page.locator(
+      'xpath=//button[@data-testid="traces-bulk-delete-button"]/preceding-sibling::button[1]',
+    );
+  }
+
+  /**
+   * Export the current selection as CSV and return the downloaded file's text.
+   *
+   * The rows the file contains are re-fetched by the app with the *current*
+   * search applied and then narrowed to the selected ids — which is exactly why
+   * a mismatch between what the table searched for and what the export searched
+   * for shows up here and nowhere else.
+   */
+  async exportSelectionAsCsv(targetDir: string): Promise<string> {
+    return test.step('Export the selected traces as CSV', async () => {
+      await expect(this.exportButton).toBeEnabled();
+      await this.exportButton.click();
+      const item = this.page.getByRole('menuitem', { name: 'Export as CSV' });
+      await item.waitFor({ state: 'visible' });
+
+      const [download] = await Promise.all([
+        this.page.waitForEvent('download'),
+        item.click(),
+      ]);
+      const filePath = path.join(targetDir, download.suggestedFilename());
+      await download.saveAs(filePath);
+      return fs.readFile(filePath, 'utf-8');
     });
   }
 

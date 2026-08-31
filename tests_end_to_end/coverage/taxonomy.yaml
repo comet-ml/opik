@@ -249,6 +249,7 @@ areas:
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-attachments.spec.ts
+      - trace-explore/trace-export-search.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -270,7 +271,7 @@ areas:
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
-      export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
+      export-traces:          { covered: true,  tier: t2-cuj, note: "EXPORT_ENABLED flag; asserts the CSV holds exactly the rows the searched table showed, for padded/upper/lower-cased terms" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
     visual:
@@ -471,13 +472,19 @@ areas:
     specs:
       - optimization-studio/optimization-studio.spec.ts
       - optimization-studio/optimization-trial-logs.spec.ts
+      - optimization-studio/optimization-runs-list-metrics.spec.ts
     capabilities:
       new-run-form-validation:  { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       launch-gepa-run:          { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       launch-hier-reflective:   { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       run-completes-healthy:    { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       studio-logs-download:     { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
-      list-optimization-runs:   { covered: false }
+      # The fourth case in optimization-runs-list-metrics.spec.ts ("Best score
+      # skips a partially evaluated trial") FAILS against 2.2.45: the Best score
+      # cell reads the ungated maxMap(feedback_scores) while its Latency/Cost
+      # siblings read the in_pool-gated best_*. Left asserting the intended
+      # behaviour, unannotated, pending triage.
+      list-optimization-runs:   { covered: true,  tier: t2-cuj, note: "best-trial score/latency/cost + deltas + optimization cost, over seeded runs" }
       trials-table:             { covered: false }
       trial-detail:             { covered: true,  tier: t2-cuj }
       best-trial-prompt:        { covered: false }
@@ -606,14 +613,15 @@ areas:
     specs:
       - annotation-queues/annotation-queue-scoring.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
+      - annotation-queues/annotation-queue-create-edit.spec.ts
     capabilities:
       score-queue-item:        { covered: true,  tier: t2-cuj }
       score-with-reason:       { covered: true,  tier: t2-cuj }
       skip-item:               { covered: true,  tier: t2-cuj }
       scores-reach-traces:     { covered: true,  tier: t2-cuj, note: "SDK-verified" }
       list-queues:             { covered: false }
-      create-queue:            { covered: false }
-      edit-queue:              { covered: false }
+      create-queue:            { covered: true,  tier: t2-cuj, note: "AddEditAnnotationQueueDialog: name trimming, blank-name rejection with the form intact, single-create on double-submit" }
+      edit-queue:              { covered: true,  tier: t2-cuj, note: "rename from the row actions, asserting the stored name is trimmed" }
       # Second case in this spec is a test.fail() known failure for OPIK-7903
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.
