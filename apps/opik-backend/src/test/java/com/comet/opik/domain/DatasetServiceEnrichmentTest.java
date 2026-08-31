@@ -172,6 +172,20 @@ class DatasetServiceEnrichmentTest {
     }
 
     @Test
+    @DisplayName("the not-migrated sentinel is not an authoritative count and falls back to dataset_items")
+    void notMigratedSentinelFallsBackToItemCount() {
+        var id = UUID.randomUUID();
+        givenDatasets(id);
+        givenLatestVersions(version(id, DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED));
+        givenItemCounts(Map.of(id, 21L));
+
+        var content = findPage().content();
+
+        verify(datasetItemDAO).findDatasetItemSummaryByDatasetIds(Set.of(id));
+        assertThat(itemsCountById(content)).containsExactlyInAnyOrderEntriesOf(Map.of(id, 21L));
+    }
+
+    @Test
     @DisplayName("a dataset with no version and no items reports a zero count")
     void missingVersionAndMissingItemCountYieldsZero() {
         var id = UUID.randomUUID();

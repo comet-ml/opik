@@ -741,9 +741,10 @@ class DatasetServiceImpl implements DatasetService {
                     // Otherwise, fall back to the legacy dataset_items count.
                     Long itemsCount = versionItemsTotal(latestVersion);
                     if (itemsCount == null) {
-                        itemsCount = datasetItemSummaryMap
-                                .getOrDefault(dataset.id(), DatasetItemSummary.empty(dataset.id()))
-                                .datasetItemsCount();
+                        var datasetItemSummary = datasetItemSummaryMap.get(dataset.id());
+                        itemsCount = datasetItemSummary != null
+                                ? datasetItemSummary.datasetItemsCount()
+                                : DatasetItemSummary.empty(dataset.id()).datasetItemsCount();
                     }
 
                     return dataset.toBuilder()
@@ -760,7 +761,8 @@ class DatasetServiceImpl implements DatasetService {
 
     private Long versionItemsTotal(DatasetVersion latestVersion) {
         if (!featureFlags.isDatasetVersioningEnabled() || latestVersion == null
-                || latestVersion.itemsTotal() == null) {
+                || latestVersion.itemsTotal() == null
+                || latestVersion.itemsTotal() == DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED) {
             return null;
         }
         return latestVersion.itemsTotal().longValue();
