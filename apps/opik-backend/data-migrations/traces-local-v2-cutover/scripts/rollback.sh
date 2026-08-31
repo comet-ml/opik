@@ -24,7 +24,8 @@
 # stage B/C run's promote succeeded but its reverse-replay was interrupted — the promote leaves `traces` in the restored
 # canonical shape, so re-running the stage is (correctly) rejected by the topology guard, which would otherwise strand
 # the post-cutover deletes unreplayed and let them resurrect. The replay is idempotent, so this is always safe to re-run.
-# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay,
+# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh, with the ' UTC' marker it must carry --
+# the value is parsed as UTC, so without the marker the zone it was captured in is unknown) to bound the reverse-replay,
 # --confirm-retention-paused (retention deletes bypass the bridge, so a retention sweep in the rollback window would
 # resurrect a deleted row from the backup), and --accept-post-cutover-write-loss (see below). Keep the deletion bridge
 # enabled through the rollback so no delete is lost.
@@ -167,6 +168,20 @@ for _w in "$SENTINEL_WINDOW_FROM" "$SENTINEL_WINDOW_TO"; do
     [[ -z "$_w" || "$_w" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] \
         || { echo "ERROR: --sentinel-window-from/--sentinel-window-to must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 done
+# The anchor carries an explicit ' UTC' marker and is required to. The SQL below parses it AS UTC, so a value captured
+# in another zone shifts the bound silently -- and for these bounds a LATER value drops rows rather than failing. A bare
+# timestamp cannot be attributed to a timezone, so it is refused rather than assumed. The drivers print their anchors
+# with the marker, so a pasted value already carries it.
+case "$CUTOVER_START" in
+    *" UTC") CUTOVER_START="${CUTOVER_START% UTC}" ;;
+        "") ;;                      # not supplied; the caller decides whether that is allowed
+    *)
+        echo "ERROR: --cutover-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
+        echo "       --cutover-start '<YYYY-MM-DD HH:MM:SS[.ffffff]> UTC'" >&2
+        echo "       The value is parsed as UTC; without the marker the zone it was captured in is unknown." >&2
+        exit 2
+        ;;
+esac
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # Exactly one mode: --stage A|B|C, --reverse-replay-only, --unwrap-only, or --sentinel-repair-only.
 if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY + SENTINEL_REPAIR_ONLY > 1 )); then
@@ -518,7 +533,7 @@ verify_replay_postcondition() {
         echo "         on 'traces'. The rollback is NOT complete: those rows were deleted by users and are being served." >&2
     fi
     echo "         Re-run the replay (idempotent), then this check repeats:" >&2
-    echo "           ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --reverse-replay-only --cutover-start '$CUTOVER_START' --confirm-retention-paused" >&2
+    echo "           ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --reverse-replay-only --cutover-start '$CUTOVER_START UTC' --confirm-retention-paused" >&2
     return 1
 }
 

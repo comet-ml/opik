@@ -176,7 +176,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    deletion replay second) — **record the second value**: the final-delta→EXCHANGE gap must fit inside the buffer hold
    (Go/No-Go). Without `--time` a bare `--query` prints no timing at all.
    ```bash
-   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts>'
+   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
 3. **QA — run [`scripts/verify.sh`](scripts/verify.sh)** (see "Verifying the migration"): confirm the copy altered no
    data before committing the swap. Run it after step 2 (and it can be re-run after step 4).
@@ -191,7 +191,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    `--with-wrap`. Restore the buffer ceiling and verify.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
-       --backfill-start '<anchor from backfill.sh>' --confirm-buffer-raised --confirm-retention-paused
+       --backfill-start '<anchor from backfill.sh> UTC' --confirm-buffer-raised --confirm-retention-paused
    ```
    Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay), `--confirm-buffer-raised` (writes in
    the final window survive the swap), and `--confirm-retention-paused` (retention deletes bypass the bridge, so a
@@ -420,7 +420,7 @@ and the `EXCHANGE` completing must stay within the buffer hold**. So run the tai
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step.
-4. Run `exchange_and_wrap.sh --backfill-start '<anchor>' …` **immediately** after it (the settle gate + `EXCHANGE` are
+4. Run `exchange_and_wrap.sh --backfill-start '<anchor> UTC' …` **immediately** after it (the settle gate + `EXCHANGE` are
    fast and metadata-only). It captures `cutover_start`, then runs a **final deletion replay** from `backfill_start`
    right before the swap — so deletes bridged in the `[final delta_replay, cutover_start)` gap are masked on the
    successor rather than leaking (that gap is covered by neither the earlier forward replay nor the rollback
@@ -874,7 +874,8 @@ Because that failure is silent, the persisted anchor carries the claim rather th
 attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
 rejected with the two ways out — re-record it with the marker if it is known to have been taken on a UTC server, or
 restart the copy cleanly. The same reasoning is why both drivers now print their anchors labelled `UTC`: the value an
-operator pastes into `--backfill-start` or `--cutover-start` says which zone it is in.
+operator pastes into `--backfill-start` or `--cutover-start` says which zone it is in — and those flags **require** the
+marker, so the guard cannot be bypassed by supplying the anchor by hand.
 
 ### Required privileges (provision these before the window)
 
@@ -1042,11 +1043,11 @@ Pick the stage by how far the cutover got:
   **"Untouched" is about rows, not values:** the flag was rolled out before the `EXCHANGE`, so traces written during
   that window carry sentinels and a negative `duration` in the live table, and stage A does not address them. Abandoning
   the cutover therefore still needs the sentinel repair below; retrying it does not, since the retry's copy heals them.
-- **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'
+- **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts> UTC'
   --confirm-retention-paused --accept-post-cutover-write-loss`. `EXCHANGE` `traces_pre_cutover_backup` back to live
   `traces`, park the now-displaced successor as `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts
   if `traces` is `Distributed` — use C.)
-- **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts>'
+- **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts> UTC'
   --confirm-retention-paused --accept-post-cutover-write-loss`. Drops the `Distributed` wrapper, then one atomic
   `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor as
   `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
@@ -1187,7 +1188,7 @@ through the replay, not merely across the rename. A failure *between* the two ne
 - **Reverse-replay interrupted (stage B or C).** The promote already restored the original, so `traces` is back in the
   canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
   post-cutover deletes unreplayed and let them resurrect. Re-apply just the replay:
-  `./scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<ts>' --confirm-retention-paused`. It runs
+  `./scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<ts> UTC' --confirm-retention-paused`. It runs
   only `000004_rollback_reverse_replay.sql` and is idempotent (safe to run once or repeatedly). It refuses unless `traces`
   is the restored original (Nullable schema) with the successor parked as `traces_post_rollback_backup`, so it cannot be
   aimed at the live successor (post-EXCHANGE, pre-rollback), where the guard-less replay would mask live rows.

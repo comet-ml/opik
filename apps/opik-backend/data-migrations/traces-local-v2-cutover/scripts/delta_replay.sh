@@ -26,6 +26,8 @@
 #                             than total query time — so a step that goes quiet while the server works trips it while
 #                             healthy. Trade-off and shared rationale: ../../README.md.
 #   --backfill-start TS        the anchor printed by backfill.sh ("RECORD backfill_start=..."). Required.
+#                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
+#                             UTC, so without it the zone it was captured in is unknown.
 #   --max-insert-block-size N  SETTINGS max_insert_block_size for the delta INSERT. Default 1048576.
 #   --max-partitions-per-insert-block N
 #                             partitions one insert block of the delta INSERT may span (SETTINGS
@@ -87,6 +89,19 @@ CH_ARGS=()
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
 CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comment 'traces_local_v2_cutover:delta_replay')
 [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start is required (printed by backfill.sh)" >&2; exit 2; }
+# The anchor carries an explicit ' UTC' marker and is required to. The SQL below parses it AS UTC, so a value captured
+# in another zone shifts the bound silently -- and for these bounds a LATER value drops rows rather than failing. A bare
+# timestamp cannot be attributed to a timezone, so it is refused rather than assumed. The drivers print their anchors
+# with the marker, so a pasted value already carries it.
+case "$BACKFILL_START" in
+    *" UTC") BACKFILL_START="${BACKFILL_START% UTC}" ;;
+    *)
+        echo "ERROR: --backfill-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
+        echo "       --backfill-start '<YYYY-MM-DD HH:MM:SS[.ffffff]> UTC'" >&2
+        echo "       The value is parsed as UTC; without the marker the zone it was captured in is unknown." >&2
+        exit 2
+        ;;
+esac
 [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 [[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
 # 0 is meaningful (ClickHouse reads it as "unlimited"), so allow it — unlike the bound above. Upper-bounded at 6 digits:

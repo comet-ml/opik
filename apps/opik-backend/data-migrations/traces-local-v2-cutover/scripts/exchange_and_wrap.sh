@@ -37,6 +37,8 @@
 #                             than total query time — so a step that goes quiet while the server works trips it while
 #                             healthy. Trade-off and shared rationale: ../../README.md.
 #   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
+#                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
+#                             UTC, so without it the zone it was captured in is unknown.
 #                     before the swap this runs a final deletion replay from that anchor, so deletes bridged since the
 #                     last delta_replay.sh don't leak live across the EXCHANGE (they'd be covered by neither the forward
 #                     replay nor the rollback reverse-replay otherwise).
@@ -131,6 +133,20 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 [[ -f "$DELTA_SQL_FILE" ]] || { echo "ERROR: cannot find $DELTA_SQL_FILE" >&2; exit 2; }
 # --backfill-start (the anchor printed by backfill.sh) is interpolated into the final deletion replay; validate its shape.
+# The anchor carries an explicit ' UTC' marker and is required to. The SQL below parses it AS UTC, so a value captured
+# in another zone shifts the bound silently -- and for these bounds a LATER value drops rows rather than failing. A bare
+# timestamp cannot be attributed to a timezone, so it is refused rather than assumed. The drivers print their anchors
+# with the marker, so a pasted value already carries it.
+case "$BACKFILL_START" in
+    *" UTC") BACKFILL_START="${BACKFILL_START% UTC}" ;;
+        "") ;;                      # not supplied; the caller decides whether that is allowed
+    *)
+        echo "ERROR: --backfill-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
+        echo "       --backfill-start '<YYYY-MM-DD HH:MM:SS[.ffffff]> UTC'" >&2
+        echo "       The value is parsed as UTC; without the marker the zone it was captured in is unknown." >&2
+        exit 2
+        ;;
+esac
 [[ -z "$BACKFILL_START" || "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # At most one wrap mode. Default (none set) is EXCHANGE only.
 if (( SKIP_WRAP + WITH_WRAP + WRAP_ONLY > 1 )); then
