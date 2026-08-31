@@ -6,8 +6,8 @@
 # fingerprint so sentinel/precision differences (end_time NULL<->epoch, ttft NULL<->NaN, ns<->us) do not count as
 # changes. For each week it reads one (row count, checksum) verdict per side; a mismatch means that week's live, deduped
 # content differs. A differing window is then re-checked on the sorting key, which yields one of three outcomes: a real
-# MISMATCH, an OK superseded-version artifact, or INCONCLUSIVE — the last where a version tie left FINAL free to pick
-# arbitrarily, so neither reading can be trusted. With --drill-down, any differing window is followed by a per-key
+# MISMATCH, an OK superseded-version artifact, INCONCLUSIVE where a version tie left FINAL free to pick between rows
+# that differ, or UNCERTIFIABLE where that tie check could not be read at all. With --drill-down, any differing window is followed by a per-key
 # listing. Exits non-zero if any window mismatched OR could not be certified: a gate that cannot decide must not pass.
 #
 # The compare and drill-down SQL are NOT duplicated here: both are read from db-app-analytics/000005_verify_migration.sql
@@ -210,6 +210,7 @@ log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEE
 mismatches=0
 artifacts=0
 inconclusive=0
+uncertifiable=0
 checked=0
 for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
     LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
@@ -239,12 +240,14 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
             # the verdict, rather than on every differing window.
             ties_out="$(version_ties_window "$LO" "$HI")"
             read -r src_ties dst_ties <<< "$ties_out"
-            # Output that is not two counts cannot certify the window. Treat it as undecided, never as "no ties".
+            # Output that is not two counts cannot certify the window, but it is not a tie either: encoding it as one
+            # would print a tie diagnosis, and a triage procedure, for what is a client or infrastructure failure.
             if ! [[ "$src_ties" =~ ^[0-9]+$ && "$dst_ties" =~ ^[0-9]+$ ]]; then
-                log "FAILED week $week: version-ties returned '$ties_out' (expected two counts)." >&2
-                src_ties=-1; dst_ties=0
-            fi
-            if (( src_ties == 0 && dst_ties == 0 )); then
+                uncertifiable=$((uncertifiable + 1))
+                log "UNCERTIFIABLE week $week ($LO .. $HI): version-ties returned '$ties_out', expected two counts." >&2
+                log "  The window differs and its re-check found nothing genuinely differing, but whether that verdict is" >&2
+                log "  decidable could not be established. This is a read failure, not a version tie." >&2
+            elif (( src_ties == 0 && dst_ties == 0 )); then
                 artifacts=$((artifacts + 1))
                 week_certified=1
                 log "week $week ($LO .. $HI): OK — superseded-version artifact (src_rows=$src_rows dst_rows=$dst_rows); every differing key's live row is identical on both sides, and no key's newest version is tied"
@@ -263,7 +266,9 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
         fi
         if [[ "$DRILL_DOWN" == "1" ]]; then
             log "  differing keys (key, src_hash, dst_hash; NULL = missing on that side):" >&2
-            drill_down_window "$LO" "$HI" >&2
+            # Non-fatal on purpose: the verdict for this window is already decided above, and since --drill-down now
+            # runs on artifact windows too, an unguarded failure here under set -e would abort a run that was passing.
+            drill_down_window "$LO" "$HI" >&2 || log "  drill-down failed for week $week; the verdict above stands" >&2
         elif (( week_certified == 0 )); then
             # Only suggested where there is something to investigate. An artifact window differs but passes, so nudging
             # an operator to drill into it would read as an unresolved problem on a clean run.
@@ -273,8 +278,12 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
 done
 
 # Fidelity mismatch is the hard failure, and so is a window the re-check could not decide (both exit 1).
-if (( mismatches != 0 || inconclusive != 0 )); then
+if (( mismatches != 0 || inconclusive != 0 || uncertifiable != 0 )); then
     (( mismatches == 0 )) || log "FAILED: $mismatches of $checked windows mismatched." >&2
+    if (( uncertifiable != 0 )); then
+        log "FAILED: $uncertifiable of $checked windows could not be read to completion — the tie check did not return" >&2
+        log "        counts, so those windows are neither certified nor shown to differ. Re-run them." >&2
+    fi
     if (( inconclusive != 0 )); then
         log "FAILED: $inconclusive of $checked windows could not be certified — a version tie left FINAL's choice" >&2
         log "        arbitrary on at least one side, so the re-check's 'no genuine difference' cannot be relied on." >&2
