@@ -503,8 +503,10 @@ areas:
       - datasets/dataset-items.spec.ts
       - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-version-counters.spec.ts
+      - datasets/dataset-list-enrichment.spec.ts
+      - datasets/dataset-list-version-count.spec.ts
     capabilities:
-      list-datasets:          { covered: true,  tier: t1-smoke }
+      list-datasets:          { covered: true,  tier: t1-smoke, note: "row presence (t1) plus the enriched per-row values the list renders: item/experiment/optimization counts and recency timestamps, list vs get-by-id agreement, and Item count tracking the latest committed version's items_total (t2)" }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
       create-dataset-sdk:     { covered: true,  tier: t1-smoke }
       view-items:             { covered: true,  tier: t1-smoke }

@@ -1,6 +1,25 @@
+import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { DatasetItemsPage } from './dataset-items.page';
+
+/**
+ * Column ids of the list table, as `DatasetListPage` declares them. They are
+ * also the second half of every `data-cell-id`, so a cell is addressed by
+ * (dataset id, column id) rather than by position — column order is
+ * user-configurable and persisted, so `nth-child` would be addressing whatever
+ * the last user dragged into place.
+ */
+export const DATASET_COLUMN = {
+  itemCount: 'dataset_items_count',
+  mostRecentExperiment: 'most_recent_experiment_at',
+  mostRecentOptimization: 'most_recent_optimization_at',
+} as const;
+
+export type DatasetColumnId = (typeof DATASET_COLUMN)[keyof typeof DATASET_COLUMN];
+
+/** What a time column renders when the dataset has no such timestamp. */
+export const EMPTY_CELL = '-';
 
 export class DatasetsPage {
   private projectId: string | null = null;
@@ -26,6 +45,55 @@ export class DatasetsPage {
     return this.page
       .locator('tbody tr[data-row-id]')
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
+  }
+
+  /**
+   * One cell of one dataset's row, addressed by identity: the shared DataTable
+   * stamps `data-row-id="<datasetId>"` on the row and
+   * `data-cell-id="<datasetId>_<columnId>"` on the cell.
+   *
+   * Callers should assert `toHaveCount(1)` before reading it, so an ambiguous
+   * match fails loudly instead of silently testing some other row.
+   */
+  cell(datasetId: string, columnId: DatasetColumnId): Locator {
+    return this.page.locator(
+      `tbody tr[data-row-id="${datasetId}"] td[data-cell-id="${datasetId}_${columnId}"]`,
+    );
+  }
+
+  /**
+   * Turn on a column that is not in the default selection, via the Columns
+   * picker.
+   *
+   * Selection lives in localStorage, so a fresh browser context always starts
+   * from the default set — a test that needs an optional column must enable it
+   * rather than assume a previous run left it on.
+   *
+   * The entries are Radix checkbox menu items, but `SortableMenuItem` spreads
+   * dnd-kit's sortable attributes over them, and those set `role="button"`.
+   * So each one reports as a button (named for the column) wrapping the
+   * checkbox that carries the state — not as a `menuitemcheckbox`.
+   */
+  async showColumn(label: string): Promise<void> {
+    return test.step(`Enable the "${label}" column`, async () => {
+      await this.page.getByTestId('columns-button').click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+
+      const entry = menu.getByRole('button', { name: label, exact: true });
+      const toggle = entry.getByRole('checkbox');
+      if (!(await toggle.isChecked())) {
+        await entry.click();
+      }
+      // Assert rather than assume: a picker that silently failed to select the
+      // column would leave the caller asserting an empty cell that never existed.
+      await expect(toggle, `"${label}" is selected in the Columns picker`).toBeChecked();
+
+      // Selecting keeps the menu open (onSelect is prevented), so close it
+      // rather than leaving it over the table.
+      await this.page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'hidden' });
+    });
   }
 
   async openDatasetByName(name: string): Promise<DatasetItemsPage> {
