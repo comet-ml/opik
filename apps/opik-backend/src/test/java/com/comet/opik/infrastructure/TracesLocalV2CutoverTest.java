@@ -173,6 +173,24 @@ class TracesLocalV2CutoverTest {
      * base column added by a future migration cannot be silently left uncopied (the fidelity fingerprint, which lists a
      * fixed set, would not catch that on its own). A new column here without a matching SELECT entry fails arity at run.
      */
+    /**
+     * The {@code version-ties} aggregate, with its source relation as the parameter: per (key, version) how many
+     * DISTINCT row contents there are, then the count at each key's newest version, then the keys where that exceeds one.
+     * Shared so the table-backed helper and the literal-relation test exercise the same expression rather than separate
+     * transcriptions of it.
+     */
+    private static final String VERSION_TIE_AGGREGATE = """
+            SELECT count() AS c
+            FROM (
+                SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                FROM (
+                %s
+                )
+                GROUP BY key
+            )
+            WHERE distinct_at_newest > 1
+            """;
+
     private static final String COPIED_COLUMNS = """
             id,
             workspace_id,
@@ -1475,6 +1493,42 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * The sequence the runbook actually prescribes — backfill a week, then run the delta over the same anchor — must not
+     * read as a tie on the successor. The delta re-copies every row written during the backfill window, and an
+     * unmodified row keeps its {@code last_updated_at}, so the successor holds several physical rows at one version
+     * until a merge collapses them. verify.sh runs before the EXCHANGE, on exactly those recent partitions, so counting
+     * physical rows here would report a tie on a faithful copy and fail the cutover gate on the normal path.
+     *
+     * <p>Merge-independent in both directions: if a merge has already collapsed the duplicates there is one row, and if
+     * it has not there are several with identical content. Either way the distinct count at the newest version is one.
+     */
+    @Test
+    void theRunbooksBackfillThenDeltaSequenceIsNotATie() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = weekInstant(0, 0);
+        var id = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(id, workspaceId, projectId, "copied-twice", at, at, 1.0, at, at);
+
+        // The anchor must precede the row, or the delta's created_at/last_updated_at bound selects nothing and the
+        // re-copy this test is about never happens. nowMicros() would sit after a seed in the anchor week.
+        var backfillStart = ClickHouseDateTimeFormat.formatMicros(ANCHOR_MONDAY.minusWeeks(1).atStartOfDay()
+                .toInstant(ZoneOffset.UTC));
+        backfillWeek(0);
+        deltaInsert(backfillStart);
+
+        assertThat(rawRowCount("traces_local_v2", workspaceId))
+                .as("the delta re-copied the row, so both physical rows are present")
+                .isEqualTo(2);
+        assertThat(liveCount("traces_local_v2", Set.of(id), workspaceId))
+                .as("they dedup to one live row")
+                .isEqualTo(1);
+        assertThat(versionTies("traces_local_v2", Shape.NEW, workspaceId))
+                .as("identical re-copies at one version are not a tie")
+                .isZero();
+    }
+
+    /**
      * The tie aggregate's POSITIVE branch: a key whose newest version is shared by more than one row is counted, and one
      * whose newest version is unique is not, however many older versions it has.
      *
@@ -1492,25 +1546,22 @@ class TracesLocalV2CutoverTest {
      */
     @Test
     void versionTieAggregateCountsOnlyASharedNewestVersion() {
-        var ties = scalar("""
-                SELECT count() AS c
-                FROM (
-                    SELECT key, argMax(rows_at_version, version) AS rows_at_newest
-                    FROM (
-                        SELECT key, version, count() AS rows_at_version
-                        FROM VALUES('key String, version UInt32',
-                                    ('tied', 2), ('tied', 2), ('tied', 1),
-                                    ('deep', 2), ('deep', 1), ('deep', 1),
-                                    ('single', 1))
-                        GROUP BY key, version
-                    )
-                    GROUP BY key
-                )
-                WHERE rows_at_newest > 1
-                """, statement -> {
+        // (key, version, content) triples standing in for the rows the shipped block reads. 'tied' carries two
+        // DIFFERENT contents at its newest version; 'dup' carries two identical ones, which is what the delta produces;
+        // 'deep' has more rows overall but a single content at its newest version.
+        var inner = """
+                    SELECT key, version, uniqExact(content) AS distinct_at_version
+                    FROM VALUES('key String, version UInt32, content String',
+                                ('tied', 2, 'a'), ('tied', 2, 'b'), ('tied', 1, 'a'),
+                                ('dup', 2, 'a'), ('dup', 2, 'a'), ('dup', 1, 'b'),
+                                ('deep', 2, 'a'), ('deep', 1, 'a'), ('deep', 1, 'b'),
+                                ('single', 1, 'a'))
+                    GROUP BY key, version
+                """;
+        var ties = scalar(VERSION_TIE_AGGREGATE.formatted(inner), statement -> {
         });
 
-        assertThat(ties).as("only the key whose NEWEST version is shared counts as tied").isEqualTo(1);
+        assertThat(ties).as("only the key whose newest version carries DIFFERING content counts as tied").isEqualTo(1);
     }
 
     /**
@@ -1538,10 +1589,16 @@ class TracesLocalV2CutoverTest {
         insertShapedTrace(id, workspaceId, projectId, "newer", at, at, 2.0, at, at.plusSeconds(1));
         backfillWeek(0);
 
-        assertThat(versionTies("traces", workspaceId))
+        // Preconditions: versionTies returns 0 for an empty candidate set exactly as it does for a correctly-ranked
+        // key, so without these every way the arrange step can silently fail leaves both assertions green — including
+        // the shifted-window copy failure the sibling test exists to prove is possible.
+        assertThat(liveCount("traces", Set.of(id), workspaceId)).as("fixture landed on the source").isEqualTo(1);
+        assertThat(liveCount("traces_local_v2", Set.of(id), workspaceId)).as("fixture was copied").isEqualTo(1);
+
+        assertThat(versionTies("traces", Shape.OLD, workspaceId))
                 .as("a multi-version key is not a tie on the source")
                 .isZero();
-        assertThat(versionTies("traces_local_v2", workspaceId))
+        assertThat(versionTies("traces_local_v2", Shape.NEW, workspaceId))
                 .as("a multi-version key is not a tie on the successor")
                 .isZero();
     }
@@ -2297,31 +2354,35 @@ class TracesLocalV2CutoverTest {
 
     /**
      * The {@code version-ties} block, reimplemented inline like the rest of this class: keys whose newest
-     * {@code last_updated_at} is shared by more than one row. No {@code FINAL} — the question is how many physical rows
-     * share the newest version, which is exactly what {@code FINAL} would have to choose between.
+     * {@code last_updated_at} is carried by more than one DISTINCT row content. Distinct content rather than row count
+     * is the whole point — the cutover puts several identical rows at one version on the successor, because 000002's
+     * delta re-copies rows the backfill already wrote and an unmodified row keeps its {@code last_updated_at}. Counting
+     * rows would call that a tie and fail the gate on a faithful copy. No {@code FINAL}: under it the rows this counts
+     * collapse to one.
      *
-     * <p>Takes the table name because the shipped block reads both sides. That block selects its candidates by the
-     * compare's window and sample predicates; this substitutes a per-workspace filter, the candidate set not being what
-     * is under test.
+     * <p>The fingerprint comes from {@code rowHash}, the same normalization {@code fingerprint} uses, so "distinct"
+     * means distinct in the sense the gate cares about. Takes the table and its schema shape because the shipped block
+     * reads both sides; that block selects candidates by the compare's window and sample predicates, while this
+     * substitutes a per-workspace filter, the candidate set not being what is under test.
      */
-    private long versionTies(String table, String workspaceId) {
-        return scalar("""
-                SELECT count() AS c
-                FROM (
-                    SELECT key, argMax(rows_at_version, version) AS rows_at_newest
-                    FROM (
-                        SELECT
-                            (workspace_id, project_id, id) AS key,
-                            last_updated_at AS version,
-                            count() AS rows_at_version
-                        FROM %s
-                        WHERE workspace_id = :workspace_id
-                        GROUP BY key, version
-                    )
-                    GROUP BY key
-                )
-                WHERE rows_at_newest > 1
-                """.formatted(table), statement -> statement.bind("workspace_id", workspaceId));
+    /** Physical rows, without {@code FINAL}, so a test can assert that duplicates it relies on are actually present. */
+    private long rawRowCount(String table, String workspaceId) {
+        return scalar("SELECT count() AS c FROM %s WHERE workspace_id = :workspace_id".formatted(table),
+                statement -> statement.bind("workspace_id", workspaceId));
+    }
+
+    private long versionTies(String table, Shape shape, String workspaceId) {
+        var inner = """
+                    SELECT
+                        (workspace_id, project_id, id) AS key,
+                        last_updated_at AS version,
+                        uniqExact(%s) AS distinct_at_version
+                    FROM %s
+                    WHERE workspace_id = :workspace_id
+                    GROUP BY key, version
+                """.formatted(rowHash(shape == Shape.OLD ? OLD_HASH_OVERRIDES : NEW_HASH_OVERRIDES), table);
+        return scalar(VERSION_TIE_AGGREGATE.formatted(inner),
+                statement -> statement.bind("workspace_id", workspaceId));
     }
 
     private long scalar(String sql, Consumer<Statement> binder) {
