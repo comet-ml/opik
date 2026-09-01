@@ -157,16 +157,10 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
-                // attribution fields: what caused the call, which agent ran it, which turn it
-                // belongs to, and which Agent tool_use spawned it. Without these the spend tables
-                // cannot separate subagent spend from the main agent's, nor name the agent.
                 assertThat(row.get().trigger()).isEqualTo("subagent");
                 assertThat(row.get().triggerDetail()).isEqualTo("code-reviewer");
                 assertThat(row.get().turnKey()).isEqualTo("abc123turnkey");
                 assertThat(row.get().parentToolUseId()).isEqualTo("toolu_parent_agent");
-                // This subagent linked, so cipx ships no link_failure_reason at all and the column
-                // must read '' — "nothing to report", which is the healthy state. cipx only stamps
-                // a reason on a subagent whose parent it could NOT resolve.
                 assertThat(row.get().linkFailureReason()).isEmpty();
             });
 
@@ -187,14 +181,6 @@ class CostIntelligenceIngestionTest {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
 
-            // systemToolsCipxMetadata carries no
-            // trigger/turn_key/parent_tool_use_id — the shape every span
-            // written before the proxy shipped them has. Ingestion must still
-            // land the row and must leave the attribution columns empty
-            // rather than substituting a default: "" means unknown, and a
-            // guessed agent name would book real spend against an agent that
-            // never ran. Scope, deliberately: this covers the half that is
-            // ours — the DAO supplying "" for a field the metadata omits.
             var span = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
                     .metadata(systemToolsCipxMetadata("claude-sonnet-4-6", 200))
@@ -218,12 +204,6 @@ class CostIntelligenceIngestionTest {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
 
-            // Both spans are subagent calls with NO parent_tool_use_id, so a per-agent rollup files
-            // both under "(unattributed)". They are not the same problem: ambiguous_prompt is cipx
-            // deliberately refusing to guess between two byte-identical peer dispatches (working as
-            // designed, nothing to chase), while no_dispatch_captured is cipx losing a dispatch it
-            // should have observed (a real defect). link_failure_reason is the only thing that keeps
-            // them apart — without it a live incident and normal operation look identical.
             var failClosed = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
                     .metadata(unattributedSubagentCipxMetadata("ambiguous_prompt"))
@@ -240,7 +220,6 @@ class CostIntelligenceIngestionTest {
                 var lost = getCipxSpend(lostDispatch.id(), ws.workspaceId());
                 assertThat(refused).isPresent();
                 assertThat(lost).isPresent();
-                // Same trigger, same empty parent — only the reason separates them.
                 assertThat(refused.get().trigger()).isEqualTo("subagent");
                 assertThat(lost.get().trigger()).isEqualTo("subagent");
                 assertThat(refused.get().parentToolUseId()).isEmpty();
@@ -255,13 +234,6 @@ class CostIntelligenceIngestionTest {
         void everyPositionalBindLandsInItsOwnColumn() {
             var ws = newWorkspace();
 
-            // CipxSpendDAO binds by position and nothing checks the bind
-            // order against the INSERT tuple at compile time. A mismatch does
-            // not fail the insert — it writes each value into the
-            // neighbouring column, which is invisible unless the columns hold
-            // values that can be told apart. Two rows, deliberately: the bind
-            // index accumulates across rows while workspace_id is bound once
-            // at index 0 and its repeats dedup.
             var rowOne = sentinelRow(1);
             var rowTwo = sentinelRow(2);
 
@@ -277,11 +249,6 @@ class CostIntelligenceIngestionTest {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
 
-            // cipx adds fields to metadata.cipx.call on its own release cadence and ships to laptops
-            // independently of this service, so a newer proxy talking to an older backend is the
-            // normal state, not an edge case. Ingestion must ignore what it does not recognize
-            // rather than reject the row — dropping the row would lose the spend entirely, and spend
-            // totals are the one thing that is correct today.
             var span = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
                     .metadata(unknownFieldsCipxMetadata("claude-sonnet-4-6"))
@@ -291,7 +258,6 @@ class CostIntelligenceIngestionTest {
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var row = getCipxSpend(span.id(), ws.workspaceId());
                 assertThat(row).isPresent();
-                // Every known field still parsed correctly alongside the unknown ones.
                 assertThat(row.get().model()).isEqualTo("claude-sonnet-4-6");
                 assertThat(row.get().uInput()).isEqualTo(11L);
                 assertThat(row.get().uCacheRead()).isEqualTo(22L);
@@ -305,14 +271,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().triggerDetail()).isEqualTo("Explore");
                 assertThat(row.get().turnKey()).isEqualTo("unknown-fields-turnkey");
                 assertThat(row.get().parentToolUseId()).isEqualTo("toolu_unknown_fields");
-                // parent_unresolved is the one reason that appears on a call that DID link: the
-                // spend is attributed, only the trace tree shape is wrong.
                 assertThat(row.get().linkFailureReason()).isEqualTo("parent_unresolved");
-                // The block writer sees the same metadata, so an unknown field on a block must not
-                // drop the blocks either. Asserted inside the same await: the listener subscribes to
-                // the spend insert and the block insert independently
-                // (CostIntelligenceIngestionListener), so the spend row landing says nothing about
-                // whether the blocks have landed.
                 assertThat(getCipxBlocks(span.id(), ws.workspaceId())).isNotEmpty();
             });
         }
@@ -586,16 +545,9 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().filesDeleted()).isEqualTo(1);
                 assertThat(row.get().linesAdded()).isEqualTo(40);
                 assertThat(row.get().linesDeleted()).isEqualTo(5);
-                // Session-grain subagent link rollup parsed from cipx.session. Every value is
-                // distinct from every other integer above, so a positional-bind rotation in
-                // CipxTraceIdentityDAO shows up here as a value reported under the wrong name.
-                // These are session running totals re-stamped on each trace of the session — a
-                // reader aggregates them with max() per session_id, never sum() (migration 000119).
                 assertThat(row.get().agentsDispatched()).isEqualTo(17);
                 assertThat(row.get().agentsLinked()).isEqualTo(12);
                 assertThat(row.get().agentsAmbiguous()).isEqualTo(4);
-                // missed = 17 - 4 - 12 = 1: the counters stay disjoint at dispatch grain, which is
-                // what makes "we lost one" separable from "we correctly refused four".
                 assertThat(row.get().agentsDispatched() - row.get().agentsAmbiguous()
                         - row.get().agentsLinked()).isEqualTo(1);
                 assertThat(row.get().cipxVersion()).isEqualTo("0.0.56");
@@ -614,11 +566,6 @@ class CostIntelligenceIngestionTest {
             String userUuid = UUID.randomUUID().toString();
             String email = "dev-" + UUID.randomUUID() + "@acme.com";
 
-            // A proxy older than these fields is the normal state, not an edge case: cipx ships to
-            // laptops on its own cadence. The counters are omitempty on the wire and absence reads
-            // as zero by design, so 0 here is faithful — it is NOT a "we don't know" sentinel. The
-            // empty cipx_version is what lets a reader tell this row (a daemon too old to report)
-            // from a genuine session that dispatched no agents.
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .metadata(traceCipxMetadataWithoutAgentRollup(userUuid, email))
@@ -712,12 +659,6 @@ class CostIntelligenceIngestionTest {
         void everyIdentityPositionalBindLandsInItsOwnColumn() {
             var ws = newWorkspace();
 
-            // CipxTraceIdentityDAO binds 30 parameters per row by position and
-            // nothing checks that order against the INSERT tuple at compile
-            // time. A mismatch does not fail the insert — it writes each value
-            // into the neighbouring column. Two rows, deliberately: the bind
-            // index accumulates across rows, so a wrong stride corrupts the
-            // second tuple while a single-row test still passes.
             var rowOne = sentinelIdentityRow(1);
             var rowTwo = sentinelIdentityRow(2);
 
@@ -732,11 +673,6 @@ class CostIntelligenceIngestionTest {
         void reorderedReUpsertKeepsTheNewerSnapshot() {
             var ws = newWorkspace();
 
-            // A trace is upserted again whenever its identity changes on an update, and the two
-            // inserts race in the async queue. Both rows share the merge key, so ReplacingMergeTree
-            // keeps one — the one with the greater last_updated_at. Insert them in the wrong order:
-            // with an ingestion-time version the older snapshot would win and the session's running
-            // totals would go backwards, with no second source to recover them from.
             var base = sentinelIdentityRow(3);
             var newer = base.toBuilder()
                     .agentsDispatched(90L)
@@ -762,12 +698,6 @@ class CostIntelligenceIngestionTest {
             String userUuid = UUID.randomUUID().toString();
             String email = "dev-" + UUID.randomUUID() + "@acme.com";
 
-            // 2^32-1 is the column ceiling and a LEGITIMATE value — asInt() carried it as -1, which
-            // is the narrowing this guards. 3e9 is past Integer.MAX_VALUE and equally legitimate.
-            // 9999999999 is past the column, so it cannot be a real count: it records 0 rather than
-            // saturating, because the ceiling is a value a real session can report and a garbage
-            // payload must not be able to impersonate one. ClickHouse would take either quietly —
-            // it wraps mod 2^32 rather than rejecting — so nothing downstream would flag it.
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "4294967295", "3000000000",
@@ -788,20 +718,10 @@ class CostIntelligenceIngestionTest {
             });
         }
 
-        // A producer bug, a version skew, a hand-edited envelope: the field is PRESENT but is not a
-        // count. Nothing here may be laundered into a plausible number — the read has to decide,
-        // rather than let the column decide for it. Two kinds, kept as separately named cases
-        // because they are stopped by different guards and a failure has to say which one gave way.
         @DisplayName("a counter that is present but unusable records 0, never a number that reads as real")
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {
-                // Not a JSON number at all. The negative is the one with teeth: text and a boolean
-                // parse to 0 anyway, while ClickHouse takes a UInt32 modulo 2^32, so -5 would land
-                // as 4294967291 and read as real.
                 "malformed  | \"not-a-number\" | -5  | true",
-                // The one malformed shape that IS a JSON number, so it reaches further than the
-                // others: canConvertToLong() is true for 1.5, so only the isIntegralNumber() guard
-                // stops asLong() truncating a count to a perfectly plausible 1.
                 "fractional | 1.5              | 2.9 | 3000000000.5",
         })
         void presentButUnusableAgentCountersRecordZero(String kind, String dispatched, String linked,
@@ -817,8 +737,6 @@ class CostIntelligenceIngestionTest {
                     .build();
             traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
 
-            // The case name is repeated into every description: awaitility reports the last assertion
-            // error on timeout, and that message is what names the input that gave way.
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var row = getCipxIdentity(trace.id(), ws.workspaceId());
                 assertThat(row).as("the row still lands — one bad metric must not lose the identity").isPresent();
@@ -839,9 +757,6 @@ class CostIntelligenceIngestionTest {
         return new WorkspaceContext(apiKey, workspaceName, workspaceId);
     }
 
-    // One distinct value per column, derived from n so two rows never collide. The ids are UUIDs
-    // because project_id/trace_id/span_id are FixedString(36) — a rotation among those three is
-    // silently accepted by ClickHouse, which is precisely why they need telling apart.
     private CipxSpendDAO.SpanRow sentinelRow(int n) {
         long base = n * 1_000_000L;
         return CipxSpendDAO.SpanRow.builder()
@@ -869,8 +784,6 @@ class CostIntelligenceIngestionTest {
                 .build();
     }
 
-    // Asserts column by column with the column name as the description, so a bind-order regression
-    // reports which column received the wrong value rather than just "expected X but was Y".
     private void assertEveryColumnHoldsItsOwnValue(String workspaceId, CipxSpendDAO.SpanRow expected) {
         var stored = getCipxSpendAllColumns(expected.spanId(), workspaceId);
         assertThat(stored).as("row for span_id %s", expected.spanId()).isPresent();
@@ -900,8 +813,6 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.linkFailureReason()).as("link_failure_reason").isEqualTo(expected.linkFailureReason());
     }
 
-    // Reads every column the DAO writes, including workspace_id and trace_id which the narrower
-    // getCipxSpend does not project. Bind-order coverage is only as wide as the read.
     private Optional<SentinelSpendRow> getCipxSpendAllColumns(String spanId, String workspaceId) {
         String sql = """
                 SELECT
@@ -949,9 +860,6 @@ class CostIntelligenceIngestionTest {
         }).blockOptional();
     }
 
-    // One distinct value per column, derived from n so two rows never collide. project_id / trace_id
-    // / user_uuid are UUIDs because they are the merge key, and dirty alternates so a swap between
-    // the two rows shows up in it as well as in the counters.
     private CipxTraceIdentityDAO.TraceIdentityRow sentinelIdentityRow(int n) {
         long base = n * 1_000_000L;
         return CipxTraceIdentityDAO.TraceIdentityRow.builder()
@@ -988,8 +896,6 @@ class CostIntelligenceIngestionTest {
                 .build();
     }
 
-    // Asserts column by column with the column name as the description, so a bind-order regression
-    // reports which column received the wrong value rather than just "expected X but was Y".
     private void assertEveryIdentityColumnHoldsItsOwnValue(String workspaceId,
             CipxTraceIdentityDAO.TraceIdentityRow expected) {
         var stored = getCipxIdentityAllColumns(expected.traceId(), workspaceId);
@@ -1029,8 +935,6 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.lastUpdatedMs()).as("last_updated_at").isEqualTo(expected.lastUpdatedAt().toEpochMilli());
     }
 
-    // Reads every column the DAO writes, including workspace_id and last_updated_at which the
-    // narrower getCipxIdentity does not project. Bind-order coverage is only as wide as the read.
     private Optional<SentinelIdentityRow> getCipxIdentityAllColumns(String traceId, String workspaceId) {
         String sql = """
                 SELECT
@@ -1088,10 +992,6 @@ class CostIntelligenceIngestionTest {
         }).blockOptional();
     }
 
-    // A cipx call carrying fields this backend has never heard of, at every level a newer proxy could
-    // add them: on the call, inside usage (inference_geo is the real pending one — OPIK-7757), inside
-    // cache_creation, inside config, as a sibling of call under cipx, on a block, and beside cipx in
-    // metadata. Every known field is still present and must still parse.
     private static JsonNode unknownFieldsCipxMetadata(String model) {
         return JsonUtils.getJsonNodeFromString(
                 """
@@ -1215,9 +1115,6 @@ class CostIntelligenceIngestionTest {
                         .formatted(model, lump == 0 ? 50 : lump, cacheCreation5m, cacheCreation1h));
     }
 
-    // A subagent call cipx could not attribute: trigger=subagent with no parent_tool_use_id, carrying
-    // only the reason it gave up. The two reasons this is used with mean opposite things to an
-    // operator, which is the whole point of persisting the column.
     private static JsonNode unattributedSubagentCipxMetadata(String linkFailureReason) {
         return JsonUtils.getJsonNodeFromString(
                 """
@@ -1321,8 +1218,6 @@ class CostIntelligenceIngestionTest {
                 """.formatted(schemaVersion, harness, repository, userUuid, email, displayName));
     }
 
-    // The counters are interpolated as raw JSON so a test can put a value past Integer.MAX_VALUE on
-    // the wire, which is where the UInt32 columns' range gets lost or kept.
     private static JsonNode traceCipxMetadataWithAgentCounters(String userUuid, String email, String dispatched,
             String linked, String ambiguous) {
         return JsonUtils.getJsonNodeFromString("""
@@ -1347,8 +1242,6 @@ class CostIntelligenceIngestionTest {
                 """.formatted(dispatched, linked, ambiguous, userUuid, email));
     }
 
-    // The identity envelope a proxy older than the agent-link rollup ships: session + identity, no
-    // agents_* counters and no cipx_version.
     private static JsonNode traceCipxMetadataWithoutAgentRollup(String userUuid, String email) {
         return JsonUtils.getJsonNodeFromString("""
                 {

@@ -30,10 +30,6 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
  * create/update events (identity can arrive or change on a trace update); never reads the traces or
  * cipx_trace_identities tables. Identity fields are parsed from metadata in Java
  * ({@link TraceIdentityRow#from}). Plain INSERT relying on ReplacingMergeTree to merge by sorting
- * key. last_updated_at — the engine's version column — is bound from the source event's publish time
- * rather than left to the column DEFAULT now64(6): a trace can be upserted more than once and those
- * inserts race in the async queue, so an ingestion-time version would let a delayed older snapshot
- * overwrite a newer one. project_id must be non-empty, so blank rows are dropped.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -72,7 +68,6 @@ public class CipxTraceIdentityDAO {
             long agentsLinked,
             long agentsAmbiguous,
             @NonNull String cipxVersion,
-            // ReplacingMergeTree version: the publish time of the event that produced this snapshot.
             @NonNull Instant lastUpdatedAt) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime,
@@ -84,10 +79,6 @@ public class CipxTraceIdentityDAO {
             if (userUuid.isEmpty()) {
                 userUuid = identity.path("user_id").asText("");
             }
-            // One WARN per row, not per field. A malformed counter is almost never a one-row
-            // accident: a producer bug or a version skew rejects the SAME fields on every trace
-            // that fleet ships, and eight lines a row drowns whatever else is in the log. Collected
-            // across the eight asUInt32 call sites and emitted once below.
             List<String> rejected = new ArrayList<>();
             var row = TraceIdentityRow.builder()
                     .traceId(traceId.toString())
@@ -115,16 +106,6 @@ public class CipxTraceIdentityDAO {
                     .filesDeleted(asUInt32(repository.path("files_deleted"), "files_deleted", rejected))
                     .linesAdded(asUInt32(repository.path("lines_added"), "lines_added", rejected))
                     .linesDeleted(asUInt32(repository.path("lines_deleted"), "lines_deleted", rejected))
-                    // Session-grain subagent link rollup. These counters are
-                    // the only place cipx's worst attribution failure is
-                    // visible: a subagent whose dispatch was never observed
-                    // looks exactly like a main-loop turn, so no span carries
-                    // a link_failure_reason and only a missing increment here
-                    // reveals it. They are session RUNNING TOTALS re-stamped
-                    // on every trace upsert of that session, so a session
-                    // with N traces leaves N rows holding N successive
-                    // snapshots. Readers must take max() per session_id,
-                    // never sum().
                     .agentsDispatched(asUInt32(session.path("agents_dispatched"), "agents_dispatched", rejected))
                     .agentsLinked(asUInt32(session.path("agents_linked"), "agents_linked", rejected))
                     .agentsAmbiguous(asUInt32(session.path("agents_ambiguous"), "agents_ambiguous", rejected))
@@ -132,33 +113,15 @@ public class CipxTraceIdentityDAO {
                     .lastUpdatedAt(lastUpdatedAt)
                     .build();
             if (!rejected.isEmpty()) {
-                // Bounded and non-sensitive by construction: at most one entry per call site, each a
-                // literal field name plus a node type or a long — never the payload's own text.
                 log.warn("cipx metrics unusable, recorded 0: trace_id='{}' rejected={}", traceId, rejected);
             }
             return row;
         }
 
-        // A UInt32 metric off the wire. Missing or null reads as 0 — that is the documented
-        // meaning, and a daemon that dispatched nothing is a real zero. An integral value in
-        // [0, 2^32) passes through untouched. Anything else PRESENT records 0 and is named in
-        // the row's single rejection warning.
-        //
-        // Zero for those, never a saturating clamp. ClickHouse takes a UInt32 modulo 2^32
-        // without complaint (measured: -1 stores as 4294967295, 9999999999 as 1410065407), so
-        // the asInt() narrowing this replaced corrupted silently — but the ceiling is that
-        // same failure wearing a different hat: 4294967295 is a legitimate count, so clamping
-        // to it makes a garbage payload indistinguishable from a real one, and these counters
-        // feed an SLO whose whole purpose is telling "we failed" from "we correctly refused".
-        // Zero degrades toward "nothing to report"; the ceiling invents the largest possible
-        // claim. A clamp would also be redundant: asLong carries all of [2^31, 2^32) exactly,
-        // so the only inputs it ever touched were already malformed.
         private static long asUInt32(JsonNode value, String field, List<String> rejected) {
             if (value.isMissingNode() || value.isNull()) {
                 return 0L;
             }
-            // Fractional is malformed too, and routed with the text: asLong() would truncate 1.5
-            // to a perfectly plausible 1. canConvertToLong also rejects a bignum past long.
             if (!value.isIntegralNumber() || !value.canConvertToLong()) {
                 rejected.add(field + ": not a whole number (" + value.getNodeType() + ")");
                 return 0L;
@@ -246,9 +209,6 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 30 parameters per row tuple in template order. The bind order below
-        // must stay in lockstep with the INSERT tuple above — nothing checks it at compile time, and
-        // a mismatch silently writes each value into the neighbouring column.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
