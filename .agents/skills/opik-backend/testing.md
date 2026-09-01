@@ -295,9 +295,7 @@ assertThat(stored).hasSize(2);
 assertThat(version.itemsTotal()).isEqualTo(stored.size());
 
 // ✅ GOOD - names the rows that must survive, so a wrong-winner bug fails
-assertThat(stored)
-    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-    .containsExactlyInAnyOrder(winningDuplicate, distinctItem);
+assertDatasetItemsInAnyOrder(stored, winningDuplicate, distinctItem);
 assertThat(version.itemsTotal()).isEqualTo(stored.size());
 ```
 
@@ -305,9 +303,30 @@ Asserting a derived counter against `stored.size()` is good — it ties the coun
 rather than to a literal — but it is only as strong as the assertion on `stored` itself. Pin the
 contents first, then tie the counter to them.
 
-Reuse the shared ignore-field constants (`IGNORED_FIELDS_DATA_ITEM` and friends) rather than
-declaring a local list: they already encode which server-generated fields are not part of the
-contract, and a local copy silently drifts from them.
+Reach for the assertion helper before the constant. Where a helper class or method already covers
+the entity, call it — reusing only its ignore-field constant still leaves the comparator chain
+re-derived at each call site, which is what drifts. The helpers live under
+`api/resources/utils/`: `TraceAssertions`, `SpanAssertions`, `DatasetItemAssertions`,
+`AlertAssertions`, `PromptTestAssertions` and `ExperimentTestAssertions`.
+
+```java
+// ❌ BAD - comparator chain re-derived; the next field to ignore has to be found here too
+assertThat(actualItems)
+    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+    .containsExactlyElementsOf(expectedItems);
+
+// ✅ GOOD - the helper owns both the ignore list and the comparison
+assertDatasetItemsInOrder(actualItems, expectedItems);
+```
+
+Each helper owns its ignore-field constant, so the constant has exactly one declaration. Never
+declare a local copy and never import one from another test class: a second copy drifts silently,
+and the resulting failure reads like a product bug rather than a stale ignore list. When a call
+site needs one extra field ignored, derive it from the shared constant (see
+`DatasetItemAssertions.ignoredFieldsPlus`) rather than rebuilding the list.
+
+If no helper exists for the entity yet and more than one test class needs the assertion, add one
+under `api/resources/utils/` rather than hoisting a constant into a test class.
 
 These `containsExactly*` variants compare elements with the element type's own `equals`, which is
 what you want for exact-valued models. When the elements carry `BigDecimal` or `double`, the same
