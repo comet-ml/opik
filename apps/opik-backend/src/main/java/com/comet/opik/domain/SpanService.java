@@ -208,6 +208,7 @@ public class SpanService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+            String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
             String userName = ctx.get(RequestContext.USER_NAME);
             String projectName = project.name();
 
@@ -224,7 +225,8 @@ public class SpanService {
                                 .build();
                         return spanDAO.insert(processedSpan)
                                 .doOnSuccess(__ -> eventBus.post(
-                                        new SpansCreated(List.of(savedSpan), workspaceId, userName, workspaceName)))
+                                        new SpansCreated(List.of(savedSpan), workspaceId, userName, workspaceName,
+                                                cipxDeviceId)))
                                 .thenReturn(processedSpan.id());
                     });
         });
@@ -426,6 +428,7 @@ public class SpanService {
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+                    String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
@@ -437,7 +440,8 @@ public class SpanService {
                             .flatMap(this::stripAttachmentsFromSpanBatch)
                             .flatMap(spans -> spanDAO.batchInsert(spans)
                                     .doOnSuccess(__ -> eventBus.post(
-                                            new SpansCreated(spans, workspaceId, userName, workspaceName))));
+                                            new SpansCreated(spans, workspaceId, userName, workspaceName,
+                                                    cipxDeviceId))));
                 }));
     }
 

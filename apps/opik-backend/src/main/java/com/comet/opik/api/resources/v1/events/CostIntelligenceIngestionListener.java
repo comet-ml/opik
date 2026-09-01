@@ -35,8 +35,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * update, so identity create reuses TracesCreated (which carries the full entities) and update
  * consumes the dedicated TraceCostIntelligenceChanged event (TracesUpdated carries only a delta).
  * cipx spans/traces are filtered out here in Java before any DB work, and all cipx fields are
- * derived in Java. Runs on the AsyncEventBus virtual threads, off the request path; failures are
- * logged and swallowed — ingestion of the source span/trace already succeeded.
+ * derived in Java, except device_id: that comes from the event, which carries the value resolved from
+ * the caller's validated device token, so a client cannot claim another machine's identity by writing
+ * one into its own metadata. Runs on the AsyncEventBus virtual threads, off the request path; failures
+ * are logged and swallowed — ingestion of the source span/trace already succeeded.
  */
 @EagerSingleton
 @Slf4j
@@ -109,7 +111,7 @@ public class CostIntelligenceIngestionListener {
         List<TraceIdentityRow> rows = event.traces().stream()
                 .filter(trace -> CipxMetadata.hasIdentity(trace.metadata()))
                 .map(trace -> TraceIdentityRow.from(trace.id(), trace.projectId(), trace.metadata(),
-                        trace.startTime()))
+                        trace.startTime(), event.cipxDeviceId()))
                 .toList();
         ingestIdentities(rows, event.workspaceId(), event.userName());
     }
@@ -132,7 +134,8 @@ public class CostIntelligenceIngestionListener {
                             List<TraceIdentityRow> rows = traceProjectIds.entrySet().stream()
                                     .filter(entry -> startTimes.containsKey(entry.getKey()))
                                     .map(entry -> TraceIdentityRow.from(entry.getKey(), entry.getValue(),
-                                            update.metadata(), startTimes.get(entry.getKey())))
+                                            update.metadata(), startTimes.get(entry.getKey()),
+                                            event.cipxDeviceId()))
                                     .toList();
                             ingestIdentities(rows, event.workspaceId(), event.userName());
                         },

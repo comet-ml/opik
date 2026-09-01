@@ -449,6 +449,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().repository()).isEqualTo("git@github.com:acme/repo.git");
                 assertThat(row.get().sessionId()).isEqualTo("cc-session-abc");
                 assertThat(row.get().harness()).isEqualTo("codex");
+                // An API-key caller carries no device, and device_id is never read from metadata.
+                assertThat(row.get().deviceId()).isEmpty();
                 assertThat(row.get().schemaVersion()).isEqualTo(3);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxTrace.startTime().toEpochMilli());
@@ -812,7 +814,8 @@ class CostIntelligenceIngestionTest {
                 SELECT
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, device_id,
+                    schema_version,
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted
@@ -833,6 +836,7 @@ class CostIntelligenceIngestionTest {
                             .repository(row.get("repository", String.class))
                             .sessionId(row.get("session_id", String.class))
                             .harness(row.get("harness", String.class))
+                            .deviceId(row.get("device_id", String.class))
                             .schemaVersion(row.get("schema_version", Integer.class))
                             .billingMode(row.get("billing_mode", String.class))
                             .plan(row.get("plan", String.class))
@@ -890,7 +894,8 @@ class CostIntelligenceIngestionTest {
 
     @Builder
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
-            String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
+            String userDisplayName, String repository, String sessionId, String harness, String deviceId,
+            Integer schemaVersion,
             String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
             String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,

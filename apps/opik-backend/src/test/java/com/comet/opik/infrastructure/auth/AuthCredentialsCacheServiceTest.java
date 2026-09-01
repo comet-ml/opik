@@ -289,6 +289,34 @@ public class AuthCredentialsCacheServiceTest {
         assertThat(credentials.get().permissions()).isEqualTo(ListUtils.emptyIfNull(permissions));
     }
 
+    @ParameterizedTest
+    @MethodSource
+    void cacheAndRetrieveDeviceId(String deviceId, String expected) {
+        String token = getRandomId();
+        String workspaceName = getRandomId();
+
+        // A CIPX device token shares this cache, so without the round-trip the device would be lost on every
+        // cache hit and the identity rows written during the TTL would carry no machine.
+        cacheService.cache(token, workspaceName, List.of(),
+                CacheService.AuthCredentials.builder()
+                        .userName(getRandomId()).workspaceId(getRandomId())
+                        .workspaceName(getRandomId()).deviceId(deviceId).build());
+
+        Optional<CacheService.AuthCredentials> credentials = cacheService
+                .resolveApiKeyUserAndWorkspaceIdFromCache(token, workspaceName, List.of());
+
+        assertThat(credentials).isPresent();
+        assertThat(credentials.get().deviceId()).isEqualTo(expected);
+    }
+
+    Stream<Arguments> cacheAndRetrieveDeviceId() {
+        return Stream.of(
+                arguments(named("a device id", "8f4b2c1e-0000-4a1b-9c3d-2e5f6a7b8c9d"),
+                        "8f4b2c1e-0000-4a1b-9c3d-2e5f6a7b8c9d"),
+                // Every non-device credential, which must read back as no device rather than as a blank one.
+                arguments(named("no device id", null), null));
+    }
+
     Stream<Arguments> cacheAndRetrievePermissions() {
         return Stream.of(
                 arguments(named("null permissions", null)),

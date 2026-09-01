@@ -5,6 +5,7 @@ import com.comet.opik.utils.JsonUtils;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RBatchReactive;
 import org.redisson.api.RBucketsReactive;
 import org.redisson.api.RMapReactive;
@@ -23,6 +24,8 @@ import java.util.Set;
  *    value: Map with keys 'userName', 'workspaceId', 'workspaceName', 'quotas'
  * 2. Permission access cache (v3). Data type: String. Key pattern: authV3-{apiKey}-{workspaceName}-{permission},
  *    value: userName. Only used when requiredPermissions are specified.
+ * <p>
+ * CIPX device tokens share the workspace metadata cache (v2), keyed by the token in place of the API key.
  */
 @RequiredArgsConstructor
 class AuthCredentialsCacheService implements CacheService {
@@ -35,13 +38,15 @@ class AuthCredentialsCacheService implements CacheService {
     private static final String WORKSPACE_NAME_KEY = "workspaceName";
     private static final String QUOTAS_KEY = "quotas";
     private static final String PERMISSIONS_KEY = "permissions";
+    private static final String DEVICE_ID_KEY = "deviceId";
 
     private static final Set<String> V2_MAP_FIELDS = Set.of(
             USER_NAME_KEY,
             WORKSPACE_ID_KEY,
             WORKSPACE_NAME_KEY,
             QUOTAS_KEY,
-            PERMISSIONS_KEY);
+            PERMISSIONS_KEY,
+            DEVICE_ID_KEY);
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
@@ -68,6 +73,9 @@ class AuthCredentialsCacheService implements CacheService {
                         .workspaceName(m.get(WORKSPACE_NAME_KEY))
                         .quotas(getQuotas(m))
                         .permissions(getPermissions(m))
+                        // Blank for every credential that is not a CIPX device token, and absent for entries
+                        // written before device ids; both mean no device, so they read back the same.
+                        .deviceId(StringUtils.trimToNull(m.get(DEVICE_ID_KEY)))
                         .build());
     }
 
@@ -103,7 +111,8 @@ class AuthCredentialsCacheService implements CacheService {
                 WORKSPACE_NAME_KEY, Optional.ofNullable(credentials.workspaceName()).orElse(requestWorkspaceName),
                 QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(credentials.quotas()).orElse(List.of())),
                 PERMISSIONS_KEY,
-                JsonUtils.writeValueAsString(Optional.ofNullable(credentials.permissions()).orElse(List.of())));
+                JsonUtils.writeValueAsString(Optional.ofNullable(credentials.permissions()).orElse(List.of())),
+                DEVICE_ID_KEY, StringUtils.defaultString(credentials.deviceId()));
 
         RBatchReactive batch = redissonClient.createBatch();
         RMapReactive<String, String> v2Map = batch.getMap(v2Key);

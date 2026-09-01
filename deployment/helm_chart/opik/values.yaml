@@ -193,6 +193,12 @@ component:
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
       UI_DEFAULT_PAGE_SIZE: "100"
+      # CIPX device-token auth (see apps/opik-backend/config.yml `cipxTokenValidation`).
+      # Off by default: validation is delegated to a cost-api service that
+      # self-hosted deployments do not run, and while disabled the backend
+      # never inspects the token prefix.
+      CIPX_TOKEN_VALIDATION_ENABLED: "false"
+      CIPX_TOKEN_VALIDATION_URL: ""
       # LLM model registry (see apps/opik-backend/config.yml:1309-1317).
       # Remote CDN fetch is opt-in: self-hosted / OSS deployments serve
       # the classpath YAML shipped with the release by default, no
