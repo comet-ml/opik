@@ -26,6 +26,8 @@ To configure the extension, open up VSCode settings (Ctrl + ,), find the setting
 
 Once installed, new Cursor chats are saved automatically. Historical chats are imported only when you explicitly run **Opik: Import Historical Cursor Traces** from the command palette.
 
+Delivered request identities are retained for 180 days to prevent duplicate uploads while keeping extension state bounded. Completed edit-cost records are compacted into one aggregate during that period.
+
 > 💻: This extension is currently under development 🚧. Please report any bugs on [Github](https://github.com/comet-ml/opik) if you run into any issues.
 
 ## Local Development

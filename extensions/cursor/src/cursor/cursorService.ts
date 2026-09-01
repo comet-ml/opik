@@ -123,9 +123,12 @@ export class CursorService {
           await updateRequestLedger(this.context, requestLedger);
 
           const loggedTurns = await logTracesToOpik(apiKey, tracesData);
-          await this.usageEnricher.track(loggedTurns);
+          // Trace delivery is durable independently from best-effort usage
+          // queue persistence. Never re-upload a trace because the local cost
+          // work queue temporarily failed to save.
           acknowledgeUploadedTraces(tracesData, requestLedger);
           await updateRequestLedger(this.context, requestLedger);
+          await this.usageEnricher.track(loggedTurns);
           
           // Update session info for each composer session
           Object.entries(updatedSessionInfo).forEach(([sessionId, sessionData]) => {

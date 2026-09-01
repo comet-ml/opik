@@ -34,9 +34,9 @@ export function requestIdForTurn(group: { userMessages: any[] }): string {
         return cursorRequestId;
     }
 
-    // Old Cursor versions did not persist requestId. The timestamp and prompt
-    // survive a fork even though bubble ids do not, so this remains stable for
-    // historical conversations without making identical prompts collide.
+    // Old Cursor versions did not persist requestId. Include the turn's bubble
+    // identity so independent legacy turns with identical timestamps and text
+    // cannot be merged into one request.
     const first = group.userMessages[0] ?? {};
     const parsedTimestamp = Date.parse(first.createdAt ?? '');
     const timestamp = first.resolvedTimestamp ?? (Number.isNaN(parsedTimestamp) ? 0 : parsedTimestamp);
@@ -44,7 +44,7 @@ export function requestIdForTurn(group: { userMessages: any[] }): string {
         .map(message => message.text || message.content || message.rawText || '')
         .join('\n\n');
     const digest = createHash('sha256')
-        .update(`${timestamp}\u0000${content}`)
+        .update(`${first.id ?? ''}\u0000${timestamp}\u0000${content}`)
         .digest('hex');
     return `legacy-${digest}`;
 }
@@ -68,14 +68,14 @@ export function shouldProcessTrace(
 }
 
 function usageKey(trace: TraceData): string {
-    return `${trace.request_key}\u0000${trace.thread_id}\u0000${trace.turn_start_ms}`;
+    return `${trace.request_key}\u0000${trace.thread_id}\u0000${trace.turn_start_ms}\u0000${trace.revision}`;
 }
 
 function assignChildSpanIds(trace: TraceData): void {
     for (const [index, span] of (trace.spans ?? []).entries()) {
         span.id = deterministicUuidV7(
             span.startTime.getTime(),
-            `cursor:child:${trace.id}:${trace.turn_start_ms}:${index}:${span.type}:${span.name}`
+            `cursor:child:${trace.id}:${trace.turn_start_ms}:${trace.revision}:${index}:${span.type}:${span.name}`
         );
     }
 }
@@ -151,38 +151,44 @@ function decorateFork(
  */
 export function prepareTraceForUpload(trace: TraceData, ledger: RequestLedger): TraceData | null {
     const key = trace.request_key;
-    const existing = ledger[key];
+    let existing = ledger[key];
     const fingerprint = traceFingerprint(trace);
     const now = Date.now();
 
     if (!existing) {
+        const ownerComposerId = trace.canonical_thread_id ?? trace.thread_id!;
+        const canonicalTurnStartMs = trace.canonical_turn_start_ms ?? trace.turn_start_ms;
         trace.id = deterministicUuidV7(
-            trace.turn_start_ms,
+            canonicalTurnStartMs,
             `cursor:trace:canonical:${trace.project_name}:${trace.request_id}`
         );
         trace.root_span_id = deterministicUuidV7(
-            trace.turn_start_ms,
+            canonicalTurnStartMs,
             `cursor:span:canonical:${trace.project_name}:${trace.request_id}`
         );
-        decorateCanonical(trace, 1, trace.turn_start_ms, false);
 
         ledger[key] = {
             requestId: trace.request_id,
             projectName: trace.project_name ?? 'default',
-            ownerComposerId: trace.thread_id!,
-            turnStartMs: trace.turn_start_ms,
-            latestTurnStartMs: trace.turn_start_ms,
+            ownerComposerId,
+            turnStartMs: canonicalTurnStartMs,
+            latestTurnStartMs: canonicalTurnStartMs,
             canonicalTraceId: trace.id,
             canonicalRootSpanId: trace.root_span_id,
-            canonicalStatus: 'pending',
-            canonicalFingerprint: fingerprint,
+            canonicalStatus: ownerComposerId === trace.thread_id ? 'pending' : 'excluded',
+            canonicalFingerprint: ownerComposerId === trace.thread_id ? fingerprint : undefined,
             canonicalRevision: 1,
             usageStatus: 'pending',
             usageByRevision: {},
             forkCopies: {},
             lastSeenAt: now,
         };
-        return trace;
+        existing = ledger[key];
+
+        if (ownerComposerId === trace.thread_id) {
+            decorateCanonical(trace, 1, canonicalTurnStartMs, false);
+            return trace;
+        }
     }
 
     existing.lastSeenAt = now;
@@ -231,6 +237,7 @@ export function prepareTraceForUpload(trace: TraceData, ledger: RequestLedger): 
     let created = false;
     if (!copy) {
         created = true;
+        const firstSeenAsEditedFork = trace.turn_start_ms !== existing.turnStartMs;
         copy = {
             traceId: deterministicUuidV7(
                 existing.turnStartMs,
@@ -243,9 +250,9 @@ export function prepareTraceForUpload(trace: TraceData, ledger: RequestLedger): 
             status: 'pending',
             fingerprint,
             latestTurnStartMs: trace.turn_start_ms,
-            originalTurnStartMs: trace.turn_start_ms,
-            revision: 1,
-            usageStatus: 'disabled',
+            originalTurnStartMs: existing.turnStartMs,
+            revision: firstSeenAsEditedFork ? 2 : 1,
+            usageStatus: firstSeenAsEditedFork ? 'pending' : 'disabled',
             usageByRevision: {},
         };
         existing.forkCopies[composerId] = copy;

@@ -239,14 +239,14 @@ test('usage aggregation sums edit costs once and keeps all models', () => {
     });
 });
 
-test('legacy request identity survives changed bubble and composer ids', () => {
+test('legacy request identity distinguishes independent bubble ids', () => {
     const left = requestIdForTurn({ userMessages: [{
         id: 'bubble-a', composerId: 'composer-a', text: 'same prompt', resolvedTimestamp: T0,
     }] });
     const right = requestIdForTurn({ userMessages: [{
         id: 'bubble-b', composerId: 'composer-b', text: 'same prompt', resolvedTimestamp: T0,
     }] });
-    assert.equal(left, right);
+    assert.notEqual(left, right);
     assert.match(left, /^legacy-[0-9a-f]{64}$/);
 });
 

@@ -20,3 +20,7 @@ export function aggregateTurnUsage(usages: TurnUsage[]): TurnUsage {
         models: [],
     });
 }
+
+export function latestUsageModel(usage: TurnUsage): string | undefined {
+    return usage.models[usage.models.length - 1];
+}

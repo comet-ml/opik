@@ -3,6 +3,8 @@ import { executeQuery } from './sqlite';
 import { getPendingUsage, updatePendingUsage } from '../state';
 import { PendingUsage, TurnUsage } from '../interface';
 import { debugLog } from '../utils';
+import { mergePendingUsage } from './usageQueue';
+import { isCursorComposerId } from './composerIdentity';
 
 const API_HOST = 'https://api2.cursor.sh';
 const SERVICE = 'aiserver.v1.DashboardService';
@@ -104,6 +106,10 @@ async function fetchUsageByConversation(
  * were already counted.
  */
 async function readUserTurnStarts(stateDbPath: string, composerId: string): Promise<number[]> {
+    if (!isCursorComposerId(composerId)) {
+        debugLog('[usage] invalid Cursor composer id', composerId);
+        return [];
+    }
     const rows = await executeQuery(
         stateDbPath,
         `SELECT json_extract(value, '$.createdAt') AS createdAt FROM cursorDiskKV
@@ -167,6 +173,7 @@ export function attributeUsageToTurns(
 export class UsageEnricher {
     private userId: number | undefined;
     private userIdToken: string | undefined;
+    private volatilePending = new Map<string, Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>>();
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -181,19 +188,21 @@ export class UsageEnricher {
         if (!this.isEnabled() || turns.length === 0) {
             return;
         }
-        const pending = getPendingUsage(this.context);
-        const known = new Set(pending.map(item =>
-            item.usageKey || item.requestKey || `${item.composerId}:${item.turnStartMs}`
-        ));
-
-        for (const turn of turns) {
-            if (known.has(turn.usageKey)) {
-                continue;
+        const nextAttemptAt = Date.now() + POLL_SCHEDULE_MS[0];
+        const pending = mergePendingUsage(getPendingUsage(this.context), turns, nextAttemptAt);
+        try {
+            await updatePendingUsage(this.context, pending);
+            for (const turn of turns) {
+                this.volatilePending.delete(turn.usageKey);
             }
-            pending.push({ ...turn, attempt: 0, nextAttemptAt: Date.now() + POLL_SCHEDULE_MS[0] });
-            known.add(turn.usageKey);
+        } catch (error) {
+            // Trace delivery has already succeeded. Keep the cost work in
+            // memory and retry persistence from tick() without re-uploading it.
+            for (const turn of turns) {
+                this.volatilePending.set(turn.usageKey, turn);
+            }
+            debugLog('[usage] failed to persist pending usage, will retry', String(error));
         }
-        await updatePendingUsage(this.context, pending);
     }
 
     // Keyed by token so that switching Cursor accounts re-resolves instead of
@@ -221,7 +230,11 @@ export class UsageEnricher {
             return;
         }
 
-        const pending = getPendingUsage(this.context);
+        const pending = mergePendingUsage(
+            getPendingUsage(this.context),
+            [...this.volatilePending.values()],
+            Date.now()
+        );
         const now = Date.now();
         const due = pending.filter(item => item.nextAttemptAt <= now);
         if (due.length === 0) {
@@ -308,5 +321,6 @@ export class UsageEnricher {
             remaining.push(item);
         }
         await updatePendingUsage(this.context, remaining);
+        this.volatilePending.clear();
     }
 }

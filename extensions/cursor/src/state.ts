@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { PendingUsage, RequestLedger, SessionInfo } from './interface';
+import { compactRequestLedger } from './cursor/ledgerRetention';
+import { resolveAutomaticTraceCutoff } from './cursor/stateMigration';
 
 export function getSessionInfo(context: vscode.ExtensionContext): Record<string, SessionInfo> {
   return context.globalState.get<Record<string, SessionInfo>>('sessionInfo', {});
@@ -56,7 +58,8 @@ export async function getOrCreateAutomaticTraceCutoffAt(
   }
 
   const previousSync = context.globalState.get<number>('lastSyncedAt');
-  const cutoff = previousSync ?? Date.now();
+  const legacySync = context.globalState.get<number | null>('lastSyncTime', null);
+  const cutoff = resolveAutomaticTraceCutoff(previousSync, legacySync, Date.now());
   await context.globalState.update('automaticTraceCutoffAt', cutoff);
   return cutoff;
 }
@@ -74,7 +77,7 @@ export function getRequestLedger(context: vscode.ExtensionContext): RequestLedge
 }
 
 export function updateRequestLedger(context: vscode.ExtensionContext, ledger: RequestLedger): Thenable<void> {
-  return context.globalState.update('requestLedger', ledger);
+  return context.globalState.update('requestLedger', compactRequestLedger(ledger));
 }
 
 export async function resetExtensionState(context: vscode.ExtensionContext): Promise<void> {

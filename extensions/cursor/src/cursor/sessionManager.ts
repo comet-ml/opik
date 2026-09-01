@@ -9,6 +9,7 @@ import { executeQuery, executeQueryPaginated } from './sqlite';
 import { orderBubbles } from './bubbleOrder';
 import { buildSpans, buildTurnOutput, DEFAULT_SPAN_OPTIONS, SpanBuildOptions } from './spanBuilder';
 import { prepareTraceForUpload, requestIdForTurn, requestKey, shouldProcessTrace } from './requestIdentity';
+import { composerIdFromKey, resolveCanonicalBubbleOwners } from './composerIdentity';
 
 import { TraceData } from "../interface";
 
@@ -221,7 +222,10 @@ async function readCursorChatDataAsync(
         composerRows.forEach((row: any) => {
             try {
                 const composerData = JSON.parse(row.value);
-                const composerId = row.key.split(':')[1];
+                const composerId = composerIdFromKey(row.key);
+                if (!composerId) {
+                    return;
+                }
                 console.log(`  → Composer ${composerId}: updated at ${composerData.lastUpdatedAt}, status: ${composerData.status}`);
             } catch (e) {
                 // Ignore parse errors
@@ -231,10 +235,7 @@ async function readCursorChatDataAsync(
         // Extract composer IDs from the keys (format: composerData:<composerId>)
         const composerIds = composerRows
             .map((row: any) => {
-                if (typeof row.key === 'string') {
-                    return row.key.split(':')[1];
-                }
-                return null;
+                return composerIdFromKey(row.key) ?? null;
             })
             .filter((id: string | null) => id !== null);
         
@@ -244,6 +245,37 @@ async function readCursorChatDataAsync(
         }
         
         console.log(`🔍 Fetching bubbles for ${composerIds.length} active composer(s)`);
+
+        // Resolve fork ownership from Cursor's durable conversation headers,
+        // not from whichever composer happened to be updated in this poll.
+        // Only the compact header projection is read for inactive composers.
+        const identityRows = await executeQuery(dbPath, `
+            SELECT key,
+                   json_extract(value, '$.createdAt') AS createdAt,
+                   json_extract(value, '$.fullConversationHeadersOnly') AS headers
+            FROM cursorDiskKV
+            WHERE key >= 'composerData' AND key < 'composerDatb'
+        `);
+        const canonicalOwners = resolveCanonicalBubbleOwners(identityRows.flatMap((row: any) => {
+            const composerId = composerIdFromKey(row.key);
+            if (!composerId) {
+                return [];
+            }
+            try {
+                const headers = JSON.parse(row.headers || '[]');
+                const numericCreatedAt = Number(row.createdAt);
+                const parsedCreatedAt = Date.parse(row.createdAt ?? '');
+                return [{
+                    composerId,
+                    composerCreatedAt: Number.isFinite(numericCreatedAt)
+                        ? numericCreatedAt
+                        : (Number.isNaN(parsedCreatedAt) ? 0 : parsedCreatedAt),
+                    headers: Array.isArray(headers) ? headers : [],
+                }];
+            } catch {
+                return [];
+            }
+        }));
         
         // Build optimized query to only fetch bubbles for relevant composers
         // Bubble key format: bubbleId:<composerId>:<bubbleId>
@@ -260,17 +292,33 @@ async function readCursorChatDataAsync(
         const bubblesByComposer: Record<string, any[]> = {};
         
         allBubbleRows.forEach((bubbleRow: any) => {
-            if (!bubbleRow.value) return;
+            if (!bubbleRow.value) {
+                return;
+            }
             
             try {
                 const key = bubbleRow.key;
-                if (typeof key !== 'string') return;
-                const composerId = key.split(':')[1];
+                if (typeof key !== 'string') {
+                    return;
+                }
+                const keyParts = key.split(':');
+                const composerId = keyParts[1];
+                if (!composerIds.includes(composerId)) {
+                    return;
+                }
+                const bubbleId = keyParts[2];
+                if (!bubbleId) {
+                    return;
+                }
                 const value = bubbleRow.value;
-                if (typeof value !== 'string') return;
+                if (typeof value !== 'string') {
+                    return;
+                }
                 const chatData = JSON.parse(value);
                 
-                if (!chatData) return;
+                if (!chatData) {
+                    return;
+                }
                 
                 if (!bubblesByComposer[composerId]) {
                     bubblesByComposer[composerId] = [];
@@ -279,7 +327,9 @@ async function readCursorChatDataAsync(
                 // Structure the bubble data
                 const bubble = {
                     ...chatData,
-                    id: key.split(':')[2], // Extract bubble ID
+                    id: bubbleId,
+                    canonicalComposerId: canonicalOwners.get(bubbleId)?.composerId,
+                    canonicalTurnStartMs: canonicalOwners.get(bubbleId)?.turnStartMs,
                     type: chatData.type === 1 ? 'user' : chatData.type === 2 ? 'ai' : 'unknown',
                     text: chatData.text || chatData.content || '',
                     content: chatData.text || chatData.content || '',
@@ -298,7 +348,9 @@ async function readCursorChatDataAsync(
         composerRows.forEach((composerRow: any, index: number) => {
             try {
                 const value = composerRow.value;
-                if (typeof value !== 'string') return;
+                if (typeof value !== 'string') {
+                    return;
+                }
                 const composerData = JSON.parse(value);
                 
                 // Handle null composerData
@@ -308,8 +360,13 @@ async function readCursorChatDataAsync(
                 }
                 
                 const key = composerRow.key;
-                if (typeof key !== 'string') return;
-                const threadId = key.split(':')[1];
+                if (typeof key !== 'string') {
+                    return;
+                }
+                const threadId = composerIdFromKey(key);
+                if (!threadId) {
+                    return;
+                }
                 
                 // Get bubbles for this composer
                 const bubbles = bubblesByComposer[threadId] || [];
@@ -358,13 +415,13 @@ export function resolveStateDbPath(VSInstallationPath: string): string | null {
     if (globalStoragePaths.length > 1) {
         const error = new Error(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
         captureException(error);
-        console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`)
+        console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
     }
 
     if (globalStoragePaths.length === 0) {
         const error = new Error("Could not find global SQLite state DB.");
         captureException(error);
-        console.warn("Could not find global SQLite state DB.")
+        console.warn("Could not find global SQLite state DB.");
         return null;
     }
 
@@ -390,7 +447,7 @@ export async function findAndReturnNewTraces(
     if (!fs.existsSync(stateDbPath)) {
         const error = new Error(`Could not find global SQLite state DB at path: ${stateDbPath}`);
         captureException(error);
-        console.warn("Could not find global SQLite state DB.")
+        console.warn("Could not find global SQLite state DB.");
         return null;
     } else {
         try {
@@ -555,6 +612,8 @@ function createTraceFromBubbleGroup(
         end_time: new Date(endTime).toISOString(),
         turn_start_ms: startTime,
         turn_starts_ms: turnStartsMs,
+        canonical_thread_id: firstUserMessage.canonicalComposerId,
+        canonical_turn_start_ms: firstUserMessage.canonicalTurnStartMs,
         model: conversation.model,
         input: { input: userContent },
         output: { output: assistantContent },

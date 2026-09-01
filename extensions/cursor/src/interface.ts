@@ -44,6 +44,8 @@ export interface TraceData {
     end_time?: string; // ISO 8601 format
     turn_start_ms: number;
     turn_starts_ms: number[];
+    canonical_thread_id?: string;
+    canonical_turn_start_ms?: number;
     model?: string;
     input: any;
     output: any;
@@ -77,7 +79,7 @@ export interface PendingUsage {
     nextAttemptAt: number;
 }
 
-export type UploadStatus = 'pending' | 'uploaded';
+export type UploadStatus = 'pending' | 'uploaded' | 'excluded';
 export type UsageStatus = 'disabled' | 'pending' | 'complete';
 
 export interface ForkCopyState {

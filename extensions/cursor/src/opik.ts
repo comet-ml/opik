@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { PendingUsage, TraceData, TurnUsage } from './interface';
 import { captureException } from './sentry';
+import { latestUsageModel } from './cursor/usageAggregation';
 
 type LoggedTurn = Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>;
 
@@ -222,7 +223,7 @@ export async function applyTurnUsage(
         body: {
             traceId: pending.traceId,
             projectName: pending.projectName,
-            model: usage.models[0],
+            model: latestUsageModel(usage),
             provider: 'cursor',
             usage: spanUsage,
             totalEstimatedCost: usage.chargedCents / 100,
