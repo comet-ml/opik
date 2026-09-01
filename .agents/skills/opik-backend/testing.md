@@ -319,11 +319,27 @@ assertThat(actualItems)
 assertDatasetItemsInOrder(actualItems, expectedItems);
 ```
 
-Each helper owns its ignore-field constant, so the constant has exactly one declaration. Never
-declare a local copy and never import one from another test class: a second copy drifts silently,
-and the resulting failure reads like a product bug rather than a stale ignore list. When a call
-site needs one extra field ignored, derive it from the shared constant (see
-`DatasetItemAssertions.ignoredFieldsPlus`) rather than rebuilding the list.
+Each helper owns the ignore-field constant for the comparisons it covers, so those comparisons
+have exactly one declaration. Never re-declare that list locally and never import it from another
+test class: a second copy drifts silently, and the resulting failure reads like a product bug
+rather than a stale ignore list.
+
+A call site whose contract genuinely differs may still ignore a different set — but derive it from
+the shared constant rather than rebuilding the list, so the base set stays in one place:
+
+```java
+// ✅ GOOD - server generates the id, so the expected item cannot pin it
+.ignoringFields(ignoredFieldsPlus("id"))
+
+// ❌ BAD - a hand-written list that silently drifts from the shared one
+private static final String[] MY_IGNORED_FIELDS = {"id", "createdAt", /* ...9 more... */};
+```
+
+Two cases need care when consolidating. A field that one comparison ignores and another asserts is
+a real difference, not drift — folding it into the shared list quietly drops coverage, so keep the
+narrower set and assert that field explicitly where it matters. And `ignoredFieldsPlus` only fits
+where the helper's comparator semantics already apply; a call site needing a different comparison
+shape keeps its own chain.
 
 If no helper exists for the entity yet and more than one test class needs the assertion, add one
 under `api/resources/utils/` rather than hoisting a constant into a test class.

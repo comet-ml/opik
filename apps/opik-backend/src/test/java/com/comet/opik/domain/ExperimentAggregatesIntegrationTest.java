@@ -1507,6 +1507,12 @@ class ExperimentAggregatesIntegrationTest {
         assertDatasetItems(actualDatasetItems, expectedDatasetItem);
 
         for (var i = 0; i < actualDatasetItems.size(); i++) {
+            // The shared helper ignores runSummariesByExperiment, but parity between the two read paths is
+            // exactly what this test exists to prove: the aggregates query omits assertions_array, so a
+            // divergence here means the aggregates path silently lost its assertion summaries.
+            assertThat(actualDatasetItems.get(i).runSummariesByExperiment())
+                    .isEqualTo(expectedDatasetItem.get(i).runSummariesByExperiment());
+
             var actualExperiments = actualDatasetItems.get(i).experimentItems();
             var expectedExperiments = expectedDatasetItem.get(i).experimentItems();
 
