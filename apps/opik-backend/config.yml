@@ -325,6 +325,38 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
+  # Default: 3s
+  # Description: Per-call read timeout for auth requests to the React service, overriding
+  #   jerseyClient.timeout (30s) for this hop only. Sized from measured production latency of
+  #   successful auth calls: p50 22ms, p99 147ms, p99.9 305ms, p99.99 1.15s -- so 3s is ~2.6x
+  #   p99.99 and normal calls never reach it. Without this override a stalled auth call blocks
+  #   for the full 30s and returns a 500 to the user. Set to 0s to inherit the shared timeout.
+  #   Does NOT apply to listEligibleWorkspaces, which has a documented large-payload case.
+  #   NOTE: this bounds a single attempt, not the whole operation -- see requestMaxRetries for
+  #   the end-to-end budget. It is an override rather than a clamp: it wins over
+  #   jerseyClient.timeout in both directions, so lowering jerseyClient.timeout alone does not cap
+  #   the auth hop -- lower this value too.
+  requestTimeout: ${AUTH_REQUEST_TIMEOUT:-3s}
+  # Default: 1
+  # Description: Maximum number of RETRIES for a failed auth request -- additional attempts after
+  #   the first, not a total attempt budget. The default of 1 therefore permits 2 outbound calls. The call is issued through the
+  #   shared RetriableHttpClient, which owns the retry policy for outbound calls in this service --
+  #   nothing bespoke is implemented for this hop. Retried: transport failures per
+  #   RetryUtils.handleHttpErrors (SocketException, TimeoutException, InterruptedIOException --
+  #   covering SocketTimeoutException and ConnectTimeoutException -- and NoHttpResponseException),
+  #   plus HTTP 503/504, which RetriableHttpClient maps to RetryableHttpException. React emits 503s
+  #   while draining during a rolling restart, so that is useful here. NOT retried: any other HTTP
+  #   error status, since verifyResponse maps 4xx to ClientErrorException, which is not retriable --
+  #   a 401 surfaces on the first attempt. Retries will NOT recover a React CPU brownout: those last
+  #   1-3 minutes, so the retry lands in the same brownout. Set to 0 to disable.
+  requestMaxRetries: ${AUTH_REQUEST_MAX_RETRIES:-1}
+  # Default: 250ms
+  # Description: Minimum backoff between auth request attempts. Deliberately non-zero -- an
+  #   immediate retry adds load to a React service that may already be CPU-starved.
+  requestRetryMinBackoff: ${AUTH_REQUEST_RETRY_MIN_BACKOFF:-250ms}
+  # Default: 1s
+  # Description: Upper bound on the exponential backoff between auth request attempts.
+  requestRetryMaxBackoff: ${AUTH_REQUEST_RETRY_MAX_BACKOFF:-1s}
 
 # Liveness health check for the shared outbound HTTP client (see shared_http_client under healthChecks)
 sharedHttpClientHealthCheck:
