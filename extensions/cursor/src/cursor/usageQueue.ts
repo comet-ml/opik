@@ -41,3 +41,7 @@ export function mergePendingUsage(
 
     return merged;
 }
+
+export function shouldKeepPendingUsage(applyFailed: boolean, settled: boolean): boolean {
+    return applyFailed || !settled;
+}

@@ -1,15 +1,16 @@
 import * as vscode from 'vscode';
 import { executeQuery } from './sqlite';
-import { getPendingUsage, updatePendingUsage } from '../state';
+import { getPendingUsage, getRequestLedger, updatePendingUsage } from '../state';
 import { PendingUsage, TurnUsage } from '../interface';
 import { debugLog } from '../utils';
-import { mergePendingUsage } from './usageQueue';
+import { mergePendingUsage, shouldKeepPendingUsage } from './usageQueue';
 import { isCursorComposerId } from './composerIdentity';
 import {
     attributeUsageToPending,
     PendingUsageAttribution,
     UsageEventDisplay,
 } from './usageAttribution';
+import { appliedUsageEventOwners } from './usageLedger';
 
 export { attributeUsageToTurns } from './usageAttribution';
 
@@ -120,7 +121,11 @@ export class UsageEnricher {
 
     constructor(
         private context: vscode.ExtensionContext,
-        private applyUsage: (pending: PendingUsage, usage: TurnUsage) => Promise<void>
+        private applyUsage: (
+            pending: PendingUsage,
+            usage: TurnUsage,
+            eventKeys: string[]
+        ) => Promise<void>
     ) {}
 
     isEnabled(): boolean {
@@ -243,23 +248,33 @@ export class UsageEnricher {
                 attribution = attributeUsageToPending(
                     composerPending,
                     starts,
-                    byConversation.get(item.composerId) ?? []
+                    byConversation.get(item.composerId) ?? [],
+                    appliedUsageEventOwners(getRequestLedger(this.context), item.composerId)
                 );
                 attributionCache.set(item.composerId, attribution);
             }
 
             const usage = attribution.usageByKey.get(item.usageKey);
+            let applyFailed = false;
 
             if (usage) {
                 try {
-                    await this.applyUsage(item, usage);
+                    await this.applyUsage(
+                        item,
+                        usage,
+                        attribution.eventKeysByUsageKey.get(item.usageKey) ?? []
+                    );
                     continue;
                 } catch (error) {
+                    applyFailed = true;
                     debugLog('[usage] failed to patch span', String(error));
                 }
             }
 
-            if (attribution.settledKeys.has(item.usageKey)) {
+            if (!shouldKeepPendingUsage(
+                applyFailed,
+                attribution.settledKeys.has(item.usageKey)
+            )) {
                 continue;
             }
 

@@ -11,11 +11,17 @@ import {
     uuidV7Timestamp,
 } from '../src/cursor/requestIdentity';
 import { resolveAutomaticTraceCutoff } from '../src/cursor/stateMigration';
+import { deliverTracesWithClient, TraceDeliveryClient } from '../src/cursor/traceDelivery';
 import { aggregateTurnUsage, latestUsageModel } from '../src/cursor/usageAggregation';
 import { attributeUsageToPending } from '../src/cursor/usageAttribution';
-import { hasAppliedUsage, recordAppliedUsage } from '../src/cursor/usageLedger';
-import { mergePendingUsage } from '../src/cursor/usageQueue';
-import { PendingUsage, RequestLedger, TraceData, TurnUsage } from '../src/interface';
+import {
+    aggregateUsageWithRevision,
+    appliedUsageEventOwners,
+    hasAppliedUsage,
+    recordAppliedUsage,
+} from '../src/cursor/usageLedger';
+import { mergePendingUsage, shouldKeepPendingUsage } from '../src/cursor/usageQueue';
+import { ForkCopyState, PendingUsage, RequestLedger, TraceData, TurnUsage } from '../src/interface';
 
 const T0 = Date.parse('2026-01-10T19:57:00.000Z');
 const ORIGINAL = '11111111-1111-4111-8111-111111111111';
@@ -136,12 +142,12 @@ test('same-timestamp edits receive distinct revision usage and child identities'
     assert.equal(edited.revision, 2);
 });
 
-test('same-timestamp revisions partition usage events exactly once', () => {
+test('partitions events across revisions sharing a turn start', () => {
     const originalKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00001`;
     const editKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00002`;
     const attribution = attributeUsageToPending([
-        { usageKey: originalKey, turnStartMs: T0, turnEndMs: T0 + 1000 },
-        { usageKey: editKey, turnStartMs: T0, turnEndMs: T0 + 2000 },
+        { usageKey: originalKey, requestKey: 'request', turnStartMs: T0, turnEndMs: T0 + 1000 },
+        { usageKey: editKey, requestKey: 'request', turnStartMs: T0, turnEndMs: T0 + 2000 },
     ], [T0], [
         { timestamp: String(T0 + 1100), model: 'old-model', chargedCents: 10 },
         { timestamp: String(T0 + 2100), model: 'new-model', chargedCents: 20 },
@@ -155,12 +161,12 @@ test('same-timestamp revisions partition usage events exactly once', () => {
     );
 });
 
-test('ambiguous same-time events settle revisions without sharing cost', () => {
+test('settles revisions sharing a completion time without duplicating cost', () => {
     const originalKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00001`;
     const editKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00002`;
     const attribution = attributeUsageToPending([
-        { usageKey: originalKey, turnStartMs: T0, turnEndMs: T0 + 1000 },
-        { usageKey: editKey, turnStartMs: T0, turnEndMs: T0 + 1000 },
+        { usageKey: originalKey, requestKey: 'request', turnStartMs: T0, turnEndMs: T0 + 1000 },
+        { usageKey: editKey, requestKey: 'request', turnStartMs: T0, turnEndMs: T0 + 1000 },
     ], [T0], [
         { timestamp: String(T0 + 1100), model: 'new-model', chargedCents: 30 },
     ]);
@@ -168,6 +174,108 @@ test('ambiguous same-time events settle revisions without sharing cost', () => {
     assert.equal(attribution.usageByKey.has(originalKey), false);
     assert.equal(attribution.usageByKey.get(editKey)?.chargedCents, 30);
     assert.deepEqual([...attribution.settledKeys].sort(), [editKey, originalKey].sort());
+});
+
+test('same-start independent requests never settle or reuse each other events', () => {
+    const leftKey = `project\u0000left\u0000${ORIGINAL}\u0000${T0}\u00001`;
+    const rightKey = `project\u0000right\u0000${ORIGINAL}\u0000${T0}\u00001`;
+    const pending = [
+        { usageKey: leftKey, requestKey: 'left', turnStartMs: T0, turnEndMs: T0 + 1000 },
+        { usageKey: rightKey, requestKey: 'right', turnStartMs: T0, turnEndMs: T0 + 2000 },
+    ];
+    const firstEvent = { timestamp: String(T0 + 1100), model: 'left-model', chargedCents: 10 };
+    const first = attributeUsageToPending(pending, [T0], [firstEvent]);
+
+    assert.equal(first.usageByKey.get(leftKey)?.chargedCents, 10);
+    assert.equal(first.settledKeys.has(rightKey), false);
+
+    const claims = new Map<string, string>();
+    for (const [usageKey, eventKeys] of first.eventKeysByUsageKey) {
+        for (const eventKey of eventKeys) {
+            claims.set(eventKey, usageKey);
+        }
+    }
+    const second = attributeUsageToPending(
+        [pending[1]],
+        [T0],
+        [
+            firstEvent,
+            { timestamp: String(T0 + 2100), model: 'right-model', chargedCents: 20 },
+        ],
+        claims
+    );
+    assert.equal(second.usageByKey.get(rightKey)?.chargedCents, 20);
+});
+
+test('a failed usage patch remains pending even after attribution settles it', () => {
+    assert.equal(shouldKeepPendingUsage(true, true), true);
+    assert.equal(shouldKeepPendingUsage(false, true), false);
+
+    const delivery: ForkCopyState = {
+        traceId: 'trace',
+        rootSpanId: 'span',
+        status: 'pending',
+    };
+    const aggregate = aggregateUsageWithRevision(delivery, 'unacknowledged', usage('model', 10));
+    assert.equal(aggregate.chargedCents, 10);
+    assert.equal(hasAppliedUsage(delivery, 'unacknowledged'), false);
+});
+
+test('delivery awaits canonical and revision writes before flushing', async () => {
+    const canonical = prepareTraceForUpload(trace('canonical-delivery', ORIGINAL), {})!;
+    const revision = prepareTraceForUpload(trace('revision-delivery', ORIGINAL), {})!;
+    revision.upload_kind = 'edit_revision';
+    revision.revision = 2;
+    revision.end_time = undefined;
+
+    const calls = {
+        traces: [] as unknown[],
+        spans: [] as unknown[],
+        traceUpdates: [] as unknown[],
+        spanUpdates: [] as unknown[],
+        spanBatches: [] as unknown[],
+        flushes: 0,
+    };
+    const client: TraceDeliveryClient = {
+        api: {
+            traces: {
+                async updateTrace(_id, request) {
+                    calls.traceUpdates.push(request);
+                },
+            },
+            spans: {
+                async updateSpan(_id, request) {
+                    calls.spanUpdates.push(request);
+                },
+                async createSpans(request) {
+                    calls.spanBatches.push(request);
+                },
+            },
+        },
+        trace(data) {
+            calls.traces.push(data);
+            return {
+                span(spanData) {
+                    calls.spans.push(spanData);
+                },
+            };
+        },
+        async flush() {
+            calls.flushes += 1;
+        },
+    };
+
+    const logged = await deliverTracesWithClient(client, [canonical, revision]);
+
+    assert.equal(calls.traces.length, 1);
+    assert.equal(calls.spans.length, 2);
+    assert.equal(calls.traceUpdates.length, 1);
+    assert.equal(calls.spanUpdates.length, 1);
+    assert.equal(calls.spanBatches.length, 1);
+    assert.equal(calls.flushes, 1);
+    assert.equal(logged.length, 2);
+    assert.equal(logged[0].turnEndMs, new Date(canonical.end_time!).getTime());
+    assert.equal(logged[1].turnEndMs, undefined);
 });
 
 test('independent legacy turns with identical text and timestamps stay distinct', () => {
@@ -249,14 +357,15 @@ test('compacted usage keeps exact acknowledgements across queue-removal retries'
     const firstKey = `${active.request_key}\u0000${ORIGINAL}\u0000${T0}\u00001`;
     const editKey = `${active.request_key}\u0000${ORIGINAL}\u0000${T0}\u00002`;
 
-    recordAppliedUsage(entry, firstKey, usage('old-model', 10));
-    recordAppliedUsage(entry, editKey, usage('new-model', 20));
+    recordAppliedUsage(entry, firstKey, usage('old-model', 10), ['event-first']);
+    recordAppliedUsage(entry, editKey, usage('new-model', 20), ['event-edit']);
     entry.usageStatus = 'complete';
     compactRequestLedger(ledger, T0 + 1);
 
     assert.deepEqual(entry.appliedUsageKeys?.sort(), [editKey, firstKey].sort());
     assert.equal(hasAppliedUsage(entry, editKey), true);
     assert.equal(Object.values(entry.usageByRevision!)[0].chargedCents, 30);
+    assert.equal(appliedUsageEventOwners(ledger, ORIGINAL).get('event-edit'), editKey);
 
     const latestKey = `${active.request_key}\u0000${ORIGINAL}\u0000${T0}\u00003`;
     const aggregate = recordAppliedUsage(entry, latestKey, usage('latest-model', 5));

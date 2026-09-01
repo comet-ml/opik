@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import { PendingUsage, TurnUsage } from '../interface';
 
 // The usage event is stamped when the request completes, so it always falls
@@ -20,6 +22,7 @@ export interface UsageEventDisplay {
 
 export interface PendingUsageAttribution {
     usageByKey: Map<string, TurnUsage>;
+    eventKeysByUsageKey: Map<string, string[]>;
     settledKeys: Set<string>;
 }
 
@@ -85,6 +88,52 @@ function completionMarker(item: Pick<PendingUsage, 'turnStartMs' | 'turnEndMs'>)
         : item.turnStartMs;
 }
 
+type PendingAttributionItem = Pick<
+    PendingUsage,
+    'usageKey' | 'requestKey' | 'turnStartMs' | 'turnEndMs'
+>;
+
+function requestChain(item: PendingAttributionItem): string {
+    return item.requestKey || item.usageKey;
+}
+
+function compareCandidates(left: PendingAttributionItem, right: PendingAttributionItem): number {
+    return completionMarker(left) - completionMarker(right) ||
+        usageRevision(left.usageKey) - usageRevision(right.usageKey) ||
+        requestChain(left).localeCompare(requestChain(right)) ||
+        left.usageKey.localeCompare(right.usageKey);
+}
+
+function eventSignature(event: UsageEventDisplay): string {
+    return JSON.stringify([
+        event.timestamp,
+        event.model,
+        event.chargedCents ?? 0,
+        event.tokenUsage?.inputTokens ?? 0,
+        event.tokenUsage?.outputTokens ?? 0,
+        event.tokenUsage?.cacheReadTokens ?? 0,
+        event.tokenUsage?.cacheWriteTokens ?? 0,
+    ]);
+}
+
+function identifiedEvents(events: UsageEventDisplay[]): Array<{
+    event: UsageEventDisplay;
+    eventKey: string;
+}> {
+    const occurrences = new Map<string, number>();
+    return [...events]
+        .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+        .map(event => {
+            const signature = eventSignature(event);
+            const occurrence = occurrences.get(signature) ?? 0;
+            occurrences.set(signature, occurrence + 1);
+            const eventKey = createHash('sha256')
+                .update(`${signature}\u0000${occurrence}`)
+                .digest('hex');
+            return { event, eventKey };
+        });
+}
+
 /**
  * Partition Cursor usage events across pending revisions without sharing an
  * event between usage keys. Revision completion times split edits that retain
@@ -92,9 +141,10 @@ function completionMarker(item: Pick<PendingUsage, 'turnStartMs' | 'turnEndMs'>)
  * chronological assignment preserves the exact total cost once.
  */
 export function attributeUsageToPending(
-    pending: Pick<PendingUsage, 'usageKey' | 'turnStartMs' | 'turnEndMs'>[],
+    pending: PendingAttributionItem[],
     turnStartsMs: number[],
-    events: UsageEventDisplay[]
+    events: UsageEventDisplay[],
+    claimedEventOwners: ReadonlyMap<string, string> = new Map()
 ): PendingUsageAttribution {
     const starts = [...new Set([
         ...turnStartsMs,
@@ -107,18 +157,25 @@ export function attributeUsageToPending(
         candidatesByTurn.set(item.turnStartMs, candidates);
     }
     for (const candidates of candidatesByTurn.values()) {
-        candidates.sort((left, right) =>
-            completionMarker(left) - completionMarker(right) ||
-            usageRevision(left.usageKey) - usageRevision(right.usageKey) ||
-            left.usageKey.localeCompare(right.usageKey)
-        );
+        candidates.sort(compareCandidates);
     }
 
     const usageByKey = new Map<string, TurnUsage>();
-    const latestAttributedIndexByTurn = new Map<number, number>();
-    const sortedEvents = [...events].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+    const eventKeysByUsageKey = new Map<string, string[]>();
+    const pendingByUsageKey = new Map(pending.map(item => [item.usageKey, item]));
 
-    for (const event of sortedEvents) {
+    for (const { event, eventKey } of identifiedEvents(events)) {
+        const claimedOwner = claimedEventOwners.get(eventKey);
+        if (claimedOwner) {
+            if (pendingByUsageKey.has(claimedOwner)) {
+                accumulateUsage(usageByKey, claimedOwner, event);
+                const ownedKeys = eventKeysByUsageKey.get(claimedOwner) ?? [];
+                ownedKeys.push(eventKey);
+                eventKeysByUsageKey.set(claimedOwner, ownedKeys);
+            }
+            continue;
+        }
+
         const at = Number(event.timestamp) + CLOCK_GRACE_MS;
         let turnStart: number | undefined;
         for (const start of starts) {
@@ -142,24 +199,31 @@ export function attributeUsageToPending(
             continue;
         }
 
-        accumulateUsage(usageByKey, candidates[targetIndex].usageKey, event);
-        latestAttributedIndexByTurn.set(
-            turnStart,
-            Math.max(latestAttributedIndexByTurn.get(turnStart) ?? -1, targetIndex)
-        );
+        const usageKey = candidates[targetIndex].usageKey;
+        accumulateUsage(usageByKey, usageKey, event);
+        const ownedKeys = eventKeysByUsageKey.get(usageKey) ?? [];
+        ownedKeys.push(eventKey);
+        eventKeysByUsageKey.set(usageKey, ownedKeys);
     }
 
     const settledKeys = new Set<string>(usageByKey.keys());
-    // If a later revision already has an event, earlier pending revisions with
-    // no separately identifiable event cannot be allowed to consume the same
-    // bucket on a later tick. Settle them without adding cost; the later event
-    // already preserves the exact composer total once.
-    for (const [turnStart, latestIndex] of latestAttributedIndexByTurn) {
-        const candidates = candidatesByTurn.get(turnStart) ?? [];
-        for (let index = 0; index <= latestIndex; index++) {
-            settledKeys.add(candidates[index].usageKey);
+    // Collapse only earlier edits from the same durable request chain. An
+    // unrelated request sharing the same millisecond must remain pending for
+    // its own event instead of being silently settled.
+    for (const targetKey of usageByKey.keys()) {
+        const target = pendingByUsageKey.get(targetKey);
+        if (!target) {
+            continue;
+        }
+        const chain = (candidatesByTurn.get(target.turnStartMs) ?? [])
+            .filter(candidate => requestChain(candidate) === requestChain(target))
+            .sort(compareCandidates);
+        for (const candidate of chain) {
+            if (compareCandidates(candidate, target) <= 0) {
+                settledKeys.add(candidate.usageKey);
+            }
         }
     }
 
-    return { usageByKey, settledKeys };
+    return { usageByKey, eventKeysByUsageKey, settledKeys };
 }

@@ -1,4 +1,4 @@
-import { ForkCopyState, RequestLedgerEntry, TurnUsage } from '../interface';
+import { ForkCopyState, RequestLedger, RequestLedgerEntry, TurnUsage } from '../interface';
 import { aggregateTurnUsage } from './usageAggregation';
 
 export type UsageDelivery = ForkCopyState | RequestLedgerEntry;
@@ -44,10 +44,27 @@ export function hasAppliedUsage(delivery: UsageDelivery, usageKey: string): bool
         delivery.usageByRevision?.[COMPACTED_KEY] !== undefined;
 }
 
+export function recordUsageEventOwnership(
+    delivery: UsageDelivery,
+    usageKey: string,
+    eventKeys: string[]
+): boolean {
+    delivery.appliedUsageEvents ??= {};
+    let changed = false;
+    for (const eventKey of eventKeys) {
+        if (delivery.appliedUsageEvents[eventKey] !== usageKey) {
+            delivery.appliedUsageEvents[eventKey] = usageKey;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 export function recordAppliedUsage(
     delivery: UsageDelivery,
     usageKey: string,
-    usage: TurnUsage
+    usage: TurnUsage,
+    eventKeys: string[] = []
 ): TurnUsage {
     delivery.usageByRevision ??= {};
     delivery.appliedUsageKeys = [...new Set([
@@ -55,6 +72,34 @@ export function recordAppliedUsage(
         ...exactUsageKeys(delivery),
         usageKey,
     ])];
+    recordUsageEventOwnership(delivery, usageKey, eventKeys);
     delivery.usageByRevision[usageKey] = usage;
     return aggregateUsageByRevision(delivery.usageByRevision);
+}
+
+export function aggregateUsageWithRevision(
+    delivery: UsageDelivery,
+    usageKey: string,
+    usage: TurnUsage
+): TurnUsage {
+    return aggregateUsageByRevision({
+        ...(delivery.usageByRevision ?? {}),
+        [usageKey]: usage,
+    });
+}
+
+export function appliedUsageEventOwners(
+    ledger: RequestLedger,
+    composerId: string
+): Map<string, string> {
+    const owners = new Map<string, string>();
+    for (const entry of Object.values(ledger)) {
+        const delivery = entry.ownerComposerId === composerId
+            ? entry
+            : entry.forkCopies?.[composerId];
+        for (const [eventKey, usageKey] of Object.entries(delivery?.appliedUsageEvents ?? {})) {
+            owners.set(eventKey, usageKey);
+        }
+    }
+    return owners;
 }

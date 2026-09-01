@@ -12,7 +12,12 @@ import {
 import { captureException } from '../sentry';
 import { UsageEnricher } from './usage';
 import { acknowledgeUploadedTraces } from './requestIdentity';
-import { hasAppliedUsage, recordAppliedUsage } from './usageLedger';
+import {
+  aggregateUsageWithRevision,
+  hasAppliedUsage,
+  recordAppliedUsage,
+  recordUsageEventOwnership,
+} from './usageLedger';
 
 export class CursorService {
   private context: vscode.ExtensionContext;
@@ -22,7 +27,7 @@ export class CursorService {
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
-    this.usageEnricher = new UsageEnricher(context, async (pending, usage) => {
+    this.usageEnricher = new UsageEnricher(context, async (pending, usage, eventKeys) => {
       if (!this.apiKey) {
         throw new Error('No API key available to patch span usage');
       }
@@ -45,11 +50,17 @@ export class CursorService {
       // removal. Keep that retry local: the same usage key must never be added
       // to the aggregate or patched to Opik twice.
       if (hasAppliedUsage(delivery, pending.usageKey)) {
+        recordUsageEventOwnership(delivery, pending.usageKey, eventKeys);
+        entry.lastSeenAt = Date.now();
+        await updateRequestLedger(this.context, ledger);
         return;
       }
 
-      const aggregate = recordAppliedUsage(delivery, pending.usageKey, usage);
+      // Build the absolute root total without acknowledging this revision yet.
+      // If the remote patch fails, the ledger must stay eligible for retry.
+      const aggregate = aggregateUsageWithRevision(delivery, pending.usageKey, usage);
       await applyTurnUsage(this.apiKey, pending, aggregate);
+      recordAppliedUsage(delivery, pending.usageKey, usage, eventKeys);
       delivery.usageStatus = 'complete';
       entry.lastSeenAt = Date.now();
       await updateRequestLedger(this.context, ledger);

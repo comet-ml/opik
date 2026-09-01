@@ -94,6 +94,7 @@ export interface ForkCopyState {
     usageStatus?: UsageStatus;
     usageByRevision?: Record<string, TurnUsage>;
     appliedUsageKeys?: string[];
+    appliedUsageEvents?: Record<string, string>;
 }
 
 /**
@@ -116,6 +117,7 @@ export interface RequestLedgerEntry {
     canonicalRevision?: number;
     usageByRevision?: Record<string, TurnUsage>;
     appliedUsageKeys?: string[];
+    appliedUsageEvents?: Record<string, string>;
     forkCopies: Record<string, ForkCopyState>;
     lastSeenAt: number;
 }
