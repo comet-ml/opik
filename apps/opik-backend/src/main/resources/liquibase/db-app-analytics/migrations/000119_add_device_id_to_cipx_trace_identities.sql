@@ -6,7 +6,8 @@
 -- own metadata: the point of the column is an identity a client cannot forge. Plain String, not
 -- LowCardinality: one value per enrolled machine, so the cardinality grows with the fleet. Rows written by
 -- API-key callers (the Claude Code plugin lane, which keeps the shared key) carry '', as harness does for
--- traces predating it.
+-- traces predating it. Only this table stores it: cipx_spends and cipx_spend_blocks reach it by semijoin on
+-- trace_id, their documented join key since 000100.
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_trace_identities ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS device_id String DEFAULT '';
 
