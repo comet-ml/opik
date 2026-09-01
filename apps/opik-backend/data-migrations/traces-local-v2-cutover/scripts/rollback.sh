@@ -818,6 +818,11 @@ fi
 assert_topology
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
+    # BEFORE the promote, not after it. Both stages promote with an ON CLUSTER RENAME and then run the reverse replay;
+    # asserting afterwards would leave a half-done rollback on an unknown topology -- the original live, the successor
+    # parked, and the post-cutover deletes never re-applied, which is user-deleted traces resurrected -- with the stage
+    # no longer re-runnable because the tables have already been swapped.
+    assert_single_shard
     echo "NOTE: promoting the frozen backup now. Traces the successor accepted after cutover_start ($CUTOVER_START) will" >&2
     echo "      stop being live; recover them from the parked traces_post_rollback_backup (kept until finalize.sh) if needed." >&2
     echo "NOTE: the promote is a single ON CLUSTER RENAME of the live 'traces' — synchronous across the shard's replicas, but" >&2
@@ -851,16 +856,14 @@ case "$STAGE" in
     B)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
         run_file 000004_rollback_stage_b_exchange_back.sql
-        assert_single_shard
-    run_file 000004_rollback_reverse_replay.sql
+        run_file 000004_rollback_reverse_replay.sql
         verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
         ;;
     C)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
         run_file 000004_rollback_stage_c_promote_original.sql
-        assert_single_shard
-    run_file 000004_rollback_reverse_replay.sql
+        run_file 000004_rollback_reverse_replay.sql
         verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
         ;;
