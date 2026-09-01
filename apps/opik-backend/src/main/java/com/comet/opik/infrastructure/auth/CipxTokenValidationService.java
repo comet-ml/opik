@@ -12,6 +12,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -39,6 +40,7 @@ import java.util.Set;
 public class CipxTokenValidationService {
 
     private static final String VALIDATE_PATH = "/v1/private/ai-spend/devices/validate";
+    private static final String BEARER_PREFIX = "Bearer ";
     private static final String INVALID_TOKEN = "CIPX device token is not valid";
     private static final String VALIDATION_UNAVAILABLE = "CIPX device token validation is unavailable";
 
@@ -111,6 +113,7 @@ public class CipxTokenValidationService {
         try (Response response = client.target(target)
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + config.getServiceToken())
                 .post(Entity.json(new ValidateRequest(token, workspaceName)))) {
 
             if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {

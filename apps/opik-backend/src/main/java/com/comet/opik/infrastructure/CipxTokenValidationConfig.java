@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
@@ -29,16 +30,22 @@ public class CipxTokenValidationConfig {
     @Valid @JsonProperty
     private String url;
 
+    /** Shared service credential presented to the validator. Not a device token. */
+    @Valid @JsonProperty
+    @ToString.Exclude
+    private String serviceToken;
+
     /**
-     * Without an absolute http/https url the validator would post to a relative target and every CIPX-token
-     * request would fail at runtime, so a misconfigured deployment must not boot.
+     * Without an absolute http/https url the validator would post to a relative target, and without the service
+     * credential the validator would reject every call -- or, worse, answer an unauthenticated one and become a
+     * token oracle. Either way a misconfigured deployment must not boot.
      */
-    @AssertTrue(message = "cipxTokenValidation.url must be an absolute http(s) URL when cipxTokenValidation.enabled=true")
-    public boolean isUrlValidWhenEnabled() {
+    @AssertTrue(message = "cipxTokenValidation.url must be an absolute http(s) URL and cipxTokenValidation.serviceToken must be set when cipxTokenValidation.enabled=true")
+    public boolean isConfiguredWhenEnabled() {
         if (!enabled) {
             return true;
         }
-        if (StringUtils.isBlank(url)) {
+        if (StringUtils.isBlank(url) || StringUtils.isBlank(serviceToken)) {
             return false;
         }
         try {
