@@ -853,7 +853,7 @@ public class SpanDAO {
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
      * <p>
-     * Each {@code spans} id-range bound carries a parallel {@code toMonday(id_at)} bound: a strict consequence of the
+     * Each {@code spans} id-range bound carries a parallel {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} bound: a strict consequence of the
      * id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives from
      * {@code id} — that lets the planner prune partitions once {@code spans} is partitioned. The {@code page_wide}
      * re-read carries the same week bounds via the window it re-reads.
@@ -872,11 +872,11 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1050,11 +1050,11 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1100,9 +1100,9 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM page_ids)
-                <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
-                <if(last_received_span_id)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
+                <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(last_received_span_id)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
@@ -1158,9 +1158,9 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1243,9 +1243,9 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1284,7 +1284,7 @@ public class SpanDAO {
      * <p>
      * Filters on {@code trace_id} only. Unlike {@code TraceDAO}, the spans retention range is keyed on
      * {@code trace_id} while the future partition column {@code id_at} is MATERIALIZED from the span's own UUIDv7 id
-     * (migration 000105). A span's id can land in a later week than its {@code trace_id}, so a {@code toMonday(id_at)}
+     * (migration 000105). A span's id can land in a later week than its {@code trace_id}, so a {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))}
      * bound derived from the trace-id range would wrongly exclude valid candidates. No partition-pruning predicate is
      * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
      */
@@ -1464,9 +1464,9 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1608,9 +1608,9 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>

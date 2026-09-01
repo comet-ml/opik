@@ -533,7 +533,7 @@ class TraceServiceImpl implements TraceService {
      * Resolves every owning project for each id: a bounded fast pass, then an unbounded pass over only the ids the
      * bounded one leaves unresolved. Returns id -> owning projects; ids absent from the result have no live row.
      * <p>
-     * The bounded pass's {@code toMonday(id_at)} window can miss a row whose {@code id_at} is not monotonic in its id
+     * The bounded pass's {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} window can miss a row whose {@code id_at} is not monotonic in its id
      * (e.g. a wrapped timestamp, OPIK-7456), so the unbounded pass re-resolves the miss set - the bounded query is
      * never a delete's sole resolver. The resolver-query javadocs cover how each pass prunes.
      */
