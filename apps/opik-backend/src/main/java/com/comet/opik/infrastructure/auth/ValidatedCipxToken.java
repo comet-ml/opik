@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -19,12 +18,4 @@ public record ValidatedCipxToken(
         String workspaceId,
         String workspaceName,
         String deviceId) {
-
-    ValidatedToken toValidatedToken() {
-        return ValidatedToken.builder()
-                .userName(userName)
-                .workspaceId(workspaceId)
-                .workspaceName(workspaceName)
-                .build();
-    }
 }

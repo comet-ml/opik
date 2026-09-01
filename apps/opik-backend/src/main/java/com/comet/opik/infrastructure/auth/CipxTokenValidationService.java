@@ -22,6 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -30,9 +31,12 @@ import java.util.Set;
  * validated by asking it rather than verified locally. Nothing here does crypto, and revocation takes effect
  * within the credentials cache TTL because the registry is re-checked on every cold call.
  * <p>
- * Caches the <em>resolved credential</em> (user, workspace, quotas, permissions, device id) under the token,
- * mirroring the API-key path: a warm request is one cache read with no outbound call. Caching only the
- * validation response would leave every ingest batch from every enrolled machine hitting the react service.
+ * The validation response carries everything the request context needs, so the caller is resolved from it
+ * directly and the react service is not consulted. That is deliberate, not a shortcut: a device token names a
+ * machine, not a Comet user, so there is no user for the react service to authenticate.
+ * <p>
+ * Caches the resolved caller under the token, mirroring the API-key path, so a warm request is one cache read
+ * with no outbound call at all.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -43,6 +47,22 @@ public class CipxTokenValidationService {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String INVALID_TOKEN = "CIPX device token is not valid";
     private static final String VALIDATION_UNAVAILABLE = "CIPX device token validation is unavailable";
+    private static final String NOT_AN_INGEST_ENDPOINT = "CIPX device tokens are accepted on trace and span ingest only";
+
+    private static final String UUID_REGEX = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
+    /**
+     * The only endpoints a device token may reach: what the cipx shipper actually calls. This is the whole
+     * authorization for the credential -- resolving the caller from the validation response means no path or
+     * permission check happens anywhere else, so without an explicit allowlist a device token would
+     * authenticate for every {@code /v1/private/*} endpoint, reads and deletes included. Rejection is by this
+     * list, never by the absence of a binding. Shape follows {@code RemoteAuthService.PUBLIC_ENDPOINTS}: path
+     * regex to allowed methods.
+     */
+    private static final Map<String, Set<String>> INGEST_ENDPOINTS = Map.of(
+            "^/v1/private/spans/batch/?$", Set.of("POST", "PATCH"),
+            "^/v1/private/traces/?$", Set.of("POST"),
+            "^/v1/private/traces/" + UUID_REGEX + "/?$", Set.of("PATCH"));
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     private record ValidateRequest(String token, String workspaceName) {
@@ -51,30 +71,51 @@ public class CipxTokenValidationService {
     private final @NonNull Client client;
     private final @NonNull OpikConfiguration opikConfig;
     private final @NonNull CacheService cacheService;
-    private final @NonNull AuthService authService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     public void authenticate(@NonNull String token, String headerWorkspace, @NonNull ContextInfoHolder contextInfo) {
+        // Checked before the token is even validated, so a device token learns nothing from a non-ingest path
+        // and a misdirected request costs no outbound call.
+        if (!isIngestEndpoint(contextInfo)) {
+            log.info("Rejecting CIPX device token outside ingest, method: '{}', path: '{}'", contextInfo.method(),
+                    contextInfo.uriInfo().getRequestUri().getPath());
+            throw new ClientErrorException(NOT_AN_INGEST_ENDPOINT, Response.Status.FORBIDDEN);
+        }
+
         // A blank workspace header is allowed: cost-api resolves the workspace from the token itself, and only
         // rejects a non-blank header that disagrees.
         String requestWorkspaceName = StringUtils.defaultString(headerWorkspace);
-        List<String> requiredPermissions = contextInfo.requiredPermissions();
 
-        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, requestWorkspaceName,
-                requiredPermissions);
+        // No required permissions are passed: nothing verified any, so nothing may be cached as granted.
+        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, requestWorkspaceName, List.of());
         if (cached.isPresent()) {
             setCredentialIntoContext(cached.get(), requestWorkspaceName);
             return;
         }
 
         var validated = validate(token, requestWorkspaceName);
-        // The same seam the MCP OAuth branch uses: resolves quotas and permissions for the caller and fills the
-        // request context.
-        authService.authorizeOAuth(validated.toValidatedToken(), contextInfo);
-        requestContext.get().setCipxDeviceId(validated.deviceId());
-        cacheResolvedCredential(token, requestWorkspaceName, requiredPermissions, validated.deviceId());
+        var credentials = CacheService.AuthCredentials.builder()
+                .userName(validated.userName())
+                .workspaceId(validated.workspaceId())
+                .workspaceName(validated.workspaceName())
+                .quotas(List.of())
+                .permissions(List.of())
+                .deviceId(validated.deviceId())
+                .build();
+        setCredentialIntoContext(credentials, requestWorkspaceName);
+        cacheService.cache(token, requestWorkspaceName, List.of(), credentials);
     }
 
+    /**
+     * Fills the request context straight from the validation response.
+     * <p>
+     * <b>Quotas and permissions are deliberately empty.</b> A device token identifies a machine enrolled to an
+     * enterprise AI-Spend workspace, not a Comet user, so there is nobody for the react service to resolve a
+     * role or a quota for. Two consequences, both accepted rather than overlooked: {@code @UsageLimited} cannot
+     * trip for this credential, and {@code @RequiredPermissions} goes unverified. What bounds the credential
+     * instead is {@link #INGEST_ENDPOINTS} -- it may reach the four ingest endpoints and nothing else. Do not
+     * "fix" this by calling the react service: it has no user to authenticate here, and the call fails.
+     */
     private void setCredentialIntoContext(CacheService.AuthCredentials credentials, String fallbackWorkspaceName) {
         var context = requestContext.get();
         context.setUserName(credentials.userName());
@@ -85,25 +126,10 @@ public class CipxTokenValidationService {
         context.setCipxDeviceId(credentials.deviceId());
     }
 
-    /**
-     * Caches whatever the authorization left in the request context, so the warm path reproduces it exactly.
-     * A caller the authorization could not fully resolve is not cached: an entry missing either key cannot be
-     * read back, and the next request would rather pay for a fresh resolution than serve a partial one.
-     */
-    private void cacheResolvedCredential(String token, String requestWorkspaceName, List<String> requiredPermissions,
-            String deviceId) {
-        var context = requestContext.get();
-        if (StringUtils.isBlank(context.getUserName()) || StringUtils.isBlank(context.getWorkspaceId())) {
-            return;
-        }
-        cacheService.cache(token, requestWorkspaceName, requiredPermissions, CacheService.AuthCredentials.builder()
-                .userName(context.getUserName())
-                .workspaceId(context.getWorkspaceId())
-                .workspaceName(context.getWorkspaceName())
-                .quotas(context.getQuotas())
-                .permissions(List.copyOf(context.getPermissions()))
-                .deviceId(deviceId)
-                .build());
+    private boolean isIngestEndpoint(ContextInfoHolder contextInfo) {
+        String path = contextInfo.uriInfo().getRequestUri().getPath();
+        return INGEST_ENDPOINTS.entrySet().stream()
+                .anyMatch(entry -> path.matches(entry.getKey()) && entry.getValue().contains(contextInfo.method()));
     }
 
     private ValidatedCipxToken validate(String token, String workspaceName) {
