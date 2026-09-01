@@ -5,10 +5,11 @@
 # Compares the migrated data on the old-schema and new-schema tables, week by week (created_at), using a NORMALIZED
 # fingerprint so sentinel/precision differences (end_time NULL<->epoch, ttft NULL<->NaN, ns<->us) do not count as
 # changes. For each week it reads one (row count, checksum) verdict per side; a mismatch means that week's live, deduped
-# content differs. A differing window is then re-checked on the sorting key, which yields one of three outcomes: a real
-# MISMATCH, an OK superseded-version artifact, INCONCLUSIVE where a version tie left FINAL free to pick between rows
-# that differ, or UNCERTIFIABLE where that tie check could not be read at all. With --drill-down, any differing window is followed by a per-key
-# listing. Exits non-zero if any window mismatched OR could not be certified: a gate that cannot decide must not pass.
+# content differs. A differing window is then re-checked on the sorting key, which yields one of four verdicts: a real
+# MISMATCH; an OK superseded-version artifact; INCONCLUSIVE, where a version tie left FINAL free to pick between rows
+# that differ; or UNCERTIFIABLE, where that tie check could not be read at all. With --drill-down, any differing window
+# is followed by a per-key listing. Exits non-zero if any window mismatched OR could not be certified: a gate that
+# cannot decide must not pass.
 #
 # The compare and drill-down SQL are NOT duplicated here: both are read from db-app-analytics/000005_verify_migration.sql
 # (the single source, and the exact normalization the gate test asserts). See README "Verifying the migration".
@@ -154,9 +155,9 @@ confirm_keys_window() {
     clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block confirm-keys "$1" "$2")"
 }
 
-# Per side, how many keys in one window have more than one row sharing their newest last_updated_at — i.e. where FINAL
-# had no forced winner. Run ONLY when confirm-keys returned 0, because that is the only verdict whose soundness depends
-# on it; see the version-ties block for why it is a separate statement and an upper bound.
+# Per side, how many keys in one window carry MORE THAN ONE DISTINCT ROW at their newest last_updated_at — i.e. where
+# FINAL had to choose between rows that differ. Run ONLY when confirm-keys returned 0, because that is the only verdict
+# whose soundness depends on it; see the version-ties block for why it is a separate statement and an upper bound.
 version_ties_window() {
     clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block version-ties "$1" "$2")"
 }
@@ -262,8 +263,8 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
         else
             mismatches=$((mismatches + 1))
             log "MISMATCH week $week ($LO .. $HI): src_rows=$src_rows dst_rows=$dst_rows src_checksum=$src_checksum dst_checksum=$dst_checksum genuinely_differing_keys=$unresolved" >&2
-            log "  A version tie can also produce this: FINAL may pick different rows for a key whose newest" >&2
-            log "  last_updated_at is not unique, on tables whose part layouts differ. See the runbook's triage." >&2
+            log "  A version tie can also produce this: where a key's newest last_updated_at is carried by more than one" >&2
+            log "  DISTINCT row, FINAL may pick a different one per side, the part layouts differing. See the runbook's triage." >&2
         fi
         if [[ "$DRILL_DOWN" == "1" ]]; then
             log "  differing keys (key, src_hash, dst_hash; NULL = missing on that side):" >&2

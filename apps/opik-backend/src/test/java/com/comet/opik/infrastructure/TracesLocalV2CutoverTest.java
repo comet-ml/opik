@@ -168,12 +168,6 @@ class TracesLocalV2CutoverTest {
     private static final String PARKED_BACKUP = "traces_pre_cutover_backup_test_parked";
 
     /**
-     * The stored (non-materialized) columns the cutover copies, one per line. Both INSERT clauses are built from this
-     * list, and {@link #cutoverCopiesEveryBaseColumn()} asserts it equals the live base columns of {@code traces} — so a
-     * base column added by a future migration cannot be silently left uncopied (the fidelity fingerprint, which lists a
-     * fixed set, would not catch that on its own). A new column here without a matching SELECT entry fails arity at run.
-     */
-    /**
      * The {@code version-ties} aggregate, with its source relation as the parameter: per (key, version) how many
      * DISTINCT row contents there are, then the count at each key's newest version, then the keys where that exceeds one.
      * Shared so the table-backed helper and the literal-relation test exercise the same expression rather than separate
@@ -191,6 +185,12 @@ class TracesLocalV2CutoverTest {
             WHERE distinct_at_newest > 1
             """;
 
+    /**
+     * The stored (non-materialized) columns the cutover copies, one per line. Both INSERT clauses are built from this
+     * list, and {@link #cutoverCopiesEveryBaseColumn()} asserts it equals the live base columns of {@code traces} — so a
+     * base column added by a future migration cannot be silently left uncopied (the fidelity fingerprint, which lists a
+     * fixed set, would not catch that on its own). A new column here without a matching SELECT entry fails arity at run.
+     */
     private static final String COPIED_COLUMNS = """
             id,
             workspace_id,
@@ -1438,29 +1438,15 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Schema-drift guard. The cutover copies a fixed column list, and the fidelity fingerprint also lists fixed
-     * columns — so a base column added to {@code traces} by a future migration would be silently left uncopied, with no
-     * existing check failing. This asserts the cutover's {@link #COPIED_COLUMNS} equals the live stored columns of
-     * {@code traces}, and that {@code traces_local_v2} mirrors them plus only the {@code is_deleted} meta-column. Adding
-     * a stored column to either table fails this until it is added to {@code COPIED_COLUMNS} (and thus to the copy).
-     */
-    /**
-     * A {@code DateTime64} literal carrying no timezone is parsed in the SESSION's, while every column it meets is
-     * {@code DateTime64(n, 'UTC')} — so on a non-UTC session an unpinned literal silently means something else. An
-     * unpinned literal only diverges where the session is not UTC, so the session is set explicitly here. The backfill
-     * has two such literals and this pins both:
-     * <ul>
-     *   <li>the WINDOW bounds. The row is seeded an hour into the week, so a bound read in a westward zone starts the
-     *   window after it and the copy silently skips it — a hole in the migration, in the week the driver reported as
-     *   done;</li>
-     *   <li>the epoch SENTINEL the projection writes for an absent {@code end_time}. Unpinned it becomes a non-zero
-     *   instant, and nothing fails at write time: the rollback's sentinel repair matches epoch exactly, so it would
-     *   match nothing and report a clean table, while the fidelity compare normalizes an absent {@code end_time} to 0
-     *   and would instead flag every migrated row that had one.</li>
-     * </ul>
+     * The backfill's window bounds. A {@code DateTime64} literal carrying no timezone is parsed in the SESSION's, while
+     * every column it meets is {@code DateTime64(n, 'UTC')}, so the session is set explicitly here: an unpinned literal
+     * only diverges where it is not UTC. The row is seeded an hour into the week, so a bound read in a westward zone
+     * starts the window after it and the copy silently skips it — a hole in the migration, in the week the driver
+     * reported as done.
      *
-     * <p>The sentinel is read back as {@code toUnixTimestamp64Micro}, so the assertion cannot depend on the same
-     * parsing it exists to pin.
+     * <p>The row also carries no {@code end_time} and no {@code ttft}, so the projection's sentinels are asserted with
+     * it. Those are deliberately NOT timezone-pinned (see 000001's header), and {@code ttft}'s NaN sentinel has no
+     * timezone at all; both are here because a window test that copied the wrong columns would otherwise pass.
      */
     @Test
     void backfillIsUnaffectedByTheSessionTimezone() {
@@ -1472,17 +1458,12 @@ class TracesLocalV2CutoverTest {
 
         var copied = copiedRow(workspaceId, "absent-both");
         assertThat(copied.rows()).as("the week's window still selects the row").isEqualTo(1);
-        assertThat(copied.endTimeMicros()).as("epoch sentinel").isZero();
         assertThat(copied.ttftIsNaN()).as("NaN ttft sentinel").isTrue();
-        // duration is MATERIALIZED by the shipped DDL, whose "not ended yet" branch compares end_time against its own
-        // epoch literal. The sentinel the backfill wrote must satisfy that comparison, independently of the session.
-        assertThat(copied.durationIsNaN()).as("NaN duration, so the DDL's epoch literal matched the one written")
-                .isTrue();
     }
 
     /**
-     * The delta's own pair of unpinned-literal sites: it re-reads the source for everything touched at or after the
-     * anchor, on {@code created_at} OR {@code last_updated_at}. Both bounds parse the same value, so a westward session
+     * The delta's own window bounds: it re-reads the source for everything touched at or after the anchor, on
+     * {@code created_at} OR {@code last_updated_at}. Both bounds parse the same value, so a westward session
      * moves them together and the delta silently narrows to rows touched after the shifted instant. That loses exactly
      * the updates the delta exists to carry — those made while the backfill ran — and, unlike a missed deletion, they
      * are invisible to the fidelity compare once the successor holds a row for the key at all.
@@ -1582,7 +1563,7 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * The tie aggregate's POSITIVE branch: a key whose newest version is shared by more than one row is counted, and one
+     * The tie aggregate's POSITIVE branch: a key carrying more than one DISTINCT row at its newest version is counted, and one
      * whose newest version is unique is not, however many older versions it has.
      *
      * <p>Evaluated over a literal relation rather than a table, which is the only way this branch can be reached
@@ -1619,7 +1600,7 @@ class TracesLocalV2CutoverTest {
 
     /**
      * The {@code version-ties} block must not count a key merely because it has SEVERAL versions — only one whose NEWEST
-     * version is shared by more than one row. That distinction is the whole content of the aggregate: ranking by version
+     * version carries more than one DISTINCT row. That distinction is the whole content of the aggregate: ranking by version
      * rather than totalling rows. A key written twice with distinct {@code last_updated_at} exercises it, on both sides
      * of the copy, and is the case that must report zero.
      *
@@ -1656,6 +1637,13 @@ class TracesLocalV2CutoverTest {
                 .isZero();
     }
 
+    /**
+     * Schema-drift guard. The cutover copies a fixed column list, and the fidelity fingerprint also lists fixed
+     * columns — so a base column added to {@code traces} by a future migration would be silently left uncopied, with no
+     * existing check failing. This asserts the cutover's {@link #COPIED_COLUMNS} equals the live stored columns of
+     * {@code traces}, and that {@code traces_local_v2} mirrors them plus only the {@code is_deleted} meta-column. Adding
+     * a stored column to either table fails this until it is added to {@code COPIED_COLUMNS} (and thus to the copy).
+     */
     @Test
     void cutoverCopiesEveryBaseColumn() {
         var tracesBase = baseColumns("traces");
@@ -2341,22 +2329,15 @@ class TracesLocalV2CutoverTest {
     // --- query helpers -------------------------------------------------------------------------------------------
 
     /**
-     * Distinct keys in the live {@code traces} matching a raw predicate. No {@code FINAL}, matching the scope of the
-     * repair mutation and of the counts that gate it.
-     */
-    /**
-     * What the copy landed on the successor for one named row: whether it arrived at all, and the two denullified
-     * columns. {@code end_time} is read as microseconds since the epoch so the assertion needs no datetime literal of
-     * its own — it must not depend on the parsing it exists to pin. One query, so {@code any()} over a single-row match
-     * is that row; callers assert {@code rows} first, so an empty match cannot be mistaken for a value.
+     * What the copy landed on the successor for one named row: whether it arrived at all, and whether the projection
+     * wrote the NaN {@code ttft} sentinel. One query, so {@code any()} over a single-row match is that row; callers
+     * assert {@code rows} first, so an empty match cannot be mistaken for a value.
      */
     private CopiedRow copiedRow(String workspaceId, String name) {
         var sql = """
                 SELECT
                     count() AS rows,
-                    any(toUnixTimestamp64Micro(end_time)) AS end_time_micros,
-                    any(isNaN(ttft)) AS ttft_is_nan,
-                    any(isNaN(duration)) AS duration_is_nan
+                    any(isNaN(ttft)) AS ttft_is_nan
                 FROM traces_local_v2
                 WHERE workspace_id = :workspace_id AND name = :name
                 """;
@@ -2368,13 +2349,11 @@ class TracesLocalV2CutoverTest {
                                 .execute())
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> new CopiedRow(
                                 row.get("rows", Long.class),
-                                row.get("end_time_micros", Long.class),
-                                row.get("ttft_is_nan", Boolean.class),
-                                row.get("duration_is_nan", Boolean.class))))))
+                                row.get("ttft_is_nan", Boolean.class))))))
                 .block();
     }
 
-    private record CopiedRow(long rows, long endTimeMicros, boolean ttftIsNaN, boolean durationIsNaN) {
+    private record CopiedRow(long rows, boolean ttftIsNaN) {
     }
 
     /**
@@ -2391,6 +2370,12 @@ class TracesLocalV2CutoverTest {
                 statement -> statement.bind("since", backfillStart));
     }
 
+    /** Physical rows, without {@code FINAL}, so a test can assert that duplicates it relies on are actually present. */
+    private long rawRowCount(String table, String workspaceId) {
+        return scalar("SELECT count() AS c FROM %s WHERE workspace_id = :workspace_id".formatted(table),
+                statement -> statement.bind("workspace_id", workspaceId));
+    }
+
     /**
      * The {@code version-ties} block, reimplemented inline like the rest of this class: keys whose newest
      * {@code last_updated_at} is carried by more than one DISTINCT row content. Distinct content rather than row count
@@ -2404,12 +2389,6 @@ class TracesLocalV2CutoverTest {
      * reads both sides; that block selects candidates by the compare's window and sample predicates, while this
      * substitutes a per-workspace filter, the candidate set not being what is under test.
      */
-    /** Physical rows, without {@code FINAL}, so a test can assert that duplicates it relies on are actually present. */
-    private long rawRowCount(String table, String workspaceId) {
-        return scalar("SELECT count() AS c FROM %s WHERE workspace_id = :workspace_id".formatted(table),
-                statement -> statement.bind("workspace_id", workspaceId));
-    }
-
     private long versionTies(String table, Shape shape, String workspaceId) {
         var inner = """
                     SELECT

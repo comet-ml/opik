@@ -859,13 +859,18 @@ Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOU
 > raised across the board rather than per driver. The cost of a generous value is that a genuinely dead connection takes
 > that long to surface; for resumable, idempotent steps that is the better trade.
 
-### Timezones: every datetime literal pins `'UTC'`
+### Timezones: every window bound pins `'UTC'`
 
 The `traces` timestamp columns are `DateTime64(n, 'UTC')`, but a literal written without a timezone is parsed in the
-**server** timezone — so on a non-UTC server the same statement means something different. Every literal in the
+**server** timezone — so on a non-UTC server the same statement means something different. Every window bound in the
 reference SQL therefore pins `'UTC'`, and where a bound is a value a driver captured, **the capture pins it too**:
 `backfill.sh` mints `backfill_start` with `now64(6, 'UTC')` and `000002` reads it back as `'UTC'`; `exchange_and_wrap.sh`
 does the same for `cutover_start`.
+
+The epoch sentinel the projection writes for an absent `end_time` is the one literal left unpinned, deliberately. It is
+read back by the destination table's own `DEFAULT` and `duration` expression and by every `end_time` comparison in the
+application, all of which are unpinned; a sentinel that disagrees with its readers is worse than one that is uniformly
+offset. Correcting it means moving the schema and the application together, which is not this runbook's change to make.
 
 Both halves have to agree. Pinning only the literal reinterprets a server-local wall clock as UTC and moves the anchor
 by the server's offset — and a *later* anchor silently drops the rows written in the gap, which the delta and the
@@ -875,7 +880,7 @@ Because that failure is silent, the persisted anchor carries the claim rather th
 `--state-file` with an explicit ` UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
 attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
 rejected with the two ways out — re-record it with the marker if it is known to have been taken on a UTC server, or
-restart the copy cleanly. The same reasoning is why both drivers now print their anchors labelled `UTC`: the value an
+restart the copy cleanly. The same reasoning is why both drivers print their anchors labelled `UTC`: the value an
 operator pastes into `--backfill-start` or `--cutover-start` says which zone it is in — and those flags **require** the
 marker, so the guard cannot be bypassed by supplying the anchor by hand.
 
@@ -1476,13 +1481,19 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
 
-> **A version tie makes a window undecidable, and the gate now says so rather than guessing.** If a key carries two or
-> more rows with an identical `last_updated_at`, `FINAL` has no winner and the comparison for that key is arbitrary in
-> both directions. Where the re-check would otherwise call the window an artifact, `verify.sh` counts those keys per
-> side with the `version-ties` block and reports the window **INCONCLUSIVE**, exiting non-zero: not a mismatch, and
-> explicitly not a pass. Resolving one is still manual — see "a version tie" under
-> *Verifying after a rollback* for the version-set read, ignoring that section's `cutover_start` test, which has no
-> meaning before the `EXCHANGE`.
+> **A version tie makes a window undecidable, and the gate says so rather than guessing.** Where a key's newest
+> `last_updated_at` is carried by more than one **distinct** row, `FINAL` has no winner and the comparison for that key
+> is arbitrary in both directions. Where the re-check would otherwise call the window an artifact, `verify.sh` counts
+> those keys per side with the `version-ties` block and reports the window **INCONCLUSIVE**, exiting non-zero: not a
+> mismatch, and explicitly not a pass.
+>
+> Distinct content, not row count, is what makes this usable before the `EXCHANGE`: the delta re-copies every row the
+> backfill already wrote, and an unmodified row keeps its `last_updated_at`, so the successor legitimately holds several
+> identical rows at one version until a merge collapses them. Counting rows would report every healthy window as
+> undecidable. `FINAL` choosing between byte-identical rows changes no verdict, so only differing content counts.
+>
+> Resolving a real tie is still manual — see "a version tie" under *Verifying after a rollback* for the version-set
+> read, ignoring that section's `cutover_start` test, which has no meaning before the `EXCHANGE`.
 >
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in

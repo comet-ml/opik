@@ -549,9 +549,8 @@ preflight_capacity
 # first INSERT so it covers every write during the (long) backfill, and persisted to --state-file so a resumed run
 # reuses the ORIGINAL anchor. Re-minting a later anchor on resume would miss deletes that fired during the first run
 # against already-copied rows. The operator MUST record it (also saved to the state file).
-# The state file is READ and validated whenever it exists, dry run or not. Keeping the guard behind DRY_RUN would let a
-# full rehearsal pass while the real run aborts on the same file — the asymmetry this script rejects twice already, for
-# --max-partitions-per-insert-block and for the --mit assignment. Only minting and persisting need a real run.
+# The state file is READ and validated whenever it exists, dry run or not: keeping the guard behind DRY_RUN would let a
+# full rehearsal pass while the real run aborts on the same file. Only minting and persisting need a real run.
 if [[ -s "$STATE_FILE" ]]; then
     BACKFILL_START="$(cat "$STATE_FILE")"
     # The anchor is stored with an explicit ' UTC' marker and is only accepted with it. The marker is not
@@ -602,9 +601,8 @@ elif [[ "$DRY_RUN" != "1" ]]; then
         log "         ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --stage A" >&2
         exit 1
     fi
-    # Captured in UTC because step 2 parses it as UTC (see 000002). The two halves must agree: read back in the
-    # other timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
-    # This is also why the persisted anchor is only reusable by this same revision of the driver.
+    # Captured in UTC because step 2 parses it as UTC (see 000002). Both halves must agree: read back in another
+    # timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
     BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
     printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE"
     log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this, marker included, to step 2: 000002_delta_and_deletion_replay.sql)"

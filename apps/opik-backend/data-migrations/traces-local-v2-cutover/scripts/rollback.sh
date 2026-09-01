@@ -70,12 +70,13 @@
 #   --sentinel-repair-only    repair ONLY the epoch/NaN sentinels on the restored original (no promote, no replay, no
 #                             rename). Requires --confirm-flag-reverted. Mutually exclusive with --stage,
 #                             --reverse-replay-only and --unwrap-only.
-#   --confirm-single-shard    Accepted only with --sentinel-repair-only, the only mode that asserts the shard count.
-#                             Asserts this cluster has ONE shard where that count cannot be READ; it does NOT override a
-#                             count that came back greater than 1, which stays fatal. Use it only where
-#                             system.clusters / system.macros are genuinely unreadable and the topology is known, and
-#                             note that the repair's postcondition reads clusterAllReplicas('{cluster}', ...), which
-#                             needs the same macro — so it will not run either.
+#   --confirm-single-shard    Accepted with the modes that assert the shard count -- --sentinel-repair-only,
+#                             --reverse-replay-only, and stages B and C -- and rejected elsewhere. Asserts this cluster
+#                             has ONE shard where that count cannot be READ; it does NOT override a count that came back
+#                             greater than 1, which stays fatal. Use it only where system.clusters / system.macros are
+#                             genuinely unreadable and the topology is known, and note that the postcondition reads
+#                             clusterAllReplicas('{cluster}', ...), which needs the same macro -- so the mutation goes
+#                             ahead unverified and the driver exits non-zero.
 #   --confirm-flag-reverted   REQUIRED with --sentinel-repair-only, and accepted by no other mode. Asserts
 #                             databaseAnalyticsDataModel.traceColumnsNonNullable=false is live on EVERY backend
 #                             instance. The scripts cannot read backend config, and a repair run while any instance
@@ -207,8 +208,8 @@ if [[ "$CONFIRM_FLAG_WAS_LIVE" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" ]]; then
     exit 2
 fi
 # The flag is inert in modes that do not assert the shard count, and an operator who passed it there would reasonably
-# believe the topology had been taken into account. The modes that do assert it are the two that mutate a table the
-# driver is connected to: --sentinel-repair-only, --reverse-replay-only, and stages B and C, which run the reverse replay.
+# believe the topology had been taken into account. The modes that do assert it are those that mutate a table the driver
+# is connected to: --sentinel-repair-only, --reverse-replay-only, and stages B and C, which run the reverse replay.
 if [[ "$CONFIRM_SINGLE_SHARD" == "1" && "$SENTINEL_REPAIR_ONLY" != "1" && "$REVERSE_REPLAY_ONLY" != "1" \
       && "$STAGE" != "B" && "$STAGE" != "C" ]]; then
     echo "ERROR: --confirm-single-shard applies to --sentinel-repair-only, --reverse-replay-only and stages B and C," >&2
@@ -399,9 +400,9 @@ assert_post_promote_state() {
 # each mutate only the shard they are connected to — deliberately not ON CLUSTER, so the change travels by replication,
 # which spans a shard's replicas and not other shards — while each has a postcondition reading clusterAllReplicas, which
 # spans every shard. On more than one shard those scopes disagree: the mutation fixes one shard and the check keeps
-# failing, after work that could not have satisfied it. Refuse up front instead; the wasted work is the point, not the
-# confusing verdict. For the reverse replay the failure is worse than a confusing verdict, because the rows left
-# unmasked on the other shards are user-deleted traces resurrected by the rollback.
+# failing, after work that could not have satisfied it. Refusing up front avoids the wasted rewrite, not merely the
+# confusing verdict. For the reverse replay the stakes are higher still: the rows left unmasked on the other shards are
+# user-deleted traces that the rollback has resurrected.
 assert_single_shard() {
     local shards
     shards="$(ch "SELECT uniqExact(shard_num) FROM system.clusters
