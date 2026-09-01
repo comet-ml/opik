@@ -6,7 +6,7 @@ package com.comet.opik.domain;
  * aggregation; the only difference is the project predicate, which each DAO selects by setting the matching
  * StringTemplate flag, so both DAOs stay in sync when the CTE changes.
  * <p>
- * Each {@code id}-range bound on the {@code spans} scan carries a parallel {@code toMonday(id_at)} bound: a strict
+ * Each {@code id}-range bound on the {@code spans} scan carries a parallel {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} bound: a strict
  * consequence of the id-range that scans the same rows but engages weekly-partition pruning once {@code spans} is
  * partitioned, which the planner can't infer through {@code UUIDv7ToDateTime}.
  */
@@ -124,9 +124,9 @@ final class SpanMetricsQueries {
                     WHERE workspace_id = :workspace_id
                     AND project_id IN :project_ids
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>
                     AND id in (
