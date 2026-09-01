@@ -75,6 +75,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILE="$SCRIPT_DIR/db-app-analytics/000003_exchange_and_wrap.sql"
 DELTA_SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sql"
+# The deletion-replay block of 000002 is templated on the table names (opik#8092) so delta_replay.sh can also run
+# AFTER the swap. This driver only ever renders that block BEFORE the EXCHANGE — run_final_deletion_replay is called
+# once cutover_start is captured and before run_block exchange — so the names here are the pre-swap ones, the same
+# fixed names 000003's own EXCHANGE/RENAME statements carry. Bound as constants rather than exposed as flags: the
+# block is one fixed step of this driver, not a parameter of it.
+DELTA_OLD_TABLE="traces"
+DELTA_NEW_TABLE="traces_local_v2"
 
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
@@ -283,6 +290,21 @@ else
     assert_replication_settled
 fi
 
+# No placeholder may survive into the SQL this driver sends. Both blocks it renders live in files it does not own —
+# 000003 here, and the deletion-replay block of 000002, which it shares with delta_replay.sh — so a ${...} added
+# there without a matching substitution added HERE reaches the server as a literal and fails mid-cutover. The
+# reference SQL's own header keeps a hand-maintained placeholder inventory; a hand-maintained list drifts, so this
+# checks the rendered text instead of trusting it. $2 names the block, for diagnostics.
+assert_no_placeholder() {
+    if grep -qE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' <<<"$1"; then
+        echo "ERROR: unsubstituted placeholder(s) survive in the rendered '$2' SQL:" >&2
+        grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' <<<"$1" | sort -u | sed 's/^/       /' >&2
+        echo "       Refusing to send SQL containing a literal placeholder. Add the missing substitution to this" >&2
+        echo "       driver (delta_replay.sh renders the same 000002 block and needs it too)." >&2
+        exit 2
+    fi
+}
+
 # Extract one `-- >>> BEGIN <name>` .. `-- >>> END <name>` block from the reference SQL (exact-line markers).
 extract() {
     awk -v begin="-- >>> BEGIN $1" -v end="-- >>> END $1" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$SQL_FILE"
@@ -292,6 +314,7 @@ run_block() {
     local sql
     sql="$(extract "$1")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    assert_no_placeholder "$sql" "$1"
     # Each ON CLUSTER DDL in the block emits one row per host (host, port, status, error, hosts_remaining,
     # hosts_active); status 0 with an empty error means that host applied it. Labelled so the rows are not mistaken for
     # output of the preceding step (e.g. the final deletion replay).
@@ -309,7 +332,10 @@ run_final_deletion_replay() {
     local sql
     sql="$(awk -v begin="-- >>> BEGIN deletion-replay" -v end="-- >>> END deletion-replay" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$DELTA_SQL_FILE")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${OLD_TABLE}'/$DELTA_OLD_TABLE}"
+    sql="${sql//'${NEW_TABLE}'/$DELTA_NEW_TABLE}"
     sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
+    assert_no_placeholder "$sql" "deletion-replay"
     # --time prints the statement's elapsed seconds to stderr (a bare --query prints nothing). This replay sits inside
     # the final-delta -> EXCHANGE gap the buffer hold has to cover, so its wall time is the number to record.
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --time --multiquery --query "$sql"

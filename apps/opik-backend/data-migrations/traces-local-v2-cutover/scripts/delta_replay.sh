@@ -26,7 +26,15 @@
 #                             post-swap catch-up is `--old-table traces_pre_cutover_backup --new-table traces`. Without
 #                             these the script can only ever run pre-EXCHANGE: it hardcoded both names, so after the swap
 #                             it would read the successor and insert into a table that no longer exists.
-#   --new-table NAME           new-schema destination to write to. Default traces_local_v2. Same swap applies.
+#   --new-table NAME           new-schema destination to write to. Default traces_local_v2. Same swap applies, with one
+#                             exception: ONCE THE DISTRIBUTED WRAP IS APPLIED (exchange_and_wrap.sh --with-wrap or
+#                             --wrap-only) `traces` is a Distributed wrapper over `traces_local`, which accepts the
+#                             delta INSERT but REJECTS the deletion replay's lightweight DELETE ("DELETE query is not
+#                             supported", code 36) — so a post-wrap catch-up aimed at `traces` would write the delta
+#                             and then fail, leaving itself half-applied. Post-wrap the destination is the LOCAL
+#                             table: `--new-table traces_local`. The driver resolves the destination's engine before
+#                             it writes anything and refuses a non-MergeTree destination, so this is enforced rather
+#                             than merely documented.
 #                             `verify.sh` has carried these two flags from the start; this brings the delta into line, so
 #                             the rows a final delta leaves behind (everything written while it ran) and the deletions
 #                             deferred past the swap both have a vehicle.
@@ -203,6 +211,45 @@ if grep -qF '${MAX_INSERT_THREADS}' <<<"$mit_masked"; then
     exit 2
 fi
 # <<< END max_insert_threads rendering
+# Generic post-render guard: NO placeholder may survive into an executable line. The reference SQL's header keeps a
+# hand-maintained inventory of the placeholders this driver substitutes ("it handles all five placeholders below,
+# listed so a new one is never missed"), and a hand-maintained list drifts — a ${...} added to the SQL without a
+# matching substitution here would otherwise reach the server as a literal and fail mid-cutover. This makes that
+# inventory a check rather than a promise, and generalises the MAX_INSERT_THREADS-specific post-condition above to
+# every placeholder. Comment-masked, because the header necessarily writes ${...} in prose (and the batching
+# instructions in step 3 tell the operator to grep for exactly that).
+render_masked="$(mit_mask_comments "$sql" || true)"
+if grep -qE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' <<<"$render_masked"; then
+    echo "ERROR: unsubstituted placeholder(s) survive in executable lines of $SQL_FILE after rendering:" >&2
+    grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' <<<"$render_masked" | sort -u | sed 's/^/       /' >&2
+    echo "       Refusing to send SQL containing a literal placeholder. Add the substitution to this driver — and to" >&2
+    echo "       exchange_and_wrap.sh, which renders the deletion-replay block of the same file." >&2
+    exit 2
+fi
+# Pre-flight, BEFORE the first write: the destination must accept BOTH statements this driver sends. The delta
+# INSERT works against any writable engine, but the deletion replay is a lightweight DELETE and only the MergeTree
+# family supports one. After the Distributed wrap, `traces` is a Distributed wrapper over `traces_local`: the INSERT
+# would land and the DELETE would then fail with "DELETE query is not supported" (code 36), leaving the catch-up
+# half-applied — the delta written, the deferred deletions not. Re-running does not repair that by itself, because
+# the DELETE keeps failing until the destination is corrected. Positive match on the MergeTree family, so every
+# other non-mutable engine (Distributed, Buffer, Merge, Null, a view) is refused too.
+dest_engine="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:delta_replay:destination_engine' --query "SELECT engine FROM system.tables WHERE database = '$DATABASE' AND name = '$NEW_TABLE'")"
+if [[ -z "$dest_engine" ]]; then
+    echo "ERROR: destination '$DATABASE.$NEW_TABLE' does not exist on this instance. Pass --new-table for whatever" >&2
+    echo "       holds the new-schema data here: pre-EXCHANGE 'traces_local_v2', post-EXCHANGE 'traces'," >&2
+    echo "       post-wrap 'traces_local'." >&2
+    exit 1
+fi
+if [[ "$dest_engine" != *MergeTree ]]; then
+    echo "ERROR: destination '$DATABASE.$NEW_TABLE' has engine '$dest_engine'. The deletion replay is a lightweight" >&2
+    echo "       DELETE and only the MergeTree family supports one, so the delta INSERT would succeed and the replay" >&2
+    echo "       would then fail, leaving this catch-up half-applied. Refusing before anything is written." >&2
+    if [[ "$dest_engine" == "Distributed" ]]; then
+        echo "       'traces' is the Distributed wrap over 'traces_local'; re-run with --new-table traces_local." >&2
+    fi
+    exit 1
+fi
+
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
 # --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
 # the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.
