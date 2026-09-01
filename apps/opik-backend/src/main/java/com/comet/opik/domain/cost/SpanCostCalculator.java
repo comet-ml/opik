@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 @UtilityClass
@@ -14,6 +15,14 @@ class SpanCostCalculator {
     // OTel GenAI semantic convention keys (bare, without original_usage. prefix)
     private static final String CACHE_READ_INPUT_TOKENS_KEY = "cache_read_input_tokens";
     private static final String CACHE_CREATION_INPUT_TOKENS_KEY = "cache_creation_input_tokens";
+    private static final String CACHE_READ_INPUT_TOKENS_OTEL_KEY = "cache_read.input_tokens";
+    private static final String CACHE_CREATION_INPUT_TOKENS_OTEL_KEY = "cache_creation.input_tokens";
+    private static final List<String> OPENAI_CACHE_READ_USAGE_KEYS = List.of(
+            "original_usage.prompt_tokens_details.cached_tokens",
+            "original_usage.input_tokens_details.cached_tokens",
+            "prompt_tokens_details.cached_tokens",
+            CACHE_READ_INPUT_TOKENS_KEY,
+            CACHE_READ_INPUT_TOKENS_OTEL_KEY);
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
         int promptTokens = usage.getOrDefault("prompt_tokens", 0);
@@ -59,9 +68,7 @@ class SpanCostCalculator {
         int totalPromptTokens = inputTokens;
 
         // Get the cached read input tokens; fall back to OTel bare key for LiteLLM/OTel spans
-        int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens",
-                usage.getOrDefault("original_usage.input_tokens_details.cached_tokens",
-                        usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0)));
+        int cachedReadInputTokens = firstPositiveUsageValue(usage, OPENAI_CACHE_READ_USAGE_KEYS);
 
         // Audio input tokens (OpenAI realtime models like gpt-4o-realtime-preview, gpt-realtime)
         // are billed at a separate rate when the model publishes input_cost_per_audio_token.
@@ -115,6 +122,36 @@ class SpanCostCalculator {
                 .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
                 .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
                         .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+    }
+
+    private static int firstPositiveUsageValue(Map<String, Integer> usage, List<String> keys) {
+        for (String key : keys) {
+            Integer value = usage.get(key);
+            if (value != null && value > 0) {
+                return value;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Calculates cost for the OpenTelemetry GenAI usage shape, where cache buckets are included in
+     * {@code prompt_tokens} and reported again as nested cache usage keys.
+     */
+    public static BigDecimal textGenerationWithCacheCostOtel(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+        int inputTokens = usage.getOrDefault("prompt_tokens", 0);
+        int outputTokens = usage.getOrDefault("completion_tokens", 0);
+        int cacheReadInputTokens = usage.getOrDefault(CACHE_READ_INPUT_TOKENS_OTEL_KEY, 0);
+        int cacheCreationInputTokens = usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_OTEL_KEY, 0);
+        int nonCachedInputTokens = Math.max(0, inputTokens - cacheReadInputTokens - cacheCreationInputTokens);
+
+        return modelPrice.effectiveInputPrice(inputTokens).multiply(BigDecimal.valueOf(nonCachedInputTokens))
+                .add(modelPrice.effectiveOutputPrice(inputTokens).multiply(BigDecimal.valueOf(outputTokens)))
+                .add(modelPrice.effectiveCacheReadInputTokenPrice(inputTokens)
+                        .multiply(BigDecimal.valueOf(cacheReadInputTokens)))
+                .add(modelPrice.effectiveCacheCreationInputTokenPrice(inputTokens)
+                        .multiply(BigDecimal.valueOf(cacheCreationInputTokens)));
     }
 
     public static BigDecimal textGenerationWithCacheCostAnthropic(@NonNull ModelPrice modelPrice,
@@ -185,9 +222,11 @@ class SpanCostCalculator {
         int inputTokens = usage.getOrDefault(inputTokensKey, usage.getOrDefault("prompt_tokens", 0));
         int outputTokens = usage.getOrDefault(outputTokensKey, usage.getOrDefault("completion_tokens", 0));
         int cacheCreationInputTokens = usage.getOrDefault(cacheCreationInputTokensKey,
-                usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_KEY, 0));
+                usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_KEY,
+                        usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_OTEL_KEY, 0)));
         int cacheReadInputTokens = usage.getOrDefault(cacheReadInputTokensKey,
-                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0));
+                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY,
+                        usage.getOrDefault(CACHE_READ_INPUT_TOKENS_OTEL_KEY, 0)));
 
         // Whole-prompt tier check: in the Anthropic/Bedrock shape the inputTokensKey value EXCLUDES
         // cached tokens, so the full prompt size for tier classification is input + both cache buckets.

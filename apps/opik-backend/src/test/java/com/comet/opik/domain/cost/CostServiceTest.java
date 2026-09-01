@@ -38,6 +38,139 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    @Test
+    void calculateCostUsesUsageShapeWhenProviderCacheCalculatorDoesNotMatch() {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 800,
+                "original_usage.output_tokens", 100,
+                "original_usage.cache_read_input_tokens", 200,
+                "original_usage.cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // Anthropic-style usage keeps cached tokens separate from input_tokens. gpt-4o pricing is
+        // 800 * 0.0000025 + 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
+    void calculateCostFallsBackForAmbiguousBareCacheShape() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 800,
+                "completion_tokens", 100,
+                "cache_read_input_tokens", 200,
+                "cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // Bare cache keys do not identify whether prompt_tokens includes the cached buckets. The
+        // OpenAI provider fallback uses the bare cache-read value and leaves the creation bucket
+        // unclassified: 600 * 0.0000025 + 100 * 0.00001 + 200 * 0.00000125 = 0.00275.
+        assertThat(cost).isEqualByComparingTo("0.00275");
+    }
+
+    @Test
+    void calculateCostUsesOpenAICalculatorForOpenAIUsageShape() {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.prompt_tokens", 800,
+                "original_usage.completion_tokens", 100,
+                "original_usage.prompt_tokens_details.cached_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        // OpenAI-style usage includes cached tokens in prompt_tokens. 600 * 0.000001 +
+        // 100 * 0.000005 + 200 * 0.0000001 = 0.00112.
+        assertThat(cost).isEqualByComparingTo("0.00112");
+    }
+
+    @Test
+    void calculateCostUsesBareOpenAICacheUsageKey() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 100,
+                "prompt_tokens_details.cached_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // The bare OpenAI usage shape includes cached tokens in prompt_tokens. 800 * 0.0000025 +
+        // 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
+    void calculateCostUsesOpenAICalculatorForResponsesCacheUsageShape() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 100,
+                "original_usage.input_tokens_details.cached_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // Responses API usage includes cached tokens in prompt_tokens. 800 * 0.0000025 +
+        // 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
+    void calculateCostUsesIncludedCacheCalculatorForNestedOtelUsageShape() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 100,
+                "cache_read.input_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // OTel input_tokens includes cached input. Only 800 prompt tokens are billed at the
+        // regular rate: 800 * 0.0000025 + 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
+    void calculateCostUsesIncludedCacheCalculatorForNestedOtelCreationShape() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 100,
+                "cache_read.input_tokens", 200,
+                "cache_creation.input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        // OTel input_tokens includes both cache buckets: 750 * 0.000001 + 100 * 0.000005 +
+        // 200 * 0.0000001 + 50 * 0.00000125 = 0.0013325.
+        assertThat(cost).isEqualByComparingTo("0.0013325");
+    }
+
+    @Test
+    void calculateCostFallsBackForInconsistentNestedOtelCacheUsage() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 100,
+                "completion_tokens", 10,
+                "cache_read.input_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        // The cache marker cannot describe an inclusive cache bucket when it exceeds the prompt
+        // total. Fall back to the provider calculator: 100 * 0.000001 + 10 * 0.000005
+        // + 200 * 0.0000001 = 0.00017.
+        assertThat(cost).isEqualByComparingTo("0.00017");
+    }
+
+    @Test
+    void calculateCostFallsBackToProviderCalculatorForMixedUsageShapes() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 100,
+                "cache_read.input_tokens", 200,
+                "original_usage.prompt_tokens_details.cached_tokens", 100);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // The nested OTel key and OpenAI cached_tokens key conflict. The OpenAI provider fallback
+        // uses its explicit original_usage value: 900 * 0.0000025 + 100 * 0.00001 +
+        // 100 * 0.00000125 = 0.003375.
+        assertThat(cost).isEqualByComparingTo("0.003375");
+    }
+
     /**
      * Covers every branch of the new audio-token handling in
      * {@link SpanCostCalculator#textGenerationCost}:

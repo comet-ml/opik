@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 @Slf4j
@@ -89,6 +90,34 @@ public class CostService {
                     Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
                     Map.entry("gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle),
                     Map.entry("vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic));
+
+    private static final Set<String> OTEL_INCLUDED_CACHE_USAGE_KEYS = Set.of(
+            "cache_read.input_tokens",
+            "cache_creation.input_tokens");
+    private static final Set<String> ANTHROPIC_USAGE_KEYS = Set.of(
+            "original_usage.cache_read_input_tokens",
+            "original_usage.cache_creation_input_tokens");
+    private static final Set<String> BEDROCK_USAGE_KEYS = Set.of(
+            "original_usage.cacheReadInputTokens",
+            "original_usage.cacheWriteInputTokens");
+    private static final Set<String> GOOGLE_USAGE_KEYS = Set.of(
+            "original_usage.cached_content_token_count");
+    private static final Set<String> OPENAI_USAGE_KEYS = Set.of(
+            "original_usage.prompt_tokens_details.cached_tokens",
+            "original_usage.input_tokens_details.cached_tokens",
+            "prompt_tokens_details.cached_tokens");
+    private static final List<String> ANTHROPIC_INPUT_USAGE_KEYS = List.of(
+            "original_usage.input_tokens",
+            "prompt_tokens");
+    private static final List<String> BEDROCK_INPUT_USAGE_KEYS = List.of(
+            "original_usage.inputTokens",
+            "prompt_tokens");
+    private static final List<String> GOOGLE_INPUT_USAGE_KEYS = List.of(
+            "original_usage.prompt_token_count",
+            "prompt_tokens");
+    private static final List<String> OPENAI_INPUT_USAGE_KEYS = List.of(
+            "original_usage.prompt_tokens",
+            "prompt_tokens");
 
     static {
         try {
@@ -565,7 +594,10 @@ public class CostService {
         }
 
         if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
-            return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+            BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> providerCalculator = PROVIDERS_CACHE_COST_CALCULATOR
+                    .getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+
+            return (modelPrice, usage) -> calculateCacheCostByUsageShape(modelPrice, usage, providerCalculator);
         }
 
         if (isPositive(inputPrice) || isPositive(outputPrice)) {
@@ -573,6 +605,168 @@ public class CostService {
         }
 
         return SpanCostCalculator::defaultCost;
+    }
+
+    private static BigDecimal calculateCacheCostByUsageShape(
+            ModelPrice modelPrice,
+            Map<String, Integer> usage,
+            BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> providerCalculator) {
+
+        CacheUsageShape shape = findSingleCacheUsageShape(usage);
+        if (shape != null) {
+            return switch (shape) {
+                case OTEL -> SpanCostCalculator.textGenerationWithCacheCostOtel(modelPrice, usage);
+                case ANTHROPIC -> SpanCostCalculator.textGenerationWithCacheCostAnthropic(modelPrice, usage);
+                case BEDROCK -> SpanCostCalculator.textGenerationWithCacheCostBedrock(modelPrice, usage);
+                case GOOGLE -> SpanCostCalculator.textGenerationWithCacheCostGoogle(modelPrice, usage);
+                case OPENAI -> SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice, usage);
+            };
+        }
+
+        // Payloads with no valid, unambiguous shape remain on the provider calculator. This covers
+        // bare cache keys, inconsistent cache totals, and mixed-provider maps.
+        return providerCalculator.apply(modelPrice, usage);
+    }
+
+    private static CacheUsageShape findSingleCacheUsageShape(Map<String, Integer> usage) {
+        CacheUsageShape match = null;
+
+        for (CacheUsageShape shape : CacheUsageShape.values()) {
+            if (containsAnyUsageKey(usage, usageKeys(shape))) {
+                if (!isValidUsageShape(usage, shape) || match != null) {
+                    return null;
+                }
+                match = shape;
+            }
+        }
+
+        return match;
+    }
+
+    private static Set<String> usageKeys(CacheUsageShape shape) {
+        return switch (shape) {
+            case OTEL -> OTEL_INCLUDED_CACHE_USAGE_KEYS;
+            case ANTHROPIC -> ANTHROPIC_USAGE_KEYS;
+            case BEDROCK -> BEDROCK_USAGE_KEYS;
+            case GOOGLE -> GOOGLE_USAGE_KEYS;
+            case OPENAI -> OPENAI_USAGE_KEYS;
+        };
+    }
+
+    private static boolean isValidUsageShape(Map<String, Integer> usage, CacheUsageShape shape) {
+        return switch (shape) {
+            case OTEL -> isValidOtelUsageShape(usage);
+            case ANTHROPIC -> isValidSeparatedCacheUsageShape(usage, ANTHROPIC_INPUT_USAGE_KEYS,
+                    ANTHROPIC_USAGE_KEYS);
+            case BEDROCK -> isValidSeparatedCacheUsageShape(usage, BEDROCK_INPUT_USAGE_KEYS,
+                    BEDROCK_USAGE_KEYS);
+            case GOOGLE -> isValidInclusiveCacheUsageShape(usage, GOOGLE_INPUT_USAGE_KEYS, GOOGLE_USAGE_KEYS);
+            case OPENAI -> isValidInclusiveCacheUsageShape(usage, OPENAI_INPUT_USAGE_KEYS, OPENAI_USAGE_KEYS);
+        };
+    }
+
+    private static boolean isValidOtelUsageShape(Map<String, Integer> usage) {
+        Integer inputTokens = usage.get("prompt_tokens");
+        if (!isNonNegative(inputTokens)) {
+            return false;
+        }
+
+        long cacheTokens = 0;
+        boolean hasPositiveCacheTokens = false;
+        for (String key : OTEL_INCLUDED_CACHE_USAGE_KEYS) {
+            if (usage.containsKey(key)) {
+                Integer value = usage.get(key);
+                if (!isNonNegative(value)) {
+                    return false;
+                }
+                cacheTokens += value;
+                hasPositiveCacheTokens |= value > 0;
+            }
+        }
+
+        return hasPositiveCacheTokens && cacheTokens <= inputTokens;
+    }
+
+    private static boolean isValidSeparatedCacheUsageShape(Map<String, Integer> usage,
+            List<String> inputKeys, Set<String> cacheKeys) {
+        if (!isNonNegative(firstUsageValue(usage, inputKeys))) {
+            return false;
+        }
+
+        return hasNonNegativePositiveCacheValue(usage, cacheKeys);
+    }
+
+    private static boolean isValidInclusiveCacheUsageShape(Map<String, Integer> usage,
+            List<String> inputKeys, Set<String> cacheKeys) {
+        Integer inputTokens = firstUsageValue(usage, inputKeys);
+        if (!isNonNegative(inputTokens)) {
+            return false;
+        }
+
+        long cacheValue = 0;
+        boolean hasPositiveCacheValue = false;
+        for (String key : cacheKeys) {
+            if (usage.containsKey(key)) {
+                Integer value = usage.get(key);
+                if (!isNonNegative(value)) {
+                    return false;
+                }
+                if (value > 0) {
+                    hasPositiveCacheValue = true;
+                    if (cacheValue != 0 && cacheValue != value) {
+                        return false;
+                    }
+                    cacheValue = value;
+                }
+            }
+        }
+
+        return hasPositiveCacheValue && cacheValue <= inputTokens;
+    }
+
+    private static boolean hasNonNegativePositiveCacheValue(Map<String, Integer> usage,
+            Set<String> cacheKeys) {
+        boolean hasPositiveCacheValue = false;
+        for (String key : cacheKeys) {
+            if (usage.containsKey(key)) {
+                Integer value = usage.get(key);
+                if (!isNonNegative(value)) {
+                    return false;
+                }
+                hasPositiveCacheValue |= value > 0;
+            }
+        }
+        return hasPositiveCacheValue;
+    }
+
+    private static boolean containsAnyUsageKey(Map<String, Integer> usage, Set<String> keys) {
+        for (String key : keys) {
+            if (usage.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Integer firstUsageValue(Map<String, Integer> usage, List<String> keys) {
+        for (String key : keys) {
+            if (usage.containsKey(key)) {
+                return usage.get(key);
+            }
+        }
+        return null;
+    }
+
+    private static boolean isNonNegative(Integer value) {
+        return value != null && value >= 0;
+    }
+
+    private enum CacheUsageShape {
+        OTEL,
+        ANTHROPIC,
+        BEDROCK,
+        GOOGLE,
+        OPENAI
     }
 
     private static boolean isPositive(BigDecimal value) {

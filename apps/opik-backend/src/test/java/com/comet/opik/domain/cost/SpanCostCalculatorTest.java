@@ -158,7 +158,15 @@ class SpanCostCalculatorTest {
                         Map.of("prompt_tokens", 1000, "completion_tokens", 100,
                                 "original_usage.input_tokens_details.cached_tokens", 300),
                         "Responses API input_tokens_details.cached_tokens key",
-                        "10.50"));
+                        "10.50"),
+                // A zero-valued higher-priority representation should not mask a nonzero
+                // cached-token value from another supported representation.
+                Arguments.of(
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 0,
+                                "prompt_tokens_details.cached_tokens", 200),
+                        "zero-valued higher-priority key does not mask a nonzero fallback",
+                        "11.00"));
     }
 
     @ParameterizedTest(name = "{1}")
@@ -315,5 +323,33 @@ class SpanCostCalculatorTest {
         return Stream.of(
                 Arguments.of(anthropic, "Anthropic"),
                 Arguments.of(bedrock, "Bedrock"));
+    }
+
+    @ParameterizedTest(name = "{1}")
+    @MethodSource("provideOtelIncludedCacheCostCases")
+    void textGenerationWithCacheCostOtelSubtractsIncludedCacheTokens(
+            Map<String, Integer> usage, String description, String expectedCost) {
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheCreationInputTokenPrice(new BigDecimal("0.015"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .build();
+
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostOtel(modelPrice, usage);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideOtelIncludedCacheCostCases() {
+        return Stream.of(
+                // input=1000 includes cache_read=200, so only 800 regular input tokens are billed.
+                Arguments.of(Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read.input_tokens", 200),
+                        "OTel cache-read usage", "11.00"),
+                // input=1000 includes cache_read=200 and cache_creation=50, so 750 regular input tokens remain.
+                Arguments.of(Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read.input_tokens", 200, "cache_creation.input_tokens", 50),
+                        "OTel cache-read and cache-creation usage", "11.25"));
     }
 }
