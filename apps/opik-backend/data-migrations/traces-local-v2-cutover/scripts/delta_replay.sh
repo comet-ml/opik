@@ -22,6 +22,14 @@
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
 #   --backfill-start TS        the anchor printed by backfill.sh ("RECORD backfill_start=..."). Required.
+#   --old-table NAME           old-schema source to read from. Default traces. AFTER THE EXCHANGE the names swap, so a
+#                             post-swap catch-up is `--old-table traces_pre_cutover_backup --new-table traces`. Without
+#                             these the script can only ever run pre-EXCHANGE: it hardcoded both names, so after the swap
+#                             it would read the successor and insert into a table that no longer exists.
+#   --new-table NAME           new-schema destination to write to. Default traces_local_v2. Same swap applies.
+#                             `verify.sh` has carried these two flags from the start; this brings the delta into line, so
+#                             the rows a final delta leaves behind (everything written while it ran) and the deletions
+#                             deferred past the swap both have a vehicle.
 #   --max-insert-block-size N  SETTINGS max_insert_block_size for the delta INSERT. Default 1048576.
 #   --max-partitions-per-insert-block N
 #                             partitions one insert block of the delta INSERT may span (SETTINGS
@@ -42,6 +50,9 @@
 
 set -euo pipefail
 
+OLD_TABLE="traces"          # old-schema side; becomes traces_pre_cutover_backup after the EXCHANGE (see --old-table)
+NEW_TABLE="traces_local_v2" # new-schema side (the successor being built); becomes traces after the EXCHANGE
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sql"
 
@@ -58,6 +69,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --backfill-start) BACKFILL_START="${2:?"$1 requires a value"}"; shift 2 ;;
+        --old-table) OLD_TABLE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --new-table) NEW_TABLE="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -86,7 +99,16 @@ echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this 
 echo "restore it after the EXCHANGE."
 
 sql="$(cat "$SQL_FILE")"
+# Interpolated straight into the reference SQL, so require plain ClickHouse identifiers — same
+# guard verify.sh applies to the same three values.
+for _ident in "$DATABASE" "$OLD_TABLE" "$NEW_TABLE"; do
+    [[ "$_ident" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database/--old-table/--new-table must be ClickHouse identifiers (letters, digits, underscore): '$_ident'" >&2; exit 2; }
+done
+[[ "$OLD_TABLE" != "$NEW_TABLE" ]] || { echo "ERROR: --old-table and --new-table must differ; '$OLD_TABLE' would copy a table onto itself." >&2; exit 2; }
+
 sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+sql="${sql//'${OLD_TABLE}'/$OLD_TABLE}"
+sql="${sql//'${NEW_TABLE}'/$NEW_TABLE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
 sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
 sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
