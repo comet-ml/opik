@@ -1,6 +1,5 @@
 import { test, expect } from '@e2e/fixtures';
-import { uuid7 } from '@e2e/core/backend';
-import type { DatasetVersionRef } from '@e2e/core/backend';
+import { uuid7, buildDatasetItemBatches, sumDatasetVersionField } from '@e2e/core/backend';
 
 /**
  * `PUT /v1/private/datasets/items` has two write paths, and they race each
@@ -65,20 +64,9 @@ const RESENT_ENTRIES = BATCH_SIZE * (GROUPED_BATCHES + UNGROUPED_BATCHES);
 const ACCOUNTED_ADDED = SEED_ITEMS;
 const ACCOUNTED_MODIFIED = RESENT_ENTRIES;
 
-function item(id: string, revision: string): { id: string; data: Record<string, unknown> } {
-  return { id, data: { input: `input ${revision}`, expected_output: `output ${revision}` } };
-}
-
-/** Split `ids` into `count` equal batches of BATCH_SIZE, stamped with `revision`. */
-function batches(ids: string[], count: number, revision: string) {
-  return Array.from({ length: count }, (_, i) =>
-    ids.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE).map((id) => item(id, revision)),
-  );
-}
-
-function sum(versions: DatasetVersionRef[], field: 'itemsAdded' | 'itemsModified'): number {
-  return versions.reduce((acc, v) => acc + v[field], 0);
-}
+/** This spec's batches are always BATCH_SIZE-sized. */
+const batches = (ids: string[], count: number, revision: string) =>
+  buildDatasetItemBatches(ids, count, BATCH_SIZE, revision);
 
 test.describe('Dataset version counters — concurrent grouped and ungrouped writes', { tag: ['@area:datasets'] }, () => {
   /** 1600 item writes against a cloud backend outrun the default budget. */
@@ -187,9 +175,12 @@ test.describe('Dataset version counters — concurrent grouped and ungrouped wri
         // not (see ACCOUNTED_* above). A batch the backend silently dropped
         // fails here even though the row set above would still look right for a
         // re-send that never applied.
-        expect(sum(versions, 'itemsAdded'), 'only phase 1 introduced ids').toBe(ACCOUNTED_ADDED);
         expect(
-          sum(versions, 'itemsModified'),
+          sumDatasetVersionField(versions, 'itemsAdded'),
+          'only phase 1 introduced ids',
+        ).toBe(ACCOUNTED_ADDED);
+        expect(
+          sumDatasetVersionField(versions, 'itemsModified'),
           `all ${RESENT_ENTRIES} phase-2 entries hit an already-stored id`,
         ).toBe(ACCOUNTED_MODIFIED);
       });

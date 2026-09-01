@@ -1,6 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import { DatasetsPage } from '@e2e/pom/datasets.page';
-import { uuid7 } from '@e2e/core/backend';
+import { uuid7, buildDatasetItem } from '@e2e/core/backend';
 
 /**
  * A dataset version's `items_total` counts DISTINCT item ids, not the number of
@@ -24,16 +24,6 @@ const DISTINCT_IDS = 50;
 /** The repeated entry: `ids[0]` sent twice in one batch, so 51 entries for 50 ids. */
 const FIRST_BATCH_ENTRIES = DISTINCT_IDS + 1;
 const SECOND_BATCH_ADDITIONS = 10;
-
-/**
- * The repeat carries DIFFERENT content from the first entry on purpose. An
- * identical repeat would still collapse to one row, but it would do so even if
- * the backend de-duplicated on content rather than on id — and it would leave
- * the "last write wins" half of the upsert unasserted.
- */
-function item(id: string, revision: string): { id: string; data: Record<string, unknown> } {
-  return { id, data: { input: `input ${revision}`, expected_output: `output ${revision}` } };
-}
 
 test.describe('Dataset version counters — repeated item ids', { tag: ['@area:datasets'] }, () => {
   test(
@@ -67,9 +57,13 @@ test.describe('Dataset version counters — repeated item ids', { tag: ['@area:d
         `Write one grouped batch of ${FIRST_BATCH_ENTRIES} entries covering ${DISTINCT_IDS} ids`,
         async () => {
           const entries = [
-            ...ids.slice(0, DISTINCT_IDS).map((id) => item(id, 'v1')),
-            // The 51st entry: ids[0] again, with content the first entry did not have.
-            item(ids[0], 'v1-superseded'),
+            ...ids.slice(0, DISTINCT_IDS).map((id) => buildDatasetItem(id, 'v1')),
+            // The 51st entry: ids[0] again, with DIFFERENT content than the first
+            // entry. An identical repeat would still collapse to one row, but it
+            // would do so even if the backend de-duplicated on content rather
+            // than on id — and it would leave the "last write wins" half of the
+            // upsert unasserted.
+            buildDatasetItem(ids[0], 'v1-superseded'),
           ];
           expect(entries, 'the seed must send one more entry than it has ids').toHaveLength(
             FIRST_BATCH_ENTRIES,
@@ -115,8 +109,8 @@ test.describe('Dataset version counters — repeated item ids', { tag: ['@area:d
             datasetId,
             batchGroupId: crypto.randomUUID(),
             items: [
-              item(ids[0], 'v2-edited'),
-              ...ids.slice(DISTINCT_IDS).map((id) => item(id, 'v2')),
+              buildDatasetItem(ids[0], 'v2-edited'),
+              ...ids.slice(DISTINCT_IDS).map((id) => buildDatasetItem(id, 'v2')),
             ],
           });
         },
