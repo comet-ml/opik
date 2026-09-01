@@ -16,12 +16,17 @@
 --                                          SETTINGS line when --max-insert-threads is unset, so the server's
 --                                          value is inherited; an explicit 0 forces no parallel execution.
 --
--- EVERY DateTime64 LITERAL IN THIS RUNBOOK PINS 'UTC', including the epoch sentinel below. Unpinned, a literal is
--- parsed in the SERVER timezone, and these columns are DateTime64(n, 'UTC') — so on a non-UTC server the sentinel
--- written here would be the instant "1970-01-01 00:00:00 local", not epoch 0. Nothing would fail at write time: the
--- rollback's sentinel repair matches epoch 0 exactly, so it would silently match nothing and report a clean table,
--- and the fidelity compare (000005) normalizes an absent end_time to 0 and would flag every such row instead. Where
--- a bound is a value the driver captured, the capture pins 'UTC' too — see ${BACKFILL_START} in 000002.
+-- EVERY WINDOW BOUND IN THIS RUNBOOK PINS 'UTC'. Unpinned, a literal is parsed in the SERVER timezone while these
+-- columns are DateTime64(n, 'UTC'), so on a non-UTC server a bound resolves to a different instant than intended --
+-- and a bound that lands LATER silently drops the rows in the gap, which the delta and the deletion replay both miss
+-- because they share it. Where a bound is a value the driver captured, the capture pins 'UTC' too: see
+-- ${BACKFILL_START} in 000002.
+--
+-- The epoch sentinel below is the deliberate exception: it stays unpinned, matching the destination table's own
+-- DEFAULT and duration expression and every end_time comparison in the application. Those are what read the value
+-- back, so the sentinel is only correct while it agrees with them; pinning it here alone would give migrated rows a
+-- sentinel no other reader matches. On a non-UTC server the whole set is wrong together, which is a real latent
+-- defect but not one a single statement can fix -- it has to move as one change across the schema and the app.
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
@@ -85,7 +90,7 @@ SELECT
     project_id,
     name,
     start_time,
-    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6, 'UTC')) AS end_time,
+    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6)) AS end_time,
     input,
     output,
     metadata,

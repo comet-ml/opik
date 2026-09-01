@@ -218,9 +218,9 @@ class NaNAwareAggregateIntegrationTest {
      */
     private double durationMs(String startTime, String endTime) {
         return queryOne("""
-                WITH toDateTime64('%s', 6, 'UTC')                                                        AS start_time,
-                     toDateTime64('%s', 6, 'UTC')                                                        AS end_time,
-                     toDateTime64('1970-01-01 00:00:00', 6, 'UTC')                                       AS epoch
+                WITH toDateTime64('%s', 6)                                                               AS start_time,
+                     toDateTime64('%s', 6)                                                               AS end_time,
+                     toDateTime64('1970-01-01 00:00:00', 6)                                              AS epoch
                 SELECT if(end_time = epoch, nan, dateDiff('microsecond', start_time, end_time) / 1000.0) AS duration_ms
                 """.formatted(startTime, endTime),
                 row -> row.get("duration_ms", Double.class));
