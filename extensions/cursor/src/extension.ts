@@ -46,10 +46,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(configChangeListener);
 
     // Register reset command
-    const resetCommand = vscode.commands.registerCommand('opik.resetState', () => {
-      resetExtensionState(context);
-      vscode.window.showInformationMessage('Opik: Extension state has been reset. Recent conversations will be re-synced.');
-      console.log('🔄 Extension state reset - will re-sync recent conversations');
+    const resetCommand = vscode.commands.registerCommand('opik.resetState', async () => {
+      await resetExtensionState(context);
+      vscode.window.showInformationMessage(
+        'Opik: Sync cursor reset. Sent-request and pending-cost tracking were retained to prevent duplicates.'
+      );
+      console.log('🔄 Sync cursor reset; durable request delivery state retained');
     });
     context.subscriptions.push(resetCommand);
 

@@ -177,20 +177,23 @@ export class UsageEnricher {
         return vscode.workspace.getConfiguration().get<boolean>('opik.usageEnrichment.enabled', true);
     }
 
-    track(turns: Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>[]) {
+    async track(turns: Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>[]): Promise<void> {
         if (!this.isEnabled() || turns.length === 0) {
             return;
         }
         const pending = getPendingUsage(this.context);
-        const known = new Set(pending.map(item => `${item.composerId}:${item.turnStartMs}`));
+        const known = new Set(pending.map(item =>
+            item.usageKey || item.requestKey || `${item.composerId}:${item.turnStartMs}`
+        ));
 
         for (const turn of turns) {
-            if (known.has(`${turn.composerId}:${turn.turnStartMs}`)) {
+            if (known.has(turn.usageKey)) {
                 continue;
             }
             pending.push({ ...turn, attempt: 0, nextAttemptAt: Date.now() + POLL_SCHEDULE_MS[0] });
+            known.add(turn.usageKey);
         }
-        updatePendingUsage(this.context, pending);
+        await updatePendingUsage(this.context, pending);
     }
 
     // Keyed by token so that switching Cursor accounts re-resolves instead of
@@ -251,7 +254,7 @@ export class UsageEnricher {
             for (const item of due) {
                 item.nextAttemptAt = now + 30000;
             }
-            updatePendingUsage(this.context, pending);
+            await updatePendingUsage(this.context, pending);
             return;
         }
 
@@ -264,11 +267,18 @@ export class UsageEnricher {
                 continue;
             }
 
-            let starts = startsCache.get(item.composerId);
-            if (!starts) {
-                starts = await readUserTurnStarts(stateDbPath, item.composerId);
-                startsCache.set(item.composerId, starts);
+            let currentStarts = startsCache.get(item.composerId);
+            if (!currentStarts) {
+                currentStarts = await readUserTurnStarts(stateDbPath, item.composerId);
+                startsCache.set(item.composerId, currentStarts);
             }
+            // Keep the immutable boundaries captured when the request was sent,
+            // while also adding later turns. This survives message edits without
+            // letting a pending earlier turn swallow usage from a newer turn.
+            const starts = [...new Set([
+                ...currentStarts,
+                ...(item.turnStartsMs ?? [item.turnStartMs]),
+            ])].sort((a, b) => a - b);
 
             const index = starts.indexOf(item.turnStartMs);
             const usage = index < 0
@@ -293,11 +303,10 @@ export class UsageEnricher {
             }
 
             item.attempt += 1;
-            if (item.attempt < POLL_SCHEDULE_MS.length) {
-                item.nextAttemptAt = now + POLL_SCHEDULE_MS[item.attempt];
-                remaining.push(item);
-            }
+            const delayIndex = Math.min(item.attempt, POLL_SCHEDULE_MS.length - 1);
+            item.nextAttemptAt = now + POLL_SCHEDULE_MS[delayIndex];
+            remaining.push(item);
         }
-        updatePendingUsage(this.context, remaining);
+        await updatePendingUsage(this.context, remaining);
     }
 }

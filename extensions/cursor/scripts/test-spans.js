@@ -12,6 +12,15 @@ const { classifyBubble, toolName, TOOL_ID_NAMES } = require('../out/cursor/bubbl
 const { assignWindows, splitIntoModelCalls } = require('../out/cursor/modelCalls.js');
 const { buildSpans, buildTurnOutput, truncateForSpan, DEFAULT_SPAN_OPTIONS } = require('../out/cursor/spanBuilder.js');
 const { orderBubbles } = require('../out/cursor/bubbleOrder.js');
+const {
+    acknowledgeUploadedTraces,
+    deterministicUuidV7,
+    prepareTraceForUpload,
+    requestIdForTurn,
+    requestKey,
+    uuidV7Timestamp,
+} = require('../out/cursor/requestIdentity.js');
+const { aggregateTurnUsage } = require('../out/cursor/usageAggregation.js');
 
 const T0 = Date.parse('2026-01-10T19:57:00.000Z');
 const at = (seconds, ms = 0) => new Date(T0 + seconds * 1000 + ms).toISOString();
@@ -38,6 +47,170 @@ const errorBubble = (seconds, msg) => ({
 
 const conversation = { composerId: 'c1', model: 'claude-4.5-opus-high', createdAt: T0 };
 const kinds = (windows) => windows.map(w => w.kind);
+
+const identityTrace = (requestId, composerId, startMs = T0) => ({
+    id: '',
+    root_span_id: '',
+    request_id: requestId,
+    request_key: requestKey('cursor-tests', requestId),
+    upload_kind: 'canonical',
+    revision: 1,
+    usage_key: '',
+    cost_owner: true,
+    name: 'cursor-chat',
+    project_name: 'cursor-tests',
+    start_time: new Date(startMs).toISOString(),
+    end_time: new Date(startMs + 1000).toISOString(),
+    turn_start_ms: startMs,
+    turn_starts_ms: [startMs],
+    input: { input: 'question' },
+    output: { output: 'answer' },
+    thread_id: composerId,
+    tags: [],
+    metadata: {},
+    spans: [{
+        name: 'read_file',
+        type: 'tool',
+        startTime: new Date(startMs + 100),
+        endTime: new Date(startMs + 200),
+    }],
+});
+
+test('deterministic UUIDv7 embeds the exact event timestamp', () => {
+    const id = deterministicUuidV7(T0, 'same logical event');
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.equal(uuidV7Timestamp(id), T0);
+    assert.equal(deterministicUuidV7(T0, 'same logical event'), id);
+    assert.notEqual(deterministicUuidV7(T0, 'different event'), id);
+});
+
+test('reopen skips an uploaded request and retry reuses every id', () => {
+    const ledger = {};
+    const first = prepareTraceForUpload(identityTrace('req-reopen', 'original'), ledger);
+    assert.ok(first);
+    const retry = prepareTraceForUpload(identityTrace('req-reopen', 'original'), ledger);
+    assert.equal(retry.id, first.id);
+    assert.equal(retry.root_span_id, first.root_span_id);
+    assert.equal(retry.spans[0].id, first.spans[0].id);
+    assert.ok(retry.tags.includes('cursor:retry'));
+
+    acknowledgeUploadedTraces([first], ledger);
+    assert.equal(prepareTraceForUpload(identityTrace('req-reopen', 'original'), ledger), null);
+});
+
+test('fork copy gets its own timestamp-correct ids but never owns cost', () => {
+    const ledger = {};
+    const canonical = prepareTraceForUpload(identityTrace('req-fork', 'original'), ledger);
+    acknowledgeUploadedTraces([canonical], ledger);
+
+    const fork = prepareTraceForUpload(identityTrace('req-fork', 'fork-1'), ledger);
+    assert.ok(fork);
+    assert.notEqual(fork.id, canonical.id);
+    assert.notEqual(fork.root_span_id, canonical.root_span_id);
+    assert.equal(uuidV7Timestamp(fork.id), T0);
+    assert.equal(uuidV7Timestamp(fork.root_span_id), T0);
+    assert.equal(uuidV7Timestamp(fork.spans[0].id), T0 + 100);
+    assert.equal(fork.cost_owner, false);
+    assert.ok(fork.tags.includes('cursor:fork-copy'));
+    assert.ok(fork.tags.includes('cursor:cost-excluded'));
+    assert.ok(!fork.tags.includes('cursor:retry'));
+    assert.equal(fork.metadata.canonical_trace_id, canonical.id);
+    assert.equal(fork.metadata.copied_from_thread_id, 'original');
+
+    acknowledgeUploadedTraces([fork], ledger);
+    assert.equal(prepareTraceForUpload(identityTrace('req-fork', 'fork-1'), ledger), null);
+});
+
+test('an edited request id in the same composer is a new canonical cost owner', () => {
+    const ledger = {};
+    const original = prepareTraceForUpload(identityTrace('req-before-edit', 'composer'), ledger);
+    acknowledgeUploadedTraces([original], ledger);
+    const edited = prepareTraceForUpload(identityTrace('req-after-edit', 'composer', T0 + 5000), ledger);
+
+    assert.ok(edited);
+    assert.equal(edited.upload_kind, 'canonical');
+    assert.equal(edited.cost_owner, true);
+    assert.notEqual(edited.id, original.id);
+    assert.equal(Object.keys(ledger).length, 2);
+});
+
+test('an edit with the same request id updates the canonical trace in place', () => {
+    const ledger = {};
+    const original = prepareTraceForUpload(identityTrace('req-same-id-edit', 'composer'), ledger);
+    acknowledgeUploadedTraces([original], ledger);
+
+    const editedInput = identityTrace('req-same-id-edit', 'composer', T0 + 5000);
+    editedInput.input = { input: 'edited question' };
+    editedInput.output = { output: 'edited answer' };
+    const edited = prepareTraceForUpload(editedInput, ledger);
+
+    assert.ok(edited);
+    assert.equal(edited.upload_kind, 'edit_revision');
+    assert.equal(edited.revision, 2);
+    assert.equal(edited.id, original.id);
+    assert.equal(edited.root_span_id, original.root_span_id);
+    assert.equal(edited.start_time, original.start_time);
+    assert.equal(edited.turn_start_ms, T0 + 5000);
+    assert.equal(uuidV7Timestamp(edited.id), T0);
+    assert.equal(uuidV7Timestamp(edited.spans[0].id), T0 + 5100);
+    assert.ok(edited.tags.includes('cursor:edit-revision'));
+
+    acknowledgeUploadedTraces([edited], ledger);
+    const reopened = identityTrace('req-same-id-edit', 'composer', T0 + 5000);
+    reopened.input = { input: 'edited question' };
+    reopened.output = { output: 'edited answer' };
+    assert.equal(prepareTraceForUpload(reopened, ledger), null);
+});
+
+test('editing an inherited fork trace updates that copy and makes it a cost owner', () => {
+    const ledger = {};
+    const canonical = prepareTraceForUpload(identityTrace('req-fork-edit', 'original'), ledger);
+    acknowledgeUploadedTraces([canonical], ledger);
+    const fork = prepareTraceForUpload(identityTrace('req-fork-edit', 'fork'), ledger);
+    acknowledgeUploadedTraces([fork], ledger);
+
+    const editedInput = identityTrace('req-fork-edit', 'fork', T0 + 8000);
+    editedInput.input = { input: 'fork edited question' };
+    const edited = prepareTraceForUpload(editedInput, ledger);
+
+    assert.equal(edited.upload_kind, 'fork_edit_revision');
+    assert.equal(edited.id, fork.id);
+    assert.equal(edited.root_span_id, fork.root_span_id);
+    assert.equal(edited.cost_owner, true);
+    assert.ok(edited.tags.includes('cursor:fork-edit'));
+    assert.ok(!edited.tags.includes('cursor:cost-excluded'));
+});
+
+test('usage aggregation sums edit costs once and keeps all models', () => {
+    const first = {
+        inputTokens: 10, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 1,
+        chargedCents: 1.25, requestCount: 1, models: ['model-a'],
+    };
+    const edit = {
+        inputTokens: 20, outputTokens: 4, cacheReadTokens: 6, cacheWriteTokens: 2,
+        chargedCents: 2.5, requestCount: 1, models: ['model-b'],
+    };
+    assert.deepEqual(aggregateTurnUsage([first, edit]), {
+        inputTokens: 30,
+        outputTokens: 6,
+        cacheReadTokens: 9,
+        cacheWriteTokens: 3,
+        chargedCents: 3.75,
+        requestCount: 2,
+        models: ['model-a', 'model-b'],
+    });
+});
+
+test('legacy request identity survives changed bubble and composer ids', () => {
+    const left = requestIdForTurn({ userMessages: [{
+        id: 'bubble-a', composerId: 'composer-a', text: 'same prompt', resolvedTimestamp: T0,
+    }] });
+    const right = requestIdForTurn({ userMessages: [{
+        id: 'bubble-b', composerId: 'composer-b', text: 'same prompt', resolvedTimestamp: T0,
+    }] });
+    assert.equal(left, right);
+    assert.match(left, /^legacy-[0-9a-f]{64}$/);
+});
 
 test('a placeholder toolFormerData is not a tool call', () => {
     // 1237 of 19691 real bubbles carry exactly this and are ordinary messages.

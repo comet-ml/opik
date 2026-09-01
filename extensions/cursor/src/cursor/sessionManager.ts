@@ -2,12 +2,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-import { SessionInfo } from "../interface";
+import { RequestLedger, SessionInfo } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
 import { executeQuery, executeQueryPaginated } from './sqlite';
 import { orderBubbles } from './bubbleOrder';
 import { buildSpans, buildTurnOutput, DEFAULT_SPAN_OPTIONS, SpanBuildOptions } from './spanBuilder';
+import { prepareTraceForUpload, requestIdForTurn, requestKey } from './requestIdentity';
 
 import { TraceData } from "../interface";
 
@@ -29,27 +30,37 @@ function readSpanOptions(): SpanBuildOptions | null {
 }
 
 /**
- * Convert cursor conversations to Opik traces with per-session tracking.
- * Each composer session maintains its own progress tracking to avoid duplicate uploads.
- * 
- * Strategy:
- *   - Never synced conversations: Upload entire conversation
- *   - Already synced, no new messages: Skip (avoid duplicates)
- *   - Already synced, has new messages: Upload new messages only
+ * Convert Cursor conversations to Opik traces using requestId as the durable
+ * identity. Per-composer state is retained only to migrate installations from
+ * versions that predate the request ledger.
  * 
  * @param conversations Array of conversation objects from cursor database
  * @param opikProjectName Project name for Opik
  * @param sessionInfo Existing session info with per-composer tracking
  * @returns Object containing traces and updated session info
  */
-async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>) {
+async function convertConversationsToTraces(
+    conversations: any[],
+    opikProjectName: string,
+    sessionInfo: Record<string, SessionInfo>,
+    requestLedger: RequestLedger
+) {
     const tracesData: TraceData[] = [];
     const updatedSessionInfo: Record<string, { lastMessageId?: string; lastMessageTime?: number }> = {};
 
     // Get git info once for all traces (performance optimization)
     const gitInfo = await getGitInfo();
+    const migrateLegacySessions = Object.keys(requestLedger).length === 0 &&
+        Object.values(sessionInfo).some(info => info.lastUploadId !== undefined);
 
-    for (const conversation of conversations) {
+    // A fork is created after its source composer. Processing oldest composers
+    // first makes the original request the canonical cost owner when both are
+    // first discovered in the same polling cycle.
+    const orderedConversations = [...conversations].sort((left, right) =>
+        Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0)
+    );
+
+    for (const conversation of orderedConversations) {
         if (!conversation.bubbles || !Array.isArray(conversation.bubbles) || conversation.bubbles.length === 0) {
             console.log(`⏭️  Skipping composer ${conversation.composerId} - no bubbles`);
             continue;
@@ -57,36 +68,14 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
 
         const composerId = conversation.composerId;
         const sessionId = `cursor-composer-${composerId}`;
-        const lastUploadId = sessionInfo[sessionId]?.lastUploadId;
-        
-        // Check if there are new messages
-        const latestMessage = conversation.bubbles[conversation.bubbles.length - 1];
-        const neverSynced = !lastUploadId;
-        const hasNewMessagesSinceSync = lastUploadId && latestMessage && latestMessage.id !== lastUploadId;
-        
-        // Skip if already synced and no new messages
-        if (!neverSynced && !hasNewMessagesSinceSync) {
-            console.log(`⏭️  Skipping composer ${composerId} - no new messages (latest: ${latestMessage?.id}, last uploaded: ${lastUploadId})`);
-            continue; // Skip - no new messages and already synced
-        }
-
-        // Determine processing strategy:
-        // - If never synced (no lastUploadId): upload entire conversation
-        // - If previously synced: upload only new messages after lastUploadId
-        const uploadEntireConversation = lastUploadId === undefined;
-        
-        if (uploadEntireConversation) {
-            console.log(`📤 Processing entire conversation for composer ${composerId} (never synced)`);
-        } else {
-            console.log(`📤 Processing new messages for composer ${composerId} after message ${lastUploadId}`);
-        }
+        console.log(`📤 Reconciling composer ${composerId} against the request ledger`);
         
         const conversationTraces = processConversationBubbles(
             conversation, 
             opikProjectName, 
-            uploadEntireConversation,
-            lastUploadId,
-            gitInfo // Pass git info to bubble processing
+            gitInfo,
+            requestLedger,
+            migrateLegacySessions ? sessionInfo[sessionId] : undefined
         );
         
         tracesData.push(...conversationTraces.traces);
@@ -108,14 +97,13 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
 function processConversationBubbles(
     conversation: any, 
     opikProjectName: string, 
-    uploadEntireConversation: boolean, 
-    lastUploadId: string | undefined,
-    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null
+    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null,
+    requestLedger: RequestLedger,
+    legacySession?: SessionInfo
 ) {
     const traces: TraceData[] = [];
     let lastMessageId: string | undefined = undefined;
     let lastMessageTime: number | undefined = undefined;
-    let shouldAppend = uploadEntireConversation;
 
     // Initialize sequential timestamp starting from conversation createdAt
     let currentTimestamp = conversation.createdAt || Date.now();
@@ -148,8 +136,15 @@ function processConversationBubbles(
     });
 
     const bubbleGroups = groupBubblesByType(bubblesWithTimestamps);
+    const turnStartsMs = bubbleGroups
+        .filter(group => group.userMessages.length > 0)
+        .map(group => group.userMessages[0].resolvedTimestamp as number);
+    const legacyTargetIndex = legacySession?.lastUploadId
+        ? bubbleGroups.findIndex(group => [...group.userMessages, ...group.aiMessages]
+            .some(message => message.id === legacySession.lastUploadId))
+        : -1;
 
-    for (const group of bubbleGroups) {
+    for (const [groupIndex, group] of bubbleGroups.entries()) {
         // Always update lastMessageId to track our processing position
         const lastMessage = group.aiMessages.length > 0 
             ? group.aiMessages[group.aiMessages.length - 1]
@@ -158,28 +153,38 @@ function processConversationBubbles(
         lastMessageId = lastMessage.id;
         lastMessageTime = lastMessage.resolvedTimestamp;
 
-        // If we're uploading the entire conversation, process all groups
-        // If we're uploading incrementally, find where to start from lastUploadId
-        if (!shouldAppend) {
-            // Check both user and AI messages for the lastUploadId
-            const hasTargetMessage = [...group.userMessages, ...group.aiMessages]
-                .some(msg => msg.id === lastUploadId);
-            
-            if (hasTargetMessage) {
-                shouldAppend = true;
-                continue; // Skip this group since it was already processed
-            }
-        }
-
-        if (!shouldAppend) {
-            continue; // Still haven't reached the point where we left off
-        }
-
         // Only upload complete conversations (both user and AI messages)
         if (group.userMessages.length > 0 && group.aiMessages.length > 0) {
-            const trace = createTraceFromBubbleGroup(group, conversation, opikProjectName, gitInfo);
+            const trace = createTraceFromBubbleGroup(
+                group,
+                conversation,
+                opikProjectName,
+                gitInfo,
+                turnStartsMs
+            );
             if (trace) {
-                traces.push(trace);
+                const prepared = prepareTraceForUpload(trace, requestLedger);
+                if (prepared) {
+                    const wasPreviouslyUploaded = legacySession !== undefined && (
+                        (legacyTargetIndex >= 0 && groupIndex <= legacyTargetIndex) ||
+                        (legacyTargetIndex < 0 && legacySession.lastUploadTime !== undefined &&
+                            lastMessageTime !== undefined &&
+                            lastMessageTime <= legacySession.lastUploadTime)
+                    );
+                    if (wasPreviouslyUploaded) {
+                        // Older releases generated random ids, so these ids are
+                        // bookkeeping aliases only. Marking delivery prevents an
+                        // upgrade, reopen, or later fork from re-uploading them.
+                        if (prepared.upload_kind === 'canonical') {
+                            requestLedger[prepared.request_key].canonicalStatus = 'uploaded';
+                        } else if (prepared.thread_id) {
+                            requestLedger[prepared.request_key]
+                                .forkCopies[prepared.thread_id].status = 'uploaded';
+                        }
+                    } else {
+                        traces.push(prepared);
+                    }
+                }
             }
         }
         // Note: We still track incomplete conversations but don't upload them
@@ -383,6 +388,7 @@ export async function findAndReturnNewTraces(
     context: vscode.ExtensionContext, 
     VSInstallationPath: string, 
     sessionInfo: Record<string, SessionInfo>,
+    requestLedger: RequestLedger,
     lastSyncedAt: number,
     currentSyncTime: number
 ) {
@@ -404,7 +410,12 @@ export async function findAndReturnNewTraces(
             
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
                 // Convert conversations to Opik traces with per-session tracking
-                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo);
+                const result = await convertConversationsToTraces(
+                    conversations,
+                    opikProjectName,
+                    sessionInfo,
+                    requestLedger
+                );
                 
                 return {
                     tracesData: result.tracesData,
@@ -464,7 +475,8 @@ function createTraceFromBubbleGroup(
     group: { userMessages: any[], aiMessages: any[] },
     conversation: any,
     opikProjectName: string,
-    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null
+    gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null,
+    turnStartsMs: number[]
 ): TraceData | null {
     const { userMessages, aiMessages } = group;
     
@@ -533,12 +545,22 @@ function createTraceFromBubbleGroup(
         tags.push("historical");
     }
 
+    const requestId = requestIdForTurn(group);
     return {
+        id: '',
+        root_span_id: '',
+        request_id: requestId,
+        request_key: requestKey(opikProjectName, requestId),
+        upload_kind: 'canonical',
+        revision: 1,
+        usage_key: '',
+        cost_owner: true,
         name: "cursor-chat",
         project_name: opikProjectName,
         start_time: new Date(startTime).toISOString(),
         end_time: new Date(endTime).toISOString(),
         turn_start_ms: startTime,
+        turn_starts_ms: turnStartsMs,
         model: conversation.model,
         input: { input: userContent },
         output: { output: assistantContent },
