@@ -32,6 +32,7 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -128,8 +129,15 @@ class BaseRedisSubscriberTest {
             assertThat(processingThreads).hasSizeGreaterThan(1);
         }
 
+        /**
+         * OPIK-8192 changed this contract. An entry with no value under the payload field used to be
+         * handed to {@code processEvent} as null, leaving every subscriber to dereference it and throw;
+         * it is now short-circuited in {@code processMessage} and retired as a non-retryable failure
+         * without reaching {@code processEvent} at all. So the assertion is the inverse of what it was:
+         * the null never arrives, and only the well-formed entries are processed.
+         */
         @Test
-        void shouldHandleNullPayloadSuccessfully() {
+        void shouldRemoveEntriesWithNoPayloadWithoutReachingProcessEvent() {
             var nullCount = new AtomicInteger(0);
             var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
@@ -141,15 +149,15 @@ class BaseRedisSubscriberTest {
             }));
             subscriber.start();
 
-            // Publish message with different field (no payload field, will result in null)
+            // Published under a different field, so nothing resolves under the payload field.
             publishMessagesToStream("other-payload", otherPayloadMessages);
             publishMessagesToStream(usualPayloadMessages);
 
-            waitForMessagesProcessed(subscriber, otherPayloadMessages.size() + usualPayloadMessages.size());
+            // Only the well-formed entries reach processEvent and count as successes.
+            waitForMessagesProcessed(subscriber, usualPayloadMessages.size());
+            // Both sets leave the stream: the payload-less ones as non-retryable failures.
             waitForMessagesAckedAndRemoved();
-            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(nullCount.get()).isEqualTo(otherPayloadMessages.size()));
-            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+            assertThat(nullCount.get()).isZero();
         }
 
         @Test
@@ -243,25 +251,32 @@ class BaseRedisSubscriberTest {
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
         }
 
+        /**
+         * Rebased off the null-payload path by OPIK-8192: payload-less entries no longer reach
+         * {@code processEvent}, so they can no longer be the source of the failures this test is about.
+         * The failure is now raised from a real payload, which is what the test always meant to
+         * exercise -- that healthy traffic keeps flowing past failing messages.
+         */
         @Test
         void shouldContinueProcessingAfterFailedMessages() {
-            var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var failingMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var failing = Set.copyOf(failingMessages);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient, message -> {
-                if (message == null) {
-                    return Mono.error(new NullPointerException("Intentional failure"));
+                if (failing.contains(message)) {
+                    // Non-retryable, so it is removed on first delivery rather than re-claimed.
+                    return Mono.error(new IllegalArgumentException("Intentional failure"));
                 }
                 return Mono.empty();
             }));
             subscriber.start();
 
-            // Publish messages including one with null payload
-            publishMessagesToStream("other-payload", otherPayloadMessages);
+            publishMessagesToStream(failingMessages);
             publishMessagesToStream(usualPayloadMessages);
 
             waitForMessagesProcessed(subscriber, usualPayloadMessages.size());
             waitForMessagesAckedAndRemoved();
-            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(otherPayloadMessages.size());
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(failingMessages.size());
         }
 
         @Test

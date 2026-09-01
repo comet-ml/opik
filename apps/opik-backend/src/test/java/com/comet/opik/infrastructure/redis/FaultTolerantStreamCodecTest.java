@@ -104,7 +104,13 @@ class FaultTolerantStreamCodecTest {
     @Test
     @DisplayName("the shipped JAVA codec tolerates an undecodable field name too")
     void shippedJavaCodecToleratesUndecodableMapKey() throws IOException {
-        var notAnLz4Frame = json("plainly not an LZ4 frame");
+        // The first four bytes are LZ4CodecV2's decompressed-length header, which its decoder reads and
+        // allocates verbatim with no sanity bound. Keep the prefix explicit and tiny: free text here
+        // reads as a ~1.8 GiB length (e.g. "plai" == 1,886,151,017) and asks the JVM for that array,
+        // which OutOfMemoryErrors on a small runner -- and an Error is deliberately not absorbed, so the
+        // test would fail instead of yielding the sentinel it asserts. Do not "simplify" this back.
+        var notAnLz4Frame = Unpooled.wrappedBuffer(
+                new byte[]{0, 0, 0, 16, 'n', 'o', 't', '-', 'l', 'z', '4'});
 
         var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(notAnLz4Frame, null);
 
