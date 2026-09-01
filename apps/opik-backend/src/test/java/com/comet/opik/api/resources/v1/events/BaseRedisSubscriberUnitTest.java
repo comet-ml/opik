@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -266,6 +267,58 @@ class BaseRedisSubscriberUnitTest {
                         assertThat(readCount.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                         assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+        }
+
+        /**
+         * OPIK-8192. Once an undecodable payload arrives as a <em>value</em> rather than as a throw from
+         * inside Redisson, it carries a messageId and is dropped. Before that it never reached here at all,
+         * was redelivered forever, and at {@code consumerBatchSize > 1} stranded every healthy entry
+         * claimed with it -- the permanent wedge in OPIK-8164.
+         * <p>
+         * Scope: this pins the drop and the consumer surviving it. It does <em>not</em> pin the explicit
+         * {@link UndecodableStreamMessage} branch in {@code processMessage} -- with that branch removed the
+         * sentinel still reaches {@code processEvent}, fails the generic cast, and is dropped as a
+         * non-retryable {@code ClassCastException}, so this test passes either way. What the branch adds is
+         * the dedicated counter and a log naming the stream and payload size, which is the difference
+         * between "we discarded a 20 MB trace" and an opaque cast error. Asserting the counter would need
+         * OTel metric test infrastructure this module does not have. The load-bearing guard against the
+         * wedge returning is {@code FaultTolerantStreamCodecTest}.
+         */
+        @Test
+        void shouldDropUndecodableMessageAndKeepConsuming() {
+            var readCount = new AtomicInteger();
+            var undecodableId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        int count = readCount.incrementAndGet();
+                        if (count == 1) {
+                            return Mono.just(Map.of(undecodableId,
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            new UndecodableStreamMessage(20_054_016,
+                                                    new IllegalStateException(
+                                                            "String value length exceeds maximum")))));
+                        }
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), count),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // The undecodable entry is acked and removed -- dropped, not redelivered.
+                        verify(stream).ack(eq(CONFIG.getConsumerGroupName()),
+                                eq(new StreamMessageId[]{undecodableId}));
+                        verify(stream).remove(eq(new StreamMessageId[]{undecodableId}));
+                        // It never reaches processEvent, and healthy messages behind it still process.
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1);
                     });
         }
 

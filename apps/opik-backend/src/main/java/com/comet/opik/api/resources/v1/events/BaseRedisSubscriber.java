@@ -4,6 +4,7 @@ import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
+import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -111,6 +112,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongHistogram messageProcessingTime;
     private final LongHistogram messageQueueDelay;
     private final LongCounter messageProcessingErrors;
+    private final LongCounter undecodableMessages;
     private final LongCounter backpressureDropCounter;
     private final LongCounter claimErrors;
     private final LongHistogram claimTime;
@@ -160,6 +162,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.messageProcessingErrors = meter
                 .counterBuilder("%s_%s_processing_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Errors when processing messages")
+                .build();
+        this.undecodableMessages = meter
+                .counterBuilder("%s_%s_undecodable_messages_total".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Stream entries dropped because their payload could not be decoded. Non-zero means "
+                        + "data was discarded: a payload the codec cannot read is unrecoverable, and keeping it "
+                        + "would wedge the stream for every consumer. Alert on any increase.")
                 .build();
         this.backpressureDropCounter = meter
                 .counterBuilder("%s_%s_backpressure_drops_total".formatted(metricNamespace, metricsBaseName))
@@ -469,6 +477,26 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     .error(classCastException)
+                    .context(MessageContext.UNKNOWN)
+                    .build());
+        }
+        // A payload the codec could not decode. It arrives as a sentinel rather than an exception
+        // precisely so this point is reachable at all -- the throw used to happen inside Redisson, below
+        // here and before any messageId existed, which is why such an entry could never be acked or
+        // removed and wedged the stream permanently (OPIK-8164). Drop it: it will never become decodable,
+        // and every redelivery strands the healthy entries claimed alongside it.
+        if (message instanceof UndecodableStreamMessage undecodable) {
+            undecodableMessages.add(1);
+            log.error("Dropping undecodable message: messageId '{}', stream '{}', payloadBytes '{}'",
+                    messageId, config.getStreamName(), undecodable.payloadBytes(), undecodable.cause());
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    // IllegalArgumentException is in NON_RETRYABLE_EXCEPTIONS, so postProcessFailureMessages
+                    // acks and removes without consulting the delivery count.
+                    .error(new IllegalArgumentException(
+                            "Undecodable stream payload of %d bytes".formatted(undecodable.payloadBytes()),
+                            undecodable.cause()))
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
