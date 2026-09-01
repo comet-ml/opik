@@ -551,8 +551,22 @@ preflight_capacity
 # against already-copied rows. The operator MUST record it (also saved to the state file).
 # The state file is READ and validated whenever it exists, dry run or not: keeping the guard behind DRY_RUN would let a
 # full rehearsal pass while the real run aborts on the same file. Only minting and persisting need a real run.
-if [[ -s "$STATE_FILE" ]]; then
+if [[ -e "$STATE_FILE" ]]; then
     BACKFILL_START="$(cat "$STATE_FILE")"
+    # An existing but EMPTY file is not "no anchor", and must not be read as one. The write below is a truncating
+    # redirect, so a run killed between opening the file and writing to it leaves exactly this state. Treating it as
+    # absent puts the two modes out of step on identical input -- a real run reaches the mint branch and its
+    # destination-not-empty guard, while a dry run reaches neither and prints a plan for an anchor it never had.
+    if [[ -z "$BACKFILL_START" ]]; then
+        echo "ERROR: $STATE_FILE exists but is empty, so it holds no anchor to resume from. A run interrupted while" >&2
+        echo "       persisting the anchor leaves this. If $DST_TABLE is still EMPTY nothing was copied against the" >&2
+        echo "       lost anchor: delete $STATE_FILE and a fresh one is minted. If it is NOT empty, recover the" >&2
+        echo "       original anchor and write it back, marker included:" >&2
+        echo "         printf '%s UTC' '<original backfill_start>' > '$STATE_FILE'" >&2
+        echo "       or restart the copy cleanly, which discards the partial shadow:" >&2
+        echo "         ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --stage A" >&2
+        exit 1
+    fi
     # The anchor is stored with an explicit ' UTC' marker and is only accepted with it. The marker is not
     # decoration: step 2 parses this value AS UTC, so a value captured in some other zone silently shifts the
     # anchor, and a LATER anchor drops the writes and deletes in the gap from both the delta and the replay.

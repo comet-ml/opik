@@ -228,7 +228,7 @@ class TracesLocalV2CutoverTest {
             project_id,
             name,
             start_time,
-            coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6, 'UTC')) AS end_time,
+            coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6)) AS end_time,
             input,
             output,
             metadata,
