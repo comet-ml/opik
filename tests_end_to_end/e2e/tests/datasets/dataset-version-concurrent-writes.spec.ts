@@ -11,9 +11,19 @@ import type { DatasetVersionRef } from '@e2e/core/backend';
  *  - **ungrouped** (`batch_group_id` omitted) — "mutate latest": the batch is
  *    folded into the version that is current when it lands, creating none.
  *
- * The ungrouped path reads `latest` before it holds the version lock, so a
- * grouped insert cutting a new version at the same moment is exactly the window
- * where a duplicate version row or a silently dropped batch can appear.
+ * Both paths take the same per-dataset lock before touching `latest`: the
+ * ungrouped path reads it from inside `withDatasetVersionLock`, and a grouped
+ * insert creating a new version acquires the same lock before it commits. So
+ * there is no pre-lock read window where either side could act on stale
+ * `latest` state — DatasetItemService serializes them instead. What is not
+ * serialized is *which* request the lock lets through first when both are
+ * queued at once: an ungrouped batch folds into whichever version is latest
+ * at the moment it gets the lock, so which version (old or newly-created) ends
+ * up holding a given ungrouped batch is genuinely unpredictable. This spec
+ * exercises that contention and checks the backend never loses or
+ * double-counts a batch regardless of the order the lock resolves them in —
+ * a real risk if `withDatasetVersionLock`'s scope (narrowed in OPIK-7708) ever
+ * regresses to not covering one of these paths.
  * Nothing in the estate drives it: `dataset-version-counters.spec.ts` sends two
  * sequential `Dataset.insert()` calls, which are always grouped and never
  * concurrent with each other, and the SDK cannot express an ungrouped write at
@@ -122,9 +132,10 @@ test.describe('Dataset version counters — concurrent grouped and ungrouped wri
       await test.step(
         `Race one grouped insert (${GROUPED_BATCHES} batches) against ${UNGROUPED_BATCHES} ungrouped batches`,
         async () => {
-          // Fired from one Promise.all so the two paths genuinely overlap: the
-          // grouped insert is cutting v2 while the ungrouped writes are reading
-          // `latest` to decide what to mutate.
+          // Fired from one Promise.all so both paths queue for the shared
+          // per-dataset lock at once: which of them the lock lets through
+          // first, and so which version an ungrouped batch lands in, is what
+          // this step leaves to chance.
           const groupId = crypto.randomUUID();
           const groupedIds = ids.slice(0, BATCH_SIZE * GROUPED_BATCHES);
           const ungroupedIds = ids.slice(BATCH_SIZE * GROUPED_BATCHES);
@@ -142,10 +153,11 @@ test.describe('Dataset version counters — concurrent grouped and ungrouped wri
       const versions = await test.step(
         'The race produced exactly one new version, and exactly one latest',
         async () => {
-          // Two failures live here. A duplicate version row (the grouped insert
-          // committing twice because an ungrouped write moved `latest` under it)
-          // shows up as a third version; a lost `is_latest` flip — or two rows
-          // both claiming it — shows up as anything other than one latest.
+          // Two failures live here. A duplicate version row (the shared lock
+          // failing to serialize the two paths, so the grouped insert commits
+          // twice) shows up as a third version; a lost `is_latest` flip — or
+          // two rows both claiming it — shows up as anything other than one
+          // latest.
           const fetched = await backendClient.getDatasetVersions(datasetId);
           expect(
             fetched,
