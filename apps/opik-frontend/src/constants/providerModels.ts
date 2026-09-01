@@ -908,6 +908,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "ibm-granite/granite-4.1-8b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.IBM_GRANITE_GRANITE_4_2_8B,
+      label: "ibm-granite/granite-4.2-8b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY,
       label: "inception/mercury",
     },

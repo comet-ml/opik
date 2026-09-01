@@ -712,6 +712,8 @@ openrouter:
     label: "ibm-granite/granite-4.0-h-micro"
   - id: "ibm-granite/granite-4.1-8b"
     label: "ibm-granite/granite-4.1-8b"
+  - id: "ibm-granite/granite-4.2-8b"
+    label: "ibm-granite/granite-4.2-8b"
   - id: "inception/mercury"
     label: "inception/mercury"
   - id: "inception/mercury-2"

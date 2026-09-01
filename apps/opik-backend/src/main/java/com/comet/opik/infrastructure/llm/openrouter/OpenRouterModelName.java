@@ -206,6 +206,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     GRYPHE_MYTHOMAX_L2_13B("gryphe/mythomax-l2-13b"),
     IBM_GRANITE_GRANITE_4_0_H_MICRO("ibm-granite/granite-4.0-h-micro"),
     IBM_GRANITE_GRANITE_4_1_8B("ibm-granite/granite-4.1-8b"),
+    IBM_GRANITE_GRANITE_4_2_8B("ibm-granite/granite-4.2-8b"),
     INCEPTION_MERCURY("inception/mercury"),
     INCEPTION_MERCURY_2("inception/mercury-2"),
     INCEPTION_MERCURY_CODER("inception/mercury-coder"),
