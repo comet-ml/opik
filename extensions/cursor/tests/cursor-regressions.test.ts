@@ -19,8 +19,13 @@ import {
     appliedUsageEventOwners,
     hasAppliedUsage,
     recordAppliedUsage,
+    usageDeliveryForComposer,
 } from '../src/cursor/usageLedger';
-import { mergePendingUsage, shouldKeepPendingUsage } from '../src/cursor/usageQueue';
+import {
+    canAttributePendingUsage,
+    mergePendingUsage,
+    shouldKeepPendingUsage,
+} from '../src/cursor/usageQueue';
 import { ForkCopyState, PendingUsage, RequestLedger, TraceData, TurnUsage } from '../src/interface';
 
 const T0 = Date.parse('2026-01-10T19:57:00.000Z');
@@ -285,6 +290,7 @@ test('independent legacy turns with identical text and timestamps stay distinct'
 });
 
 test('legacy pending usage is upgraded instead of duplicated', () => {
+    const modernUsageKey = `cursor-tests\u0000request\u0000${ORIGINAL}\u0000${T0}\u00001`;
     const legacy = {
         composerId: ORIGINAL,
         turnStartMs: T0,
@@ -295,7 +301,7 @@ test('legacy pending usage is upgraded instead of duplicated', () => {
         nextAttemptAt: T0,
     } as PendingUsage;
     const modern = {
-        usageKey: 'usage-key',
+        usageKey: modernUsageKey,
         requestId: 'request',
         requestKey: 'request-key',
         composerId: ORIGINAL,
@@ -307,9 +313,37 @@ test('legacy pending usage is upgraded instead of duplicated', () => {
     };
     const merged = mergePendingUsage([legacy], [modern], T0 + 5000);
     assert.equal(merged.length, 1);
-    assert.equal(merged[0].usageKey, 'usage-key');
+    assert.equal(merged[0].usageKey, modernUsageKey);
     assert.equal(merged[0].requestKey, 'request-key');
     assert.equal(merged[0].attempt, 2);
+});
+
+test('unmatched legacy pending usage gets a unique compatibility identity', () => {
+    const legacy = (traceId: string) => ({
+        composerId: ORIGINAL,
+        turnStartMs: T0,
+        traceId,
+        spanId: `span-${traceId}`,
+        projectName: 'cursor-tests',
+        attempt: 0,
+        nextAttemptAt: T0,
+    } as PendingUsage);
+    const normalized = mergePendingUsage([legacy('left'), legacy('right')], [], T0);
+
+    assert.equal(normalized.every(canAttributePendingUsage), true);
+    assert.notEqual(normalized[0].usageKey, normalized[1].usageKey);
+    assert.notEqual(normalized[0].requestKey, normalized[1].requestKey);
+});
+
+test('legacy ledger entries tolerate a missing fork-copy map', () => {
+    const ledger: RequestLedger = {};
+    const original = trace('legacy-ledger', ORIGINAL);
+    prepareTraceForUpload(original, ledger);
+    const entry = ledger[original.request_key];
+    (entry as { forkCopies?: Record<string, ForkCopyState> }).forkCopies = undefined;
+
+    assert.equal(usageDeliveryForComposer(entry, FORK), undefined);
+    assert.equal(usageDeliveryForComposer(entry, ORIGINAL), entry);
 });
 
 test('aggregated revisions keep the latest billed model for the root span', () => {

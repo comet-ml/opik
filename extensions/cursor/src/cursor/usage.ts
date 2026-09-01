@@ -3,7 +3,11 @@ import { executeQuery } from './sqlite';
 import { getPendingUsage, getRequestLedger, updatePendingUsage } from '../state';
 import { PendingUsage, TurnUsage } from '../interface';
 import { debugLog } from '../utils';
-import { mergePendingUsage, shouldKeepPendingUsage } from './usageQueue';
+import {
+    canAttributePendingUsage,
+    mergePendingUsage,
+    shouldKeepPendingUsage,
+} from './usageQueue';
 import { isCursorComposerId } from './composerIdentity';
 import {
     attributeUsageToPending,
@@ -184,7 +188,9 @@ export class UsageEnricher {
             Date.now()
         );
         const now = Date.now();
-        const due = pending.filter(item => item.nextAttemptAt <= now);
+        const due = pending.filter(item =>
+            canAttributePendingUsage(item) && item.nextAttemptAt <= now
+        );
         if (due.length === 0) {
             return;
         }
@@ -224,6 +230,11 @@ export class UsageEnricher {
         const remaining: PendingUsage[] = [];
 
         for (const item of pending) {
+            if (!canAttributePendingUsage(item)) {
+                debugLog('[usage] quarantining ambiguous legacy pending record');
+                remaining.push(item);
+                continue;
+            }
             if (item.nextAttemptAt > now) {
                 remaining.push(item);
                 continue;
@@ -237,6 +248,7 @@ export class UsageEnricher {
                     startsCache.set(item.composerId, currentStarts);
                 }
                 const composerPending = pending.filter(candidate =>
+                    canAttributePendingUsage(candidate) &&
                     candidate.composerId === item.composerId
                 );
                 const starts = [...new Set([

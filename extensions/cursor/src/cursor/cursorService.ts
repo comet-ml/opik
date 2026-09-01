@@ -17,6 +17,7 @@ import {
   hasAppliedUsage,
   recordAppliedUsage,
   recordUsageEventOwnership,
+  usageDeliveryForComposer,
 } from './usageLedger';
 
 export class CursorService {
@@ -38,9 +39,7 @@ export class CursorService {
         return;
       }
 
-      const delivery = entry.ownerComposerId === pending.composerId
-        ? entry
-        : entry.forkCopies[pending.composerId];
+      const delivery = usageDeliveryForComposer(entry, pending.composerId);
       if (!delivery) {
         await applyTurnUsage(this.apiKey, pending, usage);
         return;
@@ -130,7 +129,7 @@ export class CursorService {
                 const entry = requestLedger[trace.request_key];
                 if (entry.ownerComposerId === trace.thread_id) {
                   entry.usageStatus = 'disabled';
-                } else if (trace.thread_id && entry.forkCopies[trace.thread_id]) {
+                } else if (trace.thread_id && entry.forkCopies?.[trace.thread_id]) {
                   entry.forkCopies[trace.thread_id].usageStatus = 'disabled';
                 }
               }

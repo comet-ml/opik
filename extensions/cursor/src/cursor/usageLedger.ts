@@ -5,6 +5,15 @@ export type UsageDelivery = ForkCopyState | RequestLedgerEntry;
 
 const COMPACTED_KEY = 'compacted';
 
+export function usageDeliveryForComposer(
+    entry: RequestLedgerEntry,
+    composerId: string
+): UsageDelivery | undefined {
+    return entry.ownerComposerId === composerId
+        ? entry
+        : entry.forkCopies?.[composerId];
+}
+
 function revisionOrder(key: string): number {
     if (key === COMPACTED_KEY) {
         return Number.NEGATIVE_INFINITY;
@@ -94,9 +103,7 @@ export function appliedUsageEventOwners(
 ): Map<string, string> {
     const owners = new Map<string, string>();
     for (const entry of Object.values(ledger)) {
-        const delivery = entry.ownerComposerId === composerId
-            ? entry
-            : entry.forkCopies?.[composerId];
+        const delivery = usageDeliveryForComposer(entry, composerId);
         for (const [eventKey, usageKey] of Object.entries(delivery?.appliedUsageEvents ?? {})) {
             owners.set(eventKey, usageKey);
         }
