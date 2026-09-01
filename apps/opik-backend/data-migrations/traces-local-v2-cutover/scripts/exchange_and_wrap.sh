@@ -75,13 +75,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILE="$SCRIPT_DIR/db-app-analytics/000003_exchange_and_wrap.sql"
 DELTA_SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sql"
-# The deletion-replay block of 000002 is templated on the table names (opik#8092) so delta_replay.sh can also run
-# AFTER the swap. This driver only ever renders that block BEFORE the EXCHANGE — run_final_deletion_replay is called
-# once cutover_start is captured and before run_block exchange — so the names here are the pre-swap ones, the same
-# fixed names 000003's own EXCHANGE/RENAME statements carry. Bound as constants rather than exposed as flags: the
-# block is one fixed step of this driver, not a parameter of it.
-DELTA_OLD_TABLE="traces"
-DELTA_NEW_TABLE="traces_local_v2"
 
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
@@ -332,8 +325,6 @@ run_final_deletion_replay() {
     local sql
     sql="$(awk -v begin="-- >>> BEGIN deletion-replay" -v end="-- >>> END deletion-replay" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$DELTA_SQL_FILE")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
-    sql="${sql//'${OLD_TABLE}'/$DELTA_OLD_TABLE}"
-    sql="${sql//'${NEW_TABLE}'/$DELTA_NEW_TABLE}"
     sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
     assert_no_placeholder "$sql" "deletion-replay"
     # --time prints the statement's elapsed seconds to stderr (a bare --query prints nothing). This replay sits inside

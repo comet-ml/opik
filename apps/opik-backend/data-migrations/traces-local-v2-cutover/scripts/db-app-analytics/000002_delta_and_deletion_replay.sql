@@ -59,7 +59,7 @@
 -- max_insert_threads below sizes the INSERT SELECT pipeline, with the same semantics and costs as in 000001:
 -- omitted when --max-insert-threads is unset, an explicit 0 forcing no parallel execution. The delta writes to
 -- the same table through the same insert path, so pass the value used for the backfill.
-INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} (
+INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
     workspace_id,
     project_id,
@@ -108,7 +108,7 @@ SELECT
     coalesce(ttft, toFloat64('nan')) AS ttft,
     source,
     environment
-FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
    OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
@@ -146,7 +146,7 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- a malformed (non-36-char) deleted_id/project_id can't match a real trace id anyway, so skipping it via the length
 -- guard loses nothing and turns a hard abort mid-cutover into a benign no-op. Same guards in the reverse-replay.
 -- >>> BEGIN deletion-replay
-DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
+DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2
 WHERE (
     (workspace_id, project_id, id) IN (
         SELECT
@@ -165,7 +165,7 @@ WHERE (
             workspace_id,
             project_id,
             id
-        FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
         WHERE id IN (
             SELECT toFixedString(deleted_id, 36)
             FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
