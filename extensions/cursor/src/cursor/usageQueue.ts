@@ -11,7 +11,9 @@ function nonEmptyString(value: unknown): value is string {
 }
 
 function hasDurableUsageKey(value: unknown): value is string {
-    return nonEmptyString(value) && value.split('\u0000').length >= 5;
+    return nonEmptyString(value) &&
+        !value.startsWith('legacy\u0000') &&
+        value.split('\u0000').length >= 5;
 }
 
 function legacyCompatibilityKey(item: Partial<PendingUsage>): string | undefined {
@@ -32,7 +34,8 @@ function legacyCompatibilityKey(item: Partial<PendingUsage>): string | undefined
 }
 
 function isLegacyCompatibilityItem(item: Partial<PendingUsage>): boolean {
-    return !hasDurableUsageKey(item.usageKey) ||
+    return item.usageKey?.startsWith('legacy\u0000') === true ||
+        !hasDurableUsageKey(item.usageKey) ||
         item.requestKey?.startsWith('legacy\u0000') === true;
 }
 

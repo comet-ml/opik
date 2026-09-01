@@ -335,6 +335,40 @@ test('unmatched legacy pending usage gets a unique compatibility identity', () =
     assert.notEqual(normalized[0].requestKey, normalized[1].requestKey);
 });
 
+test('normalized legacy usage upgrades on a later tracking invocation', () => {
+    const legacy = {
+        usageKey: 'short-legacy-key',
+        requestId: 'old-request',
+        requestKey: 'old-request-key',
+        composerId: ORIGINAL,
+        turnStartMs: T0,
+        traceId: 'trace',
+        spanId: 'span',
+        projectName: 'cursor-tests',
+        attempt: 1,
+        nextAttemptAt: T0,
+    } as PendingUsage;
+    const normalized = mergePendingUsage([legacy], [], T0);
+    assert.equal(normalized[0].usageKey.startsWith('legacy\u0000'), true);
+
+    const modernUsageKey = `cursor-tests\u0000modern\u0000${ORIGINAL}\u0000${T0}\u00001`;
+    const upgraded = mergePendingUsage(normalized, [{
+        usageKey: modernUsageKey,
+        requestId: 'modern',
+        requestKey: 'modern-request-key',
+        composerId: ORIGINAL,
+        turnStartMs: T0,
+        turnStartsMs: [T0],
+        traceId: 'trace',
+        spanId: 'span',
+        projectName: 'cursor-tests',
+    }], T0 + 1);
+
+    assert.equal(upgraded.length, 1);
+    assert.equal(upgraded[0].usageKey, modernUsageKey);
+    assert.equal(canAttributePendingUsage(upgraded[0]), true);
+});
+
 test('legacy ledger entries tolerate a missing fork-copy map', () => {
     const ledger: RequestLedger = {};
     const original = trace('legacy-ledger', ORIGINAL);
