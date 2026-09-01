@@ -64,10 +64,8 @@ public class AuthFilter implements ContainerRequestFilter {
                         token, context.getHeaderString(RequestContext.WORKSPACE_HEADER));
                 authService.authorizeOAuth(validatedToken, contextInfo);
             } else if (opikConfig.getCipxTokenValidation().isEnabled() && CipxTokenUtils.isCipxToken(authHeader)) {
-                ValidatedCipxToken validatedToken = cipxTokenValidationService.validateTokenForWorkspace(
-                        authHeader, context.getHeaderString(RequestContext.WORKSPACE_HEADER));
-                authService.authorizeOAuth(validatedToken.toValidatedToken(), contextInfo);
-                requestContext.get().setCipxDeviceId(validatedToken.deviceId());
+                cipxTokenValidationService.authenticate(authHeader,
+                        context.getHeaderString(RequestContext.WORKSPACE_HEADER), contextInfo);
             } else {
                 authService.authenticate(headers, sessionToken, contextInfo);
             }

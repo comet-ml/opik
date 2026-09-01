@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -20,14 +21,17 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
- * Resolves a CIPX device token to its caller attributes by asking cost-api, which owns the signing key and the
- * device registry. Nothing is verified locally: revocation and org standing are re-checked on every validation,
- * so no crypto and no key distribution live here.
+ * Authenticates a CIPX device token: cost-api owns the signing key and the device registry, so the token is
+ * validated by asking it rather than verified locally. Nothing here does crypto, and revocation takes effect
+ * within the credentials cache TTL because the registry is re-checked on every cold call.
  * <p>
- * Results go through the same credentials cache and TTL as API keys, so a batch of ingest requests from one
- * machine costs one validation call and revocation still lands within that TTL.
+ * Caches the <em>resolved credential</em> (user, workspace, quotas, permissions, device id) under the token,
+ * mirroring the API-key path: a warm request is one cache read with no outbound call. Caching only the
+ * validation response would leave every ingest batch from every enrolled machine hitting the react service.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -45,30 +49,59 @@ public class CipxTokenValidationService {
     private final @NonNull Client client;
     private final @NonNull OpikConfiguration opikConfig;
     private final @NonNull CacheService cacheService;
+    private final @NonNull AuthService authService;
+    private final @NonNull Provider<RequestContext> requestContext;
 
-    public ValidatedCipxToken validateTokenForWorkspace(@NonNull String token, String headerWorkspace) {
+    public void authenticate(@NonNull String token, String headerWorkspace, @NonNull ContextInfoHolder contextInfo) {
         // A blank workspace header is allowed: cost-api resolves the workspace from the token itself, and only
         // rejects a non-blank header that disagrees.
         String requestWorkspaceName = StringUtils.defaultString(headerWorkspace);
+        List<String> requiredPermissions = contextInfo.requiredPermissions();
 
-        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, requestWorkspaceName, List.of());
+        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, requestWorkspaceName,
+                requiredPermissions);
         if (cached.isPresent()) {
-            return ValidatedCipxToken.builder()
-                    .userName(cached.get().userName())
-                    .workspaceId(cached.get().workspaceId())
-                    .workspaceName(cached.get().workspaceName())
-                    .deviceId(cached.get().deviceId())
-                    .build();
+            setCredentialIntoContext(cached.get(), requestWorkspaceName);
+            return;
         }
 
         var validated = validate(token, requestWorkspaceName);
-        cacheService.cache(token, requestWorkspaceName, List.of(), CacheService.AuthCredentials.builder()
-                .userName(validated.userName())
-                .workspaceId(validated.workspaceId())
-                .workspaceName(validated.workspaceName())
-                .deviceId(validated.deviceId())
+        // The same seam the MCP OAuth branch uses: resolves quotas and permissions for the caller and fills the
+        // request context.
+        authService.authorizeOAuth(validated.toValidatedToken(), contextInfo);
+        requestContext.get().setCipxDeviceId(validated.deviceId());
+        cacheResolvedCredential(token, requestWorkspaceName, requiredPermissions, validated.deviceId());
+    }
+
+    private void setCredentialIntoContext(CacheService.AuthCredentials credentials, String fallbackWorkspaceName) {
+        var context = requestContext.get();
+        context.setUserName(credentials.userName());
+        context.setWorkspaceId(credentials.workspaceId());
+        context.setWorkspaceName(Optional.ofNullable(credentials.workspaceName()).orElse(fallbackWorkspaceName));
+        context.setQuotas(credentials.quotas());
+        context.setPermissions(credentials.permissions() == null ? Set.of() : Set.copyOf(credentials.permissions()));
+        context.setCipxDeviceId(credentials.deviceId());
+    }
+
+    /**
+     * Caches whatever the authorization left in the request context, so the warm path reproduces it exactly.
+     * A caller the authorization could not fully resolve is not cached: an entry missing either key cannot be
+     * read back, and the next request would rather pay for a fresh resolution than serve a partial one.
+     */
+    private void cacheResolvedCredential(String token, String requestWorkspaceName, List<String> requiredPermissions,
+            String deviceId) {
+        var context = requestContext.get();
+        if (StringUtils.isBlank(context.getUserName()) || StringUtils.isBlank(context.getWorkspaceId())) {
+            return;
+        }
+        cacheService.cache(token, requestWorkspaceName, requiredPermissions, CacheService.AuthCredentials.builder()
+                .userName(context.getUserName())
+                .workspaceId(context.getWorkspaceId())
+                .workspaceName(context.getWorkspaceName())
+                .quotas(context.getQuotas())
+                .permissions(List.copyOf(context.getPermissions()))
+                .deviceId(deviceId)
                 .build());
-        return validated;
     }
 
     private ValidatedCipxToken validate(String token, String workspaceName) {
