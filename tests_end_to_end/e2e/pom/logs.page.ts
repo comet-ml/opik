@@ -31,6 +31,25 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Traces tab active for the given project.
+   *
+   * `goto()` above leaves the tab to the page, and the page's default is
+   * data-dependent: `useLogsType` opens on Threads whenever the project has a
+   * thread in the current date range, falling back to Traces only when it has
+   * none. A spec whose subject is the Traces table has to ask for it, or it
+   * silently asserts against whichever table the seed happened to produce.
+   */
+  async gotoTraces(projectId: string): Promise<void> {
+    return test.step(`Open Logs (Traces) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=traces`,
+      );
+    });
+  }
+
   /** Open Logs with the Threads tab active for the given project. */
   async gotoThreads(projectId: string): Promise<void> {
     return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {

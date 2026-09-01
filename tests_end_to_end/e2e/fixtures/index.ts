@@ -1,4 +1,4 @@
-export { test, expect } from './dashboard-cleanup.fixture';
+export { test, expect } from './project-metric-days.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -105,4 +105,13 @@ export type {
   TraceAttachmentsFixtures,
 } from './trace-attachments.fixture';
 export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type {
+  FarFutureTracesRef,
+  FarFutureTracesFixtures,
+} from './far-future-traces.fixture';
+export type {
+  ProjectMetricDayRef,
+  ProjectMetricDaysRef,
+  ProjectMetricDaysFixtures,
+} from './project-metric-days.fixture';
 export type { ProjectRef } from '../core/backend';

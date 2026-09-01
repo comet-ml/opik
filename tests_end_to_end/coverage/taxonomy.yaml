@@ -249,10 +249,12 @@ areas:
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-attachments.spec.ts
+      - trace-explore/far-future-trace-window.spec.ts
+      - trace-explore/trace-stream-cursor.spec.ts
 
     # ---- functional dimension ----
     capabilities:
-      list-traces:            { covered: true,  tier: t1-smoke }
+      list-traces:            { covered: true,  tier: t1-smoke, note: "also the time-windowed reads: which rows a from_time/to_time window is entitled to (incl. a far-future UUIDv7 id), and the traces/search stream paged with last_retrieved_id" }
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
@@ -319,8 +321,9 @@ areas:
       - trace-explore/thread-logging-smoke.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-evaluation.spec.ts
+      - trace-explore/far-future-thread-window.spec.ts
     capabilities:
-      list-threads:            { covered: true,  tier: t1-smoke }
+      list-threads:            { covered: true,  tier: t1-smoke, note: "also the time-windowed read: which threads a from_time/to_time window is entitled to, incl. a thread whose traces carry far-future UUIDv7 ids" }
       thread-message-count:    { covered: true,  tier: t1-smoke }
       open-thread-panel:       { covered: true,  tier: t1-smoke }
       turn-order-io:           { covered: true,  tier: t1-smoke }
@@ -369,6 +372,7 @@ areas:
       - dashboards/workspace-span-metrics.spec.ts
       - dashboards/project-span-metrics.spec.ts
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-metric-daily-buckets.spec.ts
     capabilities:
       list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
@@ -376,7 +380,7 @@ areas:
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
       add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
-      configure-widget:     { covered: true,  tier: t2-cuj, note: "scoping a Time series widget to one project and picking its metric through the widget dialog, plus the data contract of the per-project read it then makes (POST /projects/{id}/metrics across every MetricType and span breakdown); the widget dialog's remaining options — chart type, filters, group by, sub-metric — are uncovered" }
+      configure-widget:     { covered: true,  tier: t2-cuj, note: "scoping a Time series widget to one project and picking its metric through the widget dialog, plus the data contract of the per-project read it then makes (POST /projects/{id}/metrics across every MetricType and span breakdown); the widget dialog's remaining options — chart type, filters, group by, sub-metric — are uncovered. The per-project read's DAILY bucket *values* are pinned too (FEEDBACK_SCORES and TRACE_COUNT over a window crossing a week start, plus /projects/stats over a sub-window); reading those values back off the rendered chart is not possible, so that half stays API-level" }
       widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
       metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
 
