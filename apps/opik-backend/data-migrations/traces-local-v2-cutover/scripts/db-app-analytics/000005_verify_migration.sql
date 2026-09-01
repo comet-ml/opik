@@ -372,8 +372,8 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 
 -- >>> BEGIN version-ties
 -- For a window `confirm-keys` reported as 0: is that 0 decidable? Returns one row, src_version_ties dst_version_ties --
--- per side, the number of candidate keys whose newest last_updated_at is carried by MORE THAN ONE DISTINCT ROW. Both 0
--- means every candidate had a forced winner, so the artifact verdict stands; non-zero means FINAL chose between rows
+-- per side, the number of candidate keys whose newest last_updated_at is carried by MORE THAN ONE DISTINCT ROW. Both
+-- being 0 means every candidate had a forced winner, so the artifact verdict stands; non-zero means FINAL chose between rows
 -- that actually differ, and ../verify.sh reports the window INCONCLUSIVE instead of passing it.
 --
 -- DISTINCT CONTENT, not row count, and that distinction is load-bearing. The cutover itself puts several physical rows
@@ -411,126 +411,96 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- no such column at all. Today the only delete path is the lightweight DELETE in 000002, so the two sides agree.
 WITH
     src_ties AS (
-        SELECT count() AS n
-        FROM (
-            SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+            SELECT count() AS n
             FROM (
-                SELECT
-                    (workspace_id, project_id, id) AS key,
-                    last_updated_at AS version,
-                    uniqExact(cityHash64(
-                                id,
-                                workspace_id,
-                                toString(project_id),
-                                name,
-                                toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
-                                coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
-                                input,
-                                output,
-                                metadata,
-                                arrayStringConcat(tags, '\x1f'),
-                                toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
-                                toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
-                                created_by,
-                                last_updated_by,
-                                error_info,
-                                thread_id,
-                                toString(visibility_mode),
-                                truncation_threshold,
-                                input_slim,
-                                output_slim,
-                                if(ttft IS NULL, 'nan', toString(ttft)),
-                                toString(source),
-                                toString(environment))) AS distinct_at_version
-                FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
-                WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
-                  AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-                  AND cityHash64(id) %% ${SAMPLE_MOD} = 0
-                GROUP BY key, version
+                SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                FROM (
+                    SELECT
+                        (workspace_id, project_id, id) AS key,
+                        last_updated_at AS version,
+                        uniqExact(cityHash64(
+                            id,
+                            workspace_id,
+                            toString(project_id),
+                            name,
+                            toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
+                            coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
+                            input,
+                            output,
+                            metadata,
+                            arrayStringConcat(tags, '\x1f'),
+                            toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
+                            toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
+                            created_by,
+                            last_updated_by,
+                            error_info,
+                            thread_id,
+                            toString(visibility_mode),
+                            truncation_threshold,
+                            input_slim,
+                            output_slim,
+                            if(ttft IS NULL, 'nan', toString(ttft)),
+                            toString(source),
+                            toString(environment))) AS distinct_at_version
+                    FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+                    WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+                      AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
+                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                    GROUP BY key, version
+                )
+                GROUP BY key
             )
-            GROUP BY key
-        )
-        WHERE distinct_at_newest > 1
+            WHERE distinct_at_newest > 1
     ),
     dst_ties AS (
-        SELECT count() AS n
-        FROM (
-            SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+            SELECT count() AS n
             FROM (
-                SELECT
-                    (workspace_id, project_id, id) AS key,
-                    last_updated_at AS version,
-                    uniqExact(cityHash64(
-                                id,
-                                workspace_id,
-                                toString(project_id),
-                                name,
-                                toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
-                                coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
-                                input,
-                                output,
-                                metadata,
-                                arrayStringConcat(tags, '\x1f'),
-                                toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
-                                toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
-                                created_by,
-                                last_updated_by,
-                                error_info,
-                                thread_id,
-                                toString(visibility_mode),
-                                truncation_threshold,
-                                input_slim,
-                                output_slim,
-                                if(ttft IS NULL, 'nan', toString(ttft)),
-                                toString(source),
-                                toString(environment)) AS src_hash
-                                FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
-                                WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
-                                  AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-                                  AND cityHash64(id) % ${SAMPLE_MOD} = 0
-                            ) AS s
-                            FULL OUTER JOIN (
-                                SELECT
-                                    (workspace_id, project_id, id) AS key,
-                                    cityHash64(
-                                id,
-                                workspace_id,
-                                toString(project_id),
-                                name,
-                                toUnixTimestamp64Micro(start_time),
-                                toUnixTimestamp64Micro(end_time),
-                                input,
-                                output,
-                                metadata,
-                                arrayStringConcat(tags, '\x1f'),
-                                toUnixTimestamp64Micro(created_at),
-                                toUnixTimestamp64Micro(last_updated_at),
-                                created_by,
-                                last_updated_by,
-                                error_info,
-                                thread_id,
-                                toString(visibility_mode),
-                                truncation_threshold,
-                                input_slim,
-                                output_slim,
-                                if(isNaN(ttft), 'nan', toString(ttft)),
-                                toString(source),
-                                toString(environment))) AS distinct_at_version
-                FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
-                WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
-                  AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
-                  AND cityHash64(id) %% ${SAMPLE_MOD} = 0
-                GROUP BY key, version
+                SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                FROM (
+                    SELECT
+                        (workspace_id, project_id, id) AS key,
+                        last_updated_at AS version,
+                        uniqExact(cityHash64(
+                            id,
+                            workspace_id,
+                            toString(project_id),
+                            name,
+                            toUnixTimestamp64Micro(start_time),
+                            toUnixTimestamp64Micro(end_time),
+                            input,
+                            output,
+                            metadata,
+                            arrayStringConcat(tags, '\x1f'),
+                            toUnixTimestamp64Micro(created_at),
+                            toUnixTimestamp64Micro(last_updated_at),
+                            created_by,
+                            last_updated_by,
+                            error_info,
+                            thread_id,
+                            toString(visibility_mode),
+                            truncation_threshold,
+                            input_slim,
+                            output_slim,
+                            if(isNaN(ttft), 'nan', toString(ttft)),
+                            toString(source),
+                            toString(environment))) AS distinct_at_version
+                    FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
+                    WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+                      AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
+                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                    GROUP BY key, version
+                )
+                GROUP BY key
             )
-            GROUP BY key
-        )
-        WHERE distinct_at_newest > 1
+            WHERE distinct_at_newest > 1
     )
 SELECT
     src_ties.n AS src_version_ties,
     dst_ties.n AS dst_version_ties
 FROM src_ties, dst_ties
--- The bounds are a backstop so a pathological window fails loudly rather than consuming the server; the read is
--- partition-pruned by the window predicates above, which is the actual control.
+-- Neither setting is a query-level cap. max_rows_to_read = 0 removes any row limit a settings profile imposes: this
+-- read is not truncatable -- it either covers the window's physical versions or throws -- and a throw would fail a gate
+-- that could otherwise answer. max_bytes_before_external_group_by lets the GROUP BY spill to disk rather than hit the
+-- memory limit. What actually bounds the read is the window predicate above, which prunes partitions.
 SETTINGS max_rows_to_read = 0, max_bytes_before_external_group_by = 4000000000;
 -- >>> END version-ties
