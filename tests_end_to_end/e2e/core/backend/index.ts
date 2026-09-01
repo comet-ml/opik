@@ -14,6 +14,8 @@ export {
   type MetricBreakdown,
   type WorkspaceMetricType,
   type ProjectMetricType,
+  type KpiEntityType,
+  type KpiStat,
   PROJECT_METRIC_TYPES,
   type AttachmentRef,
   type ProjectStatsRef,

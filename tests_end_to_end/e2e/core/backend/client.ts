@@ -341,6 +341,22 @@ export const PROJECT_METRIC_TYPES = [
 
 export type ProjectMetricType = (typeof PROJECT_METRIC_TYPES)[number];
 
+/** The entity a Logs metrics-summary (KPI) card counts. */
+export type KpiEntityType = 'traces' | 'spans' | 'threads';
+
+/**
+ * One card of a `POST /v1/private/projects/{id}/kpi-cards` answer.
+ *
+ * `null` is a real answer from this endpoint, not a missing one: a card whose
+ * interval matched nothing reports a null value rather than a zero, and the two
+ * must not be collapsed by a caller asserting on a count.
+ */
+export interface KpiStat {
+  type: string;
+  currentValue: number | null;
+  previousValue: number | null;
+}
+
 /** The `breakdown` block a widget sends when the user picks a "Group by". */
 export interface MetricBreakdown {
   /** `model`, `provider`, `type`, `name`, `tags`, … — the backend's BreakdownField. */
@@ -1000,6 +1016,45 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/projects/{id}/kpi-cards` — the counts the Logs page's
+     * metrics-summary strip renders above the Traces/Threads table.
+     *
+     * Same payload the front end sends (`useProjectKpiCards.ts`): an
+     * `entity_type` plus an explicit `interval_start`/`interval_end`. That
+     * interval is the point — the card read is time-bounded where the table's
+     * own list read leaves the upper bound open, so it exercises a different
+     * branch of the same week-bound predicate.
+     */
+    async projectKpiCards(args: {
+      projectId: string;
+      entityType: KpiEntityType;
+      intervalStart: Date;
+      intervalEnd: Date;
+    }): Promise<RawApiResult & { stats: KpiStat[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/projects/${args.projectId}/kpi-cards`,
+        {
+          body: {
+            entity_type: args.entityType,
+            interval_start: args.intervalStart.toISOString(),
+            interval_end: args.intervalEnd.toISOString(),
+          },
+        },
+      );
+      const stats = (json as { stats?: Array<Record<string, unknown>> } | null)?.stats ?? [];
+      return {
+        status,
+        message,
+        stats: stats.map((s) => ({
+          type: String(s.type ?? ''),
+          currentValue: (s.current_value as number | null | undefined) ?? null,
+          previousValue: (s.previous_value as number | null | undefined) ?? null,
+        })),
+      };
+    },
+
+    /**
      * `DELETE /v1/private/dashboards/{id}`.
      *
      * A dashboard does not hang off a project, so no project delete reaches
@@ -1626,6 +1681,60 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/traces/search` — the streaming read the SDK pages a
+     * project with, in stream order (descending id).
+     *
+     * `lastRetrievedId` is the pagination cursor, and driving it is the whole
+     * reason this exists: the endpoint answers `application/octet-stream`
+     * NDJSON, which neither the pinned SDK nor `rawFetch` (which parses one JSON
+     * document) can read, and the paged `GET /traces` has no cursor at all.
+     *
+     * Ids only, like `listTraceIds` — what a cursor test asserts is *which*
+     * rows a page is entitled to and in what order, never their content.
+     */
+    async searchTraceIds(
+      args: { projectId: string; lastRetrievedId?: string; limit?: number } & ReadWindow,
+    ): Promise<RawApiResult & { ids: string[] }> {
+      const headers: Record<string, string> = {
+        ...workspaceHeaders(),
+        Accept: 'application/octet-stream',
+        'Content-Type': 'application/json',
+      };
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/traces/search`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          project_id: args.projectId,
+          truncate: true,
+          ...(args.limit === undefined ? {} : { limit: args.limit }),
+          ...(args.lastRetrievedId ? { last_retrieved_id: args.lastRetrievedId } : {}),
+          ...(args.fromTime ? { from_time: args.fromTime.toISOString() } : {}),
+          ...(args.toTime ? { to_time: args.toTime.toISOString() } : {}),
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        return { status: res.status, message: text.slice(0, 300), ids: [], location: null };
+      }
+      // One JSON document per line. The endpoint can also emit an ErrorMessage
+      // object mid-stream, which carries no `id` — surfaced as a thrown error
+      // rather than silently shortening the page, since a caller comparing the
+      // stream to an expected set would otherwise read it as missing rows.
+      const ids: string[] = [];
+      for (const line of text.split('\n')) {
+        if (line.trim() === '') continue;
+        const row = JSON.parse(line) as { id?: unknown; message?: unknown };
+        if (typeof row.id !== 'string') {
+          throw new Error(
+            `searchTraceIds: stream carried a row with no id: ${line.slice(0, 300)}`,
+          );
+        }
+        ids.push(row.id);
+      }
+      return { status: res.status, message: '', ids, location: null };
+    },
+
+    /**
      * Create a trace with an explicit id and `source`. The SDK bridge always
      * emits `source=sdk`; the optimization-trial overlay filters on
      * `source=optimization`, so a trial-log fixture cannot be built through the
@@ -1650,6 +1759,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       input?: TraceJsonSection;
       output?: TraceJsonSection;
       metadata?: Record<string, unknown>;
+      /**
+       * Puts the trace in a thread, so the same seed is readable through
+       * `/traces/threads` as well as `/traces`. The bridge's `createNestedTrace`
+       * takes a `thread_id` too, but it mints its own id — a caller that needs
+       * both an explicit id and a thread has only this route.
+       */
+      threadId?: string;
       startTime?: Date;
       /**
        * Set this to make the trace eligible for online scoring.
@@ -1666,6 +1782,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           name: args.name,
           source: args.source,
           start_time: (args.startTime ?? new Date()).toISOString(),
+          ...(args.threadId ? { thread_id: args.threadId } : {}),
           ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
           ...(args.input === undefined ? {} : { input: args.input }),
           ...(args.output === undefined ? {} : { output: args.output }),
