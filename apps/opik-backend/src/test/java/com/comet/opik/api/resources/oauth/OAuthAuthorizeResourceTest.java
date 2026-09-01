@@ -11,6 +11,8 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.UserWorkspace;
 import com.comet.opik.infrastructure.auth.WorkspaceInfo;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.ClientErrorException;
@@ -217,7 +219,7 @@ class OAuthAuthorizeResourceTest {
 
     @Test
     @DisplayName("GET /authorize/context: exposes the default workspace flag the consent UI preselects on")
-    void context_exposesDefaultWorkspaceFlag() {
+    void context_exposesDefaultWorkspaceFlag() throws JsonProcessingException {
         mockClientResolution();
         when(authService.listEligibleWorkspaces(any())).thenReturn(List.of(
                 WorkspaceInfo.builder().id("ws-1").name("staging").isDefault(false).build(),
@@ -231,8 +233,15 @@ class OAuthAuthorizeResourceTest {
                 .get()) {
 
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-            assertThat(response.readEntity(String.class))
-                    .contains("\"id\":\"ws-1\"", "\"id\":\"ws-2\"", "\"is_default\":false", "\"is_default\":true");
+            // Compared as a whole tree rather than as independent substrings: this pins the
+            // literal is_default wire key the consent UI reads and keeps each flag bound to
+            // its own workspace, so swapping the two would fail here.
+            JsonNode workspaces = JsonUtils.getMapper()
+                    .readTree(response.readEntity(String.class))
+                    .get("workspaces");
+            assertThat(workspaces).isEqualTo(JsonUtils.getMapper().readTree("""
+                    [{"id":"ws-1","name":"staging","is_default":false},
+                     {"id":"ws-2","name":"production","is_default":true}]"""));
         }
     }
 
