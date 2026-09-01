@@ -21,8 +21,8 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { AlertFormType, AlertFormSchema } from "./schema";
-import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
+import WebhookSettings from "./WebhookSettings";
 import TestWebhookSection from "./TestWebhookSection";
 import {
   alertTriggersToFormTriggers,
@@ -234,12 +234,12 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
 
               <Separator />
 
-              <WebhookSettings form={form} />
-
               <EventTriggers
                 form={form}
                 projectId={alert?.project_id || activeProjectId!}
               />
+
+              <WebhookSettings form={form} />
 
               <Separator className="lg:hidden" />
 
