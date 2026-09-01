@@ -337,12 +337,12 @@ class BaseRedisSubscriberUnitTest {
         }
 
         /**
-         * An entry with no value under the payload field — malformed on write, or a field name the
-         * now-tolerant map-key decoder could not decode — is retired the same way rather than handed
-         * to processEvent as null.
+         * A genuinely absent payload field is deterministic — no pod can invent it — so it keeps the
+         * pre-existing non-retryable treatment and is removed on the FIRST delivery. The delivery count
+         * is stubbed below maxRetries precisely to prove the removal does not depend on exhausting it.
          */
         @Test
-        void shouldRetireMessageWithNoPayload() {
+        void shouldRemoveMessageWithNoPayloadOnFirstDelivery() {
             var noPayloadId = new StreamMessageId(System.currentTimeMillis(), 0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             whenAutoClaimReturnEmpty(subscriber.getConsumerId());
@@ -353,7 +353,46 @@ class BaseRedisSubscriberUnitTest {
                             : Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
                                     Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
                                             podamFactory.manufacturePojo(String.class)))));
-            var pending = pendingEntry(noPayloadId, CONFIG.getMaxRetries());
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> verify(stream).remove(eq(new StreamMessageId[]{noPayloadId})));
+            // Deliberately no listPending stub: a non-retryable failure is removed without consulting
+            // the delivery count at all, so needing one would mean the classification had drifted to
+            // retryable. This is the assertion that separates this case from the field-name one below.
+            verify(stream, never()).listPending(any(StreamPendingRangeArgs.class));
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+        }
+
+        /**
+         * A field name the map-key decoder could not decode is a different animal: the sentinel lands
+         * among the KEYS, so the payload lookup misses, but LZ4/Kryo skew can differ between pods. It
+         * must therefore be retryable — NOT removed below maxRetries — unlike the absent-field case
+         * above. Nothing but this test distinguishes the two.
+         */
+        @Test
+        void shouldNotRemoveMessageWithUndecodableFieldNameBeforeMaxRetries() {
+            var badKeyId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        if (readCount.incrementAndGet() == 1) {
+                            // The sentinel is the KEY, so no entry matches PAYLOAD_FIELD.
+                            Map<Object, Object> entry = new java.util.HashMap<>();
+                            entry.put(new UndecodableStreamMessage(64,
+                                    new IllegalStateException("not an LZ4 frame")), "unreachable");
+                            return Mono.just(Map.of(badKeyId, entry));
+                        }
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            var pending = pendingEntry(badKeyId, 1);
             when(stream.listPending(any(StreamPendingRangeArgs.class)))
                     .thenReturn(Mono.just(List.of(pending)));
             whenAckReturn();
@@ -362,8 +401,9 @@ class BaseRedisSubscriberUnitTest {
             subscriber.start();
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> verify(stream).remove(eq(new StreamMessageId[]{noPayloadId})));
-            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1));
+
+            verify(stream, never()).remove(eq(new StreamMessageId[]{badKeyId}));
         }
 
         private void whenReadGroupReturnsUndecodableThenHealthy(StreamMessageId undecodableId) {

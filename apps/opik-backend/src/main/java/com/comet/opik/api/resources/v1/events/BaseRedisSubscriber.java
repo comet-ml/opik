@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.redis.UndecodablePayloadException;
 import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -54,9 +53,6 @@ import java.util.stream.Stream;
  * application lifecycle.
  */
 public abstract class BaseRedisSubscriber<M> implements Managed {
-
-    /** Tags the undecodable counter, so one noisy stream is distinguishable in a shared dashboard. */
-    private static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
 
     private static final String BUSYGROUP = "BUSYGROUP";
     private static final String NOGROUP = "NOGROUP";
@@ -490,12 +486,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         // A payload the codec could not decode. It arrives as a sentinel rather than an exception
         // precisely so this point is reachable at all -- the throw used to happen inside Redisson, below
         // here and before any messageId existed, which is why such an entry could never be acked or
-        // removed and wedged the stream permanently (OPIK-8164). Drop it: it will never become decodable,
-        // and every redelivery strands the healthy entries claimed alongside it.
+        // removed and wedged the stream permanently (OPIK-8164). Healthy entries claimed in the same
+        // batch are no longer stranded by it. Retire it through maxRetries rather than deleting it now:
+        // see UndecodablePayloadException for why first-delivery deletion would discard recoverable data.
         if (message instanceof UndecodableStreamMessage undecodable) {
-            undecodableMessages.add(1, Attributes.of(
-                    ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(undecodable.cause()),
-                    STREAM_KEY, config.getStreamName()));
+            recordUndecodable(messageId, undecodable.cause(), null);
             // Warn, not error: on its own this is one delivery of one entry, and the retryable path may
             // still decode it on another pod. handleMaxRetriesReached logs at error when it is finally
             // removed, which is the event worth waking someone for.
@@ -512,30 +507,47 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
-        // No payload under the expected field. Either the entry was written malformed, or -- with the
-        // map-key decoder now fault tolerant -- its field name failed to decode and the lookup missed.
-        // Retire it the same way rather than handing null to processEvent, where it would surface as an
-        // opaque NullPointerException with no size or stream in the message. Retryable like the payload
-        // case, and for the same reason: a field name that failed to decode may decode on a pod whose
-        // LZ4/Kryo versions differ, so this is not reliably deterministic. maxRetries bounds it either
-        // way, and erring toward not deleting is the safer default.
+        // Nothing under the expected field. Two different causes hide behind the same symptom, and they
+        // deserve opposite treatment, so tell them apart by looking for a sentinel among the KEYS:
+        //   - the field name itself failed to decode (LZ4/Kryo on this codec), so the lookup missed. That
+        //     can be version skew between pods, so it is retryable -- and the key sentinel carries the
+        //     cause, which would otherwise be lost entirely since nothing else inspects key objects.
+        //   - the entry genuinely carries no such field. No pod can invent it, so retrying only delays
+        //     the inevitable; keep the pre-existing non-retryable, remove-on-first-delivery behaviour
+        //     (it used to arrive as a NullPointerException out of processEvent).
         if (message == null) {
-            undecodableMessages.add(1, Attributes.of(
-                    ErrorMetricsResolver.ERROR_TYPE_KEY, "missing_payload",
-                    STREAM_KEY, config.getStreamName()));
+            var keyFailure = undecodableKeyCause(entry.getValue());
+            recordUndecodable(messageId, keyFailure != null ? keyFailure : null,
+                    keyFailure != null ? "undecodable_field_name" : "missing_payload");
+            if (keyFailure != null) {
+                log.warn("Message field name could not be decoded, payload unreachable: messageId '{}', "
+                        + "stream '{}'", messageId, config.getStreamName(), keyFailure);
+                return Mono.just(ProcessingResult.builder()
+                        .messageId(messageId)
+                        .status(MessageStatus.FAILURE)
+                        .error(new UndecodablePayloadException(
+                                "Field name could not be decoded, no payload under '%s'"
+                                        .formatted(payloadField),
+                                keyFailure))
+                        .context(MessageContext.UNKNOWN)
+                        .build());
+            }
             log.warn("Message has no payload under field '{}': messageId '{}', stream '{}'",
                     payloadField, messageId, config.getStreamName());
             return Mono.just(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
-                    .error(new UndecodablePayloadException(
-                            "No payload under field '%s'".formatted(payloadField), null))
+                    // IllegalStateException is non-retryable: removed on first delivery, as before.
+                    .error(new IllegalStateException(
+                            "No payload under field '%s'".formatted(payloadField)))
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
         var startMillis = System.currentTimeMillis();
         // Resolve the workspace/user once: the processing-time histogram is tagged with it for every
-        // message (success or failure), and the failure path reuses it for error attribution.
+        // message that reaches processEvent (success or failure), and the failure path reuses it for
+        // error attribution. The undecodable and no-payload branches above return before this -- they
+        // have no decoded message to attribute -- and record queue delay themselves.
         var context = messageContext(message);
         var workspaceAttributes = Attributes.of(
                 ErrorMetricsResolver.WORKSPACE_ID_KEY, context.workspaceId(),
@@ -560,6 +572,44 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                             .ifPresent(messageMillis -> messageQueueDelay
                                     .record(System.currentTimeMillis() - messageMillis));
                 });
+    }
+
+    /**
+     * Counts an entry that could not be decoded and keeps it visible in the queue-delay histogram.
+     * <p>
+     * The histogram matters more here than on the success path: a retryable undecodable entry is
+     * delivered up to {@code maxRetries} times, and its growing age is the signal that shows an entry
+     * cycling in a growing PEL. Returning early without recording it would hide exactly the entries
+     * worth noticing.
+     *
+     * @param cause     the decode failure, or {@code null} when there was simply no payload field
+     * @param errorType overrides the {@code error_type} label; {@code null} derives it from {@code cause}
+     */
+    private void recordUndecodable(StreamMessageId messageId, Throwable cause, String errorType) {
+        undecodableMessages.add(1, Attributes.of(
+                ErrorMetricsResolver.ERROR_TYPE_KEY,
+                errorType != null ? errorType : ErrorMetricsResolver.errorType(cause),
+                ErrorMetricsResolver.STREAM_KEY, config.getStreamName()));
+        extractTimeFromMessageId(messageId)
+                .ifPresent(messageMillis -> messageQueueDelay.record(System.currentTimeMillis() - messageMillis));
+    }
+
+    /**
+     * The decode failure behind an entry's field name, if the map-key decoder produced a sentinel.
+     * <p>
+     * Reached by inspecting the key objects, which nothing else does: a sentinel key cannot match
+     * {@code payloadField}, so without this the cause would be discarded and a field-name failure would
+     * be indistinguishable from an entry that never carried the field.
+     */
+    private static Throwable undecodableKeyCause(Map<?, ?> valueMap) {
+        if (valueMap == null) {
+            return null;
+        }
+        return valueMap.keySet().stream()
+                .filter(UndecodableStreamMessage.class::isInstance)
+                .map(key -> ((UndecodableStreamMessage) key).cause())
+                .findFirst()
+                .orElse(null);
     }
 
     private Mono<List<ProcessingResult>> postProcessSuccessMessages(List<ProcessingResult> processingResults) {

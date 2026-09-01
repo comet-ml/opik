@@ -8,19 +8,24 @@ package com.comet.opik.infrastructure.redis;
  * acked and removed, rather than being deleted on first sight.
  * <p>
  * That distinction is the whole point. "This payload cannot be decoded" is not the same claim as
- * "this payload cannot be decoded <em>by anyone</em>", and the codec cannot tell them apart:
- * <ul>
- * <li>An oversized string breaches the reader's {@code maxStringLength}, which is
- * <em>configuration</em> — a pod with a higher {@code JACKSON_MAX_STRING_LENGTH}, or one that built
- * its codec after {@code JsonUtils.configure()}, decodes the same bytes fine. That is exactly
- * OPIK-8164.</li>
- * <li>During a rolling upgrade an older pod hits an unknown enum constant or a polymorphic
- * {@code @class} absent from its jar. A newer pod reads it without trouble.</li>
- * </ul>
- * Deleting on first delivery would discard both. Leaving the entry pending gives another consumer a
- * chance to claim and decode it, and still terminates: once {@code maxRetries} is reached
- * {@code handleMaxRetriesReached} removes it, so a genuinely poisonous payload cannot wedge the
- * stream the way it did before this class existed.
+ * "this payload cannot be decoded <em>by anyone</em>", and the codec cannot tell them apart. The case
+ * that justifies retrying is <strong>jar skew during a rolling upgrade</strong>: an older pod hits an
+ * unknown enum constant or a polymorphic {@code @class} absent from its jar, where a newer pod reads
+ * the same bytes without trouble. This is the family {@code FAIL_ON_UNKNOWN_PROPERTIES=false} and
+ * {@code LenientUUIDDeserializer} already exist to survive, which is the team's standing answer to it:
+ * make such a payload decodable, not deleted.
+ * <p>
+ * Note what does <em>not</em> justify it, to keep this Javadoc honest. An oversized string breaching
+ * {@code maxStringLength} looks configuration-dependent, but since #8060 every pod of a deployment
+ * builds its memoized codec after {@code JsonUtils.configure()} from the same {@code config.yml} key,
+ * so in steady state a peer will not decode it either — {@code RedisStreamCodecTest}'s
+ * ordering test pins that. Retrying a size breach is therefore usually wasted work; it is tolerated
+ * because {@code maxRetries} bounds it and because the codec cannot distinguish the two families at
+ * the point of failure. A deployment mid config change is the narrow exception.
+ * <p>
+ * Either way this terminates: once {@code maxRetries} is reached {@code handleMaxRetriesReached}
+ * removes the entry, so a genuinely poisonous payload cannot wedge the stream the way it did before
+ * this class existed.
  */
 public class UndecodablePayloadException extends RuntimeException {
 
