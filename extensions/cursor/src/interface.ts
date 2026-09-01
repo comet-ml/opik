@@ -71,6 +71,7 @@ export interface PendingUsage {
     requestKey: string;
     composerId: string;
     turnStartMs: number;
+    turnEndMs?: number;
     turnStartsMs: number[];
     traceId: string;
     spanId: string;
@@ -92,6 +93,7 @@ export interface ForkCopyState {
     revision?: number;
     usageStatus?: UsageStatus;
     usageByRevision?: Record<string, TurnUsage>;
+    appliedUsageKeys?: string[];
 }
 
 /**
@@ -113,6 +115,7 @@ export interface RequestLedgerEntry {
     latestTurnStartMs?: number;
     canonicalRevision?: number;
     usageByRevision?: Record<string, TurnUsage>;
+    appliedUsageKeys?: string[];
     forkCopies: Record<string, ForkCopyState>;
     lastSeenAt: number;
 }

@@ -12,6 +12,8 @@ import {
 } from '../src/cursor/requestIdentity';
 import { resolveAutomaticTraceCutoff } from '../src/cursor/stateMigration';
 import { aggregateTurnUsage, latestUsageModel } from '../src/cursor/usageAggregation';
+import { attributeUsageToPending } from '../src/cursor/usageAttribution';
+import { hasAppliedUsage, recordAppliedUsage } from '../src/cursor/usageLedger';
 import { mergePendingUsage } from '../src/cursor/usageQueue';
 import { PendingUsage, RequestLedger, TraceData, TurnUsage } from '../src/interface';
 
@@ -113,6 +115,15 @@ test('composer creation order keeps ownership stable after the source is edited'
     assert.equal(owners.get('shared')?.turnStartMs, T0 + 5000);
 });
 
+test('malformed composer headers are skipped without losing valid ownership', () => {
+    const owners = resolveCanonicalBubbleOwners([{
+        composerId: ORIGINAL,
+        composerCreatedAt: T0,
+        headers: [null, 'invalid', 7, { bubbleId: 'shared', type: 1, createdAt: new Date(T0).toISOString() }],
+    }]);
+    assert.equal(owners.get('shared')?.composerId, ORIGINAL);
+});
+
 test('same-timestamp edits receive distinct revision usage and child identities', () => {
     const ledger: RequestLedger = {};
     const original = prepareTraceForUpload(trace('same-time', ORIGINAL), ledger)!;
@@ -123,6 +134,40 @@ test('same-timestamp edits receive distinct revision usage and child identities'
     assert.notEqual(edited.usage_key, original.usage_key);
     assert.notEqual(edited.spans![0].id, original.spans![0].id);
     assert.equal(edited.revision, 2);
+});
+
+test('same-timestamp revisions partition usage events exactly once', () => {
+    const originalKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00001`;
+    const editKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00002`;
+    const attribution = attributeUsageToPending([
+        { usageKey: originalKey, turnStartMs: T0, turnEndMs: T0 + 1000 },
+        { usageKey: editKey, turnStartMs: T0, turnEndMs: T0 + 2000 },
+    ], [T0], [
+        { timestamp: String(T0 + 1100), model: 'old-model', chargedCents: 10 },
+        { timestamp: String(T0 + 2100), model: 'new-model', chargedCents: 20 },
+    ]);
+
+    assert.equal(attribution.usageByKey.get(originalKey)?.chargedCents, 10);
+    assert.equal(attribution.usageByKey.get(editKey)?.chargedCents, 20);
+    assert.equal(
+        [...attribution.usageByKey.values()].reduce((total, item) => total + item.chargedCents, 0),
+        30
+    );
+});
+
+test('ambiguous same-time events settle revisions without sharing cost', () => {
+    const originalKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00001`;
+    const editKey = `project\u0000request\u0000${ORIGINAL}\u0000${T0}\u00002`;
+    const attribution = attributeUsageToPending([
+        { usageKey: originalKey, turnStartMs: T0, turnEndMs: T0 + 1000 },
+        { usageKey: editKey, turnStartMs: T0, turnEndMs: T0 + 1000 },
+    ], [T0], [
+        { timestamp: String(T0 + 1100), model: 'new-model', chargedCents: 30 },
+    ]);
+
+    assert.equal(attribution.usageByKey.has(originalKey), false);
+    assert.equal(attribution.usageByKey.get(editKey)?.chargedCents, 30);
+    assert.deepEqual([...attribution.settledKeys].sort(), [editKey, originalKey].sort());
 });
 
 test('independent legacy turns with identical text and timestamps stay distinct', () => {
@@ -194,4 +239,38 @@ test('ledger compaction collapses revision costs and prunes expired deliveries',
 
     compactRequestLedger(ledger, T0 + REQUEST_LEDGER_RETENTION_MS + 1);
     assert.equal(ledger[active.request_key], undefined);
+});
+
+test('compacted usage keeps exact acknowledgements across queue-removal retries', () => {
+    const active = trace('usage-retry', ORIGINAL);
+    const ledger: RequestLedger = {};
+    prepareTraceForUpload(active, ledger);
+    const entry = ledger[active.request_key];
+    const firstKey = `${active.request_key}\u0000${ORIGINAL}\u0000${T0}\u00001`;
+    const editKey = `${active.request_key}\u0000${ORIGINAL}\u0000${T0}\u00002`;
+
+    recordAppliedUsage(entry, firstKey, usage('old-model', 10));
+    recordAppliedUsage(entry, editKey, usage('new-model', 20));
+    entry.usageStatus = 'complete';
+    compactRequestLedger(ledger, T0 + 1);
+
+    assert.deepEqual(entry.appliedUsageKeys?.sort(), [editKey, firstKey].sort());
+    assert.equal(hasAppliedUsage(entry, editKey), true);
+    assert.equal(Object.values(entry.usageByRevision!)[0].chargedCents, 30);
+
+    const latestKey = `${active.request_key}\u0000${ORIGINAL}\u0000${T0}\u00003`;
+    const aggregate = recordAppliedUsage(entry, latestKey, usage('latest-model', 5));
+    assert.equal(aggregate.chargedCents, 35);
+    assert.equal(latestUsageModel(aggregate), 'latest-model');
+});
+
+test('retention never deletes an entry with an unknown legacy delivery status', () => {
+    const active = trace('legacy-status', ORIGINAL);
+    const ledger: RequestLedger = {};
+    prepareTraceForUpload(active, ledger);
+    const entry = ledger[active.request_key];
+    (entry as { canonicalStatus?: string }).canonicalStatus = undefined;
+
+    compactRequestLedger(ledger, T0 + REQUEST_LEDGER_RETENTION_MS + 1);
+    assert.equal(ledger[active.request_key], entry);
 });

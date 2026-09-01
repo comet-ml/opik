@@ -1,11 +1,13 @@
 export interface ComposerHeaderIdentity {
     composerId: string;
     composerCreatedAt: number;
-    headers: Array<{
-        bubbleId?: string;
-        type?: number;
-        createdAt?: string;
-    }>;
+    headers: unknown[];
+}
+
+interface ComposerHeader {
+    bubbleId?: string;
+    type?: number;
+    createdAt?: string;
 }
 
 export interface CanonicalBubbleOwner {
@@ -28,6 +30,10 @@ export function composerIdFromKey(value: unknown): string | undefined {
     return isCursorComposerId(composerId) ? composerId : undefined;
 }
 
+function isComposerHeader(value: unknown): value is ComposerHeader {
+    return typeof value === 'object' && value !== null;
+}
+
 /**
  * Cursor keeps the inherited user-bubble header in every fork. The earliest
  * composer carrying that header is the durable owner of the logical request,
@@ -43,7 +49,10 @@ export function resolveCanonicalBubbleOwners(
             continue;
         }
         for (const header of composer.headers) {
-            if (header.type !== 1 || typeof header.bubbleId !== 'string' || !header.bubbleId) {
+            if (!isComposerHeader(header) ||
+                header.type !== 1 ||
+                typeof header.bubbleId !== 'string' ||
+                !header.bubbleId) {
                 continue;
             }
             const parsed = Date.parse(header.createdAt ?? '');

@@ -5,29 +5,18 @@ import { PendingUsage, TurnUsage } from '../interface';
 import { debugLog } from '../utils';
 import { mergePendingUsage } from './usageQueue';
 import { isCursorComposerId } from './composerIdentity';
+import {
+    attributeUsageToPending,
+    PendingUsageAttribution,
+    UsageEventDisplay,
+} from './usageAttribution';
+
+export { attributeUsageToTurns } from './usageAttribution';
 
 const API_HOST = 'https://api2.cursor.sh';
 const SERVICE = 'aiserver.v1.DashboardService';
 
 const POLL_SCHEDULE_MS = [5000, 5000, 10000, 30000, 60000, 300000, 300000];
-
-// The usage event is stamped when the request completes, so it always falls
-// after its own user bubble and before the next one. A grace window wider than
-// the gap between two turns makes a later turn swallow an earlier turn's event.
-const CLOCK_GRACE_MS = 0;
-
-interface UsageEventDisplay {
-    timestamp: string;
-    model: string;
-    conversationId?: string;
-    chargedCents?: number;
-    tokenUsage?: {
-        inputTokens?: number;
-        outputTokens?: number;
-        cacheReadTokens?: number;
-        cacheWriteTokens?: number;
-    };
-}
 
 async function readAccessToken(stateDbPath: string): Promise<string | undefined> {
     const rows = await executeQuery(
@@ -122,52 +111,6 @@ async function readUserTurnStarts(stateDbPath: string, composerId: string): Prom
         .filter(value => !Number.isNaN(value));
 
     return [...new Set(starts)].sort((a, b) => a - b);
-}
-
-export function attributeUsageToTurns(
-    turnStartsMs: number[],
-    events: UsageEventDisplay[]
-): Map<number, TurnUsage> {
-    const sorted = [...events].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-    const attributed = new Map<number, TurnUsage>();
-
-    for (const event of sorted) {
-        const at = Number(event.timestamp) + CLOCK_GRACE_MS;
-
-        let turn = -1;
-        for (let i = 0; i < turnStartsMs.length; i++) {
-            if (turnStartsMs[i] > at) {
-                break;
-            }
-            turn = i;
-        }
-        if (turn < 0) {
-            continue;
-        }
-
-        const accumulated = attributed.get(turn) ?? {
-            inputTokens: 0,
-            outputTokens: 0,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-            chargedCents: 0,
-            requestCount: 0,
-            models: [],
-        };
-
-        const usage = event.tokenUsage ?? {};
-        accumulated.inputTokens += usage.inputTokens ?? 0;
-        accumulated.outputTokens += usage.outputTokens ?? 0;
-        accumulated.cacheReadTokens += usage.cacheReadTokens ?? 0;
-        accumulated.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
-        accumulated.chargedCents += event.chargedCents ?? 0;
-        accumulated.requestCount += 1;
-        if (event.model && !accumulated.models.includes(event.model)) {
-            accumulated.models.push(event.model);
-        }
-        attributed.set(turn, accumulated);
-    }
-    return attributed;
 }
 
 export class UsageEnricher {
@@ -272,6 +215,7 @@ export class UsageEnricher {
         }
 
         const startsCache = new Map<string, number[]>();
+        const attributionCache = new Map<string, PendingUsageAttribution>();
         const remaining: PendingUsage[] = [];
 
         for (const item of pending) {
@@ -280,31 +224,31 @@ export class UsageEnricher {
                 continue;
             }
 
-            let currentStarts = startsCache.get(item.composerId);
-            if (!currentStarts) {
-                currentStarts = await readUserTurnStarts(stateDbPath, item.composerId);
-                startsCache.set(item.composerId, currentStarts);
-            }
-            // Keep the immutable boundaries captured when the request was sent,
-            // while also adding later turns. This survives message edits without
-            // letting a pending earlier turn swallow usage from a newer turn.
-            const starts = [...new Set([
-                ...currentStarts,
-                ...(item.turnStartsMs ?? [item.turnStartMs]),
-            ])].sort((a, b) => a - b);
-
-            const index = starts.indexOf(item.turnStartMs);
-            const usage = index < 0
-                ? undefined
-                : attributeUsageToTurns(starts, byConversation.get(item.composerId) ?? []).get(index);
-
-            if (index < 0) {
-                debugLog('[usage] turn start not found in conversation', {
-                    composerId: item.composerId,
-                    turnStartMs: item.turnStartMs,
+            let attribution = attributionCache.get(item.composerId);
+            if (!attribution) {
+                let currentStarts = startsCache.get(item.composerId);
+                if (!currentStarts) {
+                    currentStarts = await readUserTurnStarts(stateDbPath, item.composerId);
+                    startsCache.set(item.composerId, currentStarts);
+                }
+                const composerPending = pending.filter(candidate =>
+                    candidate.composerId === item.composerId
+                );
+                const starts = [...new Set([
+                    ...currentStarts,
+                    ...composerPending.flatMap(candidate =>
+                        candidate.turnStartsMs ?? [candidate.turnStartMs]
+                    ),
+                ])].sort((a, b) => a - b);
+                attribution = attributeUsageToPending(
+                    composerPending,
                     starts,
-                });
+                    byConversation.get(item.composerId) ?? []
+                );
+                attributionCache.set(item.composerId, attribution);
             }
+
+            const usage = attribution.usageByKey.get(item.usageKey);
 
             if (usage) {
                 try {
@@ -313,6 +257,10 @@ export class UsageEnricher {
                 } catch (error) {
                     debugLog('[usage] failed to patch span', String(error));
                 }
+            }
+
+            if (attribution.settledKeys.has(item.usageKey)) {
+                continue;
             }
 
             item.attempt += 1;

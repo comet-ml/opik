@@ -169,6 +169,9 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
                     requestKey: traceData.request_key,
                     composerId: traceData.thread_id,
                     turnStartMs: traceData.turn_start_ms,
+                    turnEndMs: traceData.end_time
+                        ? new Date(traceData.end_time).getTime()
+                        : undefined,
                     turnStartsMs: traceData.turn_starts_ms,
                     traceId: traceData.id,
                     spanId: traceData.root_span_id,

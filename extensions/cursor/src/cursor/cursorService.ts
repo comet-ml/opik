@@ -12,7 +12,7 @@ import {
 import { captureException } from '../sentry';
 import { UsageEnricher } from './usage';
 import { acknowledgeUploadedTraces } from './requestIdentity';
-import { aggregateTurnUsage } from './usageAggregation';
+import { hasAppliedUsage, recordAppliedUsage } from './usageLedger';
 
 export class CursorService {
   private context: vscode.ExtensionContext;
@@ -41,9 +41,14 @@ export class CursorService {
         return;
       }
 
-      delivery.usageByRevision ??= {};
-      delivery.usageByRevision[pending.usageKey] = usage;
-      const aggregate = aggregateTurnUsage(Object.values(delivery.usageByRevision));
+      // A successful ledger update can be followed by a failed pending-queue
+      // removal. Keep that retry local: the same usage key must never be added
+      // to the aggregate or patched to Opik twice.
+      if (hasAppliedUsage(delivery, pending.usageKey)) {
+        return;
+      }
+
+      const aggregate = recordAppliedUsage(delivery, pending.usageKey, usage);
       await applyTurnUsage(this.apiKey, pending, aggregate);
       delivery.usageStatus = 'complete';
       entry.lastSeenAt = Date.now();

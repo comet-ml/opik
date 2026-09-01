@@ -1,5 +1,5 @@
-import { RequestLedger, TurnUsage, UsageStatus } from '../interface';
-import { aggregateTurnUsage } from './usageAggregation';
+import { ForkCopyState, RequestLedger, RequestLedgerEntry, TurnUsage, UsageStatus } from '../interface';
+import { aggregateUsageByRevision } from './usageLedger';
 
 export const REQUEST_LEDGER_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
@@ -14,7 +14,22 @@ function compactUsageByRevision(
     if (usages.length <= 1) {
         return usageByRevision;
     }
-    return { compacted: aggregateTurnUsage(usages) };
+    return { compacted: aggregateUsageByRevision(usageByRevision) };
+}
+
+function compactDelivery(delivery: ForkCopyState | RequestLedgerEntry): void {
+    const exactKeys = Object.keys(delivery.usageByRevision ?? {})
+        .filter(key => key !== 'compacted');
+    if (exactKeys.length > 0) {
+        delivery.appliedUsageKeys = [...new Set([
+            ...(delivery.appliedUsageKeys ?? []),
+            ...exactKeys,
+        ])];
+    }
+    delivery.usageByRevision = compactUsageByRevision(
+        delivery.usageByRevision,
+        delivery.usageStatus
+    );
 }
 
 /**
@@ -27,13 +42,15 @@ export function compactRequestLedger(
     now: number = Date.now()
 ): RequestLedger {
     for (const [key, entry] of Object.entries(ledger)) {
-        entry.usageByRevision = compactUsageByRevision(entry.usageByRevision, entry.usageStatus);
+        compactDelivery(entry);
         for (const copy of Object.values(entry.forkCopies ?? {})) {
-            copy.usageByRevision = compactUsageByRevision(copy.usageByRevision, copy.usageStatus);
+            compactDelivery(copy);
         }
 
         const copies = Object.values(entry.forkCopies ?? {});
-        const traceDeliveryComplete = entry.canonicalStatus !== 'pending' &&
+        const canonicalDeliveryComplete = entry.canonicalStatus === 'uploaded' ||
+            entry.canonicalStatus === 'excluded';
+        const traceDeliveryComplete = canonicalDeliveryComplete &&
             copies.every(copy => copy.status === 'uploaded');
         // Reopening an old composer sees its bubbles again, so lastSeenAt is
         // not a useful retention clock. Use immutable Cursor event times to
