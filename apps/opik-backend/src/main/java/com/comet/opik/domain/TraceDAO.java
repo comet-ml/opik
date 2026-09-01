@@ -2008,7 +2008,7 @@ class TraceDAOImpl implements TraceDAO {
     /**
      * Retention sweep for the applyToPast=true window {@code [lower_bound, cutoff_id)}.
      * <p>
-     * {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} is the future weekly partition expression ({@code id_at} is MATERIALIZED from
+     * {@code toMonday(id_at)} is the future weekly partition expression ({@code id_at} is MATERIALIZED from
      * the UUIDv7 id as UTC). Bounding it to the cutoff's week range never excludes a row the id-range would
      * delete, so it does not change which rows are deleted; once {@code traces} is partitioned (OPIK-6900) it
      * lets the sweep prune to the partitions in range. The bounds use UTC to match {@code id_at}, and the
@@ -2019,8 +2019,8 @@ class TraceDAOImpl implements TraceDAO {
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
+            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             AND id NOT IN (
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids
@@ -2035,7 +2035,7 @@ class TraceDAOImpl implements TraceDAO {
      * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION}: each workspace carries its own
      * {@code id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
      * <p>
-     * The {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} week bounds use the global {@code :min_lower_bound}, which is {@code <=} every
+     * The {@code toMonday(id_at)} week bounds use the global {@code :min_lower_bound}, which is {@code <=} every
      * per-workspace {@code :lb_i}, so the single floor never excludes a row that any per-workspace id-range would
      * delete. UTC matches {@code id_at}.
      * <p>
@@ -2052,8 +2052,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(item.hasNext)>OR<endif>
                 }>
             )
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'))
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'))
+            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             AND id NOT IN (
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids_flat
@@ -2067,7 +2067,7 @@ class TraceDAOImpl implements TraceDAO {
     /**
      * Lightweight pre-delete count for observability. Omits the {@code experiment_items} exclusion subquery
      * to avoid the join cost, making it an upper-bound ceiling with &gt;99% precision in practice (very few
-     * traces are linked to experiments). Carries the same {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} week bounds as
+     * traces are linked to experiments). Carries the same {@code toMonday(id_at)} week bounds as
      * {@code DELETE_FOR_RETENTION} so the count prunes to the same partitions post-cutover rather than
      * scanning (and loading cold-tier marks for) every partition each cycle.
      */
@@ -2076,14 +2076,14 @@ class TraceDAOImpl implements TraceDAO {
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
+            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     /**
-     * The {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} bounds mirror the {@code [range_start, range_end)} id-range: a strict consequence
+     * The {@code toMonday(id_at)} bounds mirror the {@code [range_start, range_end)} id-range: a strict consequence
      * that doesn't change which rows are scanned but engages partition pruning once {@code traces} is partitioned.
      */
     private static final String SCOUT_FIRST_DAY_WITH_DATA = """
@@ -2091,8 +2091,8 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id >= :range_start AND id \\< :range_end
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:range_start), 'UTC'))
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:range_end), 'UTC'))
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:range_start), 'UTC'))
+            AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:range_end), 'UTC'))
             GROUP BY day
             ORDER BY day
             LIMIT 1
