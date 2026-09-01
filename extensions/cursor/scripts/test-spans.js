@@ -18,6 +18,7 @@ const {
     prepareTraceForUpload,
     requestIdForTurn,
     requestKey,
+    shouldProcessTrace,
     uuidV7Timestamp,
 } = require('../out/cursor/requestIdentity.js');
 const { aggregateTurnUsage } = require('../out/cursor/usageAggregation.js');
@@ -96,6 +97,43 @@ test('reopen skips an uploaded request and retry reuses every id', () => {
 
     acknowledgeUploadedTraces([first], ledger);
     assert.equal(prepareTraceForUpload(identityTrace('req-reopen', 'original'), ledger), null);
+});
+
+test('normal polling excludes unseen historical turns until manual import', () => {
+    const ledger = {};
+    const historical = identityTrace('req-historical', 'old-composer', T0);
+    const cutoff = T0 + 60_000;
+
+    assert.equal(shouldProcessTrace(historical, ledger, false, cutoff), false);
+    assert.equal(shouldProcessTrace(historical, ledger, true, cutoff), true);
+    assert.equal(Object.keys(ledger).length, 0);
+});
+
+test('normal polling keeps tracking known requests and future turns', () => {
+    const ledger = {};
+    const cutoff = T0 + 60_000;
+    const tracked = identityTrace('req-tracked-before-cutoff', 'composer', T0);
+    prepareTraceForUpload(tracked, ledger);
+
+    assert.equal(shouldProcessTrace(tracked, ledger, false, cutoff), true);
+    assert.equal(
+        shouldProcessTrace(identityTrace('req-future', 'composer', cutoff), ledger, false, cutoff),
+        true
+    );
+});
+
+test('project changes do not replay historical turns automatically', () => {
+    const ledger = {};
+    const cutoff = T0 + 60_000;
+    const oldProject = identityTrace('req-project-change', 'composer', T0);
+    prepareTraceForUpload(oldProject, ledger);
+
+    const newProject = identityTrace('req-project-change', 'composer', T0);
+    newProject.project_name = 'cursor-new-project';
+    newProject.request_key = requestKey(newProject.project_name, newProject.request_id);
+
+    assert.equal(shouldProcessTrace(newProject, ledger, false, cutoff), false);
+    assert.equal(shouldProcessTrace(newProject, ledger, true, cutoff), true);
 });
 
 test('fork copy gets its own timestamp-correct ids but never owns cost', () => {

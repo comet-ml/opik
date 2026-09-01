@@ -7,12 +7,14 @@ import { CursorService } from './cursor/cursorService';
 import { initializeSentry, captureException } from './sentry';
 import { MCPService } from './mcp/mcpService';
 import { updateStatusBar, showInitialApiKeyWarning } from './ui';
-import { resetExtensionState } from './state';
+import { getOrCreateAutomaticTraceCutoffAt, resetExtensionState } from './state';
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   // Get or create user UUID for tracking
   const userId = getOrCreateUUID(context);
   const mcpService = new MCPService(context);
+  const cursorService = new CursorService(context);
+  const automaticTraceCutoffAt = await getOrCreateAutomaticTraceCutoffAt(context);
 
   // Initialize Sentry with user context
   initializeSentry(context, userId);
@@ -55,6 +57,29 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(resetCommand);
 
+    const importHistoricalCommand = vscode.commands.registerCommand('opik.importHistoricalTraces', async () => {
+      const apiKey = getOpikApiKey();
+      if (!apiKey) {
+        showInitialApiKeyWarning(context);
+        return;
+      }
+
+      const VSInstallationPath = getDefaultVSCodeUserDataPath(context);
+      const count = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Opik: Importing historical Cursor traces',
+          cancellable: false,
+        },
+        () => cursorService.processCursorTraces(apiKey, VSInstallationPath, {
+          includeHistorical: true,
+          automaticCutoffAt: automaticTraceCutoffAt,
+        })
+      );
+      vscode.window.showInformationMessage(`Opik: Imported ${count} historical Cursor trace(s).`);
+    });
+    context.subscriptions.push(importHistoricalCommand);
+
     const opikConfigPath = path.join(os.homedir(), '.opik.config');
     if (fs.existsSync(opikConfigPath)) {
       const configWatcher = fs.watch(opikConfigPath, async (eventType) => {
@@ -70,8 +95,6 @@ export function activate(context: vscode.ExtensionContext) {
     
     // Main processing loop
     let logAPIKeyBIEvent = true;
-    const cursorService = new CursorService(context);
-
     const interval = setInterval(async () => {
       try {
         const apiKey = getOpikApiKey();
@@ -82,7 +105,11 @@ export function activate(context: vscode.ExtensionContext) {
         }
         
         const VSInstallationPath = getDefaultVSCodeUserDataPath(context);
-        const numberOfCursorTracesLogged = await cursorService.processCursorTraces(apiKey, VSInstallationPath);
+        const numberOfCursorTracesLogged = await cursorService.processCursorTraces(
+          apiKey,
+          VSInstallationPath,
+          { automaticCutoffAt: automaticTraceCutoffAt }
+        );
 
         console.log(`Number of Cursor traces logged: ${numberOfCursorTracesLogged}`);
         console.log('Finished loop');

@@ -23,6 +23,11 @@
         "command": "opik.resetState",
         "title": "Reset Extension State",
         "category": "Opik"
+      },
+      {
+        "command": "opik.importHistoricalTraces",
+        "title": "Import Historical Cursor Traces",
+        "category": "Opik"
       }
     ],
     "configuration": [

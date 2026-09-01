@@ -8,7 +8,7 @@ Learn more about:
 - [Opik](https://github.com/comet-ml/opik) is an Open-Source LLM evaluation platform that allows you to keep track of all your LLM chat conversations in one place.
 - [Cursor](https://www.cursor.com/) is "the" AI Code Editor.
 
-When you use this extension, it will automatically upload your Cursor chats to Opik and make them available in the `cursor` project. You will be to view the conversations in the `thread` tab and view your token usage in the metrics tab, you'd be surprised how many tokens you consume!
+When you use this extension, it will automatically upload new Cursor chats to Opik and make them available in the `cursor` project. Existing chats are not uploaded automatically. To import them, run **Opik: Import Historical Cursor Traces** from the command palette. You can view conversations in the `thread` tab and token usage in the metrics tab.
 
 ## Installation
 
@@ -24,7 +24,7 @@ To configure the extension, open up VSCode settings (Ctrl + ,), find the setting
 
 ## Usage
 
-Once installed, there is nothing for you to do ! Just sit back and enjoy your coding experience knowing that all your chat history is saved in Opik
+Once installed, new Cursor chats are saved automatically. Historical chats are imported only when you explicitly run **Opik: Import Historical Cursor Traces** from the command palette.
 
 > 💻: This extension is currently under development 🚧. Please report any bugs on [Github](https://github.com/comet-ml/opik) if you run into any issues.
 

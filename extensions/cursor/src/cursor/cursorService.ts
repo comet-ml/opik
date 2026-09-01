@@ -54,7 +54,11 @@ export class CursorService {
   /**
    * Process cursor traces and log them to Opik
    */
-  async processCursorTraces(apiKey: string, vsInstallationPath: string): Promise<number> {
+  async processCursorTraces(
+    apiKey: string,
+    vsInstallationPath: string,
+    options: { includeHistorical?: boolean; automaticCutoffAt: number }
+  ): Promise<number> {
     // Prevent concurrent processing to avoid duplicates
     if (this.isProcessing) {
       console.log('⏳ Cursor trace processing already in progress, skipping this cycle');
@@ -74,10 +78,11 @@ export class CursorService {
       const cursorResult = await findAndReturnNewTraces(
         this.context,
         vsInstallationPath,
-        sessionInfo,
         requestLedger,
         lastSyncedAt,
-        currentSyncTime
+        currentSyncTime,
+        options.includeHistorical ?? false,
+        options.automaticCutoffAt
       );
       
       if (cursorResult && cursorResult.tracesData) {

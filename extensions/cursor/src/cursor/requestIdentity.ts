@@ -55,6 +55,18 @@ export function traceFingerprint(trace: TraceData): string {
         .digest('hex');
 }
 
+/** Normal polling only sends turns created after tracking began. */
+export function shouldProcessTrace(
+    trace: TraceData,
+    ledger: RequestLedger,
+    includeHistorical: boolean,
+    automaticCutoffAt: number
+): boolean {
+    return includeHistorical ||
+        trace.turn_start_ms >= automaticCutoffAt ||
+        ledger[trace.request_key] !== undefined;
+}
+
 function usageKey(trace: TraceData): string {
     return `${trace.request_key}\u0000${trace.thread_id}\u0000${trace.turn_start_ms}`;
 }

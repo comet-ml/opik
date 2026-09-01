@@ -39,6 +39,28 @@ export function updateLastSyncedAt(context: vscode.ExtensionContext, timestamp: 
   return context.globalState.update('lastSyncedAt', timestamp);
 }
 
+/**
+ * The first turn normal polling is allowed to upload.
+ *
+ * New installations start at activation time, so existing Cursor history is
+ * imported only through the explicit command. Upgrades start at the last
+ * successful poll, preserving turns created while the previous build was
+ * inactive without replaying conversations it already handled.
+ */
+export async function getOrCreateAutomaticTraceCutoffAt(
+  context: vscode.ExtensionContext
+): Promise<number> {
+  const stored = context.globalState.get<number>('automaticTraceCutoffAt');
+  if (stored !== undefined) {
+    return stored;
+  }
+
+  const previousSync = context.globalState.get<number>('lastSyncedAt');
+  const cutoff = previousSync ?? Date.now();
+  await context.globalState.update('automaticTraceCutoffAt', cutoff);
+  return cutoff;
+}
+
 export function getPendingUsage(context: vscode.ExtensionContext): PendingUsage[] {
   return context.globalState.get<PendingUsage[]>('pendingUsage', []);
 }

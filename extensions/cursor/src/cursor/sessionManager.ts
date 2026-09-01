@@ -2,13 +2,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-import { RequestLedger, SessionInfo } from "../interface";
+import { RequestLedger } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
 import { executeQuery, executeQueryPaginated } from './sqlite';
 import { orderBubbles } from './bubbleOrder';
 import { buildSpans, buildTurnOutput, DEFAULT_SPAN_OPTIONS, SpanBuildOptions } from './spanBuilder';
-import { prepareTraceForUpload, requestIdForTurn, requestKey } from './requestIdentity';
+import { prepareTraceForUpload, requestIdForTurn, requestKey, shouldProcessTrace } from './requestIdentity';
 
 import { TraceData } from "../interface";
 
@@ -31,28 +31,25 @@ function readSpanOptions(): SpanBuildOptions | null {
 
 /**
  * Convert Cursor conversations to Opik traces using requestId as the durable
- * identity. Per-composer state is retained only to migrate installations from
- * versions that predate the request ledger.
+ * identity. Normal polling excludes previously unseen turns from before the
+ * automatic tracking cutoff; the manual import command includes them.
  * 
  * @param conversations Array of conversation objects from cursor database
  * @param opikProjectName Project name for Opik
- * @param sessionInfo Existing session info with per-composer tracking
  * @returns Object containing traces and updated session info
  */
 async function convertConversationsToTraces(
     conversations: any[],
     opikProjectName: string,
-    sessionInfo: Record<string, SessionInfo>,
-    requestLedger: RequestLedger
+    requestLedger: RequestLedger,
+    includeHistorical: boolean,
+    automaticCutoffAt: number
 ) {
     const tracesData: TraceData[] = [];
     const updatedSessionInfo: Record<string, { lastMessageId?: string; lastMessageTime?: number }> = {};
 
     // Get git info once for all traces (performance optimization)
     const gitInfo = await getGitInfo();
-    const migrateLegacySessions = Object.keys(requestLedger).length === 0 &&
-        Object.values(sessionInfo).some(info => info.lastUploadId !== undefined);
-
     // A fork is created after its source composer. Processing oldest composers
     // first makes the original request the canonical cost owner when both are
     // first discovered in the same polling cycle.
@@ -75,7 +72,8 @@ async function convertConversationsToTraces(
             opikProjectName, 
             gitInfo,
             requestLedger,
-            migrateLegacySessions ? sessionInfo[sessionId] : undefined
+            includeHistorical,
+            automaticCutoffAt
         );
         
         tracesData.push(...conversationTraces.traces);
@@ -99,7 +97,8 @@ function processConversationBubbles(
     opikProjectName: string, 
     gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null,
     requestLedger: RequestLedger,
-    legacySession?: SessionInfo
+    includeHistorical: boolean,
+    automaticCutoffAt: number
 ) {
     const traces: TraceData[] = [];
     let lastMessageId: string | undefined = undefined;
@@ -139,12 +138,7 @@ function processConversationBubbles(
     const turnStartsMs = bubbleGroups
         .filter(group => group.userMessages.length > 0)
         .map(group => group.userMessages[0].resolvedTimestamp as number);
-    const legacyTargetIndex = legacySession?.lastUploadId
-        ? bubbleGroups.findIndex(group => [...group.userMessages, ...group.aiMessages]
-            .some(message => message.id === legacySession.lastUploadId))
-        : -1;
-
-    for (const [groupIndex, group] of bubbleGroups.entries()) {
+    for (const group of bubbleGroups) {
         // Always update lastMessageId to track our processing position
         const lastMessage = group.aiMessages.length > 0 
             ? group.aiMessages[group.aiMessages.length - 1]
@@ -163,27 +157,12 @@ function processConversationBubbles(
                 turnStartsMs
             );
             if (trace) {
+                if (!shouldProcessTrace(trace, requestLedger, includeHistorical, automaticCutoffAt)) {
+                    continue;
+                }
                 const prepared = prepareTraceForUpload(trace, requestLedger);
                 if (prepared) {
-                    const wasPreviouslyUploaded = legacySession !== undefined && (
-                        (legacyTargetIndex >= 0 && groupIndex <= legacyTargetIndex) ||
-                        (legacyTargetIndex < 0 && legacySession.lastUploadTime !== undefined &&
-                            lastMessageTime !== undefined &&
-                            lastMessageTime <= legacySession.lastUploadTime)
-                    );
-                    if (wasPreviouslyUploaded) {
-                        // Older releases generated random ids, so these ids are
-                        // bookkeeping aliases only. Marking delivery prevents an
-                        // upgrade, reopen, or later fork from re-uploading them.
-                        if (prepared.upload_kind === 'canonical') {
-                            requestLedger[prepared.request_key].canonicalStatus = 'uploaded';
-                        } else if (prepared.thread_id) {
-                            requestLedger[prepared.request_key]
-                                .forkCopies[prepared.thread_id].status = 'uploaded';
-                        }
-                    } else {
-                        traces.push(prepared);
-                    }
+                    traces.push(prepared);
                 }
             }
         }
@@ -197,7 +176,12 @@ function processConversationBubbles(
 /**
  * Read cursor chat data from SQLite database (asynchronous version)
  */
-async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number, currentSyncTime: number): Promise<any> {
+async function readCursorChatDataAsync(
+    stateDbPath: string,
+    lastSyncedAt: number,
+    currentSyncTime: number,
+    includeHistorical: boolean
+): Promise<any> {
     // Use the database directly with -readonly flag (no expensive copy operation)
     // The sqlite3 binary with -readonly flag is safe and handles locks gracefully
     
@@ -213,10 +197,13 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         // Prefix ranges instead of LIKE: LIKE is case-insensitive so SQLite cannot
         // use the index on key and scans the whole table, including the hundreds of
         // megabytes of agentKv and bubble rows.
+        const timeFilter = includeHistorical
+            ? ''
+            : `AND json_extract(value, '$.lastUpdatedAt') > ${lastSyncedAtWithBuffer}
+                AND json_extract(value, '$.lastUpdatedAt') <= ${currentSyncTime}`;
         const composerQuery = `SELECT key, value FROM cursorDiskKV 
                 WHERE key >= 'composerData' AND key < 'composerDatb'
-                AND json_extract(value, '$.lastUpdatedAt') > ${lastSyncedAtWithBuffer}
-                AND json_extract(value, '$.lastUpdatedAt') <= ${currentSyncTime}
+                ${timeFilter}
                 AND (json_extract(value, '$.status') = 'completed' 
                      OR (json_extract(value, '$.status') != 'completed' 
                          AND json_extract(value, '$.lastUpdatedAt') < ${fiveMinutesAgo}))`;
@@ -387,10 +374,11 @@ export function resolveStateDbPath(VSInstallationPath: string): string | null {
 export async function findAndReturnNewTraces(
     context: vscode.ExtensionContext, 
     VSInstallationPath: string, 
-    sessionInfo: Record<string, SessionInfo>,
     requestLedger: RequestLedger,
     lastSyncedAt: number,
-    currentSyncTime: number
+    currentSyncTime: number,
+    includeHistorical: boolean,
+    automaticCutoffAt: number
 ) {
     const opikProjectName: string = vscode.workspace.getConfiguration().get('opik.projectName') || 'default';
 
@@ -406,15 +394,21 @@ export async function findAndReturnNewTraces(
         return null;
     } else {
         try {
-            const conversations = await readCursorChatDataAsync(stateDbPath, lastSyncedAt, currentSyncTime);
+            const conversations = await readCursorChatDataAsync(
+                stateDbPath,
+                lastSyncedAt,
+                currentSyncTime,
+                includeHistorical
+            );
             
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
                 // Convert conversations to Opik traces with per-session tracking
                 const result = await convertConversationsToTraces(
                     conversations,
                     opikProjectName,
-                    sessionInfo,
-                    requestLedger
+                    requestLedger,
+                    includeHistorical,
+                    automaticCutoffAt
                 );
                 
                 return {
