@@ -912,9 +912,15 @@ class TraceDAOImpl implements TraceDAO {
      * <b>Both</b> operands are Date32 arithmetic — {@code toDate32(E) - toIntervalDay(toDayOfWeek(E, 1))}, the
      * partition expression from 000114 — and never {@code toMonday(E)} (OPIK-7456). {@code toMonday} returns a 16-bit
      * Date (1970..2149) and wraps at both ends, which breaks the invariant above: a far-future week folds into a past
-     * one, so the bound becomes a filter rather than a pruning hint. Date32 saturates instead, holds for every id, and
-     * still prunes, being the partition key's own expression. The wrap was latent before 000114, when {@code id_at}
-     * was a 32-bit DateTime that had already truncated such values into a plausible year.
+     * one, so the bound becomes a filter rather than a pruning hint. Date32 saturates instead, so the expression is
+     * honest for every id, and it still prunes, being the partition key's own.
+     * <p>
+     * <b>That is a property of the expression, not of the stored value, so the invariant is only complete on the
+     * partitioned successor</b>, whose {@code id_at} is a {@code DateTime64}. Before 000114 — still the live schema
+     * anywhere the cutover has not run — {@code id_at} is a 32-bit {@code DateTime} that has already truncated a
+     * far-future timestamp into a plausible year, and no read predicate can recover the honest week from it. There the
+     * wrap is latent rather than fixed: it resolves when the table is migrated, not here. What this does fix on both
+     * schemas is the bound side, which reads the id directly and so is honest either way.
      * <p>
      * The bound side matters as much as the column: {@code :last_received_id} is a cursor lifted from a row this query
      * returned, so it is a real id and can itself be far-future, and the time bounds come from a caller-supplied
