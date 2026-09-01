@@ -11,8 +11,14 @@ package com.comet.opik.infrastructure.redis;
  * {@code pending == XLEN} and 19.66 GiB.
  * <p>
  * Returning this instead of throwing keeps the failure inside the normal message flow, where the id
- * is known, so {@code BaseRedisSubscriber} can drop the entry, count it and log it. A payload we
- * cannot decode will never become decodable, so dropping is the only outcome that terminates.
+ * is known, so {@code BaseRedisSubscriber} can count it, log it, and retire it through
+ * {@code maxRetries}.
+ * <p>
+ * Note what this does <em>not</em> assert: that the payload is undecodable by anyone. It is not.
+ * The reader's {@code maxStringLength} is configuration, so a pod with a higher limit decodes the
+ * same bytes; and during a rolling upgrade an older pod fails on a payload a newer one reads. That
+ * is why the failure is raised as the retryable {@link UndecodablePayloadException} rather than
+ * deleted on sight — see that class for the reasoning.
  *
  * @param payloadBytes readable bytes the decoder was handed, for sizing the offending entry
  * @param cause        the decode failure, kept for the log rather than rethrown

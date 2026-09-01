@@ -14,6 +14,7 @@ import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.PlainOptions;
 import org.redisson.api.stream.AutoClaimResult;
+import org.redisson.api.stream.PendingEntry;
 import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamPendingRangeArgs;
@@ -37,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -271,40 +273,54 @@ class BaseRedisSubscriberUnitTest {
         }
 
         /**
-         * OPIK-8192. Once an undecodable payload arrives as a <em>value</em> rather than as a throw from
-         * inside Redisson, it carries a messageId and is dropped. Before that it never reached here at all,
-         * was redelivered forever, and at {@code consumerBatchSize > 1} stranded every healthy entry
-         * claimed with it -- the permanent wedge in OPIK-8164.
+         * OPIK-8192, first half. An undecodable payload now arrives as a <em>value</em> rather than a
+         * throw from inside Redisson, so it carries a messageId at all — previously it never reached
+         * here, was redelivered forever, and at {@code consumerBatchSize > 1} stranded every healthy
+         * entry claimed with it.
          * <p>
-         * Scope: this pins the drop and the consumer surviving it. It does <em>not</em> pin the explicit
-         * {@link UndecodableStreamMessage} branch in {@code processMessage} -- with that branch removed the
-         * sentinel still reaches {@code processEvent}, fails the generic cast, and is dropped as a
-         * non-retryable {@code ClassCastException}, so this test passes either way. What the branch adds is
-         * the dedicated counter and a log naming the stream and payload size, which is the difference
-         * between "we discarded a 20 MB trace" and an opaque cast error. Asserting the counter would need
-         * OTel metric test infrastructure this module does not have. The load-bearing guard against the
-         * wedge returning is {@code FaultTolerantStreamCodecTest}.
+         * It must NOT be removed on first delivery. "This pod cannot decode it" is not "nobody can":
+         * the reader's {@code maxStringLength} is configuration, and during a rolling upgrade a newer
+         * pod may read what an older one cannot. Deleting on sight would discard recoverable data.
          */
         @Test
-        void shouldDropUndecodableMessageAndKeepConsuming() {
-            var readCount = new AtomicInteger();
+        void shouldNotRemoveUndecodableMessageBeforeMaxRetries() {
             var undecodableId = new StreamMessageId(System.currentTimeMillis(), 0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             whenAutoClaimReturnEmpty(subscriber.getConsumerId());
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                    .thenAnswer(invocation -> {
-                        int count = readCount.incrementAndGet();
-                        if (count == 1) {
-                            return Mono.just(Map.of(undecodableId,
-                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
-                                            new UndecodableStreamMessage(20_054_016,
-                                                    new IllegalStateException(
-                                                            "String value length exceeds maximum")))));
-                        }
-                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), count),
-                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
-                                        podamFactory.manufacturePojo(String.class))));
-                    });
+            whenReadGroupReturnsUndecodableThenHealthy(undecodableId);
+            // Delivery count below maxRetries (3): the entry stays pending for another consumer.
+            // Built before the stubbing call -- Mockito rejects creating a mock inside when(...).
+            var pending = pendingEntry(undecodableId, 1);
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of(pending)));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1));
+
+            verify(stream, never()).ack(eq(CONFIG.getConsumerGroupName()),
+                    eq(new StreamMessageId[]{undecodableId}));
+            verify(stream, never()).remove(eq(new StreamMessageId[]{undecodableId}));
+        }
+
+        /**
+         * OPIK-8192, second half. Retrying must still terminate: once the delivery count reaches
+         * {@code maxRetries} the entry is acked and removed, so a genuinely poisonous payload cannot
+         * wedge the stream the way it did before. This is the bound that makes the retryable
+         * classification safe.
+         */
+        @Test
+        void shouldRemoveUndecodableMessageOnceMaxRetriesReached() {
+            var undecodableId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnsUndecodableThenHealthy(undecodableId);
+            var pending = pendingEntry(undecodableId, CONFIG.getMaxRetries());
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of(pending)));
             whenAckReturn();
             whenRemoveReturn();
 
@@ -312,14 +328,56 @@ class BaseRedisSubscriberUnitTest {
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        // The undecodable entry is acked and removed -- dropped, not redelivered.
                         verify(stream).ack(eq(CONFIG.getConsumerGroupName()),
                                 eq(new StreamMessageId[]{undecodableId}));
                         verify(stream).remove(eq(new StreamMessageId[]{undecodableId}));
-                        // It never reaches processEvent, and healthy messages behind it still process.
-                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
-                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1);
                     });
+            // It never reaches processEvent either way, and healthy traffic behind it keeps flowing.
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+        }
+
+        /**
+         * An entry with no value under the payload field — malformed on write, or a field name the
+         * now-tolerant map-key decoder could not decode — is retired the same way rather than handed
+         * to processEvent as null.
+         */
+        @Test
+        void shouldRetireMessageWithNoPayload() {
+            var noPayloadId = new StreamMessageId(System.currentTimeMillis(), 0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
+                            ? Mono.just(Map.of(noPayloadId, Map.of("not-the-payload-field", "ignored")))
+                            : Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            podamFactory.manufacturePojo(String.class)))));
+            var pending = pendingEntry(noPayloadId, CONFIG.getMaxRetries());
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of(pending)));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> verify(stream).remove(eq(new StreamMessageId[]{noPayloadId})));
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+        }
+
+        private void whenReadGroupReturnsUndecodableThenHealthy(StreamMessageId undecodableId) {
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
+                            ? Mono.just(Map.of(undecodableId,
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            new UndecodableStreamMessage(20_054_016,
+                                                    new IllegalStateException(
+                                                            "String value length (20054016) exceeds the maximum allowed")))))
+                            : Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
+                                    Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            podamFactory.manufacturePojo(String.class)))));
         }
 
         @Test
@@ -655,6 +713,14 @@ class BaseRedisSubscriberUnitTest {
 
             assertThatCode(subscriber::stop).doesNotThrowAnyException();
         }
+    }
+
+    /** A PendingEntry whose delivery count drives the maxRetries decision. */
+    private static PendingEntry pendingEntry(StreamMessageId messageId, long deliveryCount) {
+        var entry = org.mockito.Mockito.mock(PendingEntry.class);
+        lenient().when(entry.getId()).thenReturn(messageId);
+        lenient().when(entry.getDeliveryCount()).thenReturn(deliveryCount);
+        return entry;
     }
 
     private TestRedisSubscriber trackSubscriber(TestRedisSubscriber subscriber) {

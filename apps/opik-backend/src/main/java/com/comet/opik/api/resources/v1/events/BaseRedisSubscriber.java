@@ -4,9 +4,11 @@ import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
+import com.comet.opik.infrastructure.redis.UndecodablePayloadException;
 import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -52,6 +54,9 @@ import java.util.stream.Stream;
  * application lifecycle.
  */
 public abstract class BaseRedisSubscriber<M> implements Managed {
+
+    /** Tags the undecodable counter, so one noisy stream is distinguishable in a shared dashboard. */
+    private static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
 
     private static final String BUSYGROUP = "BUSYGROUP";
     private static final String NOGROUP = "NOGROUP";
@@ -165,9 +170,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .build();
         this.undecodableMessages = meter
                 .counterBuilder("%s_%s_undecodable_messages_total".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Stream entries dropped because their payload could not be decoded. Non-zero means "
-                        + "data was discarded: a payload the codec cannot read is unrecoverable, and keeping it "
-                        + "would wedge the stream for every consumer. Alert on any increase.")
+                .setDescription("Stream entries whose payload could not be decoded, counted at detection. "
+                        + "Deliberately not a drop count: the failure is retryable, so one entry is counted once "
+                        + "per delivery until maxRetries retires it, and a pod that decodes it on a later claim "
+                        + "never contributes a drop at all. Alert on a sustained increase, which means entries are "
+                        + "cycling; the removal itself is logged by handleMaxRetriesReached.")
                 .build();
         this.backpressureDropCounter = meter
                 .counterBuilder("%s_%s_backpressure_drops_total".formatted(metricNamespace, metricsBaseName))
@@ -486,17 +493,43 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         // removed and wedged the stream permanently (OPIK-8164). Drop it: it will never become decodable,
         // and every redelivery strands the healthy entries claimed alongside it.
         if (message instanceof UndecodableStreamMessage undecodable) {
-            undecodableMessages.add(1);
-            log.error("Dropping undecodable message: messageId '{}', stream '{}', payloadBytes '{}'",
+            undecodableMessages.add(1, Attributes.of(
+                    ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(undecodable.cause()),
+                    STREAM_KEY, config.getStreamName()));
+            // Warn, not error: on its own this is one delivery of one entry, and the retryable path may
+            // still decode it on another pod. handleMaxRetriesReached logs at error when it is finally
+            // removed, which is the event worth waking someone for.
+            log.warn("Undecodable message: messageId '{}', stream '{}', payloadBytes '{}'",
                     messageId, config.getStreamName(), undecodable.payloadBytes(), undecodable.cause());
             return Mono.just(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
-                    // IllegalArgumentException is in NON_RETRYABLE_EXCEPTIONS, so postProcessFailureMessages
-                    // acks and removes without consulting the delivery count.
-                    .error(new IllegalArgumentException(
+                    // Retryable on purpose: "this pod cannot decode it" is not "nobody can". maxRetries
+                    // bounds the cycling, so it still terminates. See UndecodablePayloadException.
+                    .error(new UndecodablePayloadException(
                             "Undecodable stream payload of %d bytes".formatted(undecodable.payloadBytes()),
                             undecodable.cause()))
+                    .context(MessageContext.UNKNOWN)
+                    .build());
+        }
+        // No payload under the expected field. Either the entry was written malformed, or -- with the
+        // map-key decoder now fault tolerant -- its field name failed to decode and the lookup missed.
+        // Retire it the same way rather than handing null to processEvent, where it would surface as an
+        // opaque NullPointerException with no size or stream in the message. Retryable like the payload
+        // case, and for the same reason: a field name that failed to decode may decode on a pod whose
+        // LZ4/Kryo versions differ, so this is not reliably deterministic. maxRetries bounds it either
+        // way, and erring toward not deleting is the safer default.
+        if (message == null) {
+            undecodableMessages.add(1, Attributes.of(
+                    ErrorMetricsResolver.ERROR_TYPE_KEY, "missing_payload",
+                    STREAM_KEY, config.getStreamName()));
+            log.warn("Message has no payload under field '{}': messageId '{}', stream '{}'",
+                    payloadField, messageId, config.getStreamName());
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    .error(new UndecodablePayloadException(
+                            "No payload under field '%s'".formatted(payloadField), null))
                     .context(MessageContext.UNKNOWN)
                     .build());
         }

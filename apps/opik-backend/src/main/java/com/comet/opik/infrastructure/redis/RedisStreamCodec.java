@@ -25,8 +25,8 @@ import java.util.function.Supplier;
 @AllArgsConstructor
 @Getter
 public enum RedisStreamCodec {
-    JAVA(Constants.JAVA, Suppliers.memoize(() -> new CompositeCodec(new LZ4CodecV2(),
-            faultTolerant(new JsonJacksonCodec(buildStreamMapper()))))),
+    JAVA(Constants.JAVA, Suppliers.memoize(() -> faultTolerant(new CompositeCodec(new LZ4CodecV2(),
+            new JsonJacksonCodec(buildStreamMapper()))))),
     JSON(Constants.JSON, () -> StringCodec.INSTANCE);
 
     /**
@@ -68,11 +68,32 @@ public enum RedisStreamCodec {
     }
 
     /**
-     * Delegates everything except decoding, which cannot throw.
+     * Delegates encoding untouched; every decoder is wrapped so no decode path can throw.
      * <p>
-     * Both the map-value and plain-value decoders are wrapped: streams decode the payload through
-     * {@code getMapValueDecoder}, but {@link CompositeCodec} may reach for either depending on the
-     * operation, and a decoder that throws on one path defeats the purpose.
+     * All three are wrapped deliberately, because each is a distinct wire path and a throw on any of
+     * them lands in {@code CommandDecoder} with no {@code StreamMessageId}:
+     * <ul>
+     * <li>{@code getMapValueDecoder} — the payload. This is the OPIK-8164 path.</li>
+     * <li>{@code getMapKeyDecoder} — the entry's field name. On {@link #JAVA} this resolves to
+     * {@code LZ4CodecV2} over Kryo5, and both LZ4 frame validation and Kryo deserialization throw on
+     * corruption or a format skew across a version bump. This is why the wrapper goes <em>around</em>
+     * the {@link CompositeCodec} rather than around its value codec: the composite routes the map-key
+     * path to its {@code mapKeyCodec}, so wrapping the inner JSON codec would never have covered it.
+     * Field names are a fixed constant written only by Opik publishers, so a failure here is remote —
+     * but its blast radius is identical to the incident. A sentinel key misses the payload-field
+     * lookup, which the null-payload guard in {@code BaseRedisSubscriber.processMessage} then retires
+     * like any other undecodable entry.</li>
+     * <li>{@code getValueDecoder} — plain-value reads. Not reachable through {@link #JAVA}: the
+     * two-arg {@link CompositeCodec} constructor leaves {@code valueCodec} null, so
+     * {@code CompositeCodec.getValueDecoder()} throws {@link NullPointerException} while <em>obtaining</em>
+     * the decoder, which is before any wrapper can intervene. Wrapped anyway because this class is a
+     * general wrapper, not a JAVA-specific one, and a three-arg rewiring would otherwise silently
+     * reopen the hole.</li>
+     * </ul>
+     * The catch is {@link Exception}, not {@link Throwable}: an {@link Error} — an
+     * {@link OutOfMemoryError} while Jackson materializes a multi-megabyte String is the plausible one
+     * here — still propagates, because a JVM in that state should not have its failure recorded as a
+     * routine per-message drop.
      */
     @RequiredArgsConstructor
     private static final class FaultTolerantCodec implements Codec {
@@ -107,7 +128,7 @@ public enum RedisStreamCodec {
 
         @Override
         public Decoder<Object> getMapKeyDecoder() {
-            return delegate.getMapKeyDecoder();
+            return tolerant(delegate.getMapKeyDecoder());
         }
 
         @Override

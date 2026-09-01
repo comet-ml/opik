@@ -7,12 +7,15 @@ import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.redisson.client.codec.Codec;
+import org.redisson.client.protocol.Decoder;
+import org.redisson.client.protocol.Encoder;
 import org.redisson.codec.JsonJacksonCodec;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The decode side of {@link RedisStreamCodec#JAVA} must never throw: a throw lands inside Redisson's
@@ -51,7 +54,8 @@ class FaultTolerantStreamCodecTest {
         assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
         var undecodable = (UndecodableStreamMessage) decoded;
         assertThat(undecodable.payloadBytes()).isEqualTo(payloadBytes);
-        assertThat(undecodable.cause()).isNotNull();
+        assertThat(undecodable.cause())
+                .hasMessageContaining("maximum allowed");
         // The size is reported from the buffer, so it survives the failed decode consuming it.
         assertThat(buf.isReadable()).isFalse();
     }
@@ -85,8 +89,101 @@ class FaultTolerantStreamCodecTest {
         assertThat(tolerant.getMapValueEncoder()).isSameAs(delegate.getMapValueEncoder());
         assertThat(tolerant.getMapKeyEncoder()).isSameAs(delegate.getMapKeyEncoder());
         assertThat(tolerant.getValueEncoder()).isSameAs(delegate.getValueEncoder());
-        assertThat(tolerant.getMapKeyDecoder()).isSameAs(delegate.getMapKeyDecoder());
         assertThat(tolerant.getClassLoader()).isSameAs(delegate.getClassLoader());
+        // Decoders, by contrast, must NOT be pass-through -- including the map-key one, which is the
+        // field-name path and was the remaining hole.
+        assertThat(tolerant.getMapKeyDecoder()).isNotSameAs(delegate.getMapKeyDecoder());
+        assertThat(tolerant.getMapValueDecoder()).isNotSameAs(delegate.getMapValueDecoder());
+    }
+
+    /**
+     * The field-name path on the shipped codec resolves to {@code LZ4CodecV2} over Kryo5, not to the
+     * JSON codec, so it is only covered because the wrapper goes around the {@link org.redisson.codec.CompositeCodec}
+     * rather than around its value codec. A throw here would wedge exactly like the payload path.
+     */
+    @Test
+    @DisplayName("the shipped JAVA codec tolerates an undecodable field name too")
+    void shippedJavaCodecToleratesUndecodableMapKey() throws IOException {
+        var notAnLz4Frame = json("plainly not an LZ4 frame");
+
+        var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(notAnLz4Frame, null);
+
+        assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
+    }
+
+    /**
+     * The drain branch: a decoder that consumes part of the buffer and then throws must still leave it
+     * fully consumed, and the reported size must be the pre-decode size, not what is left.
+     */
+    @Test
+    @DisplayName("a partially consumed buffer is drained and the pre-decode size reported")
+    void partiallyConsumedBufferIsDrained() throws IOException {
+        var buf = json("0123456789");
+        var payloadBytes = buf.readableBytes();
+        Codec partialReader = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
+            b.skipBytes(4);
+            throw new IllegalStateException("failed after consuming 4 bytes");
+        }));
+
+        var decoded = partialReader.getMapValueDecoder().decode(buf, null);
+
+        assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
+        assertThat(((UndecodableStreamMessage) decoded).payloadBytes()).isEqualTo(payloadBytes);
+        assertThat(buf.isReadable()).isFalse();
+    }
+
+    /**
+     * The boundary of the no-throw contract. An {@link Error} is deliberately not absorbed: an
+     * OutOfMemoryError while Jackson materializes a multi-megabyte String is the plausible one on this
+     * path, and a JVM in that state should not have its failure filed as a routine per-message drop.
+     */
+    @Test
+    @DisplayName("an Error still propagates -- only Exception is absorbed")
+    void errorStillPropagates() {
+        Codec throwsError = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
+            throw new OutOfMemoryError("simulated");
+        }));
+
+        assertThatThrownBy(() -> throwsError.getMapValueDecoder().decode(json("{}"), null))
+                .isInstanceOf(OutOfMemoryError.class);
+    }
+
+    /** Minimal codec whose every decoder is the supplied one, for driving the wrapper directly. */
+    private record StubCodec(Decoder<Object> decoder) implements Codec {
+        @Override
+        public Decoder<Object> getMapValueDecoder() {
+            return decoder;
+        }
+
+        @Override
+        public Encoder getMapValueEncoder() {
+            return null;
+        }
+
+        @Override
+        public Decoder<Object> getMapKeyDecoder() {
+            return decoder;
+        }
+
+        @Override
+        public Encoder getMapKeyEncoder() {
+            return null;
+        }
+
+        @Override
+        public Decoder<Object> getValueDecoder() {
+            return decoder;
+        }
+
+        @Override
+        public Encoder getValueEncoder() {
+            return null;
+        }
+
+        @Override
+        public ClassLoader getClassLoader() {
+            return getClass().getClassLoader();
+        }
     }
 
     @Test
