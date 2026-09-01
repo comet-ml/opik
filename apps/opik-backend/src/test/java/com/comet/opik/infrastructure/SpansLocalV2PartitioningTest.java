@@ -144,7 +144,7 @@ class SpansLocalV2PartitioningTest {
                 .bind("id_lo", seed.ids().get(1))
                 .bind("id_hi", seed.ids().get(2)));
 
-        // Queries the same inner id range (weeks 1..2 of the four seeded) as idRangeWithWeekStartBoundPrunesPartitions,
+        // Queries the same inner id range (weeks 1..2 of the four seeded) as idRangeWithToMondayBoundPrunesPartitions,
         // so the two are a controlled pair whose only difference is the added toMonday(id_at) bound. With no id_at
         // predicate the id_at MinMax has nothing to constrain (the planner doesn't infer id -> id_at monotonicity
         // through UUIDv7ToDateTime), so every part is read. Should the target LTS start inferring that, this fails —
@@ -166,49 +166,43 @@ class SpansLocalV2PartitioningTest {
      * the container-wide table, which the other tests in this class also write to.
      */
     @Test
-    void idRangeWithWeekStartBoundPrunesPartitions() {
+    void idRangeWithToMondayBoundPrunesPartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
         Consumer<Statement> binder = statement -> statement
                 .bind("workspace_id", seed.workspaceId())
                 .bind("id_lo", seed.ids().get(1))
                 .bind("id_hi", seed.ids().get(2));
 
-        var lowerBoundOnly = minMaxParts(
-                """
-                        SELECT
-                            id
-                        FROM spans_local_v2
-                        WHERE workspace_id = :workspace_id
-                            AND id >= :id_lo
-                            AND id <= :id_hi
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
-                        """,
-                binder);
-        var upperBoundOnly = minMaxParts(
-                """
-                        SELECT
-                            id
-                        FROM spans_local_v2
-                        WHERE workspace_id = :workspace_id
-                            AND id >= :id_lo
-                            AND id <= :id_hi
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
-                        """,
-                binder);
+        var lowerBoundOnly = minMaxParts("""
+                SELECT
+                    id
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id >= :id_lo
+                    AND id <= :id_hi
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
+                """, binder);
+        var upperBoundOnly = minMaxParts("""
+                SELECT
+                    id
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id >= :id_lo
+                    AND id <= :id_hi
+                    AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
+                """, binder);
         // Run last on purpose: a background merge can only ever collapse parts, so measuring the two-bound query
         // against the most-merged state keeps the inequalities below one-directional.
-        var bothBounds = minMaxParts(
-                """
-                        SELECT
-                            id
-                        FROM spans_local_v2
-                        WHERE workspace_id = :workspace_id
-                            AND id >= :id_lo
-                            AND id <= :id_hi
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
-                        """,
-                binder);
+        var bothBounds = minMaxParts("""
+                SELECT
+                    id
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id >= :id_lo
+                    AND id <= :id_hi
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
+                    AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
+                """, binder);
 
         // Each bound prunes what the other cannot: the week-3 parts only the upper bound excludes, and the week-0
         // parts only the lower one does. Together they also imply pruning happens at all, since a planner that ignored
@@ -229,18 +223,16 @@ class SpansLocalV2PartitioningTest {
     void idPointLookupWithToMondayEqualityPrunesPartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
 
-        var actualParts = minMaxParts(
-                """
-                        SELECT
-                            id
-                        FROM spans_local_v2
-                        WHERE workspace_id = :workspace_id
-                            AND id = :id
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
-                        """,
-                statement -> statement
-                        .bind("workspace_id", seed.workspaceId())
-                        .bind("id", seed.ids().get(1)));
+        var actualParts = minMaxParts("""
+                SELECT
+                    id
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id = :id
+                    AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
+                """, statement -> statement
+                .bind("workspace_id", seed.workspaceId())
+                .bind("id", seed.ids().get(1)));
 
         // Equality on toMonday(id_at) prunes via the id_at MinMax to the single week id 1 lands in; the other three
         // seeded weeks (and every out-of-window part) fall away, so selected drops below total.

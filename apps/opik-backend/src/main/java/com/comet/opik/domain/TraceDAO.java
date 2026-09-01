@@ -873,9 +873,14 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-     * {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)) = ...} pins the scan to the single week that can hold {@code :id}: a strict consequence
+     * The week-start equality pins the scan to the single week that can hold {@code :id}: a strict consequence
      * of {@code id = :id} (never hides the row) that engages partition pruning once {@code traces} is partitioned,
      * which the planner can't infer from the id filter alone.
+     * <p>
+     * <b>Both</b> operands are the {@code Date32} week expression (see {@link #SELECT_BY_PROJECT_ID}). An equality
+     * only holds when the two sides agree for every id, so mixing the forms is worse here than at a range bound: with
+     * {@code toMonday} on the bound side a far-future {@code :id} yields a wrapped week the honest left side can never
+     * equal, and the row this query exists to find is the one it drops.
      */
     private static final String SELECT_DETAILS_BY_ID = """
             SELECT DISTINCT
@@ -883,7 +888,8 @@ class TraceDAOImpl implements TraceDAO {
                 project_id
             FROM traces
             WHERE id = :id
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                = (toDate32(UUIDv7ToDateTime(toUUID(:id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id), 'UTC'), 1)))
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -899,18 +905,23 @@ class TraceDAOImpl implements TraceDAO {
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
      * <p>
-     * Each {@code traces} id-range bound carries a parallel {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))} bound: a strict consequence of
+     * Each {@code traces} id-range bound carries a parallel week-start bound: a strict consequence of
      * the id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives
      * from {@code id} — that lets the planner prune partitions once {@code traces} is partitioned.
      * <p>
-     * The week-start bound is Date32 arithmetic, matching the partition expression from 000114, and NOT
-     * {@code toMonday(id_at)} (OPIK-7456). {@code toMonday} returns a 16-bit Date (1970..2149) and wraps at both
-     * ends, which silently breaks the "strict consequence" invariant above: a far-future {@code id_at} passes the
-     * {@code id} bound but wraps to a past week and fails the week bound, so the row is dropped from a result the
-     * id-range admits. That is a filter, not a pruning hint. Before 000114 {@code id_at} was a 32-bit DateTime
-     * that had already truncated such values into a plausible year, so the wrap was latent; making {@code id_at}
-     * honest to 2299 exposed it. The Date32 form saturates instead of wrapping, so the invariant holds for every
-     * id, and it still prunes — it is the partition key's own expression.
+     * <b>Both</b> operands are Date32 arithmetic — {@code toDate32(E) - toIntervalDay(toDayOfWeek(E, 1))}, the
+     * partition expression from 000114 — and never {@code toMonday(E)} (OPIK-7456). {@code toMonday} returns a 16-bit
+     * Date (1970..2149) and wraps at both ends, which breaks the invariant above: a far-future week folds into a past
+     * one, so the bound becomes a filter rather than a pruning hint. Date32 saturates instead, holds for every id, and
+     * still prunes, being the partition key's own expression. The wrap was latent before 000114, when {@code id_at}
+     * was a 32-bit DateTime that had already truncated such values into a plausible year.
+     * <p>
+     * The bound side matters as much as the column: {@code :last_received_id} is a cursor lifted from a row this query
+     * returned, so it is a real id and can itself be far-future, and the time bounds come from a caller-supplied
+     * {@code Instant}. A wrapped <em>lower</em> bound only widens the window, but a wrapped <em>upper</em> bound
+     * collapses it — every ordinary row has a later week, fails {@code <=}, and the page comes back empty. Deriving
+     * both sides identically is what makes that checkable by reading one line instead of re-deriving the wrap
+     * arithmetic per direction.
      * <p>
      * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
      * {@code shouldPageKeyAggregates}), the aggregate CTEs are keyed on
@@ -932,11 +943,14 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(last_received_id)> AND id \\< :last_received_id
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif><if(!exclude_feedback_scores)>feedback_scores_deduped AS (
@@ -1376,11 +1390,14 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(last_received_id)> AND id \\< :last_received_id
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -1462,9 +1479,12 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM page_ids)
-                <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
-                <if(last_received_id)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
+                <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                <if(last_received_id)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -1591,9 +1611,11 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif>feedback_scores_deduped AS (
@@ -1863,9 +1885,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -2226,7 +2250,8 @@ class TraceDAOImpl implements TraceDAO {
                 start_time
             FROM traces
             WHERE id = :id
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                = (toDate32(UUIDv7ToDateTime(toUUID(:id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id), 'UTC'), 1)))
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
@@ -2248,7 +2273,8 @@ class TraceDAOImpl implements TraceDAO {
                 DISTINCT project_id
             FROM traces
             WHERE id = :id
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                = (toDate32(UUIDv7ToDateTime(toUUID(:id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id), 'UTC'), 1)))
             AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2286,20 +2312,29 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-     * Partition-pruning fast pass of {@code SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS}. Constrains {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))}
-     * ({@code id_at} is MATERIALIZED from the UUIDv7 id, migration 000091) to the id set's own min/max week and, like
-     * the unbounded query, prunes granules on the {@code idx_traces_id_bf} bloom index. The week window is a no-op on
-     * the current unpartitioned table but prunes partitions once {@code traces} is partitioned. Well-formed UUIDv7 ids
-     * have {@code id_at} monotonic in id, so the window resolves them; a malformed id whose {@code id_at} wrapped
-     * (OPIK-7456) can fall outside it and is re-resolved by the unbounded fallback, so the bounded query is never a
-     * delete's sole resolver.
+     * Partition-pruning fast pass of {@code SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS}. Constrains the {@code Date32} week
+     * expression (see {@link #SELECT_BY_PROJECT_ID}; {@code id_at} is MATERIALIZED from the UUIDv7 id, migration
+     * 000091) to the id set's own min/max week and, like the unbounded query, prunes granules on the
+     * {@code idx_traces_id_bf} bloom index.
+     * <p>
+     * {@code :min_id} / {@code :max_id} are drawn from the batch, so either can be far-future — which is exactly why
+     * both sides use the Date32 form. Under {@code toMonday} a far-future {@code :max_id} wrapped below
+     * {@code :min_id}'s week and inverted the window, so the fast pass matched nothing and every id fell through to
+     * the unbounded pass. It now resolves them.
+     * <p>
+     * The fallback remains load-bearing for what {@link com.comet.opik.utils.WeeklyPartitions#of} still cannot derive
+     * exactly: an id at or past the end of {@code DateTime64}'s range, where {@code id_at} saturates to
+     * {@code 2299-12-31} whatever the real week, so every such id collapses into one partition. Real data contains
+     * them, so the bounded query is never a delete's sole resolver.
      */
     private static final String SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
             SELECT DISTINCT id, project_id
             FROM traces
             WHERE id IN :trace_ids
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:min_id), 'UTC'))
-            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:max_id), 'UTC'))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                >= (toDate32(UUIDv7ToDateTime(toUUID(:min_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:min_id), 'UTC'), 1)))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:max_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:max_id), 'UTC'), 1)))
             AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2654,9 +2689,11 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)>AND id >= :uuid_from_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -2996,9 +3033,11 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)>AND id >= :uuid_from_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                 <if(!dedup_by_argmax)>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>

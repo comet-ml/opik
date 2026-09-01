@@ -50,13 +50,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   partition — the property {@code ReplacingMergeTree}'s in-partition dedup depends on. Regresses if the
  *   {@code id_at} expression or the partition key stops deriving from the immutable {@code id}.</li>
  *   <li><b>Pruning with the read predicates.</b> The read path emits the same {@code Date32} week-start bounds as the
- *   partition key, paired with its id-range. They prune because {@code id_at} is a column of the partition key, so
- *   ClickHouse keeps a {@code MinMax} over {@code id_at} per part and the expression is monotonic over a part's narrow
- *   {@code id_at} range. An id-range predicate alone does not prune (the planner doesn't infer {@code id → id_at}
- *   monotonicity through {@code UUIDv7ToDateTime}). Read via {@code EXPLAIN indexes = 1}: the {@code MinMax} block's
- *   selected count drops below the total exactly when pruning engages. These bounds were {@code toMonday(id_at)} until
- *   OPIK-7456's read-path fix — that wrapped far-future ids into a past week and dropped rows the id-range admits, so
- *   the bound acted as a filter rather than a hint.</li>
+ *   partition key, paired with its id-range, and they prune where the id-range alone does not (the planner doesn't
+ *   infer {@code id → id_at} monotonicity through {@code UUIDv7ToDateTime}). Read via {@code EXPLAIN indexes = 1}
+ *   across the {@code MinMax} and {@code Partition} entries — see {@code prunedParts}, which explains why the fix moved
+ *   the work from one to the other — the selected count drops below the total exactly when pruning engages. These
+ *   bounds were {@code toMonday} until OPIK-7456's read-path fix: that wrapped far-future ids into a past week and
+ *   dropped rows the id-range admits, so the bound acted as a filter rather than a hint.</li>
+ *   <li><b>Both operands, in every direction.</b> The wrap is reachable through the bound as well as the column —
+ *   {@code :last_received_id} is a real trace id, and the time bounds are built from a caller-supplied instant — and
+ *   how it fails depends on the direction: a wrapped lower bound only widens, a wrapped <b>upper</b> bound drops every
+ *   ordinary row, and a wrapped equality never matches. All three are pinned below, because a lower-bound case alone
+ *   cannot detect a wrapped bound at all.</li>
  *   <li><b>Honest far-future isolation.</b> A legitimate row whose UUIDv7 carries a far-future timestamp lands in its own
  *   distinct, honest weekly partition, never mixed with a real recent week.</li>
  *   <li><b>Week-expression correctness.</b> The {@code Date32} Monday equals {@code toMonday} across the in-range
@@ -81,6 +85,13 @@ class TracesLocalV2PartitioningTest {
     private static final LocalDate ANCHOR_MONDAY = LocalDate.of(2025, 3, 3);
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
+    /**
+     * A far-future UUIDv7 timestamp of the kind a broken client clock mints (litellm BerriAI/litellm#31294). Past
+     * {@code Date}'s 2149-06-06 ceiling, so {@code toMonday} wraps it into a plausible recent week while the
+     * {@code Date32} week expression keeps it honest — the whole point of every far-future case below.
+     */
+    private static final Instant FAR_FUTURE_INSTANT = Instant.parse("2201-06-01T00:00:00Z");
 
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
@@ -120,7 +131,7 @@ class TracesLocalV2PartitioningTest {
     void idRangePredicateAloneDoesNotPrunePartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
 
-        var actualParts = minMaxParts("""
+        var actualParts = prunedParts("""
                 SELECT
                     id
                 FROM traces_local_v2
@@ -144,11 +155,11 @@ class TracesLocalV2PartitioningTest {
     void idRangeWithWeekStartBoundPrunesPartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
 
-        // The exact predicate the TraceDAO read path emits: each id-range bound carries a parallel Date32 week-start bound
-        // derived from the same UUIDv7. id_at is a column of the partition-key expression, so ClickHouse keeps a MinMax
-        // over id_at per part; toMonday is monotonic over a part's narrow id_at range, so these bounds prune parts via
-        // that MinMax even though the key expression itself does not mention toMonday.
-        var actualParts = minMaxParts(
+        // The exact predicate the TraceDAO read path emits: each id-range bound carries a parallel Date32 week-start
+        // bound derived from the same UUIDv7, the same expression on both sides. id_at is a column of the partition-key
+        // expression, so ClickHouse keeps a MinMax over id_at per part and the week expression — being the key's own —
+        // prunes parts through it.
+        var actualParts = prunedParts(
                 """
                         SELECT
                             id
@@ -156,8 +167,10 @@ class TracesLocalV2PartitioningTest {
                         WHERE workspace_id = :workspace_id
                             AND id >= :id_lo
                             AND id <= :id_hi
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'), 1)))
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                <= (toDate32(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'), 1)))
                         """,
                 statement -> statement
                         .bind("workspace_id", seed.workspaceId())
@@ -165,32 +178,32 @@ class TracesLocalV2PartitioningTest {
                         .bind("id_hi", seed.ids().get(2)));
 
         // ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below the range and week 3 above; both
-        // prune away, demonstrating pruning on each bound. The week-start bounds prune via the id_at MinMax (id_at
-        // being a partition-key column), so the MinMax entry's selected count drops below the total.
+        // prune away, demonstrating pruning on each bound.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
     }
 
     @Test
-    void idPointLookupWithToMondayEqualityPrunesPartitions() {
+    void idPointLookupWithWeekStartEqualityPrunesPartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
 
         // The point-lookup shape the TraceDAO read path emits (e.g. SELECT_DETAILS_BY_ID): a single id paired with a
         // week-start equality on that same UUIDv7, the equality counterpart of the range bound above.
-        var actualParts = minMaxParts(
+        var actualParts = prunedParts(
                 """
                         SELECT
                             id
                         FROM traces_local_v2
                         WHERE workspace_id = :workspace_id
                             AND id = :id
-                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                = (toDate32(UUIDv7ToDateTime(toUUID(:id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id), 'UTC'), 1)))
                         """,
                 statement -> statement
                         .bind("workspace_id", seed.workspaceId())
                         .bind("id", seed.ids().get(1)));
 
-        // Equality on the week-start expression prunes via the id_at MinMax to the single week id 1 lands in; the other three
-        // seeded weeks (and every out-of-window part) fall away, so selected drops below total.
+        // Equality on the week-start expression prunes to the single week id 1 lands in; the other three seeded weeks
+        // (and every out-of-window part) fall away, so selected drops below total.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
     }
 
@@ -244,27 +257,77 @@ class TracesLocalV2PartitioningTest {
      */
     @Test
     void weekStartLowerBoundKeepsFarFutureRowsThatTheIdRangeAdmits() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = ID_GENERATOR.generateId();
-        var presentId = ID_GENERATOR.generateId(weekInstant(0));
-        var farFutureId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
-        insert(List.of(presentId, farFutureId), workspaceId, projectId, weekInstant(0));
+        var seed = seedPresentAndFarFuture();
 
-        var returnedIds = transactionTemplateAsync.stream(connection -> {
-            var statement = connection.createStatement("""
-                    SELECT id
-                    FROM traces_local_v2
-                    WHERE workspace_id = :workspace_id
+        var returnedIds = idsMatching(
+                """
+                        SELECT id
+                        FROM traces_local_v2
+                        WHERE workspace_id = :workspace_id
                         AND id >= :id_lo
                         AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
-                    """);
-            statement.bind("workspace_id", workspaceId).bind("id_lo", presentId);
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, ignored) -> row.get("id", String.class)));
-        }).collectList().block();
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'), 1)))
+                        """,
+                seed.workspaceId(), statement -> statement.bind("id_lo", seed.present()));
 
-        assertThat(returnedIds).containsExactlyInAnyOrder(presentId.toString(), farFutureId.toString());
+        assertThat(returnedIds).containsExactlyInAnyOrder(seed.present().toString(), seed.farFuture().toString());
+    }
+
+    /**
+     * The bound side of a week bound has to be Date32 too, and an equality is where mixing the forms fails hardest:
+     * it holds only if both sides agree for every id, so a {@code toMonday} bound against the honest column never
+     * matches a far-future row at all.
+     *
+     * <p>This is the point-lookup shape ({@code SELECT_PARTIAL_BY_ID}, {@code SELECT_PROJECT_ID_FROM_TRACE},
+     * {@code SELECT_DETAILS_BY_ID}) — the queries that resolve a trace's owning project, including on the delete path.
+     * Asserts that the far-future id <em>resolves</em>, not merely that it is not lost: an equality that matches
+     * nothing is indistinguishable from an absent row, so only the positive assertion pins it.
+     */
+    @Test
+    void weekStartEqualityResolvesAFarFutureId() {
+        var seed = seedPresentAndFarFuture();
+
+        var returnedIds = idsMatching(
+                """
+                        SELECT id
+                        FROM traces_local_v2
+                        WHERE workspace_id = :workspace_id
+                        AND id = :id
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            = (toDate32(UUIDv7ToDateTime(toUUID(:id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id), 'UTC'), 1)))
+                        """,
+                seed.workspaceId(), statement -> statement.bind("id", seed.farFuture()));
+
+        assertThat(returnedIds).containsExactly(seed.farFuture().toString());
+    }
+
+    /**
+     * The mirror of {@link #weekStartLowerBoundKeepsFarFutureRowsThatTheIdRangeAdmits()}, and the direction where a
+     * wrapped bound is catastrophic rather than merely imprecise: on an <b>upper</b> bound it does not lose the
+     * far-future row, it loses every <em>ordinary</em> row.
+     *
+     * <p>{@code :last_received_id} is a pagination cursor lifted from a row the previous page returned, so it is a real
+     * trace id and can itself be far-future — the far-future rows sort first under {@code ORDER BY id DESC}, which is
+     * exactly when it happens. With {@code toMonday} on the bound side that cursor wraps to a past week, and every
+     * ordinary row — whose honest week is later — fails {@code <=}. The page comes back empty and pagination stops
+     * dead. Seeds both rows, pages with the far-future id as the cursor, and asserts the present-day row still returns.
+     */
+    @Test
+    void weekStartUpperBoundKeepsOrdinaryRowsWhenTheCursorIsFarFuture() {
+        var seed = seedPresentAndFarFuture();
+
+        var returnedIds = idsMatching(
+                """
+                        SELECT id
+                        FROM traces_local_v2
+                        WHERE workspace_id = :workspace_id
+                        AND id < :last_received_id
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            <= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1)))
+                        """,
+                seed.workspaceId(), statement -> statement.bind("last_received_id", seed.farFuture()));
+
+        assertThat(returnedIds).containsExactly(seed.present().toString());
     }
 
     /**
@@ -289,6 +352,11 @@ class TracesLocalV2PartitioningTest {
      * {@code 1970-01-01}. Asserts the <em>exact</em> expected Monday as {@code YYYYMMDD} against a Java oracle
      * ({@code toMonday} can't be the oracle — it wraps), pinning both ends of the {@code Date32} window and catching an
      * off-by-one-week regression that would still land on some Monday in the right year.
+     *
+     * <p>The dates stop below {@code 2300} deliberately. Past the end of {@code DateTime64}'s range {@code id_at}
+     * saturates to {@code 2299-12-31}, so ClickHouse answers {@code 22991225} for every such date while this oracle
+     * would compute the real Monday — adding one above the ceiling fails for that reason, not a real one. Saturated
+     * ids are covered by {@code WeeklyPartitionsTest}, which owns the ceiling.
      */
     @ParameterizedTest(name = "honest week is the exact Monday of {0}''s week")
     @ValueSource(strings = {"1970-01-01", "2160-06-01", "2201-06-01", "2250-06-01", "2298-06-01"})
@@ -296,6 +364,34 @@ class TracesLocalV2PartitioningTest {
         var expectedMonday = LocalDate.parse(date).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         assertThat(weekProbe(date, "toYYYYMMDD(hw)"))
                 .isEqualTo(Long.parseLong(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE)));
+    }
+
+    /**
+     * Runs the given {@code SELECT id} and returns the ids it yields, binding {@code workspace_id} for the caller.
+     * Takes the whole statement rather than a fragment, like {@link #prunedParts}, so each read-path case shows the
+     * query it pins in full.
+     */
+    private List<String> idsMatching(String selectSql, String workspaceId, Consumer<Statement> binder) {
+        return transactionTemplateAsync.stream(connection -> {
+            var statement = connection.createStatement(selectSql);
+            statement.bind("workspace_id", workspaceId);
+            binder.accept(statement);
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, ignored) -> row.get("id", String.class)));
+        }).collectList().block();
+    }
+
+    /**
+     * Seeds one present-day row and one far-future row under a fresh workspace — the fixture every read-path case
+     * below shares. Each case then differs only in the predicate it applies and what it expects back, which is the
+     * whole of what distinguishes them.
+     */
+    private FarFutureSeed seedPresentAndFarFuture() {
+        var workspaceId = UUID.randomUUID().toString();
+        var present = ID_GENERATOR.generateId(weekInstant(0));
+        var farFuture = ID_GENERATOR.generateId(FAR_FUTURE_INSTANT);
+        insert(List.of(present, farFuture), workspaceId, ID_GENERATOR.generateId(), weekInstant(0));
+        return FarFutureSeed.builder().workspaceId(workspaceId).present(present).farFuture(farFuture).build();
     }
 
     /**
@@ -415,11 +511,21 @@ class TracesLocalV2PartitioningTest {
     }
 
     /**
-     * Runs {@code EXPLAIN indexes = 1, json = 1} for the query and returns its {@code MinMax} index entry. That entry
-     * reflects part-level pruning on the partition-expression column ({@code id_at}): {@code Initial Parts} is every
-     * active part in the (reused) table, {@code Selected Parts} is what survives partition pruning.
+     * Runs {@code EXPLAIN indexes = 1, json = 1} for the query and reports part-level pruning: {@code total} is every
+     * active part in the (reused) table, {@code selected} is what survives partition analysis.
+     *
+     * <p>Reads the {@code MinMax} and {@code Partition} entries together, because which of the two carries the
+     * condition is a planner decision, not a property of the query. ClickHouse applies them in that order, each
+     * narrowing the previous one's selection, so {@code total} is {@code MinMax}'s initial count and {@code selected}
+     * is whichever of the two ran last.
+     *
+     * <p>The distinction is not cosmetic, and it moved with OPIK-7456's fix. A week bound whose bound side is
+     * {@code toMonday} cannot match the partition key as a whole, so ClickHouse falls back to inferring monotonicity of
+     * the left expression over each part's {@code id_at} {@code MinMax}. Deriving both sides the same way makes the
+     * predicate the partition key's own expression, which it matches directly — a stricter route to the same pruning,
+     * and one that needs no monotonicity inference over a function that is not in fact monotonic at the wrap.
      */
-    private MinMaxParts minMaxParts(String selectSql, Consumer<Statement> binder) {
+    private PrunedParts prunedParts(String selectSql, Consumer<Statement> binder) {
         var explainRows = transactionTemplateAsync.stream(connection -> {
             var statement = connection.createStatement("EXPLAIN indexes = 1, json = 1 %s".formatted(selectSql));
             binder.accept(statement);
@@ -429,14 +535,25 @@ class TracesLocalV2PartitioningTest {
 
         var explain = String.join("\n", explainRows);
         var indexes = JsonUtils.getJsonNodeFromString(explain).findValue("Indexes");
+        PrunedParts minMax = null;
+        PrunedParts partition = null;
         if (indexes != null) {
             for (JsonNode index : indexes) {
-                if ("MinMax".equals(index.path("Type").asText())) {
-                    return JsonUtils.treeToValue(index, MinMaxParts.class);
+                var entry = JsonUtils.treeToValue(index, PrunedParts.class);
+                switch (index.path("Type").asText()) {
+                    case "MinMax" -> minMax = entry;
+                    case "Partition" -> partition = entry;
+                    default -> {
+                    }
                 }
             }
         }
-        throw new AssertionError("No MinMax index in EXPLAIN output:\n" + explain);
+        if (minMax == null) {
+            throw new AssertionError("No MinMax index in EXPLAIN output:\n" + explain);
+        }
+        return partition == null
+                ? minMax
+                : new PrunedParts(partition.selected(), minMax.total());
     }
 
     private Instant weekInstant(int weekOffset) {
@@ -447,9 +564,15 @@ class TracesLocalV2PartitioningTest {
     private record Seed(String workspaceId, UUID projectId, List<UUID> ids) {
     }
 
+    /** Built through the builder, not positionally: the two ids are both {@code UUID} and swapping them would invert
+     * every case below without a compile error. */
+    @Builder(toBuilder = true)
+    private record FarFutureSeed(String workspaceId, UUID present, UUID farFuture) {
+    }
+
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record MinMaxParts(
+    private record PrunedParts(
             @JsonProperty("Selected Parts") int selected,
             @JsonProperty("Initial Parts") int total) {
     }

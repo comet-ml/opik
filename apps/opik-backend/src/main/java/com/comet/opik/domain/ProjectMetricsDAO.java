@@ -281,9 +281,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -549,9 +551,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -564,8 +566,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
-            """
-            .formatted(TRACE_FILTERED_PREFIX);
+            """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_COST_WITH_BREAKDOWN = """
             %s, spans_dedup AS (
@@ -582,9 +583,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -594,8 +595,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
             SETTINGS log_comment = '<log_comment>';
-            """
-            .formatted(TRACE_FILTERED_PREFIX);
+            """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TOKEN_USAGE = """
             %s, spans_dedup AS (
@@ -612,9 +612,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
@@ -630,8 +630,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
-            """
-            .formatted(TRACE_FILTERED_PREFIX);
+            """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TOKEN_USAGE_WITH_BREAKDOWN = """
             %s, spans_dedup AS (
@@ -649,9 +648,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
@@ -664,8 +663,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY group_name, bucket
             ORDER BY group_name, bucket
             SETTINGS log_comment = '<log_comment>';
-            """
-            .formatted(TRACE_FILTERED_PREFIX);
+            """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES = """
             %s, feedback_scores_deduplication AS (
@@ -961,9 +959,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 <if(uuid_from_time)>AND id >= :uuid_from_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 
@@ -975,9 +975,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 AND length(error_info) > 0
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 <if(uuid_from_time)>AND id >= :uuid_from_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 
@@ -1166,9 +1168,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = tr.id
             )
             SELECT <bucket> AS bucket,
@@ -1181,8 +1183,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>
             SETTINGS log_comment = '<log_comment>';
-            """
-            .formatted(THREAD_FILTERED_PREFIX);
+            """.formatted(THREAD_FILTERED_PREFIX);
 
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {

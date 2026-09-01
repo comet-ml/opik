@@ -92,8 +92,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
                   AND id BETWEEN :id_prior_start AND :id_end
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
@@ -111,8 +113,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 AND id BETWEEN :id_prior_start AND :id_end
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
-                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                 AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9);
             """;
 
@@ -130,8 +132,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
                       AND id BETWEEN :id_start AND :id_end
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                       AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
@@ -166,8 +170,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND id BETWEEN :id_start AND :id_end
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                       AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
@@ -197,8 +203,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
                   AND id BETWEEN :id_start AND :id_end
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
+                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket
@@ -223,8 +229,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND id BETWEEN :id_start AND :id_end
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
+                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY bucket
                 ORDER BY bucket

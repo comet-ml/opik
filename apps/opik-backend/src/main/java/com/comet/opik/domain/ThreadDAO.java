@@ -89,8 +89,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 )
                 WHERE 1 = 1
@@ -168,11 +170,15 @@ class ThreadDAOImpl implements ThreadDAO {
                       <else>
                           <if(traces_final_ids)>
                               AND id IN (SELECT id FROM traces_final_ids)
-                              <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                              <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                              <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                              <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <else>
-                              <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                               <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                           <endif>
                       <endif>
@@ -505,8 +511,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 )
                 WHERE 1 = 1
@@ -534,11 +542,15 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
                           AND id IN (SELECT id FROM traces_final_ids)
-                          <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                          <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                          <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                          <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                       <else>
-                          <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                          <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                       <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -1055,8 +1067,10 @@ class ThreadDAOImpl implements ThreadDAO {
                         WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
                         AND thread_id \\<> ''
-                        <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                        <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                         <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                     )
                     WHERE 1 = 1
@@ -1084,11 +1098,15 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND thread_id \\<> ''
                           <if(traces_final_ids)>
                               AND id IN (SELECT id FROM traces_final_ids)
-                              <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                              <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                              <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                              <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <else>
-                              <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                  \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                               <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                           <endif>
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
