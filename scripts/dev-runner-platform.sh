@@ -276,9 +276,13 @@ SQL
 }
 
 # Patch the module's test-config.yml into a runtime config that works against
-# Opik's infra. Only redisConfig.redisPass isn't ${..}-overridable: it is
-# hardcoded 'NA' and Opik's Redis needs 'opik'.
-# Everything else is env-substituted from start_platform_backend_local.
+# Opik's infra:
+#   - redisConfig.redisPass is hardcoded 'NA'; Opik's Redis needs 'opik'
+#   - templates older than comet-backend 6cb013b662 hardcode the MinIO port as
+#     ':9000' instead of '${MINIO_PORT:-9000}'; Opik's MinIO API is published on
+#     ${MINIO_API_PORT} because ClickHouse holds 9000
+# Newer templates carry the ${MINIO_PORT} placeholder and are covered by the
+# env-substitution from start_platform_backend_local instead.
 generate_platform_backend_config() {
     local src="$COMET_BACKEND_PATH/comet-ml-react-webapp/src/test/resources/test-config.yml"
     if [ ! -f "$src" ]; then
@@ -287,6 +291,7 @@ generate_platform_backend_config() {
     fi
     sed -E \
         -e 's/redisPass: NA/redisPass: opik/g' \
+        -e "/MINIO_HOST/ s/:9000/:${MINIO_API_PORT}/g" \
         "$src" > "$PLATFORM_BACKEND_CONFIG_FILE"
     log_debug "Generated EM backend config: $PLATFORM_BACKEND_CONFIG_FILE"
 }
