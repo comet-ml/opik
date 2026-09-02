@@ -110,18 +110,31 @@ class TestTimeoutGuardTest {
                 .doesNotContain("junit.jupiter.execution.timeout.default");
     }
 
-    @ParameterizedTest(name = "{0} -> {1}s")
-    @CsvSource({"30s, 30", "45, 45", "2m, 120", "4m, 240", "1h, 3600", "500ms, 0", "2 m, 120", "2M, 120"})
+    @ParameterizedTest(name = "{0} -> {1}ms")
+    @CsvSource({"30s, 30000", "45, 45000", "2m, 120000", "4m, 240000", "1h, 3600000",
+            "500ms, 500", "2 m, 120000", "2M, 120000", "100us, 0", "5000000ns, 5"})
     @DisplayName("timeout values are parsed per JUnit's grammar, not by stripping the unit")
-    void parsesJUnitTimeoutGrammar(String value, long expectedSeconds) {
-        assertThat(toSeconds(value)).isEqualTo(expectedSeconds);
+    void parsesJUnitTimeoutGrammar(String value, long expectedMillis) {
+        // Asserted in millis rather than seconds so sub-second values are visible here: truncating
+        // them to 0 is what previously made safe budgets look like no budget at all.
+        assertThat(toDuration(value).toMillis()).isEqualTo(expectedMillis);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"500ms", "999ms", "1ms", "100us", "5000000ns"})
+    @DisplayName("sub-second bounds are accepted, not truncated to zero and rejected")
+    void acceptsSubSecondBudgets(String value) {
+        // 4 attempts at any of these is well under a minute, let alone the 10m wall. They were
+        // rejected because toSeconds() floored them to 0 and the isPositive() guard then read that
+        // as "no budget" -- a guard added to catch overflow was rejecting the smallest safe values.
+        assertRetryBudgetFits(value, UNIT_JOB_WALL, "sub-second probe");
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"2x", "abc", "m", "2mm", "-5m", ""})
     @DisplayName("values outside JUnit's grammar are rejected, never coerced to a passing number")
     void rejectsValuesOutsideGrammar(String value) {
-        assertThatThrownBy(() -> toSeconds(value)).isInstanceOf(AssertionError.class);
+        assertThatThrownBy(() -> toDuration(value)).isInstanceOf(AssertionError.class);
     }
 
     @ParameterizedTest
@@ -179,12 +192,15 @@ class TestTimeoutGuardTest {
         // grammar-valid bound (e.g. 106751991167300d) wrapped negative and satisfied
         // isLessThan(wall), so the assertion designed to reject oversized timeouts accepted the
         // most oversized ones of all.
-        long budget;
+        //
+        // Compared as Durations, not whole seconds: flooring to seconds turned every sub-second
+        // bound into 0, which the isPositive() check below then rejected as no budget at all.
+        Duration budget;
         try {
-            budget = Math.multiplyExact(toSeconds(value), (long) ATTEMPTS_PER_HANG);
+            budget = toDuration(value).multipliedBy(ATTEMPTS_PER_HANG);
         } catch (ArithmeticException overflow) {
             throw new AssertionError(
-                    "'%s' (%s) is absurdly large: %d attempts overflow a long, so it cannot fit inside the %s job wall"
+                    "'%s' (%s) is absurdly large: %d attempts overflow a Duration, so it cannot fit inside the %s job wall"
                             .formatted(value, description, ATTEMPTS_PER_HANG, wall),
                     overflow);
         }
@@ -196,7 +212,7 @@ class TestTimeoutGuardTest {
                 .as("%d attempts at '%s' (%s) must fit inside the %s job wall",
                         ATTEMPTS_PER_HANG, value, description, wall)
                 .isPositive()
-                .isLessThan(wall.toSeconds());
+                .isLessThan(wall);
     }
 
     private static String matchOne(String haystack, String regex) {
@@ -241,11 +257,14 @@ class TestTimeoutGuardTest {
     }
 
     /**
-     * Converts a JUnit timeout value to seconds, rejecting anything outside the documented grammar.
-     * Rejecting matters more than converting: an unrecognised value that silently became a small
-     * number would let a catastrophic bound sail past the retry-budget assertions above.
+     * Parses a JUnit timeout value, rejecting anything outside the documented grammar.
+     * <p>
+     * Returns a {@link Duration} rather than whole seconds so sub-second bounds keep their
+     * magnitude: flooring {@code 500ms} to 0 made a perfectly safe budget indistinguishable from no
+     * budget at all. Rejecting still matters more than converting -- an unrecognised value that
+     * silently became a small number would let a catastrophic bound sail past the budget assertions.
      */
-    private static long toSeconds(String value) {
+    private static Duration toDuration(String value) {
         assertThat(value).as("per-test timeout must be configured").isNotBlank();
 
         var matcher = TIMEOUT_GRAMMAR.matcher(value.trim());
@@ -257,15 +276,15 @@ class TestTimeoutGuardTest {
         var unit = matcher.group(2) == null ? "s" : matcher.group(2).toLowerCase(Locale.ROOT);
 
         return switch (unit) {
-            case "ns" -> Duration.ofNanos(amount).toSeconds();
+            case "ns" -> Duration.ofNanos(amount);
             // multiplyExact, not *: a huge microsecond count would otherwise wrap negative here,
             // before the retry-budget check ever sees it.
-            case "μs", "us" -> Duration.ofNanos(Math.multiplyExact(amount, 1_000L)).toSeconds();
-            case "ms" -> Duration.ofMillis(amount).toSeconds();
-            case "s" -> amount;
-            case "m" -> Duration.ofMinutes(amount).toSeconds();
-            case "h" -> Duration.ofHours(amount).toSeconds();
-            case "d" -> Duration.ofDays(amount).toSeconds();
+            case "μs", "us" -> Duration.ofNanos(Math.multiplyExact(amount, 1_000L));
+            case "ms" -> Duration.ofMillis(amount);
+            case "s" -> Duration.ofSeconds(amount);
+            case "m" -> Duration.ofMinutes(amount);
+            case "h" -> Duration.ofHours(amount);
+            case "d" -> Duration.ofDays(amount);
             default -> throw new IllegalStateException("unreachable: grammar admitted '" + unit + "'");
         };
     }
