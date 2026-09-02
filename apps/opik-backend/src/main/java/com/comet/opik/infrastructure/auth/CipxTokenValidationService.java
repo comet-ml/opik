@@ -26,23 +26,15 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Authenticates a CIPX device token: cost-api owns the signing key and the device registry, so the token is
- * validated by asking it rather than verified locally. Nothing here does crypto, and revocation takes effect
- * within the credentials cache TTL because the registry is re-checked on every cold call.
+ * Authenticates a CIPX device token: cost-api owns the signing key and the device registry.
  * <p>
  * The validation response carries everything the request context needs, so the caller is resolved from it
- * directly and the react service is not consulted. That is deliberate, not a shortcut: a device token names a
- * machine, not a Comet user, so there is no user for the react service to authenticate.
+ * directly and Platform is not consulted. That is deliberate, not a shortcut: a device token names a
+ * machine, not a Comet user, so there is no user for the Platform to authenticate.
  * <p>
  * Caches the resolved caller under the token, mirroring the API-key path, so a warm request is one cache read
  * with no outbound call at all.
  * <p>
- * The validator lives under {@code /v1/internal/} deliberately, and must stay there: that routing is the whole
- * control on the call, which is otherwise unauthenticated (as {@code /v1/internal/usage} already is). cost-api's
- * public contract is the {@code /v1/private/ai-spend/} prefix, which nginx forwards to it from the internet, so
- * an endpoint there that answers a presented token with a user name, workspace and device id would be an
- * internet-reachable validation oracle. Nothing routes {@code /v1/internal/} publicly, and this endpoint's only
- * caller is this one, in-cluster.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -57,12 +49,8 @@ public class CipxTokenValidationService {
     private static final String UUID_REGEX = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
     /**
-     * The only endpoints a device token may reach: what the cipx shipper actually calls. This is the whole
-     * authorization for the credential -- resolving the caller from the validation response means no path or
-     * permission check happens anywhere else, so without an explicit allowlist a device token would
-     * authenticate for every {@code /v1/private/*} endpoint, reads and deletes included. Rejection is by this
-     * list, never by the absence of a binding. Shape follows {@code RemoteAuthService.PUBLIC_ENDPOINTS}: path
-     * regex to allowed methods.
+     * The only endpoints a device token may reach. Rejection is by this list, never by the absence of a binding.
+     * Shape follows {@code RemoteAuthService.PUBLIC_ENDPOINTS}: path regex to allowed methods.
      */
     private static final Map<String, Set<String>> INGEST_ENDPOINTS = Map.of(
             "^/v1/private/spans/batch/?$", Set.of("POST", "PATCH"),
@@ -79,10 +67,8 @@ public class CipxTokenValidationService {
     private final @NonNull Provider<RequestContext> requestContext;
 
     public void authenticate(@NonNull String token, String headerWorkspace, @NonNull ContextInfoHolder contextInfo) {
-        // Checked before the token is even validated, so a device token learns nothing from a non-ingest path
-        // and a misdirected request costs no outbound call.
         if (!isIngestEndpoint(contextInfo)) {
-            log.info("Rejecting CIPX device token outside ingest, method: '{}', path: '{}'", contextInfo.method(),
+            log.error("Rejecting CIPX device token outside ingest, method: '{}', path: '{}'", contextInfo.method(),
                     contextInfo.uriInfo().getRequestUri().getPath());
             throw new ClientErrorException(NOT_AN_INGEST_ENDPOINT, Response.Status.FORBIDDEN);
         }
