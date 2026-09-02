@@ -1,7 +1,7 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import get from "lodash/get";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, UseFormReturn } from "react-hook-form";
+import { useForm, UseFormReturn, useWatch } from "react-hook-form";
 import { useNavigate } from "@tanstack/react-router";
 
 import { buildFullBaseUrl, cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ import Loader from "@/shared/Loader/Loader";
 import { Alert, ALERT_TYPE } from "@/types/alerts";
 import useAlertCreateMutation from "@/api/alerts/useAlertCreateMutation";
 import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
+import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
@@ -24,6 +25,7 @@ import { AlertFormType, AlertFormSchema } from "./schema";
 import EventTriggers from "./EventTriggers";
 import WebhookSettings from "./WebhookSettings";
 import useWebhookTest from "./useWebhookTest";
+import { buildAlertName, ensureUniqueAlertName } from "./alertNameHelpers";
 import {
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
@@ -103,6 +105,44 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
   const { testConnection, testTrigger, isTestPending } = useWebhookTest({
     getAlert,
   });
+
+  const triggers = useWatch({ control: form.control, name: "triggers" });
+  const nameValue = useWatch({ control: form.control, name: "name" });
+
+  // The last name we suggested. formState.dirtyFields can't stand in for this:
+  // once a suggestion is written, the value differs from the "" default, so RHF
+  // reports the field as dirty and we could never tell a suggestion apart from
+  // something the user typed.
+  const suggestedNameRef = useRef("");
+
+  const { data: alertsList } = useProjectAlertsList(
+    { projectId: activeProjectId!, page: 1, size: 100 },
+    { enabled: !isEdit && Boolean(activeProjectId) },
+  );
+
+  const existingAlertNames = useMemo(
+    () => (alertsList?.content ?? []).map(({ name }) => name),
+    [alertsList],
+  );
+
+  // Name new alerts after their triggers until the user types their own.
+  // Clearing the field back to empty hands naming back to us.
+  useEffect(() => {
+    if (isEdit) return;
+
+    const currentName = form.getValues("name");
+    if (currentName && currentName !== suggestedNameRef.current) return;
+
+    const generated = buildAlertName(triggers ?? []);
+    const nextName = generated
+      ? ensureUniqueAlertName(generated, existingAlertNames)
+      : "";
+
+    if (nextName !== currentName) {
+      suggestedNameRef.current = nextName;
+      form.setValue("name", nextName, { shouldDirty: false });
+    }
+  }, [form, isEdit, triggers, nameValue, existingAlertNames]);
 
   const handleNavigateBack = useCallback(() => {
     navigate({
