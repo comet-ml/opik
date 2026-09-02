@@ -13,12 +13,17 @@ title: Alerts
   In Opik 2.0, prompts, datasets, and experiments are project-scoped. Alert events such as prompt changes and feedback scores are now associated with specific projects.
 </Note>
 
-Alerts allow you to configure automated webhook notifications for important events in your Opik workspace. When specific events occur — such as trace errors, new feedback scores, or prompt changes — Opik sends HTTP POST requests to your configured endpoint with detailed event data.
+Set up an alert when you want to be notified about an important, actionable event in your Opik workspace — a spike in trace errors, a quality score dropping, a prompt changing under you in production.
 
-Opik provides three destination types for alerts:
-- **Slack**: Native integration with automatic message formatting for Slack
-- **PagerDuty**: Native integration with automatic event formatting for PagerDuty
-- **General**: For custom webhooks, no-code automation platforms, or middleware services
+Setting one up is two decisions:
+
+1. **When do you want to be alerted?** Pick one or more [event types](#supported-event-types) and set their filter conditions — the threshold, the comparison, the time window, and which projects to watch.
+2. **Who needs to be notified, and how?** Point the alert at a destination:
+   - **Slack** — native integration, messages formatted for Slack
+   - **PagerDuty** — native integration, events formatted for PagerDuty's Events API v2
+   - **General** — any webhook endpoint, no-code automation platform, or middleware service
+
+Opik delivers each notification as an HTTP POST carrying the event data in the body.
 
 <Frame>
   <img src="/img/production/alerts_configuration.png" alt="Alerts configuration in Opik" />
@@ -296,11 +301,25 @@ async def get_dashboard():
 
 ## Supported event types
 
-Opik supports ten types of alert events:
+Opik supports ten types of alert events. Select one to jump to its full description.
+
+| Event | Event type | Triggered when |
+| --- | --- | --- |
+| [Trace errors threshold exceeded](#trace-errors-threshold-exceeded) | `trace:errors` | Trace error count passes your threshold in a time window |
+| [Trace feedback score threshold exceeded](#trace-feedback-score-threshold-exceeded) | `trace:feedback_score` | Average trace feedback score crosses your threshold |
+| [Thread feedback score threshold exceeded](#thread-feedback-score-threshold-exceeded) | `trace_thread:feedback_score` | Average thread feedback score crosses your threshold |
+| [Guardrails triggered](#guardrails-triggered) | `trace:guardrails_triggered` | A guardrail check fails on a trace |
+| [Cost threshold exceeded](#cost-threshold-exceeded) | `trace:cost` | Total trace cost passes your threshold in a time window |
+| [Latency threshold exceeded](#latency-threshold-exceeded) | `trace:latency` | Average trace latency passes your threshold in a time window |
+| [New prompt added](#new-prompt-added) | `prompt:created` | A prompt is created in the prompt library |
+| [New prompt version created](#new-prompt-version-created) | `prompt:committed` | A new version is committed to a prompt |
+| [Prompt deleted](#prompt-deleted) | `prompt:deleted` | A prompt is removed from the prompt library |
+| [Experiment finished](#experiment-finished) | `experiment:finished` | An experiment completes |
 
 ### Observability events
 
-**Trace errors threshold exceeded**
+#### Trace errors threshold exceeded
+
 - **Event type**: `trace:errors`
 - **Triggered when**: Total trace error count exceeds the specified threshold within a time window
 - **Project scope**: Can be configured to specific projects
@@ -308,7 +327,8 @@ Opik supports ten types of alert events:
 - **Payload**: Metrics alert payload with error count details
 - **Use case**: Proactive error monitoring, detect error spikes, prevent system degradation
 
-**Trace feedback score threshold exceeded**
+#### Trace feedback score threshold exceeded
+
 - **Event type**: `trace:feedback_score`
 - **Triggered when**: Average trace feedback score meets the specified threshold criteria within a time window
 - **Project scope**: Can be configured to specific projects
@@ -316,7 +336,8 @@ Opik supports ten types of alert events:
 - **Payload**: Metrics alert payload with average feedback score details
 - **Use case**: Track model performance, monitor user satisfaction, detect quality degradation
 
-**Thread feedback score threshold exceeded**
+#### Thread feedback score threshold exceeded
+
 - **Event type**: `trace_thread:feedback_score`
 - **Triggered when**: Average thread feedback score meets the specified threshold criteria within a time window
 - **Project scope**: Can be configured to specific projects
@@ -334,14 +355,16 @@ The score has to be on a production trace, span or thread for an alert to see it
   A score name appears in the **Feedback Score Name** dropdown only after at least one score with that name has been logged to the project.
 </Note>
 
-**Guardrails triggered**
+#### Guardrails triggered
+
 - **Event type**: `trace:guardrails_triggered`
 - **Triggered when**: A guardrail check fails for a trace
 - **Project scope**: Can be configured to specific projects
 - **Payload**: Array of guardrail result objects
 - **Use case**: Security monitoring, compliance tracking, PII detection
 
-**Cost threshold exceeded**
+#### Cost threshold exceeded
+
 - **Event type**: `trace:cost`
 - **Triggered when**: Total trace cost exceeds the specified threshold within a time window
 - **Project scope**: Can be configured to specific projects
@@ -349,7 +372,8 @@ The score has to be on a production trace, span or thread for an alert to see it
 - **Payload**: Metrics alert payload with cost details
 - **Use case**: Budget monitoring, cost control, prevent runaway spending
 
-**Latency threshold exceeded**
+#### Latency threshold exceeded
+
 - **Event type**: `trace:latency`
 - **Triggered when**: Average trace latency exceeds the specified threshold within a time window
 - **Project scope**: Can be configured to specific projects
@@ -359,21 +383,24 @@ The score has to be on a production trace, span or thread for an alert to see it
 
 ### Prompt engineering events
 
-**New prompt added**
+#### New prompt added
+
 - **Event type**: `prompt:created`
 - **Triggered when**: A new prompt is created in the prompt library
 - **Project scope**: Workspace-wide
 - **Payload**: Prompt object with metadata
 - **Use case**: Track prompt library changes, audit prompt creation
 
-**New prompt version created**
+#### New prompt version created
+
 - **Event type**: `prompt:committed`
 - **Triggered when**: A new version (commit) is added to a prompt
 - **Project scope**: Workspace-wide
 - **Payload**: Prompt version object with template and metadata
 - **Use case**: Monitor prompt iterations, track version history
 
-**Prompt deleted**
+#### Prompt deleted
+
 - **Event type**: `prompt:deleted`
 - **Triggered when**: A prompt is removed from the prompt library
 - **Project scope**: Workspace-wide
@@ -382,7 +409,8 @@ The score has to be on a production trace, span or thread for an alert to see it
 
 ### Evaluation events
 
-**Experiment finished**
+#### Experiment finished
+
 - **Event type**: `experiment:finished`
 - **Triggered when**: An experiment completes in the workspace
 - **Project scope**: Workspace-wide
