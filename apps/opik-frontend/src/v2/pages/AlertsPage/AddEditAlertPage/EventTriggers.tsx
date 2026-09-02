@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Path, useFieldArray, UseFormReturn } from "react-hook-form";
+import { Path, useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
 import { CircleHelp, ExternalLink, Plus, WebhookIcon, X } from "lucide-react";
 import get from "lodash/get";
 
@@ -17,6 +17,12 @@ import { Description } from "@/ui/description";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Separator } from "@/ui/separator";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/ui/accordion";
 import { Input } from "@/ui/input";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { AlertFormType } from "./schema";
@@ -31,10 +37,16 @@ import { cn } from "@/lib/utils";
 import FeedbackScoreConditions, {
   DEFAULT_FEEDBACK_SCORE_CONDITION_GROUP,
 } from "./FeedbackScoreConditions";
+import WebhookPayloadExample from "./WebhookPayloadExample";
+import { Alert } from "@/types/alerts";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
   projectId: string;
+  getAlert: () => Partial<Alert>;
+  onTestTrigger: (eventType: string, label: string) => void;
+  isTestPending: boolean;
+  isPending: boolean;
 };
 
 function getThresholdLabel(eventType: ALERT_EVENT_TYPE): string {
@@ -66,8 +78,13 @@ function getThresholdPlaceholder(eventType: ALERT_EVENT_TYPE): string {
 const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   form,
   projectId,
+  getAlert,
+  onTestTrigger,
+  isTestPending,
+  isPending,
 }) => {
   const triggersError = form.formState.errors.triggers;
+  const alertType = useWatch({ control: form.control, name: "alertType" });
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -379,6 +396,44 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                           )}
                         {isGuardrailsTrigger &&
                           renderGuardrailTypesConfig(index)}
+
+                        <Accordion type="single" collapsible>
+                          <AccordionItem
+                            value={field.eventType}
+                            className="border-b-0"
+                          >
+                            <AccordionTrigger className="comet-body-s h-auto justify-start gap-1 px-0 py-1 text-muted-foreground">
+                              Example payload
+                            </AccordionTrigger>
+                            <AccordionContent className="pb-2">
+                              <WebhookPayloadExample
+                                eventType={field.eventType}
+                                alertType={alertType}
+                                alert={getAlert()}
+                                actionButton={
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      onTestTrigger(
+                                        field.eventType,
+                                        config.title,
+                                      )
+                                    }
+                                    disabled={isPending || isTestPending}
+                                    className="px-0"
+                                  >
+                                    {isTestPending && (
+                                      <div className="mr-2 size-4 animate-spin rounded-full border-2 border-light-slate border-r-transparent" />
+                                    )}
+                                    Test trigger
+                                  </Button>
+                                }
+                              />
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
                       </div>
                       <div className="flex items-start pt-0.5">
                         <Button
