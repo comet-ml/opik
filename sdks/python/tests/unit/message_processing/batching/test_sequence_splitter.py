@@ -132,3 +132,75 @@ def test_get_json_size_complex_nested():
         )
     )
     assert sequence_splitter._get_json_size(test_input) == expected
+
+
+class TestStreamIntoBatches:
+    """The streaming half, which `split_into_batches` is now built from.
+
+    It exists so a caller can hand in a generator and hold one batch of memory
+    instead of the whole sequence, so what these pin down is that it yields the
+    same batches as the eager version and pulls no further ahead than it must.
+    """
+
+    @pytest.mark.parametrize(
+        "items, limits",
+        [
+            ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], {"max_length": 4}),
+            ([1, 2, 3], {"max_length": 10}),
+            ([], {"max_length": 4}),
+            ([ONE_MEGABYTE_OBJECT_A] * 2 + [ONE_MEGABYTE_OBJECT_B] * 2, {"max_payload_size_MB": 3.5}),
+            (
+                [ONE_MEGABYTE_OBJECT_A] * 2
+                + [[ONE_MEGABYTE_OBJECT_C] * 4]
+                + [ONE_MEGABYTE_OBJECT_B] * 2,
+                {"max_length": 2, "max_payload_size_MB": 3.5},
+            ),
+        ],
+    )
+    def test_stream__yields_what_the_eager_version_returns(self, items, limits):
+        assert list(sequence_splitter.stream_into_batches(items, **limits)) == (
+            sequence_splitter.split_into_batches(items, **limits)
+        )
+
+    def test_stream__generator_input__needs_no_length(self):
+        """A `Sequence` was required only because the eager version called `len()`."""
+        batches = sequence_splitter.stream_into_batches(
+            (i for i in range(5)), max_length=2
+        )
+
+        assert list(batches) == [[0, 1], [2, 3], [4]]
+
+    def test_stream__pulls_only_as_far_as_the_batch_it_yields(self):
+        """The point of the whole thing: bounded memory, not just a nicer signature.
+
+        One item of lookahead is inherent - a batch is only known to be full when
+        the item that would overflow it arrives - so the guarantee is a batch plus
+        one, not a batch.
+        """
+        pulled = []
+
+        def counting_source():
+            for i in range(100):
+                pulled.append(i)
+                yield i
+
+        batches = sequence_splitter.stream_into_batches(
+            counting_source(), max_length=10
+        )
+
+        first = next(batches)
+
+        assert first == list(range(10))
+        assert len(pulled) == 11, (
+            "Only the first batch and the item that closed it should have been read"
+        )
+
+    def test_stream__oversized_item__yielded_before_the_pending_batch(self):
+        """Matching the eager version, which appended it to the result directly."""
+        items = [ONE_MEGABYTE_OBJECT_A, [ONE_MEGABYTE_OBJECT_C] * 4]
+
+        batches = list(
+            sequence_splitter.stream_into_batches(items, max_payload_size_MB=3.5)
+        )
+
+        assert batches == [[[ONE_MEGABYTE_OBJECT_C] * 4], [ONE_MEGABYTE_OBJECT_A]]

@@ -297,6 +297,25 @@ The flag is available on every Python SDK method that writes items — `insert`,
 `insert_from_pandas` and `read_jsonl_from_file` — as well as on the equivalent `TestSuite` methods. With
 deduplication disabled, inserting the same content twice produces two separate dataset items.
 
+#### Inserting more items than fit in memory
+
+`insert` accepts any iterable, so a dataset larger than your available memory does not have to be built as a
+list first. Hand it a generator and items are converted and uploaded in batches as they are read, holding only
+the batches currently in flight:
+
+```python title="Python" language="python"
+def read_items(path):
+    with open(path) as file:
+        for line in file:
+            yield {"input": json.loads(line)}
+
+dataset.insert(read_items("items.jsonl"), deduplication=False)
+```
+
+The iterable is consumed exactly once. If reading it fails partway through, the batches already uploaded stay in
+the dataset — the same behaviour as a batch that fails to upload. Note that `deduplication=True` keeps a content
+hash per inserted item in memory, so pass `deduplication=False` when the point is to bound memory.
+
 <Note>
   When using the SDK to insert items, a new dataset version is automatically created.
   If you insert items in multiple batches within a single `insert()` call, they are grouped into one version.
