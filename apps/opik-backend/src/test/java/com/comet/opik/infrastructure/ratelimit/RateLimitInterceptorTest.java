@@ -13,6 +13,7 @@ import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.MultivaluedHashMap;
 import org.aopalliance.intercept.MethodInvocation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,12 +25,18 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.RandomTestUtils.randomIp;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -261,6 +268,50 @@ class RateLimitInterceptorTest {
         }
     }
 
+    @Nested
+    @DisplayName("General rate-limit principal tests")
+    class GeneralRateLimitPrincipalTests {
+
+        @ParameterizedTest
+        @MethodSource
+        void invoke_usesDeviceIdWhenPresentAndApiKeyOtherwise(
+                String cipxDeviceId, String apiKey, String expectedPrincipal) throws Throwable {
+            var generalLimit = new RateLimitConfig.LimitConfig(
+                    "general-limit", "general-events", 100, 60, "general limit exceeded");
+            var workspaceLimit = new RateLimitConfig.LimitConfig(
+                    "workspace-limit", "workspace-events", 100, 60, "workspace limit exceeded");
+
+            when(methodInvocation.getMethod()).thenReturn(RateLimitedResource.class.getMethod("create"));
+            when(methodInvocation.getArguments()).thenReturn(new Object[0]);
+            when(rateLimitConfig.isEnabled()).thenReturn(true);
+            when(rateLimitConfig.getGeneralLimit()).thenReturn(generalLimit);
+            when(rateLimitConfig.getWorkspaceLimit()).thenReturn(workspaceLimit);
+            when(rateLimitConfig.getCustomLimits()).thenReturn(Map.of());
+            when(requestContextProvider.get()).thenReturn(requestContext);
+            when(requestContext.getWorkspaceId()).thenReturn("workspace-id");
+            when(requestContext.getCipxDeviceId()).thenReturn(cipxDeviceId);
+            if (cipxDeviceId == null) {
+                when(requestContext.getApiKey()).thenReturn(apiKey);
+            }
+            when(requestContext.getHeaders()).thenReturn(new MultivaluedHashMap<>());
+            when(rateLimitServiceProvider.get()).thenReturn(rateLimitService);
+            when(rateLimitService.isLimitExceeded(anyLong(), any(), any())).thenReturn(Mono.just(false));
+            when(rateLimitService.getRemainingTTL(any(), any())).thenReturn(Mono.just(60_000L));
+            when(rateLimitService.availableEvents(any(), any())).thenReturn(Mono.just(99L));
+
+            interceptor.invoke(methodInvocation);
+
+            verify(rateLimitService).isLimitExceeded(
+                    eq(1L), eq("rate-limit:general_events-" + expectedPrincipal), eq(generalLimit));
+        }
+
+        static Stream<Arguments> invoke_usesDeviceIdWhenPresentAndApiKeyOtherwise() {
+            return Stream.of(
+                    Arguments.of("device-id", "api-key", "device-id"),
+                    Arguments.of(null, "api-key", "api-key"));
+        }
+    }
+
     // Helper method to access private getClientIp method
     private String getClientIp() throws Exception {
         Method method = RateLimitInterceptor.class.getDeclaredMethod("getClientIp");
@@ -375,6 +426,13 @@ class RateLimitInterceptorTest {
 
     static class TestResourceWithoutHttpMethod {
         public void testMethod() {
+        }
+    }
+
+    static class RateLimitedResource {
+        @POST
+        @RateLimited
+        public void create() {
         }
     }
 }
