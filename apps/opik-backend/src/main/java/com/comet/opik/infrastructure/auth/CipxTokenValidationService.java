@@ -63,14 +63,13 @@ public class CipxTokenValidationService {
 
     public void authenticate(@NonNull String token, @NonNull ContextInfoHolder contextInfo) {
         if (!isIngestEndpoint(contextInfo)) {
-            log.error("Rejecting CIPX device token outside ingest, method: '{}', path: '{}'", contextInfo.method(),
+            log.info("Rejecting CIPX device token outside ingest, method: '{}', path: '{}'", contextInfo.method(),
                     contextInfo.uriInfo().getRequestUri().getPath());
             throw new ClientErrorException(NOT_AN_INGEST_ENDPOINT, Response.Status.FORBIDDEN);
         }
 
         // Keyed by the token alone: a device's workspace is derived from its enrollment, never supplied.
-        // No required permissions are passed: nothing verified any, so nothing may be cached as granted.
-        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, "", List.of());
+        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, StringUtils.EMPTY, List.of());
         if (cached.isPresent()) {
             setCredentialIntoContext(cached.get());
             return;
@@ -86,18 +85,17 @@ public class CipxTokenValidationService {
                 .deviceId(validated.deviceId())
                 .build();
         setCredentialIntoContext(credentials);
-        cacheService.cache(token, "", List.of(), credentials);
+        cacheService.cache(token, StringUtils.EMPTY, List.of(), credentials);
     }
 
     /**
      * Fills the request context straight from the validation response.
      * <p>
      * <b>Quotas and permissions are deliberately empty.</b> A device token identifies a machine enrolled to an
-     * enterprise AI-Spend workspace, not a Comet user, so there is nobody for the react service to resolve a
+     * enterprise AI-Spend workspace, not a Comet user, so there is nobody for the Platform to resolve a
      * role or a quota for. Two consequences, both accepted rather than overlooked: {@code @UsageLimited} cannot
      * trip for this credential, and {@code @RequiredPermissions} goes unverified. What bounds the credential
-     * instead is {@link #INGEST_ENDPOINTS} -- it may reach the four ingest endpoints and nothing else. Do not
-     * "fix" this by calling the react service: it has no user to authenticate here, and the call fails.
+     * instead is {@link #INGEST_ENDPOINTS} -- it may reach the four ingest endpoints and nothing else.
      */
     private void setCredentialIntoContext(CacheService.AuthCredentials credentials) {
         var context = requestContext.get();

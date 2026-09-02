@@ -50,9 +50,6 @@ public class RequestContext {
     private Visibility visibility;
     private String workspaceFallbackMessage;
 
-    /**
-     * The machine identity a validated CIPX device token resolved to. Null for every other credential.
-     */
     private String cipxDeviceId;
 
     /**

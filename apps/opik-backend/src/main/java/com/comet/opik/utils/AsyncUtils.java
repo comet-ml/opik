@@ -24,7 +24,6 @@ public class AsyncUtils {
         return ctx.put(RequestContext.USER_NAME, requestContext.getUserName())
                 .put(RequestContext.WORKSPACE_ID, requestContext.getWorkspaceId())
                 .put(RequestContext.WORKSPACE_NAME, requestContext.getWorkspaceName())
-                // Reactor's context rejects nulls, and only a CIPX device token carries a device.
                 .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));

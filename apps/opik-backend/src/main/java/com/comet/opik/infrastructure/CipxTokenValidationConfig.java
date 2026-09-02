@@ -8,9 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Delegated validation of CIPX device tokens. Disabled by default: with {@code enabled=false} the
- * authentication filter never looks at the CIPX token prefix, so self-hosted and local deployments
- * behave exactly as before.
+ * Delegated validation of CIPX device tokens. Disabled by default.
  */
 @Data
 @Builder(toBuilder = true)
