@@ -225,6 +225,23 @@ def _digest(api_key: str) -> str:
 
     Lowercase hex of the UTF-8 bytes, because BI joins on the exact string: a
     different encoding or casing here would produce a digest that matches nothing.
+
+    A plain fast hash is the right primitive, and CodeQL's
+    `py/weak-sensitive-data-hashing` will disagree because the input is named like
+    a credential. That rule is about *storing a password for verification*, where
+    a fast hash lets whoever steals the store brute-force human-chosen secrets.
+    Neither half holds here:
+
+    - This is a label, not a verifier. Nothing compares it to anything to grant
+      access; it exists so two reports of the same credential can be recognised as
+      one setup. The raw key never leaves the process.
+    - A password KDF cannot do the job. bcrypt / scrypt / PBKDF2 are salted, so the
+      same key would digest differently on every machine and join to nothing - and
+      an unsalted slow hash would still have to match what the MCP server emits,
+      which is this.
+
+    An Opik API key is also a high-entropy generated value rather than something a
+    person chose, so the guessing attack the rule guards against does not apply.
     """
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
