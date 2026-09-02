@@ -677,23 +677,30 @@ areas:
     label: Alerts
     nav_group: Production
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
+    spec_dir: alerts
     specs:
+      - alerts/alerts-crud.spec.ts
     capabilities:
-      list-alerts:         { covered: false }
-      create-alert:        { covered: false }
-      edit-alert:          { covered: false }
-      event-triggers:      { covered: false }
-      webhook-destination: { covered: false }
-      enable-disable:      { covered: false }
-      delete-alert:        { covered: false }
+      list-alerts:         { covered: true,  tier: t1-smoke }
+      create-alert:        { covered: true,  tier: t1-smoke }
+      edit-alert:          { covered: true,  tier: t2-cuj }
+      event-triggers:      { covered: true,  tier: t2-cuj }
+      webhook-destination: { covered: true,  tier: t1-smoke }
+      enable-disable:      { covered: true,  tier: t2-cuj }
+      delete-alert:        { covered: true,  tier: t2-cuj }
+      # "Test connection" / "Test trigger" POST the draft alert to the endpoint
+      # in the form. Asserting a *success* needs a receiver the suite controls;
+      # against example.com the mutation answers failure, so a passing test
+      # would only be pinning the error toast. Left uncovered until a receiver
+      # exists rather than covered by asserting the sad path.
       test-alert:          { covered: false }
-
-  # ===================== ASSISTANT / CONNECT =====================
 
     visual:
       alerts-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E12" }
       alerts-list:  { covered: false, state: default }
       alert-editor: { covered: false, state: default }
+
+  # ===================== ASSISTANT / CONNECT =====================
 
   ollie:
     label: Opik Connect

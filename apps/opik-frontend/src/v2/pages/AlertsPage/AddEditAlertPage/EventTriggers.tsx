@@ -361,7 +361,10 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                 return (
                   <div key={field.id}>
                     <div className="flex items-stretch gap-4">
-                      <div className="flex flex-auto flex-col gap-3">
+                      <div
+                        className="flex flex-auto flex-col gap-3"
+                        data-testid={`alert-trigger-${field.eventType}`}
+                      >
                         <div className="flex gap-4">
                           <div className="flex flex-1 flex-col gap-1">
                             <Label className="comet-body-s-accented">
