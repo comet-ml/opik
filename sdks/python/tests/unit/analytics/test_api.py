@@ -277,9 +277,13 @@ class TestReportingAllowed:
     """
 
     def test_reporting_allowed__happyflow(self, monkeypatch):
+        # Every "yes" this can answer has to be arranged explicitly, because the
+        # answer is read from the environment the suite itself runs in: CI sets
+        # OPIK_ANALYTICS_ENABLE=false, pytest is a rule of its own, and being
+        # switched off for good is process-wide state that an earlier test asking
+        # for a worker is enough to have set.
+        monkeypatch.setenv("OPIK_ANALYTICS_ENABLE", "true")
         monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
-        # Switched off for good is process-wide state, and an earlier test asking
-        # for a worker under pytest is enough to have set it.
         monkeypatch.setattr(api, "_DISABLED", False)
 
         assert analytics.reporting_allowed() is True
