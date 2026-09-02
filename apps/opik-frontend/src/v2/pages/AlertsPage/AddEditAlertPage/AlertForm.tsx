@@ -3,8 +3,10 @@ import get from "lodash/get";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn, useWatch } from "react-hook-form";
 import { useNavigate } from "@tanstack/react-router";
+import { ExternalLink } from "lucide-react";
 
 import { buildFullBaseUrl, cn } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
@@ -212,7 +214,24 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
           />
         </div>
       )}
-      <h1 className="comet-title-xs">{title}</h1>
+      <div className="flex min-h-7 max-w-[720px] items-center justify-between gap-2">
+        <h1 className="comet-title-xs truncate">{title}</h1>
+        <Button
+          variant="ghost"
+          size="2xs"
+          className="comet-body-xs shrink-0 text-muted-slate"
+          asChild
+        >
+          <a
+            href={buildDocsUrl("/production/alerts/alerts")}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Go to docs
+            <ExternalLink className="ml-1 size-3.5 shrink-0" />
+          </a>
+        </Button>
+      </div>
 
       <div className="relative mt-6 max-w-[720px]">
         <Form {...form}>
