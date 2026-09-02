@@ -284,6 +284,10 @@ def get_test_suites(
                 dataset_items_count=dataset_fern.dataset_items_count,
                 client=client,
             )
+            # This suite already holds items on the backend that we have not
+            # hashed locally, so the first insert must sync before it can tell
+            # a duplicate from a new item.
+            suite_dataset.__internal_api__hashes_synced__ = False
 
             suites.append(
                 test_suite_module.TestSuite(
