@@ -418,12 +418,14 @@ cors:
 redaction:
   # Default: false
   # Description: Master switch. Off here so the suite exercises the shipped default; the tests that need it on
-  # override redaction.enabled and redaction.rules per application, which is what keeps this file honest about
-  # the keys existing.
+  # override redaction.enabled and redaction.maskFields per application, which is what keeps this file honest
+  # about the keys existing.
   enabled: false
-  # Default: [] - valid only while enabled=false, since an empty set with enabled=true fails startup.
-  # Description: JSON array of {"regex", "replace"} applied to every string in a response.
-  rules: '[]'
+  # One placeholder entry, deliberately: Dropwizard's indexed list overrides (redaction.maskFields[0]) only
+  # replace an index that already exists in the file, so a test that configures fields needs a slot to overwrite.
+  # The name is one no payload will carry, so leaving it in place masks nothing.
+  maskFields:
+    - __placeholder_never_matches__
 
 # Encryption related configuration
 encryption:

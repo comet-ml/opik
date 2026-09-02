@@ -20,6 +20,9 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redaction.FieldMasker;
+import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.infrastructure.redaction.RedactionSupport;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -1811,6 +1814,7 @@ public class SpanDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull WorkspacesService workspacesService;
+    private final @NonNull RedactionService redactionService;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -2441,15 +2445,16 @@ public class SpanDAO {
     }
 
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
-
-        return result.map((row, rowMetadata) -> mapRowToSpan(row, rowMetadata, exclude));
+        // Resolved per result set from the reactive context: see TraceDAO.mapToDto.
+        return RedactionSupport.masked(redactionService,
+                masker -> result.map((row, rowMetadata) -> mapRowToSpan(row, rowMetadata, exclude, masker)));
     }
 
-    private Span mapRowToSpan(Row row, RowMetadata rowMetadata, Set<SpanField> exclude) {
+    private Span mapRowToSpan(Row row, RowMetadata rowMetadata, Set<SpanField> exclude, FieldMasker masker) {
         String provider = StringUtils.defaultIfBlank(
                 getValue(exclude, SpanField.PROVIDER, row, SpanField.PROVIDER.getValue(), String.class), null);
 
-        JsonNode metadata = getMetadataWithProvider(row, exclude, provider);
+        JsonNode metadata = getMetadataWithProvider(row, exclude, provider, masker);
 
         return Span.builder()
                 .id(row.get("id", UUID.class))
@@ -2469,12 +2474,14 @@ public class SpanDAO {
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
                                 row,
                                 value))
+                        .map(masker::mask)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated",
                                 row,
                                 value))
+                        .map(masker::mask)
                         .orElse(null))
                 .metadata(metadata)
                 .model(StringUtils.defaultIfBlank(getValue(exclude, SpanField.MODEL, row, "model", String.class),
@@ -3276,12 +3283,15 @@ public class SpanDAO {
                 .ifPresent(environment -> statement.bind("environment", environment));
     }
 
-    private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
-        // Parse base metadata from database
+    private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider,
+            FieldMasker masker) {
+        // Parse base metadata from database. Masked before provider is prepended: provider is API structure,
+        // not caller content, and must survive whatever the field config says.
         JsonNode baseMetadata = Optional
                 .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
                 .filter(str -> !str.isBlank())
                 .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                .map(masker::mask)
                 .orElse(null);
 
         // Inject provider as first field in metadata

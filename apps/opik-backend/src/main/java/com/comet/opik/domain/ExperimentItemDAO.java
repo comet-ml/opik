@@ -6,6 +6,8 @@ import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts
 import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.infrastructure.redaction.RedactionSupport;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -598,6 +600,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull RedactionService redactionService;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
@@ -681,7 +684,8 @@ class ExperimentItemDAO {
     public Mono<ExperimentItem> get(@NonNull UUID id) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> get(id, connection))
-                .flatMap(ExperimentItemMapper::mapToExperimentItem)
+                .flatMap(result -> RedactionSupport.masked(redactionService,
+                        masker -> ExperimentItemMapper.mapToExperimentItem(result, masker)))
                 .singleOrEmpty();
     }
 
@@ -713,7 +717,8 @@ class ExperimentItemDAO {
                     return Mono.from(connectionFactory.create())
                             .flatMapMany(connection -> getItems(experimentIds, criteria, connection, counts,
                                     targetProjectIds))
-                            .flatMap(ExperimentItemMapper::mapToExperimentItemFullContent);
+                            .flatMap(result -> RedactionSupport.masked(redactionService,
+                                    masker -> ExperimentItemMapper.mapToExperimentItemFullContent(result, masker)));
                 });
     }
 

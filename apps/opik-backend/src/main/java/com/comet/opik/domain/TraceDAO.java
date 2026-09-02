@@ -28,6 +28,9 @@ import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.redaction.FieldMasker;
+import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.infrastructure.redaction.RedactionSupport;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -3327,6 +3330,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
+    private final @NonNull RedactionService redactionService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     /**
@@ -3801,15 +3805,19 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
-
-        return result.map((row, rowMetadata) -> mapRowToTrace(row, rowMetadata, exclude));
+        // Resolved per result set rather than per row: the decision is a property of the request, and reading it
+        // from the reactive context is the only way to reach it here - row mapping runs long after the resource
+        // method returned, on whichever thread the driver hands us.
+        return RedactionSupport.masked(redactionService,
+                masker -> result.map((row, rowMetadata) -> mapRowToTrace(row, rowMetadata, exclude, masker)));
     }
 
-    private Trace mapRowToTrace(Row row, RowMetadata rowMetadata, Set<Trace.TraceField> exclude) {
+    private Trace mapRowToTrace(Row row, RowMetadata rowMetadata, Set<Trace.TraceField> exclude,
+            FieldMasker masker) {
         @SuppressWarnings("unchecked")
         List<String> providers = (List<String>) row.get(Trace.TraceField.PROVIDERS.getValue(), List.class);
 
-        JsonNode metadata = getMetadataWithProviders(row, exclude, providers);
+        JsonNode metadata = getMetadataWithProviders(row, exclude, providers, masker);
 
         return Trace.builder()
                 .id(row.get("id", UUID.class))
@@ -3823,12 +3831,14 @@ class TraceDAOImpl implements TraceDAO {
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
                                 row,
                                 value))
+                        .map(masker::mask)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated",
                                 row,
                                 value))
+                        .map(masker::mask)
                         .orElse(null))
                 .metadata(metadata)
                 .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
@@ -5196,12 +5206,15 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(environment -> statement.bind("environment", environment));
     }
 
-    private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {
-        // Parse base metadata from database
+    private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers,
+            FieldMasker masker) {
+        // Parse base metadata from database. Masked before providers are prepended: providers is API structure,
+        // not caller content, and must survive whatever the field config says.
         JsonNode baseMetadata = Optional
                 .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
                 .filter(str -> !str.isBlank())
                 .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                .map(masker::mask)
                 .orElse(null);
 
         // Inject providers as first field in metadata

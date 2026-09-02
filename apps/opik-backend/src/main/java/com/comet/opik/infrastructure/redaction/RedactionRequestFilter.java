@@ -15,19 +15,14 @@ import java.io.IOException;
 import java.util.Set;
 
 /**
- * Resolves once per request whether this caller's response must be redacted, and records it where the write can
- * find it again.
+ * Resolves once per request whether this caller's response must be redacted, and records it on the request
+ * context for the writer interceptor to act on.
  * <p>
  * The priority places it after authentication so the permissions the platform resolved are already on the
  * context. Request filters run lowest-priority-first and the auth filter carries the default
  * {@code Priorities.USER}, so this has to sit above it; sharing that default leaves the order undefined, and
  * running first makes every caller — admins included — look unpermitted. The decision is recorded here rather
  * than at write time because a response can be serialized in more than one pass when it is streamed.
- * <p>
- * It is recorded twice, on purpose. {@code RequestContext} is what the resources read, and it is
- * {@code @RequestScoped} and therefore thread-bound; the Jersey request property is not, so the writer
- * interceptor can read the same answer on whichever thread the response is written from — including the reactor
- * thread that resumes a {@code @Suspended AsyncResponse}.
  */
 @jakarta.ws.rs.ext.Provider
 @Singleton
@@ -52,17 +47,6 @@ public class RedactionRequestFilter implements ContainerRequestFilter {
             "/v1/private/",
             "/v1/internal/analytics-queries");
 
-    /**
-     * Where the decision is left for {@link RedactionWriterInterceptor}.
-     * <p>
-     * A Jersey request property rather than the request context, because the write does not always happen on the
-     * request thread: {@code LocalRunnersResource.nextJob} and the other long-polling endpoints resume a
-     * {@code @Suspended AsyncResponse} from a reactor thread, where the {@code @RequestScoped} context cannot be
-     * resolved at all. The property lives on the {@code ContainerRequest}, which Jersey hands to the writer
-     * interceptor chain as its properties delegate, so it is visible from any thread that writes this response.
-     */
-    static final String REDACT_RESPONSE_PROPERTY = "com.comet.opik.redaction.redact-response";
-
     private final @NonNull RedactionService redactionService;
     private final @NonNull Provider<RequestContext> requestContext;
 
@@ -76,10 +60,7 @@ public class RedactionRequestFilter implements ContainerRequestFilter {
         }
 
         RequestContext current = requestContext.get();
-        boolean redact = redactionService.shouldRedactFor(current.getPermissions());
-
-        current.setRedactResponse(redact);
-        context.setProperty(REDACT_RESPONSE_PROPERTY, redact);
+        current.setRedactResponse(redactionService.shouldRedactFor(current.getPermissions()));
     }
 
     /**

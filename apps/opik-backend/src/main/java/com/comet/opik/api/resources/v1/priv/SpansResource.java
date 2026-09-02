@@ -502,8 +502,11 @@ public class SpansResource {
                 .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility))
                 .block();
 
+        // See TracesResource.searchTraces: snapshot so the masking decision survives onto the scheduler thread.
+        var ctxSnapshot = requestContext.get();
+
         var items = spanService.search(request.limit(), criteria)
-                .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility));
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed spans search results by '{}', workspaceId '{}'", request, workspaceId));

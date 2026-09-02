@@ -19,6 +19,7 @@ public class AsyncUtils {
         return ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
                 .put(RequestContext.WORKSPACE_ID, requestContext.get().getWorkspaceId())
                 .put(RequestContext.WORKSPACE_NAME, requestContext.get().getWorkspaceName())
+                .put(RequestContext.REDACT_RESPONSE, requestContext.get().isRedactResponse())
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.get().getVisibility()).orElse(Visibility.PRIVATE));
     }
@@ -27,6 +28,7 @@ public class AsyncUtils {
         return ctx.put(RequestContext.USER_NAME, requestContext.getUserName())
                 .put(RequestContext.WORKSPACE_ID, requestContext.getWorkspaceId())
                 .put(RequestContext.WORKSPACE_NAME, requestContext.getWorkspaceName())
+                .put(RequestContext.REDACT_RESPONSE, requestContext.isRedactResponse())
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
     }

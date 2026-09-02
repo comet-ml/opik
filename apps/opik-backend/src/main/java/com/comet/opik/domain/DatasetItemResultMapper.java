@@ -7,6 +7,7 @@ import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.infrastructure.redaction.FieldMasker;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.SentinelTranslation;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -152,12 +153,20 @@ public class DatasetItemResultMapper {
     }
 
     public static Publisher<DatasetItem> mapItem(Result results) {
-        return results.map(DatasetItemResultMapper::buildItemFromRow);
+        return mapItem(results, FieldMasker.noOp());
+    }
+
+    public static Publisher<DatasetItem> mapItem(Result results, FieldMasker masker) {
+        return results.map((row, rowMetadata) -> buildItemFromRow(row, rowMetadata, masker));
     }
 
     public static DatasetItem buildItemFromRow(Row row, RowMetadata rowMetadata) {
+        return buildItemFromRow(row, rowMetadata, FieldMasker.noOp());
+    }
 
-        Map<String, JsonNode> data = getData(row);
+    public static DatasetItem buildItemFromRow(Row row, RowMetadata rowMetadata, FieldMasker masker) {
+
+        Map<String, JsonNode> data = getData(row, masker);
 
         var id = row.get("id", UUID.class);
         // Check if dataset_item_id column exists in the result (only present for versioned items)
@@ -258,7 +267,7 @@ public class DatasetItemResultMapper {
                 .orElse(null);
     }
 
-    private static Map<String, JsonNode> getData(Row row) {
+    private static Map<String, JsonNode> getData(Row row, FieldMasker masker) {
 
         Optional<Map> data = Optional.ofNullable(row.get("data", Map.class));
 
@@ -272,7 +281,9 @@ public class DatasetItemResultMapper {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromStringWithFallback(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(),
+                        masker.maskNamed(entry.getKey(),
+                                JsonUtils.getJsonNodeFromStringWithFallback(entry.getValue()))))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 

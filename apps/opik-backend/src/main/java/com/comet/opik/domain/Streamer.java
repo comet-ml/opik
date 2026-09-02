@@ -1,17 +1,8 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.redaction.JsonNodeRedactor;
-import com.comet.opik.infrastructure.redaction.RedactionRules;
-import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.base.Throwables;
-import com.google.inject.OutOfScopeException;
-import com.google.inject.ProvisionException;
 import io.dropwizard.jersey.errors.ErrorMessage;
-import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -27,16 +18,6 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class Streamer {
 
-    private final RedactionService redactionService;
-    private final Provider<RequestContext> requestContext;
-
-    @Inject
-    public Streamer(@NonNull RedactionService redactionService,
-            @NonNull Provider<RequestContext> requestContext) {
-        this.redactionService = redactionService;
-        this.requestContext = requestContext;
-    }
-
     public <T> ChunkedOutput<JsonNode> getOutputStream(@NonNull Flux<T> flux) {
         return getOutputStream(flux, () -> {
         });
@@ -44,11 +25,8 @@ public class Streamer {
 
     public <T> ChunkedOutput<JsonNode> getOutputStream(@NonNull Flux<T> flux, Runnable onCompleted) {
         var outputStream = new ChunkedOutput<JsonNode>(JsonNode.class, "\r\n");
-        // Resolved here, while still on the request thread: the items below are built and written on a
-        // scheduler thread, where neither the request scope nor the writer interceptor's thread-local exists.
-        var rules = resolveRules();
         Schedulers.boundedElastic()
-                .schedule(() -> flux.doOnNext(item -> sendItem(item, outputStream, rules))
+                .schedule(() -> flux.doOnNext(item -> sendItem(item, outputStream))
                         .onErrorResume(throwable -> handleError(throwable, outputStream))
                         .doFinally(signalType -> {
                             close(outputStream);
@@ -58,68 +36,12 @@ public class Streamer {
         return outputStream;
     }
 
-    RedactionRules resolveRules() {
-        if (!redactionService.isEnabled()) {
-            return RedactionRules.empty();
-        }
-
+    private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream) {
         try {
-            var context = requestContext.get();
-            return context != null && context.isRedactResponse()
-                    ? redactionService.rules()
-                    : RedactionRules.empty();
-        } catch (ProvisionException provisionException) {
-            // Only the missing request scope gets the fallback. Guice reports that as a ProvisionException
-            // wrapping an OutOfScopeException at the provider boundary - which is why this cannot catch
-            // OutOfScopeException directly, and why AnalyticsService.resolveIdentity catches ProvisionException
-            // for the same case. Every other ProvisionException is a provider bug or a fault in
-            // isRedactResponse(), and answering those with the unknown-caller policy would return a defect as a
-            // successful redacted stream, so they propagate.
-            if (!isOutsideRequestScope(provisionException)) {
-                throw provisionException;
-            }
-
-            log.debug("No request scope for this stream, applying the unknown-caller redaction policy");
-
-            // See RedactionService.redactWhenCallerUnknown for why a stream can answer this and the writer
-            // interceptor cannot.
-            return redactionService.redactWhenCallerUnknown() ? redactionService.rules() : RedactionRules.empty();
-        }
-    }
-
-    /**
-     * Guava rather than a hand-rolled walk: {@code getCausalChain} detects a cycle and throws instead of
-     * spinning, and a cause chain that references itself is reachable through wrapping.
-     */
-    private static boolean isOutsideRequestScope(ProvisionException exception) {
-        return Throwables.getCausalChain(exception).stream()
-                .anyMatch(OutOfScopeException.class::isInstance);
-    }
-
-    private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
-        try {
-            var tree = JsonUtils.readTree(item);
-            outputStream.write(rules.isEmpty()
-                    ? tree
-                    : JsonNodeRedactor.redact(copyIfShared(tree, item), rules, item.getClass()));
+            outputStream.write(JsonUtils.readTree(item));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
-    }
-
-    /**
-     * The redactor rewrites in place, so what it is handed must belong to nobody else.
-     * <p>
-     * JsonUtils.readTree is convertValue, which serializes the item into a TokenBuffer and reads it back - a
-     * tree built for this call, sharing no node with the item, whatever the item was. Copying it again duplicates
-     * every streamed tree for nothing.
-     * <p>
-     * The identity check is what makes that safe to rely on rather than a claim about Jackson: convertValue is
-     * documented as free to return its argument when the argument is already of the target type, and an item that
-     * is itself a JsonNode is the case where that would matter. If it ever does, this copies.
-     */
-    static <T> JsonNode copyIfShared(JsonNode tree, T item) {
-        return tree == item ? tree.deepCopy() : tree;
     }
 
     private <T> Flux<T> handleError(Throwable throwable, ChunkedOutput<JsonNode> outputStream) {

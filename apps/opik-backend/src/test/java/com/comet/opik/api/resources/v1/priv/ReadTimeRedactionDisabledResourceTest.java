@@ -57,9 +57,7 @@ class ReadTimeRedactionDisabledResourceTest {
 
     private static final String EMAIL = "john.doe@example.com";
     private static final String PHONE = "555-123-4567";
-    private static final String RULES_JSON = """
-            [{"regex":"(?<![\\\\w.+-])[\\\\w.+-]+@[\\\\w-]+\\\\.[\\\\w.]+","replace":"[EMAIL]"},\
-            {"regex":"\\\\b\\\\d{3}-\\\\d{3}-\\\\d{4}\\\\b","replace":"[PHONE]"}]""";
+    private static final String MASK = "[REDACTED]";
 
     private static final String STORED_INPUT = """
             {"prompt":"Refund for %s, callback %s"}""".formatted(EMAIL, PHONE);
@@ -101,7 +99,7 @@ class ReadTimeRedactionDisabledResourceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .customConfigs(List.of(
                                 new CustomConfig("redaction.enabled", "false"),
-                                new CustomConfig("redaction.rules", RULES_JSON)))
+                                new CustomConfig("redaction.maskFields[0]", "prompt")))
                         .build());
     }
 
@@ -149,12 +147,12 @@ class ReadTimeRedactionDisabledResourceTest {
     void withFlagOffContentReachesUnpermittedCallerAsStored() {
         var traceId = createTraceWithPii("redaction-off-" + UUID.randomUUID());
 
-        // MEMBER_API_KEY is mocked as not holding the permission, and rules are configured. Only the flag is
-        // off — which must be enough to leave every response byte-identical to an install without the feature.
+        // MEMBER_API_KEY is mocked as not holding the permission, and mask fields are configured. Only the flag
+        // is off — which must be enough to leave every response byte-identical to an install without the feature.
         var trace = traceResourceClient.getById(traceId, WORKSPACE_NAME, MEMBER_API_KEY);
 
         assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE);
-        assertThat(trace.input().toString()).doesNotContain("[EMAIL]").doesNotContain("[PHONE]");
+        assertThat(trace.input().toString()).doesNotContain(MASK);
     }
 
     @Test
@@ -167,6 +165,6 @@ class ReadTimeRedactionDisabledResourceTest {
                 TraceSearchStreamRequest.builder().projectName(projectName).build());
 
         assertThat(streamed).isNotEmpty();
-        assertThat(streamed.toString()).contains(EMAIL).doesNotContain("[EMAIL]");
+        assertThat(streamed.toString()).contains(EMAIL).doesNotContain(MASK);
     }
 }

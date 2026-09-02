@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("Redaction Guard")
 class RedactionGuardTest {
@@ -38,8 +39,8 @@ class RedactionGuardTest {
     @Test
     @DisplayName("the refusal is 403, not 401 or 500")
     void theRefusalIsForbidden() {
-        var thrown = org.junit.jupiter.api.Assertions.assertThrows(ForbiddenException.class,
-                () -> RedactionGuard.rejectUnmaskable(true, "Agent Insights free-form SQL"));
+        var thrown = assertThrows(ForbiddenException.class,
+                () -> RedactionGuard.rejectUnmaskable(true, "Dataset CSV export download"));
 
         // 403 rather than 401: the caller is authenticated, they simply may not read this content.
         assertThat(thrown.getResponse().getStatus()).isEqualTo(403);

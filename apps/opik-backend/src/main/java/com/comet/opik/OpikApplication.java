@@ -32,7 +32,6 @@ import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
-import com.comet.opik.infrastructure.redaction.RedactionModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
@@ -137,12 +136,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                         .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
-
-        // Read-time redaction, registered only when switched on: with the flag off there is no serializer in
-        // the chain at all, so responses are written exactly as before.
-        if (configuration.getRedaction().isEnabled()) {
-            environment.getObjectMapper().registerModule(new RedactionModule());
-        }
 
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
         long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();

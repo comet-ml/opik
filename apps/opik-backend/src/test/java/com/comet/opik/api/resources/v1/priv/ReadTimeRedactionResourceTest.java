@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.connect.ActivateRequest;
@@ -16,6 +17,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
 import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
@@ -28,8 +30,10 @@ import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -80,20 +84,18 @@ class ReadTimeRedactionResourceTest {
 
     private static final String EMAIL = "john.doe@example.com";
     private static final String PHONE = "555-123-4567";
-    private static final String RULES_JSON = """
-            [{"regex":"(?<![\\\\w.+-])[\\\\w.+-]+@[\\\\w-]+\\\\.[\\\\w.]+","replace":"[EMAIL]"},\
-            {"regex":"\\\\b\\\\d{3}-\\\\d{3}-\\\\d{4}\\\\b","replace":"[PHONE]"}]""";
-
-    private static final String STORED_INPUT = """
-            {"prompt":"Refund for %s, callback %s"}""".formatted(EMAIL, PHONE);
-
-    /**
-     * Deliberately a value the PHONE rule matches. Nothing but the structural exemption keeps it intact, so if
-     * the exemption is missing on a path the assertion fails rather than passing by luck.
-     */
-    private static final String RULE_MATCHING_THREAD_ID = PHONE;
+    private static final String MASK = "[REDACTED]";
 
     private static final String RUNNER_AGENT = "redaction-agent";
+
+    /**
+     * A structural field the config does not name, alongside content it does. It has to survive so the assertions
+     * can tell masking from wholesale destruction of the payload.
+     */
+    private static final String MODEL = "gpt-4o-2024-08-06";
+
+    private static final String STORED_INPUT = """
+            {"prompt":"Refund for %s, callback %s","model":"%s"}""".formatted(EMAIL, PHONE, MODEL);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -124,24 +126,26 @@ class ReadTimeRedactionResourceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .customConfigs(List.of(
                                 new CustomConfig("redaction.enabled", "true"),
-                                new CustomConfig("redaction.rules", RULES_JSON)))
+                                new CustomConfig("redaction.maskFields[0]", "prompt")))
                         .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private ClientSupport client;
     private String baseURI;
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
+    private ClientSupport clientSupport;
     private LocalRunnersResourceClient runnersClient;
     private PairingResourceClient pairingClient;
     private ProjectResourceClient projectClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-        this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.clientSupport = client;
         this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
         this.pairingClient = new PairingResourceClient(client, baseURI);
         this.projectClient = new ProjectResourceClient(client, baseURI, factory);
@@ -154,7 +158,7 @@ class ReadTimeRedactionResourceTest {
         AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), MEMBER_API_KEY, WORKSPACE_NAME,
                 WORKSPACE_ID, USER, List.of());
 
-        // The same two callers over a session cookie, which authenticates through a different endpoint.
+        // The same two callers over a session cookie, which resolves permissions through its own endpoint.
         AuthTestUtils.mockSessionCookieTargetWorkspaceWithPermissions(wireMock.server(), ADMIN_SESSION_TOKEN,
                 WORKSPACE_NAME, WORKSPACE_ID, USER,
                 List.of(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
@@ -189,7 +193,7 @@ class ReadTimeRedactionResourceTest {
 
         var trace = traceResourceClient.getById(traceId, WORKSPACE_NAME, ADMIN_API_KEY);
 
-        assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE);
+        assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE).contains(MODEL);
     }
 
     @Test
@@ -202,8 +206,9 @@ class ReadTimeRedactionResourceTest {
         assertThat(trace.input().toString())
                 .doesNotContain(EMAIL)
                 .doesNotContain(PHONE)
-                .contains("[EMAIL]")
-                .contains("[PHONE]");
+                .contains(MASK)
+                // The field the config does not name is returned as stored, so the payload stays navigable.
+                .contains(MODEL);
     }
 
     @Test
@@ -215,7 +220,7 @@ class ReadTimeRedactionResourceTest {
         var traces = traceResourceClient.getByProjectName(projectName, MEMBER_API_KEY, WORKSPACE_NAME);
 
         assertThat(traces).isNotEmpty();
-        assertThat(traces.toString()).doesNotContain(EMAIL).contains("[EMAIL]");
+        assertThat(traces.toString()).doesNotContain(EMAIL).contains(MASK).contains(MODEL);
     }
 
     @Test
@@ -228,44 +233,136 @@ class ReadTimeRedactionResourceTest {
                 TraceSearchStreamRequest.builder().projectName(projectName).build());
 
         assertThat(streamed).isNotEmpty();
-        assertThat(streamed.toString()).doesNotContain(EMAIL).doesNotContain(PHONE).contains("[EMAIL]");
+        assertThat(streamed.toString()).doesNotContain(EMAIL).doesNotContain(PHONE).contains(MASK);
     }
 
     @Test
-    @DisplayName("streamed items keep the structural exemptions the paged path applies")
-    void streamedItemsKeepTheStructuralExemptions() {
-        // The streamed path is rewritten by hand rather than through the serializer, so it needs the same
-        // exemptions or the two representations of one trace disagree. thread_id here matches a configured rule:
-        // without the exemption it comes back rewritten from search while the UI shows it intact, and
-        // get_trace_by_id on a rewritten id returns nothing.
-        var projectName = "redaction-exempt-" + UUID.randomUUID();
-        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+    @DisplayName("streamed and paged reads agree, including on the fields that are not masked")
+    void streamedAndPagedReadsAgree() {
+        // Guards the divergence that a second, separate masking implementation for the streamed path caused: the
+        // streamed items skipped the structural exemptions the paged path applied, so search returned rewritten
+        // ids and models while the UI showed them intact. One implementation in the row mapper is what keeps
+        // these two assertions true together.
+        var projectName = "redaction-parity-" + UUID.randomUUID();
+        var traceId = createTraceWithPii(projectName);
+
+        var paged = traceResourceClient.getById(traceId, WORKSPACE_NAME, MEMBER_API_KEY);
+        var streamed = traceResourceClient.getStreamAndAssertContent(MEMBER_API_KEY, WORKSPACE_NAME,
+                TraceSearchStreamRequest.builder().projectName(projectName).build());
+
+        assertThat(streamed).hasSize(1);
+        assertThat(streamed.getFirst().id()).isEqualTo(paged.id());
+        assertThat(streamed.getFirst().input()).isEqualTo(paged.input());
+    }
+
+    @Test
+    @DisplayName("spans are masked too, so the wiring is not trace-only")
+    void spansAreMaskedToo() {
+        var projectName = "redaction-span-" + UUID.randomUUID();
+        var traceId = createTraceWithPii(projectName);
+
+        var span = factory.manufacturePojo(Span.class).toBuilder()
                 .projectName(projectName)
-                .threadId(RULE_MATCHING_THREAD_ID)
+                .traceId(traceId)
+                .parentSpanId(null)
                 .input(JsonUtils.getJsonNodeFromString(STORED_INPUT))
                 .output(null)
                 .metadata(null)
                 .feedbackScores(null)
                 .comments(null)
-                .guardrailsValidations(null)
                 .usage(null)
+                .totalEstimatedCost(null)
                 .build();
-        traceResourceClient.createTrace(trace, ADMIN_API_KEY, WORKSPACE_NAME);
+        spanResourceClient.createSpan(span, ADMIN_API_KEY, WORKSPACE_NAME);
 
-        var streamed = traceResourceClient.getStreamAndAssertContent(MEMBER_API_KEY, WORKSPACE_NAME,
-                TraceSearchStreamRequest.builder().projectName(projectName).build());
+        var asStored = spanResourceClient.getById(span.id(), WORKSPACE_NAME, ADMIN_API_KEY);
+        var masked = spanResourceClient.getById(span.id(), WORKSPACE_NAME, MEMBER_API_KEY);
 
-        assertThat(streamed).hasSize(1);
-        assertThat(streamed.getFirst().threadId()).isEqualTo(RULE_MATCHING_THREAD_ID);
-        assertThat(streamed.getFirst().input().toString()).doesNotContain(EMAIL).contains("[EMAIL]");
+        assertThat(asStored.input().toString()).contains(EMAIL).contains(MODEL);
+        assertThat(masked.input().toString()).doesNotContain(EMAIL).contains(MASK).contains(MODEL);
+    }
+
+    @Test
+    @DisplayName("a response that cannot be masked is refused rather than served as stored")
+    void aResponseThatCannotBeMaskedIsRefused() {
+        // The CSV export is generated by a job with no caller and downloaded by callers whose permissions
+        // differ, so it can only be withheld. Serving it would be a hole in the control, not a limitation of it.
+        try (var response = downloadExport(MEMBER_API_KEY)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    @Test
+    @DisplayName("the refusal is the masking decision, not the endpoint refusing everyone")
+    void theRefusalIsTheMaskingDecision() {
+        // Same path, same nonexistent job, caller who may see originals: anything but 403 proves the 403 above
+        // came from the masking decision rather than from authentication or the path itself.
+        try (var response = downloadExport(ADMIN_API_KEY)) {
+            assertThat(response.getStatus()).isNotEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    private jakarta.ws.rs.core.Response downloadExport(String apiKey) {
+        return clientSupport.target(baseURI)
+                .path("v1/private/datasets/export-jobs")
+                .path(UUID.randomUUID().toString())
+                .path("download")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                .get();
     }
 
     /**
-     * A local runner job is the async case: {@code nextJob} suspends and its response is written from the
-     * reactor thread that resumes it, where the request-scoped context does not exist. The decision therefore
-     * has to travel on the request rather than on the thread, and these two tests are what says it does — the
-     * unpermitted caller is masked, and the permitted one is not, which is the half that a fail-closed
-     * interceptor got wrong.
+     * The same two decisions over a session cookie rather than an api key.
+     * <p>
+     * Browser and OAuth callers resolve their permissions through a different endpoint of the workspace
+     * permissions API than api-key callers do, so a change that drops permissions on one path only, or inverts
+     * the decision, would leave every api-key test green.
+     */
+    private Trace getTraceWithSessionCookie(UUID traceId, String sessionToken) {
+        try (var response = clientSupport.target("%s/v1/private/traces/%s".formatted(baseURI, traceId))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .cookie(SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            return response.readEntity(Trace.class);
+        }
+    }
+
+    @Test
+    @DisplayName("a session caller without the permission is masked, as an api key caller is")
+    void aSessionCallerWithoutThePermissionIsMasked() {
+        var traceId = createTraceWithPii("redaction-session-member-" + UUID.randomUUID());
+
+        var trace = getTraceWithSessionCookie(traceId, MEMBER_SESSION_TOKEN);
+
+        assertThat(trace.input().get("prompt").asText()).isEqualTo(MASK);
+        assertThat(trace.input().toString()).doesNotContain(EMAIL).doesNotContain(PHONE);
+        // The unnamed field survives, so this says masking rather than wholesale destruction.
+        assertThat(trace.input().get("model").asText()).isEqualTo(MODEL);
+    }
+
+    @Test
+    @DisplayName("a session caller holding the permission reads stored content, as an api key caller does")
+    void aSessionCallerHoldingThePermissionReadsStoredContent() {
+        var traceId = createTraceWithPii("redaction-session-admin-" + UUID.randomUUID());
+
+        var trace = getTraceWithSessionCookie(traceId, ADMIN_SESSION_TOKEN);
+
+        assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE);
+    }
+
+    /**
+     * A runner job is read from Redis rather than through a masked DAO, so it is masked in the resource or not
+     * at all — the coverage boundary of moving masking into the DAOs. It is also the async case: {@code nextJob}
+     * suspends and its response is written from the reactor thread that resumes it, where the request-scoped
+     * context does not exist, so the masker is captured before the chain is subscribed. These two tests are what
+     * says both halves work — the unpermitted caller is masked, and the permitted one is not.
      */
     private UUID connectRunner(String apiKey) {
         UUID projectId = projectClient.createProject("redaction-runner-" + UUID.randomUUID(), apiKey,
@@ -325,8 +422,8 @@ class ReadTimeRedactionResourceTest {
     }
 
     @Test
-    @DisplayName("a long-polled job is redacted, though its response is written off the request thread")
-    void aLongPolledJobIsRedacted() {
+    @DisplayName("a long-polled job is masked, though its response is written off the request thread")
+    void aLongPolledJobIsMasked() {
         UUID runnerId = connectRunner(ADMIN_API_KEY);
         UUID jobId = createJobWithPii(runnerId, ADMIN_API_KEY);
 
@@ -337,11 +434,10 @@ class ReadTimeRedactionResourceTest {
         }
 
         assertThat(polled.id()).isEqualTo(jobId);
-        assertThat(polled.inputs().toString())
-                .doesNotContain(EMAIL)
-                .doesNotContain(PHONE)
-                .contains("[EMAIL]")
-                .contains("[PHONE]");
+        assertThat(polled.inputs().get("prompt").asText()).isEqualTo(MASK);
+        assertThat(polled.inputs().toString()).doesNotContain(EMAIL).doesNotContain(PHONE);
+        // The unnamed field survives, so this says masking rather than wholesale destruction.
+        assertThat(polled.inputs().get("model").asText()).isEqualTo(MODEL);
 
         // The same job as a permitted caller sees it, which bounds what redaction was allowed to touch: every
         // other field has to survive intact. Asserting only on inputs() would pass just as well if the rules
@@ -377,66 +473,5 @@ class ReadTimeRedactionResourceTest {
         // Whole job, not just inputs: "reaches a permitted caller as stored" is a claim about the entire
         // response, and the interceptor either leaves it alone or it does not.
         assertThat(polled).isEqualTo(runnersClient.getJob(jobId, ADMIN_API_KEY, WORKSPACE_NAME));
-    }
-
-    @Test
-    @DisplayName("streamed and paged reads of one trace agree")
-    void streamedAndPagedReadsAgree() {
-        var projectName = "redaction-parity-" + UUID.randomUUID();
-        var traceId = createTraceWithPii(projectName);
-
-        var paged = traceResourceClient.getById(traceId, WORKSPACE_NAME, MEMBER_API_KEY);
-        var streamed = traceResourceClient.getStreamAndAssertContent(MEMBER_API_KEY, WORKSPACE_NAME,
-                TraceSearchStreamRequest.builder().projectName(projectName).build());
-
-        assertThat(streamed).hasSize(1);
-        assertThat(streamed.getFirst().threadId()).isEqualTo(paged.threadId());
-        assertThat(streamed.getFirst().input()).isEqualTo(paged.input());
-    }
-
-    /**
-     * The same two decisions over a session cookie rather than an api key.
-     * <p>
-     * Browser and OAuth callers authenticate through {@code /opik/auth-session}, a different branch of
-     * {@code RemoteAuthService} that resolves its own credentials before the context is populated. It reaches the
-     * same {@code ValidatedAuthCredentials.from(authResponse)}, so nothing here is expected to differ — which is
-     * exactly why it was untested: a branch that drops permissions on this path only, or inverts the decision,
-     * would have left every api-key test green.
-     */
-    private Trace getTraceWithSessionCookie(UUID traceId, String sessionToken) {
-        try (var response = client.target("%s/v1/private/traces/%s".formatted(baseURI, traceId))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .cookie(SESSION_COOKIE, sessionToken)
-                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                .get()) {
-
-            assertThat(response.getStatus()).isEqualTo(200);
-            return response.readEntity(Trace.class);
-        }
-    }
-
-    @Test
-    @DisplayName("a session caller without the permission is redacted, as an api key caller is")
-    void aSessionCallerWithoutThePermissionIsRedacted() {
-        var traceId = createTraceWithPii("redaction-session-member-" + UUID.randomUUID());
-
-        var trace = getTraceWithSessionCookie(traceId, MEMBER_SESSION_TOKEN);
-
-        assertThat(trace.input().toString())
-                .doesNotContain(EMAIL)
-                .doesNotContain(PHONE)
-                .contains("[EMAIL]")
-                .contains("[PHONE]");
-    }
-
-    @Test
-    @DisplayName("a session caller holding the permission reads stored content, as an api key caller does")
-    void aSessionCallerHoldingThePermissionReadsStoredContent() {
-        var traceId = createTraceWithPii("redaction-session-admin-" + UUID.randomUUID());
-
-        var trace = getTraceWithSessionCookie(traceId, ADMIN_SESSION_TOKEN);
-
-        assertThat(trace.input().toString()).contains(EMAIL).contains(PHONE);
     }
 }

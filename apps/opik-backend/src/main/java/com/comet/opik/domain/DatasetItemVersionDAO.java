@@ -25,6 +25,8 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
+import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.infrastructure.redaction.RedactionSupport;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -2732,6 +2734,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull RedactionService redactionService;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
@@ -2855,7 +2858,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(DatasetItemResultMapper::mapItem);
+                    .flatMap(result -> RedactionSupport.masked(redactionService,
+                            masker -> DatasetItemResultMapper.mapItem(result, masker)));
         });
     }
 
@@ -2940,7 +2944,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                                 .doFinally(signalType -> endSegment(segment))
-                                .flatMap(DatasetItemResultMapper::mapItem)
+                                .flatMap(result -> RedactionSupport.masked(redactionService,
+                                        masker -> DatasetItemResultMapper.mapItem(result, masker)))
                                 .collectList()
                                 .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, List.of()))
                                 .map(items -> new DatasetItemPage(items, page, items.size(), total, columns,
@@ -3065,7 +3070,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                                     .doFinally(signalType -> endSegment(segment))
-                                    .flatMap(DatasetItemResultMapper::mapItem)
+                                    .flatMap(result -> RedactionSupport.masked(redactionService,
+                                            masker -> DatasetItemResultMapper.mapItem(result, masker)))
                                     .collectList()
                                     .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, List.of()))
                                     .zipWith(getCountWithExperimentFilters(criteria, versionId,

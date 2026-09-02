@@ -90,7 +90,6 @@ import reactor.core.publisher.Flux;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -240,10 +239,13 @@ public class TracesResource {
 
         searchCriteria = searchCriteria.toBuilder().projectId(projectId).build();
 
+        // Snapshot rather than the provider: this lambda runs at subscribe time on a scheduler thread, where the
+        // request scope is gone. Building the context in one place also keeps the read-time masking decision from
+        // being dropped, which an inline copy of these three keys silently did.
+        var ctxSnapshot = requestContext.get();
+
         Flux<Trace> items = service.search(request.limit(), searchCriteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed traces search results by '{}', workspaceId '{}'", request, workspaceId));
@@ -760,10 +762,10 @@ public class TracesResource {
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
+        var ctxSnapshot = requestContext.get();
+
         Flux<TraceThread> items = traceThreadQueryService.search(request.limit(), searchCriteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed trace threads search results by '{}', workspaceId '{}'", request,
