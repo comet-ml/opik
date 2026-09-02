@@ -30,6 +30,17 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
+    @DisplayName("an explicit budget alongside off is honoured on Gemini 3 too, as it is on 2.5")
+    void explicitBudgetSurvivesLevelOffOnGemini3() {
+        var config = GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3,
+                new GeminiThinkingParams(Level.OFF, 4096, null));
+
+        assertThat(config).isPresent();
+        assertThat(config.get().thinkingBudget()).isEqualTo(4096);
+        assertThat(config.get().thinkingLevel()).isNull();
+    }
+
+    @Test
     @DisplayName("level off sends nothing on Gemini 3+, which cannot disable thinking or take a budget")
     void ignoresLevelOffOnGemini3() {
         assertThat(GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3,

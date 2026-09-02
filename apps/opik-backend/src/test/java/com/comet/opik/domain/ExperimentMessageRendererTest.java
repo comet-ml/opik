@@ -203,6 +203,8 @@ class ExperimentMessageRendererTest {
             assertThat(request.maxCompletionTokens()).isEqualTo(1024);
             assertThat(request.frequencyPenalty()).isEqualTo(0.5);
             assertThat(request.presencePenalty()).isEqualTo(0.3);
+            // configs present but carrying no custom_parameters key must not invent one
+            assertThat(request.customParameters()).isNull();
         }
 
         @Test

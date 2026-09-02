@@ -36,7 +36,10 @@ class GeminiThinkingConfigMapper {
         // Note this is about "off" specifically, not budgets in general — a Gemini 3 model does accept
         // thinking_budget (verified live on both providers), which is what the Vertex path relies on
         // since its protobuf has no level field.
-        if (params.level() == Level.OFF && GeminiThinkingParams.modelAcceptsLevel(model)) {
+        // An explicit budget still wins, exactly as it does on 2.5 — only the unusable level is dropped.
+        if (params.level() == Level.OFF
+                && params.budgetTokens() == null
+                && GeminiThinkingParams.modelAcceptsLevel(model)) {
             return Optional.empty();
         }
 
