@@ -69,7 +69,8 @@ class CipxTokenValidationServiceTest {
     @DisplayName("accepts a device token on the endpoints the cipx shipper calls")
     void acceptsIngestEndpoints(String method, String path) {
         // Served from cache, so the accepted case needs no validator: what is under test is the allowlist.
-        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, WORKSPACE_NAME, List.of()))
+        // The cache key carries no workspace: a device's workspace is derived from its enrollment.
+        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
                 .thenReturn(Optional.of(CacheService.AuthCredentials.builder()
                         .userName("cipx-device-" + DEVICE_ID)
                         .workspaceId(WORKSPACE_ID)
@@ -79,7 +80,7 @@ class CipxTokenValidationServiceTest {
                         .deviceId(DEVICE_ID)
                         .build()));
 
-        service.authenticate(TOKEN, WORKSPACE_NAME, contextInfo(method, path));
+        service.authenticate(TOKEN, contextInfo(method, path));
 
         assertThat(requestContext.getWorkspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(requestContext.getWorkspaceName()).isEqualTo(WORKSPACE_NAME);
@@ -102,7 +103,7 @@ class CipxTokenValidationServiceTest {
     @MethodSource
     @DisplayName("rejects a device token everywhere else with 403, before validating it")
     void rejectsEverythingElse(String method, String path) {
-        assertThatThrownBy(() -> service.authenticate(TOKEN, WORKSPACE_NAME, contextInfo(method, path)))
+        assertThatThrownBy(() -> service.authenticate(TOKEN, contextInfo(method, path)))
                 .isInstanceOf(ClientErrorException.class)
                 .satisfies(rejected -> assertThat(((ClientErrorException) rejected).getResponse().getStatus())
                         .isEqualTo(Response.Status.FORBIDDEN.getStatusCode()));

@@ -2,8 +2,6 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.CipxTokenValidationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -22,7 +20,6 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -34,7 +31,6 @@ import java.util.Set;
  * <p>
  * Caches the resolved caller under the token, mirroring the API-key path, so a warm request is one cache read
  * with no outbound call at all.
- * <p>
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -57,8 +53,7 @@ public class CipxTokenValidationService {
             "^/v1/private/traces/?$", Set.of("POST"),
             "^/v1/private/traces/" + UUID_REGEX + "/?$", Set.of("PATCH"));
 
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    private record ValidateRequest(String token, String workspaceName) {
+    private record ValidateRequest(String token) {
     }
 
     private final @NonNull Client client;
@@ -66,25 +61,22 @@ public class CipxTokenValidationService {
     private final @NonNull CacheService cacheService;
     private final @NonNull Provider<RequestContext> requestContext;
 
-    public void authenticate(@NonNull String token, String headerWorkspace, @NonNull ContextInfoHolder contextInfo) {
+    public void authenticate(@NonNull String token, @NonNull ContextInfoHolder contextInfo) {
         if (!isIngestEndpoint(contextInfo)) {
             log.error("Rejecting CIPX device token outside ingest, method: '{}', path: '{}'", contextInfo.method(),
                     contextInfo.uriInfo().getRequestUri().getPath());
             throw new ClientErrorException(NOT_AN_INGEST_ENDPOINT, Response.Status.FORBIDDEN);
         }
 
-        // A blank workspace header is allowed: cost-api resolves the workspace from the token itself, and only
-        // rejects a non-blank header that disagrees.
-        String requestWorkspaceName = StringUtils.defaultString(headerWorkspace);
-
+        // Keyed by the token alone: a device's workspace is derived from its enrollment, never supplied.
         // No required permissions are passed: nothing verified any, so nothing may be cached as granted.
-        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, requestWorkspaceName, List.of());
+        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, "", List.of());
         if (cached.isPresent()) {
-            setCredentialIntoContext(cached.get(), requestWorkspaceName);
+            setCredentialIntoContext(cached.get());
             return;
         }
 
-        var validated = validate(token, requestWorkspaceName);
+        var validated = validate(token);
         var credentials = CacheService.AuthCredentials.builder()
                 .userName(validated.userName())
                 .workspaceId(validated.workspaceId())
@@ -93,8 +85,8 @@ public class CipxTokenValidationService {
                 .permissions(List.of())
                 .deviceId(validated.deviceId())
                 .build();
-        setCredentialIntoContext(credentials, requestWorkspaceName);
-        cacheService.cache(token, requestWorkspaceName, List.of(), credentials);
+        setCredentialIntoContext(credentials);
+        cacheService.cache(token, "", List.of(), credentials);
     }
 
     /**
@@ -107,11 +99,11 @@ public class CipxTokenValidationService {
      * instead is {@link #INGEST_ENDPOINTS} -- it may reach the four ingest endpoints and nothing else. Do not
      * "fix" this by calling the react service: it has no user to authenticate here, and the call fails.
      */
-    private void setCredentialIntoContext(CacheService.AuthCredentials credentials, String fallbackWorkspaceName) {
+    private void setCredentialIntoContext(CacheService.AuthCredentials credentials) {
         var context = requestContext.get();
         context.setUserName(credentials.userName());
         context.setWorkspaceId(credentials.workspaceId());
-        context.setWorkspaceName(Optional.ofNullable(credentials.workspaceName()).orElse(fallbackWorkspaceName));
+        context.setWorkspaceName(credentials.workspaceName());
         context.setQuotas(credentials.quotas());
         context.setPermissions(credentials.permissions() == null ? Set.of() : Set.copyOf(credentials.permissions()));
         context.setCipxDeviceId(credentials.deviceId());
@@ -123,14 +115,14 @@ public class CipxTokenValidationService {
                 .anyMatch(entry -> path.matches(entry.getKey()) && entry.getValue().contains(contextInfo.method()));
     }
 
-    private ValidatedCipxToken validate(String token, String workspaceName) {
+    private ValidatedCipxToken validate(String token) {
         var config = config();
         URI target = URI.create(StringUtils.stripEnd(config.getUrl(), "/") + VALIDATE_PATH);
 
         try (Response response = client.target(target)
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
-                .post(Entity.json(new ValidateRequest(token, workspaceName)))) {
+                .post(Entity.json(new ValidateRequest(token)))) {
 
             if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
                 throw new ClientErrorException(INVALID_TOKEN, Response.Status.UNAUTHORIZED);
