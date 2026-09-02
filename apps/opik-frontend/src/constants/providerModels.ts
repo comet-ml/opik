@@ -158,6 +158,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1,
+      label: "Claude Fable 5.1",
+    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -284,6 +288,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5,
       label: "anthropic/claude-fable-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1,
+      label: "anthropic/claude-fable-5.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_BATCH,
@@ -918,6 +926,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2,
       label: "inception/mercury-2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2_5_PREVIEW,
+      label: "inception/mercury-2.5-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,

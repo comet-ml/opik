@@ -113,6 +113,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
+  CLAUDE_FABLE_5_1 = "claude-fable-5-1",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -146,6 +147,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
   ANTHROPIC_CLAUDE_FABLE_5 = "anthropic/claude-fable-5",
+  ANTHROPIC_CLAUDE_FABLE_5_1 = "anthropic/claude-fable-5.1",
   ANTHROPIC_CLAUDE_FABLE_5_BATCH = "anthropic/claude-fable-5:batch",
   ANTHROPIC_CLAUDE_HAIKU_4_5 = "anthropic/claude-haiku-4.5",
   ANTHROPIC_CLAUDE_HAIKU_4_5_BATCH = "anthropic/claude-haiku-4.5:batch",
@@ -305,6 +307,7 @@ export enum PROVIDER_MODEL_TYPE {
   IBM_GRANITE_GRANITE_4_2_8B = "ibm-granite/granite-4.2-8b",
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
+  INCEPTION_MERCURY_2_5_PREVIEW = "inception/mercury-2.5-preview",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
   INCLUSIONAI_LING_2_6_1T = "inclusionai/ling-2.6-1t",
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",

@@ -165,6 +165,8 @@ anthropic:
   - id: "claude-fable-5"
     label: "Claude Fable 5"
     structuredOutput: true
+  - id: "claude-fable-5-1"
+    label: "Claude Fable 5.1"
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-1-20250805"
   - id: "claude-opus-4-20250514"
@@ -369,6 +371,8 @@ openrouter:
     reasoning: true
   - id: "anthropic/claude-fable-5"
     label: "anthropic/claude-fable-5"
+  - id: "anthropic/claude-fable-5.1"
+    label: "anthropic/claude-fable-5.1"
   - id: "anthropic/claude-fable-5:batch"
     label: "anthropic/claude-fable-5:batch"
   - id: "anthropic/claude-haiku-4.5"
@@ -719,6 +723,8 @@ openrouter:
   - id: "inception/mercury-2"
     label: "inception/mercury-2"
     structuredOutput: true
+  - id: "inception/mercury-2.5-preview"
+    label: "inception/mercury-2.5-preview"
   - id: "inception/mercury-coder"
     label: "inception/mercury-coder"
   - id: "inclusionai/ling-2.6-1t"
