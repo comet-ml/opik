@@ -52,6 +52,9 @@ class AuthFilterCipxTokenTest {
     private static final String BOUND_WORKSPACE = "__ai_spend_" + RandomStringUtils.secure().nextAlphanumeric(8)
             + "__";
     private static final String DEVICE_ID = UUID.randomUUID().toString();
+    // What the validator really returns as the user name: the device's MDM-provisioned address, not a
+    // Comet username. The cipx-device-<id> form is a fallback cost-api owns and tests.
+    private static final String MDM_EMAIL = "dev-" + UUID.randomUUID() + "@acme.com";
 
     @Mock
     private AuthService authService;
@@ -115,7 +118,7 @@ class AuthFilterCipxTokenTest {
     private void cacheHit() {
         when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
                 .thenReturn(Optional.of(CacheService.AuthCredentials.builder()
-                        .userName("cipx-device-" + DEVICE_ID)
+                        .userName(MDM_EMAIL)
                         .workspaceId(WORKSPACE_ID)
                         .workspaceName(BOUND_WORKSPACE)
                         .quotas(List.of())

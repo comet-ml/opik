@@ -49,6 +49,9 @@ class CipxTokenValidationServiceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String PROJECT_ID = UUID.randomUUID().toString();
     private static final String DEVICE_ID = UUID.randomUUID().toString();
+    // What the validator really returns as the user name: the device's MDM-provisioned address, not a
+    // Comet username. The cipx-device-<id> form is a fallback cost-api owns and tests.
+    private static final String MDM_EMAIL = "dev-" + UUID.randomUUID() + "@acme.com";
     // UUID-shaped deliberately: the allowlist's trace-update pattern matches only a UUID path segment.
     private static final String TRACE_ID = UUID.randomUUID().toString();
 
@@ -80,7 +83,7 @@ class CipxTokenValidationServiceTest {
         // The cache key carries no workspace: a device's workspace is derived from its enrollment.
         when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
                 .thenReturn(Optional.of(CacheService.AuthCredentials.builder()
-                        .userName("cipx-device-" + DEVICE_ID)
+                        .userName(MDM_EMAIL)
                         .workspaceId(WORKSPACE_ID)
                         .workspaceName(WORKSPACE_NAME)
                         .quotas(List.of())
