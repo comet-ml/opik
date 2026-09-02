@@ -15,6 +15,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
@@ -41,6 +42,7 @@ public class CipxTokenValidationService {
     private static final String INVALID_TOKEN = "CIPX device token is not valid";
     private static final String VALIDATION_UNAVAILABLE = "CIPX device token validation is unavailable";
     private static final String NOT_AN_INGEST_ENDPOINT = "CIPX device tokens are accepted on trace and span ingest only";
+    private static final String CACHE_KEY_PREFIX = "cipx-sha256:";
 
     private static final String UUID_REGEX = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
@@ -68,8 +70,8 @@ public class CipxTokenValidationService {
             throw new ClientErrorException(NOT_AN_INGEST_ENDPOINT, Response.Status.FORBIDDEN);
         }
 
-        // Keyed by the token alone: a device's workspace is derived from its enrollment, never supplied.
-        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(token, StringUtils.EMPTY, List.of());
+        String cacheKey = CACHE_KEY_PREFIX + DigestUtils.sha256Hex(token);
+        var cached = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(cacheKey, StringUtils.EMPTY, List.of());
         if (cached.isPresent()) {
             setCredentialIntoContext(cached.get());
             return;
@@ -85,7 +87,7 @@ public class CipxTokenValidationService {
                 .deviceId(validated.deviceId())
                 .build();
         setCredentialIntoContext(credentials);
-        cacheService.cache(token, StringUtils.EMPTY, List.of(), credentials);
+        cacheService.cache(cacheKey, StringUtils.EMPTY, List.of(), credentials);
     }
 
     /**

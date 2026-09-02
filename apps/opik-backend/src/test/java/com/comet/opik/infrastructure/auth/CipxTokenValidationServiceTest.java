@@ -9,6 +9,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -51,6 +52,7 @@ class CipxTokenValidationServiceTest {
     // The prefix stays literal: it is what triggers the branch. Only the secret part is data.
     private static final String TOKEN = CipxTokenUtils.ACCESS_PREFIX + RandomStringUtils.secure()
             .nextAlphanumeric(32);
+    private static final String TOKEN_CACHE_KEY = "cipx-sha256:" + DigestUtils.sha256Hex(TOKEN);
     // Likewise the __ai_spend_ fence, which is the contract shape of a device's bound workspace.
     private static final String WORKSPACE_NAME = "__ai_spend_" + RandomStringUtils.secure().nextAlphanumeric(8)
             + "__";
@@ -89,7 +91,7 @@ class CipxTokenValidationServiceTest {
     void acceptsIngestEndpoints(String method, String path) {
         // Served from cache, so the accepted case needs no validator: what is under test is the allowlist.
         // The cache key carries no workspace: a device's workspace is derived from its enrollment.
-        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
+        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN_CACHE_KEY, "", List.of()))
                 .thenReturn(Optional.of(CacheService.AuthCredentials.builder()
                         .userName(MDM_EMAIL)
                         .workspaceId(WORKSPACE_ID)
@@ -126,7 +128,7 @@ class CipxTokenValidationServiceTest {
         WebTarget target = mock(WebTarget.class);
         Invocation.Builder request = mock(Invocation.Builder.class);
         Response response = mock(Response.class);
-        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
+        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN_CACHE_KEY, "", List.of()))
                 .thenReturn(Optional.empty());
         when(client.target(URI.create("http://ai-cost-backend/v1/internal/cipx-device-tokens/validate")))
                 .thenReturn(target);
