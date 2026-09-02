@@ -99,6 +99,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -243,6 +244,11 @@ class AutomationRuleEvaluatorsResourceTest {
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    // The evaluator log rows these tests wait for are written by the async ClickHouseAppender, which
+    // flushes every 500ms. Stated explicitly rather than relying on Awaitility's implicit 10s default,
+    // which is easy to miss when reading the waits below.
+    private static final int AWAIT_TIMEOUT_SECONDS = 30;
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
@@ -641,7 +647,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 try (var actualResponse = evaluatorsResourceClient.getLogsWithSessionToken(
                         id, sessionToken, workspaceName)) {
                     if (isAuthorized) {
@@ -1435,7 +1441,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
                 assertTraceLogResponse(logPage, id, trace);
             });
@@ -1472,7 +1478,7 @@ class AutomationRuleEvaluatorsResourceTest {
             Instant createdAt = trace.createdAt();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
 
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
@@ -1531,7 +1537,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
                 assertTraceLogResponse(logPage, id, trace);
             });
@@ -1590,7 +1596,7 @@ class AutomationRuleEvaluatorsResourceTest {
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             // Then
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
@@ -1641,7 +1647,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 var logPagePython = evaluatorsResourceClient.getLogs(idPython, WORKSPACE_NAME, API_KEY);
                 assertLogResponse(logPagePython, idPython, evaluatorPython, trace);
                 var logPageLlm = evaluatorsResourceClient.getLogs(idLlm, WORKSPACE_NAME, API_KEY);
@@ -1693,7 +1699,7 @@ class AutomationRuleEvaluatorsResourceTest {
             Instant createdAt = trace.createdAt();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
@@ -1783,7 +1789,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 var logPagePython = evaluatorsResourceClient.getLogs(idPython, WORKSPACE_NAME, API_KEY);
                 assertDisabledRuleLogResponse(logPagePython, idPython, evaluatorPython, trace);
                 var logPageLlm = evaluatorsResourceClient.getLogs(idLlm, WORKSPACE_NAME, API_KEY);
@@ -1835,7 +1841,7 @@ class AutomationRuleEvaluatorsResourceTest {
             Instant createdAt = trace.createdAt();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
@@ -1894,7 +1900,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 // Enabled rule should generate sampling rate message (skipped due to 0% rate)
                 var enabledLogPage = evaluatorsResourceClient.getLogs(enabledId, WORKSPACE_NAME, API_KEY);
                 assertLogResponse(enabledLogPage, enabledId, enabledRule, trace);
@@ -1933,7 +1939,7 @@ class AutomationRuleEvaluatorsResourceTest {
             }
 
             // All traces should be skipped with "disabled" message, none with sampling rate message
-            Awaitility.await().untilAsserted(() -> {
+            Awaitility.await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 var logPage = evaluatorsResourceClient.getLogs(disabledId, WORKSPACE_NAME, API_KEY);
                 assertLogPage(logPage, 5); // Should have 5 log entries
 

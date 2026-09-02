@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -26,6 +27,9 @@ import static java.util.stream.Collectors.groupingBy;
 @RequiredArgsConstructor(access = lombok.AccessLevel.PRIVATE)
 @Slf4j
 class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
+
+    private static final long INSERT_RETRY_ATTEMPTS = 3;
+    private static final Duration INSERT_RETRY_MIN_BACKOFF = Duration.ofMillis(100);
 
     private static ClickHouseAppender instance;
 
@@ -58,11 +62,21 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     @Override
     public void start() {
-        // Background flush thread
-        scheduler.get().scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
+        // Background flush thread. Wrapped in safeFlushLogs because scheduleAtFixedRate silently
+        // cancels the task forever if it ever throws, which would stop persisting user logs for the
+        // rest of the JVM's life.
+        scheduler.get().scheduleAtFixedRate(this::safeFlushLogs, flushIntervalDuration.toMillis(),
                 flushIntervalDuration.toMillis(), TimeUnit.MILLISECONDS);
 
         super.start();
+    }
+
+    private void safeFlushLogs() {
+        try {
+            flushLogs();
+        } catch (Exception e) {
+            log.error("Failed to flush logs", e);
+        }
     }
 
     private void flushLogs() {
@@ -87,14 +101,41 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                         UserLogTableFactory.UserLogTableDAO tableDAO = userLogTableFactory
                                 .getDAO(UserLog.valueOf(userLog));
 
-                        tableDAO
-                                .saveAll(events)
-                                .subscribe(
-                                        noop -> {
-                                        },
-                                        e -> log.error("Failed to insert logs", e));
+                        // The batch is already drained out of the queue, so a failed insert would lose
+                        // these events outright. Retry transient failures, and put the events back on
+                        // the queue if the retries are exhausted so a later flush can pick them up.
+                        // saveAll is called inside the try so that a synchronous throw re-queues too,
+                        // rather than only errors signalled through the returned Mono.
+                        try {
+                            tableDAO
+                                    .saveAll(events)
+                                    .retryWhen(Retry.backoff(INSERT_RETRY_ATTEMPTS, INSERT_RETRY_MIN_BACKOFF))
+                                    .subscribe(
+                                            noop -> {
+                                            },
+                                            e -> {
+                                                log.error("Failed to insert logs", e);
+                                                requeue(events);
+                                            });
+                        } catch (Exception e) {
+                            log.error("Failed to insert logs", e);
+                            requeue(events);
+                        }
                     }
                 });
+    }
+
+    private void requeue(List<ILoggingEvent> events) {
+        if (!running) {
+            log.warn("ClickHouseAppender is stopped, dropping '{}' logs after failed insert", events.size());
+            return;
+        }
+
+        for (ILoggingEvent event : events) {
+            if (!logQueue.offer(event)) {
+                log.warn("Log queue is full, dropping log: {}", event.getFormattedMessage());
+            }
+        }
     }
 
     @Override
@@ -110,7 +151,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         }
 
         if (logQueue.size() >= batchSize) {
-            scheduler.get().execute(this::flushLogs);
+            scheduler.get().execute(this::safeFlushLogs);
         }
     }
 
