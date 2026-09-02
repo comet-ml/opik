@@ -82,12 +82,21 @@ class TestTimeoutGuardTest {
     @DisplayName("an active -D override also survives the retry budget for its tier")
     void overrideFitsRetryBudget() {
         var override = System.getProperty(TIMEOUT_PROPERTY);
-        if (override == null) {
-            return; // No override in play (plain local run) -- the shipped default is asserted above.
+
+        // Under CI the workflow always passes -D, so its absence means the override was removed or
+        // renamed and every job silently fell back to the shipped default. Skipping quietly here
+        // would let the guard stay green through exactly that regression. Locally there is no
+        // override to check, and the shipped default is asserted unconditionally above.
+        if (runningInCi()) {
+            assertThat(override)
+                    .as("CI must pass -D%s (see the mvn step in backend_tests.yml)", TIMEOUT_PROPERTY)
+                    .isNotBlank();
+        } else if (override == null) {
+            return;
         }
 
         // The override is per-tier and the tier is not knowable from inside the JVM, so hold it to
-        // the most generous wall. The unit value is pinned exactly by discoveryScriptPinsBothTiers.
+        // the most generous wall. Each tier's exact value is pinned by ciMatrixWiresBothTiers.
         assertRetryBudgetFits(override, INTEGRATION_JOB_WALL, "-D override");
     }
 
@@ -115,16 +124,45 @@ class TestTimeoutGuardTest {
         assertThatThrownBy(() -> toSeconds(value)).isInstanceOf(AssertionError.class);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"106751991167300d", "9223372036854775807s", "9223372036854775807us"})
+    @DisplayName("absurd values fail closed rather than overflowing into a passing budget")
+    void failsClosedOnOverflow(String value) {
+        // These are grammar-valid, so parsing accepts them; the budget multiplication is where they
+        // used to wrap negative and satisfy isLessThan(wall) -- the assertion meant to reject
+        // oversized bounds accepted the most oversized ones of all.
+        assertThatThrownBy(() -> assertRetryBudgetFits(value, UNIT_JOB_WALL, "overflow probe"))
+                .isInstanceOf(AssertionError.class);
+    }
+
     @Test
-    @DisplayName("both tiers stay pinned in the discovery script that feeds the CI matrix")
-    void discoveryScriptPinsBothTiers() {
-        // The -D override originates here, so the file is the only place the per-tier values and
-        // their job walls are stated together. Asserting the pairing keeps a change to one from
-        // silently outgrowing the other.
+    @DisplayName("the CI matrix wires a budget-safe timeout into every job, end to end")
+    void ciMatrixWiresBothTiers() {
+        // Pinning the shell variables alone is not enough: the values only reach JUnit if the
+        // matrix emits them AND the workflow passes them through. Any link can be renamed or
+        // dropped independently, so assert the whole chain -- script variable, emitted matrix
+        // entry, and the -D on the mvn step.
         var script = readDiscoveryScript();
+        var workflow = readWorkflow();
+
+        assertThat(workflow)
+                .as("the mvn step must pass matrix.testTimeout as -D%s", TIMEOUT_PROPERTY)
+                .contains("-D" + TIMEOUT_PROPERTY + "=\"${{ matrix.testTimeout }}\"");
+        assertThat(workflow)
+                .as("the job wall must come from the matrix, matching the tiers asserted here")
+                .contains("timeout-minutes: ${{ matrix.timeout }}");
 
         assertTierPinned(script, "UNIT_TIMEOUT", "UNIT_TEST_TIMEOUT", UNIT_JOB_WALL);
         assertTierPinned(script, "INTEGRATION_TIMEOUT", "INTEGRATION_TEST_TIMEOUT", INTEGRATION_JOB_WALL);
+
+        // Both emitted entry shapes must pair the wall with the per-test bound. A job missing the
+        // testTimeout key would render it as the empty string and fall back to the shipped default.
+        assertThat(script)
+                .as("the unit matrix entry must set both timeout and testTimeout")
+                .contains("\\\"timeout\\\":$UNIT_TIMEOUT,\\\"testTimeout\\\":\\\"$UNIT_TEST_TIMEOUT\\\"");
+        assertThat(script)
+                .as("the integration matrix entry must set both timeout and testTimeout")
+                .contains("\\\"timeout\\\":$INTEGRATION_TIMEOUT,\\\"testTimeout\\\":\\\"$INTEGRATION_TEST_TIMEOUT\\\"");
     }
 
     private static void assertTierPinned(String script, String wallVar, String testVar, Duration expectedWall) {
@@ -137,12 +175,27 @@ class TestTimeoutGuardTest {
     }
 
     private static void assertRetryBudgetFits(String value, Duration wall, String description) {
+        // Checked arithmetic, and fail closed on overflow: with plain long math an absurd but
+        // grammar-valid bound (e.g. 106751991167300d) wrapped negative and satisfied
+        // isLessThan(wall), so the assertion designed to reject oversized timeouts accepted the
+        // most oversized ones of all.
+        long budget;
+        try {
+            budget = Math.multiplyExact(toSeconds(value), (long) ATTEMPTS_PER_HANG);
+        } catch (ArithmeticException overflow) {
+            throw new AssertionError(
+                    "'%s' (%s) is absurdly large: %d attempts overflow a long, so it cannot fit inside the %s job wall"
+                            .formatted(value, description, ATTEMPTS_PER_HANG, wall),
+                    overflow);
+        }
+
         // 4 attempts at the bound must still leave room for compilation and suite overhead,
         // otherwise CI cancels the job before Surefire can publish the named failure -- losing
         // exactly the diagnostic the timeout exists to provide.
-        assertThat(toSeconds(value) * ATTEMPTS_PER_HANG)
+        assertThat(budget)
                 .as("%d attempts at '%s' (%s) must fit inside the %s job wall",
                         ATTEMPTS_PER_HANG, value, description, wall)
+                .isPositive()
                 .isLessThan(wall.toSeconds());
     }
 
@@ -152,11 +205,23 @@ class TestTimeoutGuardTest {
         return matcher.group(1);
     }
 
+    private static boolean runningInCi() {
+        // GITHUB_ACTIONS is set by the runner itself, so it cannot drift out of sync with the
+        // workflow the way a hand-maintained flag would.
+        return Boolean.parseBoolean(System.getenv("GITHUB_ACTIONS"));
+    }
+
+    private static String readWorkflow() {
+        return readRepoFile("../../.github/workflows/backend_tests.yml");
+    }
+
     private static String readDiscoveryScript() {
-        // src/test/resources -> module root -> repo root
-        var path = java.nio.file.Path.of("").toAbsolutePath()
-                .resolve("../../.github/scripts/discover-backend-tests.sh").normalize();
-        assertThat(path).as("discovery script must exist").exists();
+        return readRepoFile("../../.github/scripts/discover-backend-tests.sh");
+    }
+
+    private static String readRepoFile(String relativeToModule) {
+        var path = java.nio.file.Path.of("").toAbsolutePath().resolve(relativeToModule).normalize();
+        assertThat(path).as("%s must exist", relativeToModule).exists();
         try {
             return java.nio.file.Files.readString(path);
         } catch (IOException e) {
@@ -193,7 +258,9 @@ class TestTimeoutGuardTest {
 
         return switch (unit) {
             case "ns" -> Duration.ofNanos(amount).toSeconds();
-            case "μs", "us" -> Duration.ofNanos(amount * 1_000).toSeconds();
+            // multiplyExact, not *: a huge microsecond count would otherwise wrap negative here,
+            // before the retry-budget check ever sees it.
+            case "μs", "us" -> Duration.ofNanos(Math.multiplyExact(amount, 1_000L)).toSeconds();
             case "ms" -> Duration.ofMillis(amount).toSeconds();
             case "s" -> amount;
             case "m" -> Duration.ofMinutes(amount).toSeconds();
