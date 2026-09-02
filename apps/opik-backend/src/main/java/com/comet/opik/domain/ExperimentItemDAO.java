@@ -6,6 +6,7 @@ import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts
 import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.FastBindStatement;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -728,7 +729,7 @@ class ExperimentItemDAO {
                     var template = TemplateUtils.newST(SELECT_TARGET_PROJECTS);
                     template.add("log_comment", "get_target_project_ids_experiment_items");
 
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
@@ -763,7 +764,7 @@ class ExperimentItemDAO {
             if (criteria.projectId() != null) {
                 template.add("project_id", true);
             }
-            var statement = connection.createStatement(template.render())
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                     .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                     .bind("limit", limit)
                     .bind("workspace_id", workspaceId);
@@ -881,7 +882,7 @@ class ExperimentItemDAO {
                         template.add("project_id", projectId.toString());
                     }
 
-                    Statement statement = connection.createStatement(template.render())
+                    Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
                             .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
 

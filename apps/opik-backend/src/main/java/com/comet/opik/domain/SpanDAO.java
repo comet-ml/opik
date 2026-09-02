@@ -22,6 +22,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
+import com.comet.opik.utils.FastBindStatement;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
@@ -1838,7 +1839,7 @@ public class SpanDAO {
             var template = getSTWithLogComment(BULK_INSERT, "batch_insert_spans", workspaceId, userName, spans.size())
                     .add("items", queryItems);
 
-            Statement statement = connection.createStatement(template.render());
+            Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()));
 
             // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
             // the same timestamp — matches the prior server-side now64(6) semantics.
@@ -1919,7 +1920,7 @@ public class SpanDAO {
             var template = newInsertTemplate(workspaceId, userName);
             String inputValue = TruncationUtils.toJsonString(span.input());
             String outputValue = TruncationUtils.toJsonString(span.output());
-            var statement = connection.createStatement(template.render())
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                     .bind("id", span.id())
                     .bind("project_id", span.projectId())
                     .bind("trace_id", span.traceId())
@@ -2065,7 +2066,7 @@ public class SpanDAO {
                     var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false, "partial_insert_span",
                             workspaceId, userName);
 
-                    var statement = connection.createStatement(template.render());
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()));
 
                     statement.bind("id", id);
                     statement.bind("project_id", projectId);
@@ -2115,7 +2116,7 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newUpdateTemplate(finalUpdate, UPDATE, isManualCost(existingSpan), "update_span",
                     workspaceId, userName);
-            var statement = connection.createStatement(template.render());
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()));
             statement.bind("id", id);
 
             bindUpdateParams(finalUpdate, statement, isManualCost(existingSpan));
@@ -2247,7 +2248,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_ONLY_SPAN_BY_ID, "get_only_span_by_id", workspaceId,
                             userName, "");
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("id", id)
                             .bind("project_id", projectId)
                             .bind("workspace_id", workspaceId);
@@ -2274,7 +2275,7 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_span_by_id", workspaceId, userName,
                     "");
-            var statement = connection.createStatement(template.render())
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                     .bind("id", id)
                     .bind("workspace_id", workspaceId);
             var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
@@ -2296,7 +2297,7 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_BY_TRACE_IDS, "get_spans_by_trace_ids", workspaceId,
                             userName,
                             traceIds.size());
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
 
@@ -2324,7 +2325,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_SPANS_SIZE_BY_TRACE_IDS, "get_spans_size_by_trace_ids",
                             workspaceId, userName, "traces_size=%s".formatted(traceIds.size()));
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
 
@@ -2350,7 +2351,7 @@ public class SpanDAO {
                         var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_SPANS,
                                 "get_target_project_ids_for_spans", workspaceId, userName, ids.size());
 
-                        var statement = connection.createStatement(template.render())
+                        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                                 .bind("ids", ids.toArray(UUID[]::new));
 
                         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
@@ -2383,7 +2384,7 @@ public class SpanDAO {
                                     template.add("has_target_projects", true);
                                 }
 
-                                var statement = connection.createStatement(template.render())
+                                var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                                         .bind("ids", ids.toArray(new UUID[0]));
 
                                 if (CollectionUtils.isNotEmpty(targetProjectIds)) {
@@ -2413,7 +2414,7 @@ public class SpanDAO {
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
 
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("ids", spanIds.toArray(UUID[]::new))
                             .bind("workspace_id", workspaceId);
 
@@ -2557,7 +2558,7 @@ public class SpanDAO {
                         }
                     }
 
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("project_id", spanSearchCriteria.projectId())
                             .bind("workspace_id", workspaceId);
 
@@ -2623,7 +2624,7 @@ public class SpanDAO {
 
             template = template.add("stream", true);
 
-            var statement = connection.createStatement(template.render())
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                     .bind("project_id", criteria.projectId())
                     .bind("workspace_id", workspaceId)
                     .bind("limit", limit);
@@ -2673,7 +2674,7 @@ public class SpanDAO {
 
             var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
 
-            var statement = connection.createStatement(template.render())
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId)
                     .bind("limit", size)
@@ -2750,7 +2751,7 @@ public class SpanDAO {
                 template.add("span_id_prefilter", true);
             }
 
-            var statement = connection.createStatement(template.render())
+            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
 
@@ -2894,7 +2895,7 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
 
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("spanIds", spanIds.toArray(UUID[]::new));
 
                     return Mono.from(statement.execute());
@@ -2914,7 +2915,7 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_SPAN, "get_project_id_from_span",
                             workspaceId, userName, "");
 
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("id", spanId)
                             .bind("workspace_id", workspaceId);
 
@@ -2938,7 +2939,7 @@ public class SpanDAO {
                                         workspaceId, userName);
                                 template.add("has_legacy_scores", hasLegacyScores);
 
-                                var statement = connection.createStatement(template.render())
+                                var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                                         .bind("project_id", searchCriteria.projectId())
                                         .bind("workspace_id", workspaceId);
                                 bindSearchCriteria(statement, searchCriteria);
@@ -2960,7 +2961,7 @@ public class SpanDAO {
                                     template.add("filters_present", true);
                                 }
 
-                                var statement = connection.createStatement(template.render())
+                                var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                                         .bind("project_id", searchCriteria.projectId())
                                         .bind("workspace_id", workspaceId);
                                 bindSearchCriteria(statement, searchCriteria);
@@ -3006,7 +3007,7 @@ public class SpanDAO {
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
 
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("trace_ids", traceIds)
                             .bind("workspace_id", workspaceId);
 
@@ -3037,7 +3038,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()));
 
                     if (!excludedProjectIds.isEmpty()) {
                         statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3074,7 +3075,7 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
-                    var statement = connection.createStatement(template.render());
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()));
 
                     if (!excludedProjectIds.isEmpty()) {
                         statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3112,7 +3113,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()));
 
                     if (!excludedProjectIds.isEmpty()) {
                         statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3306,7 +3307,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("workspace_ids", workspaceIds.toArray(String[]::new))
                             .bind("cutoff_id", cutoffId)
                             .bind("lower_bound", lowerBound);
@@ -3333,7 +3334,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("workspace_ids", workspaceIds.toArray(String[]::new))
                             .bind("cutoff_id", cutoffId)
                             .bind("lower_bound", lowerBound);
@@ -3412,7 +3413,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(template.render())
+                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
                             .bind("workspace_id", workspaceId)
                             .bind("lower_bound", lowerBound)
                             .bind("cutoff_id", cutoffId);
