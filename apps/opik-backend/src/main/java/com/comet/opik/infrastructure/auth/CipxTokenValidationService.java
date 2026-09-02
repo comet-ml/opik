@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 
 import java.net.URI;
 import java.util.List;
@@ -43,6 +44,7 @@ public class CipxTokenValidationService {
     private static final String VALIDATION_UNAVAILABLE = "CIPX device token validation is unavailable";
     private static final String NOT_AN_INGEST_ENDPOINT = "CIPX device tokens are accepted on trace and span ingest only";
     private static final String CACHE_KEY_PREFIX = "cipx-sha256:";
+    private static final int VALIDATION_READ_TIMEOUT_MILLIS = 5_000;
 
     private static final String UUID_REGEX = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
@@ -126,6 +128,7 @@ public class CipxTokenValidationService {
 
         try (Response response = client.target(target)
                 .request()
+                .property(ClientProperties.READ_TIMEOUT, VALIDATION_READ_TIMEOUT_MILLIS)
                 .accept(MediaType.APPLICATION_JSON)
                 .post(Entity.json(new ValidateRequest(token)))) {
 

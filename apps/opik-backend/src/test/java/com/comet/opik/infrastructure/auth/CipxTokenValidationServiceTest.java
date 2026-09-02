@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -147,6 +148,7 @@ class CipxTokenValidationServiceTest {
         when(client.target(URI.create("http://ai-cost-backend/v1/internal/cipx-device-tokens/validate")))
                 .thenReturn(target);
         when(target.request()).thenReturn(request);
+        when(request.property(ClientProperties.READ_TIMEOUT, 5_000)).thenReturn(request);
         when(request.accept(MediaType.APPLICATION_JSON)).thenReturn(request);
         when(request.post(any())).thenReturn(response);
         when(response.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
@@ -177,6 +179,7 @@ class CipxTokenValidationServiceTest {
         when(client.target(URI.create("http://ai-cost-backend/v1/internal/cipx-device-tokens/validate")))
                 .thenReturn(target);
         when(target.request()).thenReturn(request);
+        when(request.property(ClientProperties.READ_TIMEOUT, 5_000)).thenReturn(request);
         when(request.accept(MediaType.APPLICATION_JSON)).thenReturn(request);
         when(request.post(any())).thenReturn(response);
         when(response.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
