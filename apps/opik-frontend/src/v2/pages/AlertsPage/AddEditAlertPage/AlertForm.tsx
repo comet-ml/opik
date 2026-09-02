@@ -21,9 +21,9 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { AlertFormType, AlertFormSchema } from "./schema";
-import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
-import TestWebhookSection from "./TestWebhookSection";
+import WebhookSettings from "./WebhookSettings";
+import useWebhookTest from "./useWebhookTest";
 import {
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
@@ -100,6 +100,10 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
     };
   }, [form, activeProjectId, alert?.metadata]);
 
+  const { testConnection, testTrigger, isTestPending } = useWebhookTest({
+    getAlert,
+  });
+
   const handleNavigateBack = useCallback(() => {
     navigate({
       to: "/$workspaceName/projects/$projectId/alerts",
@@ -170,38 +174,58 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
       )}
       <h1 className="comet-title-xs">{title}</h1>
 
-      <div className="relative mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex-1 lg:max-w-[720px]">
-          <Form {...form}>
-            <form
-              className="flex flex-col gap-6"
-              onSubmit={form.handleSubmit(onSubmit)}
-            >
-              <div className="flex flex-col gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field, formState }) => {
-                    const validationErrors = get(formState.errors, ["name"]);
-                    return (
-                      <FormItem>
-                        <Label>Name</Label>
-                        <FormControl>
-                          <Input
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                            placeholder="Name"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
+      <div className="relative mt-6 max-w-[720px]">
+        <Form {...form}>
+          <form
+            className="flex flex-col gap-6"
+            onSubmit={form.handleSubmit(onSubmit)}
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, ["name"]);
+                return (
+                  <FormItem>
+                    <Label>Name</Label>
+                    <FormControl>
+                      <Input
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        placeholder="Name"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+
+            <Separator />
+
+            <EventTriggers
+              form={form}
+              projectId={alert?.project_id || activeProjectId!}
+              getAlert={getAlert}
+              onTestTrigger={testTrigger}
+              isTestPending={isTestPending}
+              isPending={isPending}
+            />
+
+            <WebhookSettings
+              form={form}
+              onTestConnection={testConnection}
+              isTestPending={isTestPending}
+              isPending={isPending}
+            />
+
+            {isEdit && (
+              <>
+                <Separator />
 
                 <FormField
                   control={form.control}
@@ -230,58 +254,28 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
                     </FormItem>
                   )}
                 />
-              </div>
+              </>
+            )}
 
-              <Separator />
-
-              <WebhookSettings form={form} />
-
-              <EventTriggers
-                form={form}
-                projectId={alert?.project_id || activeProjectId!}
-              />
-
-              <Separator className="lg:hidden" />
-
-              <div className="lg:hidden">
-                <TestWebhookSection
-                  form={form}
-                  getAlert={getAlert}
-                  isPending={isPending}
-                />
-              </div>
-
-              <Separator className="lg:hidden" />
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  type="submit"
-                  disabled={form.formState.isSubmitting || isPending}
-                >
-                  {submitText}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleNavigateBack}
-                  disabled={form.formState.isSubmitting || isPending}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </div>
-
-        <div className="hidden w-full lg:sticky lg:top-6 lg:block lg:w-2/5 lg:min-w-[320px] lg:max-w-[480px]">
-          <TestWebhookSection
-            form={form}
-            getAlert={getAlert}
-            isPending={isPending}
-          />
-        </div>
+            <div className="flex gap-2 pt-4">
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting || isPending}
+              >
+                {submitText}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleNavigateBack}
+                disabled={form.formState.isSubmitting || isPending}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
       </div>
-
       {DialogComponent}
     </div>
   );
