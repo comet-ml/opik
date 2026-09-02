@@ -37,7 +37,7 @@ package com.comet.opik.infrastructure.redis;
  * And {@code maxRetries} is a budget shared across the fleet, not per pod: an older pod can consume
  * all of it before a newer one ever claims the entry, in which case the retry bought nothing and the
  * entry is removed anyway. So this is a <em>chance</em> for a newer decoder, not a guarantee — three
- * chances against the one that deleting on first delivery would give. At the shipped defaults
+ * chances instead of the single chance that deleting on first delivery would give. At the shipped defaults
  * ({@code maxRetries: 3}, {@code pendingMessageDuration: 10m}) the window is roughly 30 minutes, which
  * normally outlasts a rolling upgrade; a slower deploy can still lose the entry. Scoping retirement by
  * decoder version would close that properly, and is out of scope here.
