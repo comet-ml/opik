@@ -7,8 +7,8 @@ import lombok.Builder;
 
 /**
  * The caller attributes a CIPX device token resolves to, as returned by the cost-api validator.
- * {@code deviceId} is the server-assigned machine identity; the rest mirror what any other
- * credential resolves to.
+ * {@code deviceId} is the server-assigned machine identity, and {@code userName} is the device's
+ * MDM-provisioned email address rather than a Comet username -- it becomes {@code traces.created_by}.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)

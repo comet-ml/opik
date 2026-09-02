@@ -101,6 +101,7 @@ public class CipxTokenValidationService {
      */
     private void setCredentialIntoContext(CacheService.AuthCredentials credentials) {
         var context = requestContext.get();
+        // An email address on this path, where every other credential puts a Comet username.
         context.setUserName(credentials.userName());
         context.setWorkspaceId(credentials.workspaceId());
         context.setWorkspaceName(credentials.workspaceName());
