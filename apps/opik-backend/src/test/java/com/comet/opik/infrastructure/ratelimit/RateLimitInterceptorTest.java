@@ -274,7 +274,7 @@ class RateLimitInterceptorTest {
 
         @ParameterizedTest
         @MethodSource
-        void invoke_usesDeviceIdWhenPresentAndApiKeyOtherwise(
+        void invokeUsesDeviceIdWhenPresentAndApiKeyOtherwise(
                 String cipxDeviceId, String apiKey, String expectedPrincipal) throws Throwable {
             var generalLimit = new RateLimitConfig.LimitConfig(
                     "general-limit", "general-events", 100, 60, "general limit exceeded");
@@ -305,7 +305,7 @@ class RateLimitInterceptorTest {
                     eq(1L), eq("rate-limit:general_events-" + expectedPrincipal), eq(generalLimit));
         }
 
-        static Stream<Arguments> invoke_usesDeviceIdWhenPresentAndApiKeyOtherwise() {
+        static Stream<Arguments> invokeUsesDeviceIdWhenPresentAndApiKeyOtherwise() {
             return Stream.of(
                     Arguments.of("device-id", "api-key", "device-id"),
                     Arguments.of(null, "api-key", "api-key"));

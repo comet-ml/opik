@@ -20,8 +20,8 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Authenticates a CIPX device token: cost-api owns the signing key and the device registry.
@@ -50,10 +50,13 @@ public class CipxTokenValidationService {
      * The only endpoints a device token may reach. Rejection is by this list, never by the absence of a binding.
      * Shape follows {@code RemoteAuthService.PUBLIC_ENDPOINTS}: path regex to allowed methods.
      */
-    private static final Map<String, Set<String>> INGEST_ENDPOINTS = Map.of(
-            "^/v1/private/spans/batch/?$", Set.of("POST", "PATCH"),
-            "^/v1/private/traces/?$", Set.of("POST"),
-            "^/v1/private/traces/" + UUID_REGEX + "/?$", Set.of("PATCH"));
+    private static final List<IngestEndpoint> INGEST_ENDPOINTS = List.of(
+            new IngestEndpoint(Pattern.compile("^/v1/private/spans/batch/?$"), Set.of("POST", "PATCH")),
+            new IngestEndpoint(Pattern.compile("^/v1/private/traces/?$"), Set.of("POST")),
+            new IngestEndpoint(Pattern.compile("^/v1/private/traces/" + UUID_REGEX + "/?$"), Set.of("PATCH")));
+
+    private record IngestEndpoint(Pattern path, Set<String> methods) {
+    }
 
     private record ValidateRequest(String token) {
     }
@@ -112,8 +115,9 @@ public class CipxTokenValidationService {
 
     private boolean isIngestEndpoint(ContextInfoHolder contextInfo) {
         String path = contextInfo.uriInfo().getRequestUri().getPath();
-        return INGEST_ENDPOINTS.entrySet().stream()
-                .anyMatch(entry -> path.matches(entry.getKey()) && entry.getValue().contains(contextInfo.method()));
+        return INGEST_ENDPOINTS.stream()
+                .anyMatch(endpoint -> endpoint.path().matcher(path).matches()
+                        && endpoint.methods().contains(contextInfo.method()));
     }
 
     private ValidatedCipxToken validate(String token) {

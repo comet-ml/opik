@@ -10,12 +10,15 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.CipxTokenUtils;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -43,11 +46,18 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -83,8 +93,15 @@ class CostIntelligenceIngestionTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
+                .jdbcUrl(MYSQL.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(REDIS.getRedisURI())
+                .customConfigs(List.of(
+                        new CustomConfig("cipxTokenValidation.enabled", "true"),
+                        new CustomConfig("cipxTokenValidation.url", wireMock.runtimeInfo().getHttpBaseUrl())))
+                .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -477,6 +494,40 @@ class CostIntelligenceIngestionTest {
             });
 
             assertThat(getCipxIdentity(plainTrace.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("CIPX-authenticated trace persists the validator-provided device id")
+        void cipxAuthenticatedTracePersistsValidatorDeviceId() {
+            var ws = newWorkspace();
+            String token = CipxTokenUtils.ACCESS_PREFIX + UUID.randomUUID();
+            String deviceId = UUID.randomUUID().toString();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            wireMock.server().stubFor(post(urlPathEqualTo("/v1/internal/cipx-device-tokens/validate"))
+                    .withRequestBody(matchingJsonPath("$.token", equalTo(token)))
+                    .willReturn(okJson(JsonUtils.writeValueAsString(Map.of(
+                            "user_name", email,
+                            "workspace_id", ws.workspaceId(),
+                            "workspace_name", ws.workspaceName(),
+                            "device_id", deviceId)))));
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName("cipx-" + UUID.randomUUID())
+                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "git@github.com:acme/repo.git",
+                            "codex", 3))
+                    .build();
+
+            traceResourceClient.createTrace(trace, token, "ignored-for-device-token-auth");
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().deviceId()).isEqualTo(deviceId);
+            });
+            wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/internal/cipx-device-tokens/validate"))
+                    .withRequestBody(matchingJsonPath("$.token", equalTo(token))));
         }
 
         @Test

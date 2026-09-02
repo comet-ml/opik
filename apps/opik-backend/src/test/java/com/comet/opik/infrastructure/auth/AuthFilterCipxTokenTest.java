@@ -8,6 +8,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.UriInfo;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,6 +47,7 @@ class AuthFilterCipxTokenTest {
     // The prefix stays literal: it is what triggers the branch. Only the secret part is data.
     private static final String TOKEN = CipxTokenUtils.ACCESS_PREFIX + RandomStringUtils.secure()
             .nextAlphanumeric(32);
+    private static final String TOKEN_CACHE_KEY = "cipx-sha256:" + DigestUtils.sha256Hex(TOKEN);
     private static final String INGEST_PATH = "/v1/private/traces";
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     // The __ai_spend_ fence is the contract shape of a device's bound workspace; only the org part is data.
@@ -111,12 +113,12 @@ class AuthFilterCipxTokenTest {
         filter.filter(requestContext("something-else-entirely"));
 
         // Same key both times, so a client varying the header cannot force a cold validate per variant.
-        verify(cacheService, times(2)).resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of());
+        verify(cacheService, times(2)).resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN_CACHE_KEY, "", List.of());
         verify(cacheService, never()).cache(any(), any(), any(), any());
     }
 
     private void cacheHit() {
-        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
+        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN_CACHE_KEY, "", List.of()))
                 .thenReturn(Optional.of(CacheService.AuthCredentials.builder()
                         .userName(MDM_EMAIL)
                         .workspaceId(WORKSPACE_ID)

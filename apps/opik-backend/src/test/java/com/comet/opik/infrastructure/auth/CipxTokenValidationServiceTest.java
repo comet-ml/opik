@@ -13,6 +13,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -118,6 +119,49 @@ class CipxTokenValidationServiceTest {
                 arguments(named("span batch update", "PATCH"), "/v1/private/spans/batch"),
                 arguments(named("trace create", "POST"), "/v1/private/traces"),
                 arguments(named("trace update", "PATCH"), "/v1/private/traces/" + TRACE_ID));
+    }
+
+    @Test
+    @DisplayName("authenticates and caches a validated token on a cache miss")
+    void authenticatesAndCachesValidatedTokenOnCacheMiss() {
+        WebTarget target = mock(WebTarget.class);
+        Invocation.Builder request = mock(Invocation.Builder.class);
+        Response response = mock(Response.class);
+        var validated = ValidatedCipxToken.builder()
+                .userName(MDM_EMAIL)
+                .workspaceId(WORKSPACE_ID)
+                .workspaceName(WORKSPACE_NAME)
+                .deviceId(DEVICE_ID)
+                .build();
+        var expectedCredentials = CacheService.AuthCredentials.builder()
+                .userName(MDM_EMAIL)
+                .workspaceId(WORKSPACE_ID)
+                .workspaceName(WORKSPACE_NAME)
+                .quotas(List.of())
+                .permissions(List.of())
+                .deviceId(DEVICE_ID)
+                .build();
+
+        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN_CACHE_KEY, "", List.of()))
+                .thenReturn(Optional.empty());
+        when(client.target(URI.create("http://ai-cost-backend/v1/internal/cipx-device-tokens/validate")))
+                .thenReturn(target);
+        when(target.request()).thenReturn(request);
+        when(request.accept(MediaType.APPLICATION_JSON)).thenReturn(request);
+        when(request.post(any())).thenReturn(response);
+        when(response.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
+        when(response.getStatusInfo()).thenReturn(Response.Status.OK);
+        when(response.readEntity(ValidatedCipxToken.class)).thenReturn(validated);
+
+        service.authenticate(TOKEN, contextInfo("POST", "/v1/private/traces"));
+
+        assertThat(requestContext.getUserName()).isEqualTo(MDM_EMAIL);
+        assertThat(requestContext.getWorkspaceId()).isEqualTo(WORKSPACE_ID);
+        assertThat(requestContext.getWorkspaceName()).isEqualTo(WORKSPACE_NAME);
+        assertThat(requestContext.getQuotas()).isEmpty();
+        assertThat(requestContext.getPermissions()).isEmpty();
+        assertThat(requestContext.getCipxDeviceId()).isEqualTo(DEVICE_ID);
+        verify(cacheService).cache(TOKEN_CACHE_KEY, "", List.of(), expectedCredentials);
     }
 
     @ParameterizedTest
