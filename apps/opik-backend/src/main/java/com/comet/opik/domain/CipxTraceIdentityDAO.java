@@ -50,8 +50,6 @@ public class CipxTraceIdentityDAO {
             @NonNull String repository,
             @NonNull String sessionId,
             @NonNull String harness,
-            // From the validated device token, never from the trace's own metadata, which a client could set
-            // to anything. Empty for API-key callers, as harness is for legacy rows.
             @NonNull String deviceId,
             int schemaVersion,
             @NonNull String billingMode,

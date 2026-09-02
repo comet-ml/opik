@@ -19,8 +19,6 @@ public class TracesCreated extends BaseEvent {
     // Resolved from RequestContext.WORKSPACE_NAME at publish time (TraceService). May be null/blank
     // for callers that don't carry it; consumers fall back to workspaceId.
     private final @Nullable String workspaceName;
-    // Resolved from RequestContext.CIPX_DEVICE_ID at publish time (TraceService): the cipx subscriber runs off
-    // the request path and cannot read the request context. Null/blank for every non-device-token caller.
     private final @Nullable String cipxDeviceId;
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName) {

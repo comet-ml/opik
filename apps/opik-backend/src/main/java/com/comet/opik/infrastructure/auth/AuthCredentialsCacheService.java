@@ -24,8 +24,6 @@ import java.util.Set;
  *    value: Map with keys 'userName', 'workspaceId', 'workspaceName', 'quotas'
  * 2. Permission access cache (v3). Data type: String. Key pattern: authV3-{apiKey}-{workspaceName}-{permission},
  *    value: userName. Only used when requiredPermissions are specified.
- * <p>
- * CIPX device tokens share the workspace metadata cache (v2), keyed by the token in place of the API key.
  */
 @RequiredArgsConstructor
 class AuthCredentialsCacheService implements CacheService {

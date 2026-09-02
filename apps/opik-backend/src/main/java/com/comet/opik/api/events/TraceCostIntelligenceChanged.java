@@ -22,8 +22,6 @@ public class TraceCostIntelligenceChanged extends BaseEvent {
 
     private final @NonNull Map<UUID, UUID> traceProjectIds;
     private final @NonNull TraceUpdate traceUpdate;
-    // Resolved from RequestContext.CIPX_DEVICE_ID at publish time (TraceService), like workspaceName on
-    // TracesCreated. Null/blank for every non-device-token caller.
     private final @Nullable String cipxDeviceId;
 
     public TraceCostIntelligenceChanged(@NonNull Map<UUID, UUID> traceProjectIds, @NonNull TraceUpdate traceUpdate,
