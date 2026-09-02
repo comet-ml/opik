@@ -551,6 +551,68 @@ def test_insert__version_endpoint_unreachable__uploads_sequentially(monkeypatch)
     ), "A failing version probe must not break insert; it falls back to sequential"
 
 
+def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
+    """A transient probe failure must not pin the dataset to sequential uploads."""
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = Mock()
+    mock_rest_client.version.side_effect = [
+        ConnectionError("backend unreachable"),
+        {"version": constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT},
+    ]
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    dataset.insert(_make_items(4), deduplication=False)
+    dataset.insert(_make_items(4), deduplication=False)
+
+    assert mock_rest_client.version.call_count == 2, (
+        "The failed probe must be retried rather than cached as unsupported"
+    )
+    assert dataset._parallel_insert_supported, (
+        "Once the backend answers, parallel upload must be available again"
+    )
+
+
+def test_insert__unparseable_version__probed_once(monkeypatch):
+    """An unparseable version is a conclusive answer, so it must still cache."""
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = _mock_rest_client("dev-local")
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    for _ in range(3):
+        dataset.insert(_make_items(4), deduplication=False)
+
+    assert mock_rest_client.version.call_count == 1, (
+        "A version the SDK cannot parse will not change, so it must not be re-probed"
+    )
+
+
+@pytest.mark.parametrize("bad_value", ["false", 0, 1, None, "", []])
+def test_insert__non_bool_deduplication__raises_before_any_request(bad_value):
+    mock_rest_client = Mock()
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(ValueError, match="deduplication must be a bool"):
+        dataset.insert(_make_items(3), deduplication=bad_value)
+
+    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+    mock_rest_client.version.assert_not_called()
+
+
 def test_insert__sequential__uploads_sequentially_without_probing_version(monkeypatch):
     mock_rest_client = _mock_rest_client()
 
