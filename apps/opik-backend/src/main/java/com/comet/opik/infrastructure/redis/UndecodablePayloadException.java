@@ -23,9 +23,24 @@ package com.comet.opik.infrastructure.redis;
  * because {@code maxRetries} bounds it and because the codec cannot distinguish the two families at
  * the point of failure. A deployment mid config change is the narrow exception.
  * <p>
- * Either way this terminates: once {@code maxRetries} is reached {@code handleMaxRetriesReached}
- * removes the entry, so a genuinely poisonous payload cannot wedge the stream the way it did before
- * this class existed.
+ * Either way this normally terminates: once {@code maxRetries} is reached
+ * {@code handleMaxRetriesReached} removes the entry, so a genuinely poisonous payload cannot wedge the
+ * stream the way it did before this class existed.
+ * <p>
+ * Two caveats, stated rather than glossed.
+ * <p>
+ * Retirement depends on {@code getDeliveryCount}, which maps a failed {@code listPending} to
+ * {@code 0}. While a PEL lookup is failing persistently the count never reaches {@code maxRetries} and
+ * the entry keeps being redelivered, so "always terminates" is really "terminates while the PEL is
+ * readable". Pre-existing behaviour for every retryable failure, not specific to this one.
+ * <p>
+ * And {@code maxRetries} is a budget shared across the fleet, not per pod: an older pod can consume
+ * all of it before a newer one ever claims the entry, in which case the retry bought nothing and the
+ * entry is removed anyway. So this is a <em>chance</em> for a newer decoder, not a guarantee — three
+ * chances against the one that deleting on first delivery would give. At the shipped defaults
+ * ({@code maxRetries: 3}, {@code pendingMessageDuration: 10m}) the window is roughly 30 minutes, which
+ * normally outlasts a rolling upgrade; a slower deploy can still lose the entry. Scoping retirement by
+ * decoder version would close that properly, and is out of scope here.
  */
 public class UndecodablePayloadException extends RuntimeException {
 
