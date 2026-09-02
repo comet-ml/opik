@@ -59,8 +59,7 @@ class CipxTokenValidationServiceTest {
         var config = new OpikConfiguration();
         config.setCipxTokenValidation(CipxTokenValidationConfig.builder()
                 .enabled(true)
-                .url("http://cost-api:8000")
-                .serviceToken("service-token")
+                .url("http://ai-cost-backend")
                 .build());
         service = new CipxTokenValidationService(client, config, cacheService, () -> requestContext);
     }

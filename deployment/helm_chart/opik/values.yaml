@@ -201,9 +201,6 @@ component:
       # The in-cluster service, not the public front door: the validator is
       # reached only from inside the cluster.
       CIPX_TOKEN_VALIDATION_URL: "http://ai-cost-backend"
-      # Shared service credential for the validator. Supply it from a secret
-      # via `envFrom` rather than here when enabling the feature.
-      CIPX_TOKEN_VALIDATION_SERVICE_TOKEN: ""
       # LLM model registry (see apps/opik-backend/config.yml:1309-1317).
       # Remote CDN fetch is opt-in: self-hosted / OSS deployments serve
       # the classpath YAML shipped with the release by default, no

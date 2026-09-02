@@ -12,7 +12,6 @@ import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -38,11 +37,12 @@ import java.util.Set;
  * Caches the resolved caller under the token, mirroring the API-key path, so a warm request is one cache read
  * with no outbound call at all.
  * <p>
- * The validator lives under {@code /v1/internal/} deliberately, and must stay there. cost-api's public routing
- * contract is the {@code /v1/private/ai-spend/} prefix, which nginx forwards to it from the internet; an
- * endpoint that answers a caller's token with a user name, workspace and device id would be a validation
- * oracle behind nothing but the service credential. Nothing routes {@code /v1/internal/} publicly, and this
- * endpoint's only caller is in-cluster.
+ * The validator lives under {@code /v1/internal/} deliberately, and must stay there: that routing is the whole
+ * control on the call, which is otherwise unauthenticated (as {@code /v1/internal/usage} already is). cost-api's
+ * public contract is the {@code /v1/private/ai-spend/} prefix, which nginx forwards to it from the internet, so
+ * an endpoint there that answers a presented token with a user name, workspace and device id would be an
+ * internet-reachable validation oracle. Nothing routes {@code /v1/internal/} publicly, and this endpoint's only
+ * caller is this one, in-cluster.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -50,7 +50,6 @@ import java.util.Set;
 public class CipxTokenValidationService {
 
     private static final String VALIDATE_PATH = "/v1/internal/cipx-device-tokens/validate";
-    private static final String BEARER_PREFIX = "Bearer ";
     private static final String INVALID_TOKEN = "CIPX device token is not valid";
     private static final String VALIDATION_UNAVAILABLE = "CIPX device token validation is unavailable";
     private static final String NOT_AN_INGEST_ENDPOINT = "CIPX device tokens are accepted on trace and span ingest only";
@@ -145,7 +144,6 @@ public class CipxTokenValidationService {
         try (Response response = client.target(target)
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
-                .header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + config.getServiceToken())
                 .post(Entity.json(new ValidateRequest(token, workspaceName)))) {
 
             if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
