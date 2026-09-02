@@ -571,9 +571,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis, workspaceAttributes);
-                    extractTimeFromMessageId(messageId)
-                            .ifPresent(messageMillis -> messageQueueDelay
-                                    .record(System.currentTimeMillis() - messageMillis));
+                    recordQueueDelay(messageId);
                 });
     }
 
