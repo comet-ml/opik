@@ -1,6 +1,7 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from opik.api_objects.dataset import rest_operations
+from opik.rest_api.types import dataset_item as rest_dataset_item
 
 
 def _find_datasets_returning(*pages) -> Mock:
@@ -27,25 +28,47 @@ def _backend_dataset(name: str, type_: str, items_total: int) -> Mock:
     return dataset_fern
 
 
-def test_get_test_suites__suite_holds_backend_items__first_insert_syncs_hashes():
-    """A listed suite must not treat its empty local hash set as authoritative.
+def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitted():
+    """A listed suite must re-read its backend items before deduplicating.
 
-    Otherwise the first deduplicated insert compares against nothing, decides
-    every item is new, and resubmits items the suite already holds.
+    Otherwise the first insert compares against an empty local hash set,
+    decides every item is new, and resubmits items the suite already holds.
     """
+    existing_content = {"question": "already in the suite"}
     mock_rest_client = _find_datasets_returning(
-        [_backend_dataset("my-suite", "evaluation_suite", items_total=25)]
+        [_backend_dataset("my-suite", "evaluation_suite", items_total=1)]
     )
 
     suites = rest_operations.get_test_suites(
         project_name="Test project",
         rest_client=mock_rest_client,
     )
-
     assert len(suites) == 1
-    assert not suites[0]._dataset.__internal_api__hashes_synced__, (
-        "A suite listed from the backend has items we have not hashed locally, "
-        "so the first insert must sync before deduplicating"
+
+    backend_item = rest_dataset_item.DatasetItem(
+        id="existing-item-id", source="sdk", data=existing_content
+    )
+    with patch(
+        "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
+        side_effect=[[backend_item], []],
+    ):
+        suites[0].insert(
+            [
+                {"data": existing_content},
+                {"data": {"question": "brand new"}},
+            ]
+        )
+
+    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+    submitted = [
+        item
+        for call in create_or_update.call_args_list
+        for item in call.kwargs["items"]
+    ]
+
+    assert [item.data for item in submitted] == [{"question": "brand new"}], (
+        "The item the suite already holds must be recognised as a duplicate and "
+        "left out of the batch"
     )
 
 

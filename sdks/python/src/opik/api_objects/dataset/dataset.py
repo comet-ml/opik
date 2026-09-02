@@ -745,6 +745,13 @@ class Dataset(DatasetExportOperations):
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
 
+        # Gated here rather than in `insert` so every caller of this funnel is
+        # covered: older backends race on concurrent batches that share a
+        # batch_group_id, and a direct caller asking for workers must not be
+        # able to skip that check.
+        if num_threads > 1 and not self._parallel_insert_supported:
+            num_threads = 1
+
         if deduplication:
             items_to_send = self._deduplicate(items)
         else:
@@ -797,12 +804,9 @@ class Dataset(DatasetExportOperations):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
-        # Checked before the version probe below so bad input costs no request.
+        # Checked here too so bad input raises before any item is converted.
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
-
-        if num_threads > 1 and not self._parallel_insert_supported:
-            num_threads = 1
 
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)

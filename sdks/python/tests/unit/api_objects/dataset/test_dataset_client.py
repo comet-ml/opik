@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from opik.api_objects import constants
+from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
 
 
@@ -566,14 +567,29 @@ def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
         rest_client=mock_rest_client,
     )
 
+    # Spying on the upload layer keeps the assertion on the worker count that
+    # actually reached it, so a gate that stops honouring the probe still fails
+    # this test.
+    workers_per_insert = []
+    original_send = Dataset._send_batches
+
+    def spy_send_batches(self, batches, batch_group_id, num_threads):
+        workers_per_insert.append(num_threads)
+        return original_send(self, batches, batch_group_id, num_threads)
+
+    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+
     dataset.insert(_make_items(4), deduplication=False)
     dataset.insert(_make_items(4), deduplication=False)
 
     assert mock_rest_client.version.call_count == 2, (
         "The failed probe must be retried rather than cached as unsupported"
     )
-    assert dataset._parallel_insert_supported, (
-        "Once the backend answers, parallel upload must be available again"
+    assert workers_per_insert[0] == 1, (
+        "While the backend is unreachable the upload must stay sequential"
+    )
+    assert workers_per_insert[1] > 1, (
+        "Once the backend answers, the upload must go back to using workers"
     )
 
 
@@ -593,6 +609,37 @@ def test_insert__unparseable_version__probed_once(monkeypatch):
 
     assert mock_rest_client.version.call_count == 1, (
         "A version the SDK cannot parse will not change, so it must not be re-probed"
+    )
+
+
+def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
+    """The gate lives in the funnel, so a direct caller cannot skip it."""
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = _mock_rest_client("2.2.7")
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    used_workers = []
+    monkeypatch.setattr(
+        Dataset,
+        "_send_batches",
+        lambda self, batches, batch_group_id, num_threads: used_workers.append(
+            num_threads
+        ),
+    )
+
+    dataset.__internal_api__insert_items_as_dataclasses__(
+        [dataset_item.DatasetItem(**item) for item in _make_items(4)],
+        num_threads=4,
+    )
+
+    assert used_workers == [1], (
+        "A backend that predates parallel insert must force a sequential upload "
+        "even when the internal API is called directly"
     )
 
 
