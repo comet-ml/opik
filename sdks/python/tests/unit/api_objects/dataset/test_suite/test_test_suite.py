@@ -147,6 +147,22 @@ class TestEvaluatorValidation:
         assert len(item.evaluators) == 1
         assert item.evaluators[0].type == "llm_judge"
 
+    @pytest.mark.parametrize("deduplication", [True, False])
+    def test_insert__deduplication_flag__forwarded_to_the_dataset(self, deduplication):
+        mock_dataset = _create_mock_dataset()
+        suite = test_suite.TestSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        suite.insert(
+            [{"data": {"input": "test"}}],
+            deduplication=deduplication,
+        )
+
+        call_args = mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args
+        assert call_args[1]["deduplication"] is deduplication
+
     def test_resolve_evaluators__with_both_assertions_and_evaluators__raises_value_error(
         self,
     ):
