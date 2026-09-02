@@ -805,6 +805,10 @@ class Dataset(DatasetExportOperations):
                 batches that already succeeded stay persisted. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, or
+                ``deduplication`` is not a bool.
         """
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
