@@ -59,6 +59,7 @@ import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.WINDOW_IN_SECONDS_CONFIG_KEY;
 
 /**
  * Scheduled job for processing metrics-based alerts.
@@ -427,9 +428,12 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
 
         var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
         if (windowString == null) {
+            windowString = config.configValue().get(WINDOW_IN_SECONDS_CONFIG_KEY);
+        }
+        if (windowString == null) {
             throw new IllegalArgumentException(
-                    "Missing config value for key '%s' in trigger of type '%s'"
-                            .formatted(WINDOW_CONFIG_KEY, thresholdConfigType));
+                    "Missing config value for key '%s' or '%s' in trigger of type '%s'"
+                            .formatted(WINDOW_CONFIG_KEY, WINDOW_IN_SECONDS_CONFIG_KEY, thresholdConfigType));
         }
         long windowSeconds = Long.parseLong(windowString);
 
