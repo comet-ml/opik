@@ -32,7 +32,7 @@
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
         <redisson.version>4.7.0</redisson.version>
-        <opentelmetry.version>2.30.0</opentelmetry.version>
+        <opentelmetry.version>2.31.1-alpha</opentelmetry.version>
         <aws.java.sdk.version>2.54.2</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
         <jackson-jq.version>1.6.1</jackson-jq.version>
@@ -122,7 +122,7 @@
         <dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-r2dbc-1.0</artifactId>
-            <version>${opentelmetry.version}-alpha</version>
+            <version>${opentelmetry.version}</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
