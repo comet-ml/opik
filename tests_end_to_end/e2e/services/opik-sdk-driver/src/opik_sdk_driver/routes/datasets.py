@@ -7,6 +7,8 @@ from ..schemas import (
     DatasetCreate,
     DatasetInsertItemsRequest,
     DatasetInsertItemsResponse,
+    DatasetInsertItemsSessionRequest,
+    DatasetInsertItemsSessionResponse,
     DatasetResponse,
 )
 
@@ -60,10 +62,51 @@ def insert_dataset_items(
         dataset = client.get_dataset(
             name=body.dataset_name, project_name=body.project_name
         )
-        dataset.insert(body.items, num_threads=body.num_threads)
+        dataset.insert(
+            body.items,
+            num_threads=body.num_threads,
+            deduplication=body.deduplication,
+        )
         dataset_id = str(dataset.id)
     finally:
         client.end(flush=True)
         atexit.unregister(client.end)
 
     return DatasetInsertItemsResponse(dataset_id=dataset_id, inserted=len(body.items))
+
+
+@router.post(
+    "/insert-items-session",
+    response_model=DatasetInsertItemsSessionResponse,
+    status_code=200,
+)
+def insert_dataset_items_session(
+    body: DatasetInsertItemsSessionRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> DatasetInsertItemsSessionResponse:
+    """Run several `Dataset.insert(...)` calls against ONE `Dataset` object.
+
+    Same per-call semantics as `/insert-items` — one insert, one version — but
+    the object (and therefore its local content-hash cache) survives across the
+    whole sequence, so a caller can exercise how one insert affects the next.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        dataset = client.get_dataset(
+            name=body.dataset_name, project_name=body.project_name
+        )
+        for call in body.inserts:
+            dataset.insert(
+                call.items,
+                num_threads=call.num_threads,
+                deduplication=call.deduplication,
+            )
+        dataset_id = str(dataset.id)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return DatasetInsertItemsSessionResponse(
+        dataset_id=dataset_id,
+        inserted=[len(call.items) for call in body.inserts],
+    )
