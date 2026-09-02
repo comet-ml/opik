@@ -13,6 +13,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
@@ -276,6 +278,23 @@ class ExperimentMessageRendererTest {
 
             assertThat(request.customParameters())
                     .isEqualTo(Map.of("thinking", Map.of("level", "high")));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"[1, 2]", "\"text\"", "5", "true", "null"})
+        @DisplayName("should ignore custom_parameters of any non-object shape rather than failing")
+        void ignoreEveryNonObjectCustomParameterShape(String json) {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "gemini-2.5-flash-lite", messages,
+                    Map.of("custom_parameters", JsonUtils.getJsonNodeFromString(json)), null);
+
+            assertThat(renderer.buildChatCompletionRequest(prompt, messages).customParameters()).isNull();
         }
 
         @Test

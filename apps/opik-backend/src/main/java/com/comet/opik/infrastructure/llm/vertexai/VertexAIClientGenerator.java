@@ -138,7 +138,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         var thinkingConfig = GenerationConfig.ThinkingConfig.newBuilder();
 
         Optional.ofNullable(params.budgetForLevel()).ifPresent(thinkingConfig::setThinkingBudget);
-        Optional.ofNullable(params.includeThoughts()).ifPresent(thinkingConfig::setIncludeThoughts);
+        // include_thoughts is deliberately not forwarded here either. Nothing on the Vertex path
+        // filters thought parts: langchain4j builds the answer from ResponseHandler.getText(), which
+        // concatenates every part with no thought check and has no returnThinking equivalent. Asking
+        // for thoughts would prepend the reasoning trace to the answer, and on the judge path that
+        // breaks the JSON parse in OnlineScoringEngine, yielding no scores at all.
 
         return Optional.of(thinkingConfig.build());
     }

@@ -150,6 +150,12 @@ class GeminiThinkingParamsTest {
         }
 
         @Test
+        @DisplayName("an explicit zero budget wins over the level, rather than reading as absent")
+        void explicitZeroBudgetWinsOverLevel() {
+            assertThat(new GeminiThinkingParams(Level.HIGH, 0, null).budgetForLevel()).isZero();
+        }
+
+        @Test
         void explicitBudgetWinsOverLevel() {
             assertThat(new GeminiThinkingParams(Level.HIGH, 1234, null).budgetForLevel()).isEqualTo(1234);
         }

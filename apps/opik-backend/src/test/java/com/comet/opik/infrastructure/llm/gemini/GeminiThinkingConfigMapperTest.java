@@ -53,12 +53,15 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
-    void forwardsExplicitBudgetAndIncludeThoughts() {
+    @DisplayName("an explicit budget is forwarded, but include_thoughts is not: the thoughts would be dropped")
+    void forwardsExplicitBudgetButNotIncludeThoughts() {
         var config = GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3, new GeminiThinkingParams(null, 4096, true));
 
         assertThat(config).isPresent();
         assertThat(config.get().thinkingBudget()).isEqualTo(4096);
-        assertThat(config.get().includeThoughts()).isTrue();
+        // returnThinking is pinned FALSE on the model, so requesting thoughts would bill for tokens
+        // that langchain4j then discards.
+        assertThat(config.get().includeThoughts()).isNull();
     }
 
     @Test

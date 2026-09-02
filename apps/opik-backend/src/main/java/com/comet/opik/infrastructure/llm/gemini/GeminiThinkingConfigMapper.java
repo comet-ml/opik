@@ -29,9 +29,13 @@ class GeminiThinkingConfigMapper {
             return Optional.empty();
         }
 
-        // Gemini 3+ cannot disable thinking and does not accept a budget, so an "off" level there is
-        // better ignored than translated into a zero budget the API would reject. The UI never offers
-        // "off" for those models, but the judge path takes custom_parameters verbatim from the API.
+        // Gemini 3+ cannot disable thinking, so an "off" level there is meaningless: prefer sending no
+        // thinking config over a zero budget that claims something the model will not honour. The UI
+        // never offers "off" for those models, but the judge path takes custom_parameters verbatim.
+        //
+        // Note this is about "off" specifically, not budgets in general — a Gemini 3 model does accept
+        // thinking_budget (verified live on both providers), which is what the Vertex path relies on
+        // since its protobuf has no level field.
         if (params.level() == Level.OFF && GeminiThinkingParams.modelAcceptsLevel(model)) {
             return Optional.empty();
         }
@@ -49,7 +53,11 @@ class GeminiThinkingConfigMapper {
             Optional.ofNullable(params.budgetForLevel()).ifPresent(builder::thinkingBudget);
         }
 
-        Optional.ofNullable(params.includeThoughts()).ifPresent(builder::includeThoughts);
+        // include_thoughts is deliberately not forwarded. returnThinking is pinned to FALSE above this
+        // mapper (Gemma 4 returns thought parts unconditionally and they would otherwise be
+        // concatenated into the answer), and langchain4j's PartsAndContentsMapper drops thought parts
+        // outright at FALSE — so asking the API for them would bill thinking tokens and return
+        // nothing. Wire it up only alongside a way to surface the thoughts.
 
         return Optional.of(builder.build());
     }
