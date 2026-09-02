@@ -13,10 +13,18 @@ import { LogsPage } from '@e2e/pom/logs.page';
  * other windowed read is a 24-hour window — so a wrapped bound left the suite
  * green.
  *
- * Both surfaces on purpose. The API half is the bound itself, read at exactly
- * the ages that discriminate. The UI half is the symptom a user would have
- * seen: an epoch-week trace surfacing in a "last 30 days" Logs view, which is
- * the latent false positive the fix removes.
+ * Both surfaces on purpose, but they carry different weight. The API half is
+ * the bound itself, read at exactly the ages that discriminate: those steps
+ * fail against the wrapped expression and pass against the Date32 one.
+ *
+ * The UI half does NOT discriminate the fix, and does not claim to. Every Logs
+ * date range sends a `from_time` — the default preset is `past30days`, and even
+ * `alltime` reaches only five years back while the picker clamps to one year —
+ * which the read applies as `id >= :uuid_from_time` before the week predicate.
+ * An epoch-week id fails that id-range bound with or without the fix, so the
+ * table assertion below would pass either way. It is a default-range smoke
+ * check: the epoch row stays out of the view a user actually sees, and the
+ * panel step proves the row existed to be excluded rather than never seeded.
  *
  * Deterministic despite naming a week: the ids are minted, not clocked, and
  * every bound below is either far outside any plausible run week or derived
@@ -64,13 +72,15 @@ test.describe('Trace id time window — CUJ', { tag: ['@t2-cuj', '@area:traces']
 
     const logs = new LogsPage(page);
 
-    await test.step('The Logs table on its default range lists only the present-day trace', async () => {
+    await test.step('Smoke: the Logs table on its default range lists only the present-day trace', async () => {
       await logs.goto(project.id);
       await logs.waitForReady();
 
       await expect(logs.traceRow(present.id)).toBeVisible();
-      // The false positive the fix removes: wrapped to 2149-06-06, the epoch
-      // row satisfied a "past 30 days" lower bound and rendered here.
+      // Not a regression gate: the default range's `from_time` becomes an
+      // `id >= :uuid_from_time` bound that excludes an epoch-week id whether or
+      // not the week expression wraps. Asserted because it is the view a user
+      // sees, not because it distinguishes the fix.
       await expect(logs.traceRow(epoch.id)).toHaveCount(0);
       await expect(logs.traceRows).toHaveCount(1);
       expect(await logs.countTraces()).toBe(1);
@@ -81,8 +91,8 @@ test.describe('Trace id time window — CUJ', { tag: ['@t2-cuj', '@area:traces']
       await panel.waitForFullyLoaded();
 
       // Without this the step above would pass just as well if the seed had
-      // never landed: the row exists and renders its payload, and only the
-      // window excludes it.
+      // never landed: the row exists and renders its payload, so its absence
+      // from the table above is an exclusion rather than a missing seed.
       await expect(panel.traceNameInHeader(epoch.name)).toBeVisible();
       await expect(panel.inputValue(epoch.input)).toBeVisible();
       await expect(panel.outputValue(epoch.output)).toBeVisible();

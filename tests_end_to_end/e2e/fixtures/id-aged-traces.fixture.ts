@@ -1,3 +1,4 @@
+import type { TestInfo } from '@playwright/test';
 import { test as baseTest } from './dashboard-cleanup.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type BackendClient } from '../core/backend';
@@ -60,6 +61,31 @@ const FAR_FUTURE_MOMENT = new Date(Date.UTC(2201, 0, 15));
 const READABLE_TIMEOUT_MS = 30_000;
 const READABLE_POLL_MS = 500;
 
+/**
+ * Reject-mode UUID validation refuses the ids these specs exist to seed.
+ *
+ * `UuidV7TimestampValidator` bounds an ingested id's embedded timestamp to
+ * `[now - window, now + window]` and answers 400 when `uuidValidation.enabled=true`
+ * and `auditOnly=false`. It ships disabled, so the default install seeds fine —
+ * but the mode is not readable from the client, so it is detected from the
+ * rejection rather than checked up front. Without this the whole spec fails as
+ * an opaque 400 from a seed helper, which reads as a product bug instead of an
+ * environment the spec cannot run in.
+ *
+ * Matched on the `message` field, not the `too_old` / `too_far_future` reason:
+ * the reason lives in the response's `details`, which `rawFetch` drops when it
+ * narrows the body to `message`. Verified against a reject-mode backend.
+ */
+function isUuidWindowRejection(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('Invalid UUID for id');
+}
+
+const UUID_VALIDATION_SKIP_REASON =
+  'this env runs UUID timestamp validation in reject mode (UUID_VALIDATION_ENABLED=true, ' +
+  'auditOnly=false), which refuses the out-of-window ids these specs seed — set auditOnly=true ' +
+  'or disable validation to run them';
+
 async function seedAgedTrace(
   backendClient: BackendClient,
   projectName: string,
@@ -120,7 +146,11 @@ async function assertSeedIsReady(
   const pending = new Map(traces.map((t) => [t.id, t.name]));
   while (pending.size > 0 && Date.now() - start < READABLE_TIMEOUT_MS) {
     for (const [id] of pending) {
-      if ((await backendClient.getTracePayload(id)) !== null) pending.delete(id);
+      // Require the row to identify itself: a 200 that came back without an id
+      // is not the seed being readable, and treating it as ready would let the
+      // spec assert against a row that may not be there yet.
+      const payload = await backendClient.getTracePayload(id);
+      if (payload !== null && payload.id === id) pending.delete(id);
     }
     if (pending.size > 0) await new Promise((r) => setTimeout(r, READABLE_POLL_MS));
   }
@@ -142,77 +172,105 @@ async function deleteSeeded(
   backendClient: BackendClient,
   traces: IdAgedTraceRef[],
 ): Promise<void> {
+  // Explicit: deleting the project does not take its traces with it, and
+  // global-teardown's run-prefix sweep does not know about traces at all.
   try {
-    // Explicit: deleting the project does not take its traces with it, and
-    // global-teardown's run-prefix sweep does not know about traces at all.
     await backendClient.deleteTraces(traces.map((t) => t.id));
+    return;
   } catch (err) {
-    console.warn('[idAgedTraces fixture] trace delete warning:', err);
+    console.warn('[idAgedTraces fixture] batch trace delete failed, retrying per id:', err);
+  }
+
+  // The batch is one request, so one bad id loses every other trace with it.
+  // Retry individually rather than leaving rows behind, and never throw:
+  // a cleanup failure must not replace the test's own error.
+  for (const trace of traces) {
+    try {
+      await backendClient.deleteTraces([trace.id]);
+    } catch (err) {
+      console.warn(`[idAgedTraces fixture] could not delete ${trace.name}:`, err);
+    }
+  }
+}
+
+/**
+ * The seed → readiness → attach → use → cleanup lifecycle both fixtures share.
+ *
+ * Registers each trace in `seeded` as soon as it is created, and cleans up in a
+ * `finally`, so a rejection from a later seed or a readiness timeout still
+ * deletes the rows already written. Registering only after the whole setup
+ * succeeded would orphan them, and a leaked trace poisons the empty-state
+ * assertions of whatever runs next in the project.
+ */
+async function withSeededTraces<T>(
+  backendClient: BackendClient,
+  projectName: string,
+  namespace: string,
+  testInfo: TestInfo,
+  attachmentName: string,
+  labelledMoments: ReadonlyArray<readonly [label: string, idMoment: Date]>,
+  shape: (refs: IdAgedTraceRef[]) => T,
+  use: (value: T) => Promise<void>,
+): Promise<void> {
+  const seeded: IdAgedTraceRef[] = [];
+  try {
+    for (const [label, idMoment] of labelledMoments) {
+      try {
+        seeded.push(
+          await seedAgedTrace(backendClient, projectName, namespace, label, idMoment),
+        );
+      } catch (err) {
+        if (isUuidWindowRejection(err)) baseTest.skip(true, UUID_VALIDATION_SKIP_REASON);
+        throw err;
+      }
+    }
+    await assertSeedIsReady(backendClient, seeded);
+
+    await testInfo.attach(attachmentName, {
+      body: JSON.stringify(seeded, null, 2),
+      contentType: 'application/json',
+    });
+
+    await use(shape(seeded));
+  } finally {
+    if (!shouldLeaveArtifacts(testInfo) && seeded.length > 0) {
+      await deleteSeeded(backendClient, seeded);
+    }
   }
 }
 
 export const test = baseTest.extend<IdAgedTracesFixtures>({
   epochWindowTraces: async ({ backendClient, project, testNamespace }, use, testInfo) => {
-    const epoch = await seedAgedTrace(
+    await withSeededTraces(
       backendClient,
       project.name,
       testNamespace,
-      'epoch',
-      EPOCH_WEEK_MOMENT,
+      testInfo,
+      'opik.epochWindowTraces',
+      [
+        ['epoch', EPOCH_WEEK_MOMENT],
+        ['present', new Date()],
+      ],
+      ([epoch, present]) => ({ epoch, present }),
+      use,
     );
-    const present = await seedAgedTrace(
-      backendClient,
-      project.name,
-      testNamespace,
-      'present',
-      new Date(),
-    );
-    const seeded = [epoch, present];
-    await assertSeedIsReady(backendClient, seeded);
-
-    await testInfo.attach('opik.epochWindowTraces', {
-      body: JSON.stringify(seeded, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use({ epoch, present });
-
-    if (!shouldLeaveArtifacts(testInfo)) await deleteSeeded(backendClient, seeded);
   },
 
   idAgedTraces: async ({ backendClient, project, testNamespace }, use, testInfo) => {
-    const epoch = await seedAgedTrace(
+    await withSeededTraces(
       backendClient,
       project.name,
       testNamespace,
-      'epoch',
-      EPOCH_WEEK_MOMENT,
+      testInfo,
+      'opik.idAgedTraces',
+      [
+        ['epoch', EPOCH_WEEK_MOMENT],
+        ['present', new Date()],
+        ['far-future', FAR_FUTURE_MOMENT],
+      ],
+      ([epoch, present, farFuture]) => ({ epoch, present, farFuture }),
+      use,
     );
-    const present = await seedAgedTrace(
-      backendClient,
-      project.name,
-      testNamespace,
-      'present',
-      new Date(),
-    );
-    const farFuture = await seedAgedTrace(
-      backendClient,
-      project.name,
-      testNamespace,
-      'far-future',
-      FAR_FUTURE_MOMENT,
-    );
-    const seeded = [epoch, present, farFuture];
-    await assertSeedIsReady(backendClient, seeded);
-
-    await testInfo.attach('opik.idAgedTraces', {
-      body: JSON.stringify(seeded, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use({ epoch, present, farFuture });
-
-    if (!shouldLeaveArtifacts(testInfo)) await deleteSeeded(backendClient, seeded);
   },
 });
 
