@@ -621,8 +621,20 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     string,
     unknown
   >;
+  // Strip the persisted `thinking` when the form is putting one back, and also when the form held a
+  // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
+  // to go, which is what the level check above is for.
+  //
+  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
+  // level of its own here", not "delete whatever else was in there": budget_tokens and
+  // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
+  // this same key for extended thinking.
+  const formRejectedItsLevel =
+    thinkingLevel != null &&
+    thinkingLevel !== "auto" &&
+    !thinkingCustomParameters;
   const otherCustomParameters =
-    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0
+    thinkingCustomParameters || formRejectedItsLevel
       ? omit(persistedCustomParameters, "thinking")
       : persistedCustomParameters;
 

@@ -823,6 +823,26 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toEqual({ thinking: { level: "medium" } });
   });
 
+  // A caller that persists the sanitized output and feeds it back has no flat thinkingLevel — the
+  // optimizer reloads a saved run's parameters blob wholesale. Substituting the model default there
+  // silently reset the user's saved choice on every re-run.
+  it("honours a level already nested under custom_parameters", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, {
+        custom_parameters: { thinking: { level: "low" } },
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "low" } });
+  });
+
+  it("prefers the flat level over a nested one", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, {
+        thinkingLevel: "high",
+        custom_parameters: { thinking: { level: "low" } },
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "high" } });
+  });
+
   it("adds no thinking block for models without a level control", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, {

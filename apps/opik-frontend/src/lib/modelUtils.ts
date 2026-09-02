@@ -504,7 +504,17 @@ export const sanitizeConfigForRequest = (
     // before the control existed) and a config holding a level this model does not offer (carried over
     // from another model outside the reconciler). Either way the dropdown displays the default, so the
     // request has to send it rather than nothing.
-    const stored = sanitized.thinkingLevel as GeminiThinkingLevel | undefined;
+    // A level already nested under custom_parameters counts as stored. Callers that persist the
+    // sanitized output and feed it back — the optimizer form reloads a saved run's `parameters`
+    // blob wholesale — have no flat thinkingLevel to offer, and substituting the model default
+    // there would silently reset the user's saved choice on every re-run.
+    const nested = (
+      (sanitized.custom_parameters as Record<string, unknown> | undefined)
+        ?.thinking as Record<string, unknown> | undefined
+    )?.level;
+    const stored = (sanitized.thinkingLevel ?? nested) as
+      | GeminiThinkingLevel
+      | undefined;
     const level = (
       stored != null && thinkingLevelOptions.some((o) => o.value === stored)
         ? stored

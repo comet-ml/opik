@@ -79,6 +79,26 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
+  // A Gemini model whose default level is "auto" contributes no thinking block of its own, so the
+  // persisted one must be carried through rather than deleted — budget_tokens and include_thoughts
+  // are not represented in the form.
+  it("keeps a persisted thinking block when the level resolves to auto", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: {
+          thinking: { budget_tokens: 4096, include_thoughts: true },
+          unrelated: "keep",
+        },
+      }),
+    );
+
+    expect(object.model.custom_parameters).toEqual({
+      thinking: { budget_tokens: 4096, include_thoughts: true },
+      unrelated: "keep",
+    });
+  });
+
   // "off" is the exception: a persisted budget would outrank it server-side and leave thinking on.
   it("clears a persisted budget when the level is off", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
