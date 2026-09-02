@@ -748,6 +748,41 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     },
 
+    /**
+     * One `PUT /v1/private/datasets/items` batch, with explicit control over
+     * `batch_group_id` — the field that decides whether the write commits a new
+     * dataset version (grouped: every batch sharing an id collapses into one)
+     * or mutates the latest version in place (ungrouped, `batch_group_id`
+     * omitted).
+     *
+     * Not reachable through the SDK bridge, which is why this exists alongside
+     * `sdkClient.python.insertDatasetItems`. `Dataset.insert()` mints its own
+     * batch_group_id per call, so the ungrouped mutate-latest path cannot be
+     * driven through it at all; and it drops duplicate entries by content hash
+     * before batching, so a batch carrying the same item id twice never reaches
+     * the endpoint. Both are exactly what the version-counter specs seed.
+     *
+     * Item ids are caller-supplied and must be UUIDv7 (`uuid7()`) — the backend
+     * rejects any other version, and the endpoint answers 204 with no body, so
+     * a test asserting on which rows were stored has to mint them up front.
+     */
+    async writeDatasetItemsBatch(args: {
+      datasetId: string;
+      items: Array<{ id: string; data: Record<string, unknown> }>;
+      /** Omit for the mutate-latest path; the backend reads null as "no group". */
+      batchGroupId?: string;
+    }): Promise<void> {
+      await opik.api.datasets.createOrUpdateDatasetItems({
+        datasetId: args.datasetId,
+        items: args.items.map((item) => ({
+          id: item.id,
+          source: 'manual' as const,
+          data: item.data,
+        })),
+        ...(args.batchGroupId ? { batchGroupId: args.batchGroupId } : {}),
+      });
+    },
+
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
       const page = await opik.api.datasets.getDatasetItems(datasetId);
       const content = page.content ?? [];

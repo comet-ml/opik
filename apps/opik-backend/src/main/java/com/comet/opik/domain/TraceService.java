@@ -537,9 +537,12 @@ class TraceServiceImpl implements TraceService {
      * Resolves every owning project for each id: a bounded fast pass, then an unbounded pass over only the ids the
      * bounded one leaves unresolved. Returns id -> owning projects; ids absent from the result have no live row.
      * <p>
-     * The bounded pass's {@code toMonday(id_at)} window can miss a row whose {@code id_at} is not monotonic in its id
-     * (e.g. a wrapped timestamp, OPIK-7456), so the unbounded pass re-resolves the miss set - the bounded query is
-     * never a delete's sole resolver. The resolver-query javadocs cover how each pass prunes.
+     * The bounded pass's week window can miss a row whose week {@link com.comet.opik.utils.WeeklyPartitions#of}
+     * cannot derive exactly — an id at or past the end of {@code DateTime64}'s range, where {@code id_at} saturates
+     * to {@code 2299-12-31} whatever the real week — so the unbounded pass re-resolves the miss set and the bounded
+     * query is never a delete's sole resolver. A far-future timestamp short of that ceiling is no longer such a case:
+     * since OPIK-7456 both sides of the window are Date32 and the fast pass resolves it. The resolver-query javadocs
+     * cover how each pass prunes.
      */
     private Mono<Map<UUID, Set<UUID>>> resolveOwningProjects(Set<UUID> ids) {
         return dao.getAllProjectIdsByTraceIdsBounded(ids)
