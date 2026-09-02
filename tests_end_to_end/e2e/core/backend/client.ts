@@ -166,6 +166,25 @@ export interface AutomationRuleLogRef {
 }
 
 /**
+ * One alert as `GET /v1/private/projects/{id}/alerts` returns it.
+ *
+ * `enabled` is the field the create form no longer exposes (the Enable alert
+ * switch is edit-only since OPIK-8198), so a new alert's enabled state comes
+ * entirely from the server default. Both `name` and `enabled` are therefore
+ * read strictly: the generated REST shape marks them optional, and defaulting
+ * a missing `enabled` to `true` would produce exactly the value the assertion
+ * is trying to prove the server really sent.
+ */
+export interface AlertRef {
+  id: string;
+  name: string;
+  enabled: boolean;
+  webhookUrl: string;
+  /** `event_type` of each trigger, e.g. `trace:errors`, in the order returned. */
+  triggerEventTypes: string[];
+}
+
+/**
  * A trace `input`/`output`/`metadata` payload as the REST API accepts it.
  *
  * The endpoint stores a bare `JsonNode`, so a scalar, an array and an object
@@ -392,6 +411,41 @@ function toMetricSeries(json: unknown): MetricSeries[] {
       value: p.value ?? null,
     })),
   }));
+}
+
+/**
+ * Map one raw alert payload onto `AlertRef`, refusing to invent values.
+ *
+ * `name` and `enabled` are the two fields the alert specs assert on, and both
+ * are the sort a `?? ''` / `?? true` fallback would quietly fabricate — an
+ * absent `enabled` defaulted to `true` is indistinguishable from a server that
+ * really did default the alert to enabled, which is the whole assertion. Throw
+ * instead, naming `where` so the failure says which read produced it.
+ */
+function toAlertRef(raw: unknown, where: string): AlertRef {
+  const alert = raw as {
+    id?: string;
+    name?: string;
+    enabled?: boolean;
+    webhook?: { url?: string };
+    triggers?: Array<{ event_type?: string }>;
+  } | null;
+  if (!alert || typeof alert.id !== 'string') {
+    throw new Error(`toAlertRef (${where}): payload carried no alert id`);
+  }
+  if (typeof alert.name !== 'string') {
+    throw new Error(`toAlertRef (${where}): alert ${alert.id} returned no name`);
+  }
+  if (typeof alert.enabled !== 'boolean') {
+    throw new Error(`toAlertRef (${where}): alert ${alert.id} returned no enabled flag`);
+  }
+  return {
+    id: alert.id,
+    name: alert.name,
+    enabled: alert.enabled,
+    webhookUrl: String(alert.webhook?.url ?? ''),
+    triggerEventTypes: (alert.triggers ?? []).map((t) => String(t.event_type ?? '')),
+  };
 }
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
@@ -1497,6 +1551,43 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         level: String(item.level ?? ''),
         message: String(item.message ?? ''),
       }));
+    },
+
+    /**
+     * The alerts scoped to one project — the exact read the alert form itself
+     * issues (`useProjectAlertsList`).
+     *
+     * Raw fetch rather than `opik.api.alerts.findAlerts`: the typed call is
+     * workspace-wide with no project filter, so it would answer with every
+     * alert every parallel worker has created. Project scope is what makes an
+     * assertion about "the alert this test just saved" mean anything.
+     */
+    async listAlertsForProject(projectId: string): Promise<AlertRef[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/projects/${projectId}/alerts`,
+        { query: new URLSearchParams({ size: '100', page: '1' }) },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listAlertsForProject: ${projectId} answered ${status}: ${message}`,
+        );
+      }
+      const page = json as { content?: unknown[] };
+      return (page.content ?? []).map((raw) => toAlertRef(raw, projectId));
+    },
+
+    /** One alert by id. 404s surface as `null` so a delete can be asserted. */
+    async getAlert(alertId: string): Promise<AlertRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/alerts/${alertId}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`getAlert: ${alertId} answered ${status}: ${message}`);
+      }
+      return toAlertRef(json, alertId);
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {

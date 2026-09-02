@@ -1,4 +1,4 @@
-export { test, expect } from './dashboard-cleanup.fixture';
+export { test, expect } from './alert-cleanup.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -105,4 +105,5 @@ export type {
   TraceAttachmentsFixtures,
 } from './trace-attachments.fixture';
 export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type { AlertCleanupFixtures } from './alert-cleanup.fixture';
 export type { ProjectRef } from '../core/backend';

@@ -34,7 +34,10 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({
   isPending,
 }) => {
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4"
+      data-testid="alert-webhook-settings-section"
+    >
       <div className="flex flex-col gap-1">
         <h3 className="comet-body-accented">Webhook settings</h3>
         <Description>
@@ -112,6 +115,7 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({
               </div>
               <FormControl>
                 <Input
+                  data-testid="alert-webhook-url-input"
                   className={cn({
                     "border-destructive": Boolean(validationErrors?.message),
                   })}

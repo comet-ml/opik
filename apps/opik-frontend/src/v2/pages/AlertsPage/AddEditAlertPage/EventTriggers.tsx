@@ -266,7 +266,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   }, [isGuardrailsEnabled]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" data-testid="alert-triggers-section">
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <h3 className="comet-body-accented">Triggers</h3>

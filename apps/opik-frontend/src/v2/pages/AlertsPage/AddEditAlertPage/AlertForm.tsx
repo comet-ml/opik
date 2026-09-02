@@ -249,6 +249,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
                     <Label>Name</Label>
                     <FormControl>
                       <Input
+                        data-testid="alert-name-input"
                         className={cn({
                           "border-destructive": Boolean(
                             validationErrors?.message,

@@ -25,6 +25,7 @@ export {
   type AutomationRuleRef,
   type AutomationRuleDetail,
   type AutomationRuleLogRef,
+  type AlertRef,
   type TraceJsonSection,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,

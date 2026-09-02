@@ -677,15 +677,26 @@ areas:
     label: Alerts
     nav_group: Production
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
+    spec_dir: alerts
     specs:
+      - alerts/alert-name-from-triggers.spec.ts
+      - alerts/alert-enabled-on-create.spec.ts
+      - alerts/alert-webhook-test-validation.spec.ts
     capabilities:
       list-alerts:         { covered: false }
-      create-alert:        { covered: false }
+      create-alert:        { covered: true,  tier: t2-cuj, note: "create form -> GET /projects/{id}/alerts; covers the trigger-generated name (suggestion, +N more, typed name wins, cleared field regenerates) and the persisted name/triggers/webhook" }
       edit-alert:          { covered: false }
       event-triggers:      { covered: false }
       webhook-destination: { covered: false }
-      enable-disable:      { covered: false }
+      enable-disable:      { covered: true,  tier: t2-cuj, note: "no switch on the create form and the backend default is enabled: true; edit-form switch driven checked -> off and read back by id" }
       delete-alert:        { covered: false }
+      # Deliberately still false. alert-webhook-test-validation.spec.ts asserts
+      # the PRE-FLIGHT half of this capability — that Test connection / Test
+      # trigger refuse a blank or malformed Endpoint URL and issue no request —
+      # but never that a webhook test DELIVERS. Proving delivery needs an HTTP
+      # sink the Opik backend container can POST to, which the estate does not
+      # have. Flipping this on the validation half would read as "webhook
+      # testing is tested" for good, and nobody re-derives a covered capability.
       test-alert:          { covered: false }
 
   # ===================== ASSISTANT / CONNECT =====================
