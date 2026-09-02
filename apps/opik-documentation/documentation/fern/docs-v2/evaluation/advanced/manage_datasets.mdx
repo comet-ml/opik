@@ -277,12 +277,32 @@ dataset.insert([
 <Tip>
   Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you
   can insert the same item multiple times without duplicating it in the dataset. This combined with the `get or create
-  dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner.
+  dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner. It can be
+  turned off with `deduplication=False`, see [Disabling deduplication](#disabling-deduplication).
 </Tip>
+
+#### Disabling deduplication
+
+Deduplication requires the Python SDK to download the dataset's existing items once so it can compare their
+content hashes against the items you are inserting. On large datasets that download dominates the insert. If you
+already know your items are unique — for example when populating a fresh dataset, or when you generate ids
+yourself — pass `deduplication=False` to skip that work entirely: nothing is downloaded, no hashes are computed,
+and every item you pass is sent as-is.
+
+```python title="Python" language="python"
+dataset.insert(items, deduplication=False)
+```
+
+The flag is available on every Python SDK method that writes items — `insert`, `update`, `insert_from_json`,
+`insert_from_pandas` and `read_jsonl_from_file` — as well as on the equivalent `TestSuite` methods. With
+deduplication disabled, inserting the same content twice produces two separate dataset items.
 
 <Note>
   When using the SDK to insert items, a new dataset version is automatically created.
   If you insert items in multiple batches within a single `insert()` call, they are grouped into one version.
+  The Python SDK uploads those batches on 4 worker threads by default; use `num_threads=1` to upload them
+  sequentially instead. Parallel upload requires a recent Opik backend — against older ones the SDK falls back
+  to a sequential upload and logs a warning.
 </Note>
 
 Once the items have been inserted, you can view them in the Opik UI:
