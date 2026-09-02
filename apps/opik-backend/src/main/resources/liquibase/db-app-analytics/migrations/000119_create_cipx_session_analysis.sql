@@ -25,6 +25,6 @@ ENGINE = ReplicatedReplacingMergeTree(
     '{replica}',
     analyzed_at
 )
-ORDER BY (workspace_id, project_id, user_uuid, session_id);
+ORDER BY (workspace_id, project_id, session_id);
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}';
