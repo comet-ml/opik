@@ -276,10 +276,8 @@ SQL
 }
 
 # Patch the module's test-config.yml into a runtime config that works against
-# Opik's infra. Only two values aren't ${..}-overridable and need rewriting:
-#   - redisConfig.redisPass is hardcoded 'NA'; Opik's Redis needs 'opik'
-#   - the S3 endpoint port is hardcoded ':9000'; Opik's MinIO API is on
-#     ${MINIO_API_PORT} (the :9000 rewrite is scoped to MINIO_HOST lines)
+# Opik's infra. Only redisConfig.redisPass isn't ${..}-overridable: it is
+# hardcoded 'NA' and Opik's Redis needs 'opik'.
 # Everything else is env-substituted from start_platform_backend_local.
 generate_platform_backend_config() {
     local src="$COMET_BACKEND_PATH/comet-ml-react-webapp/src/test/resources/test-config.yml"
@@ -289,7 +287,6 @@ generate_platform_backend_config() {
     fi
     sed -E \
         -e 's/redisPass: NA/redisPass: opik/g' \
-        -e "/MINIO_HOST/ s/:9000/:${MINIO_API_PORT}/g" \
         "$src" > "$PLATFORM_BACKEND_CONFIG_FILE"
     log_debug "Generated EM backend config: $PLATFORM_BACKEND_CONFIG_FILE"
 }
@@ -340,7 +337,7 @@ start_platform_backend_local() {
         MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" MYSQL_DB=logger \
         MYSQL_RW_USER=user MYSQL_RO_USER=user-ro MYSQL_PASSWORD=pass \
         REDIS_HOST=localhost REDIS_PORT="$REDIS_PORT" REDIS_USER=default REDIS_TOKEN=opik \
-        MINIO_HOST=localhost MINIO_HOST_VIEW=localhost \
+        MINIO_HOST=localhost MINIO_HOST_VIEW=localhost MINIO_PORT="$MINIO_API_PORT" \
         CASSANDRA_ENABLED=false MPM_ENABLED=false \
         FORCE_FAIL_ON_TIMEZONE_MISMATCH=False \
         MYSQL_MIN_MAX_ALLOWED_PACKET_MB=3 \
