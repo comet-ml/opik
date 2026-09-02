@@ -374,9 +374,43 @@ Learn how to create custom conversation metrics in the [Custom Conversation Metr
 
 ## Using your custom metric in production
 
-Custom metrics are not limited to offline evaluation. Once a custom metric scores your production traces, you can also **alert** on it: Opik's feedback score alerts threshold on a score *name*, and any score logged to a project is eligible, whether Opik computed it or you did.
+Custom metrics are not limited to offline evaluation. Once a custom metric scores your production traces, you can monitor it in the Opik dashboard and set up [alerts](/production/alerts/alerts) on it, exactly like Opik's built-in metrics. Alerts threshold on a feedback score *name*, and any score logged to a project is eligible — Opik does not care which system produced it.
 
-You can either run your metric as a custom [online evaluation rule](/production/online-evaluation/rules), or keep the metric code in your own pipeline and push the score to the trace with `client.log_traces_feedback_scores(...)`. Either way, the score name becomes selectable when you configure a feedback score alert. See [Alerting on custom metrics](/production/alerts/alerts#alerting-on-custom-metrics).
+There are two ways to get your metric's scores onto production traces.
+
+### Run it as an online evaluation rule
+
+Custom LLM as a Judge and custom Python code metrics can run automatically against production traces and threads. Each writes a feedback score under the name you give the rule. See [Online evaluation rules](/production/online-evaluation/rules).
+
+### Score in your own pipeline and push the result
+
+Keep your metric code wherever you like — your application, a scheduled job, your CI — and attach the score to the trace, span or thread yourself:
+
+```python
+metric = MyCustomMetric()
+result = metric.score(input=..., output=...)
+
+client.log_traces_feedback_scores(
+    [{"id": trace_id, "name": "policy_compliance", "value": result.value, "reason": result.reason}]
+)
+```
+
+`log_spans_feedback_scores` and `log_threads_feedback_scores` do the same for spans and threads, and `opik_context.update_current_trace(feedback_scores=[...])` works inline inside a tracked function. From any other language, use the `PUT /v1/private/traces/feedback-scores` REST endpoint.
+
+Use this path when you want full control over the metric logic, the model it uses (if any), and its cost.
+
+### Alerting on the score
+
+Once scores are flowing, create an alert with the **Trace feedback score threshold** trigger (or **Thread feedback score threshold** for conversation-level metrics) and select your metric's name under **Feedback Score Name**.
+
+<Note>
+  A score name appears in the **Feedback Score Name** dropdown only after at least one score with that name has been logged to the project. If you have just defined a custom metric, log one score before creating the alert.
+</Note>
+
+Two things to keep in mind:
+
+- **The score must be attached to a trace, span or thread.** Metrics computed purely offline as part of an experiment (via `evaluate()`) cannot be thresholded — the only experiment-related alert event is `experiment:finished`, which reports completion and carries no threshold.
+- **Set the alert's time window wider than your scoring cadence.** Alerts compare the *average* score within the window, and a window containing no scores is skipped rather than fired. A nightly batch scoring job paired with a one-hour window will rarely fire.
 
 ## What's next
 

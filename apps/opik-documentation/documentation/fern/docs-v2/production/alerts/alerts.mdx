@@ -42,9 +42,15 @@ Opik provides three destination types for alerts:
    - Go to Configuration → Alerts tab
    - Click "Create new alert" button
 
-2. **Configure basic settings**
-   - **Name**: Give your alert a descriptive name (e.g., "Production Errors Slack")
-   - **Enable alert**: Toggle on to activate the alert immediately
+2. **Add triggers**
+   - Click "Add trigger" and tick one or more event types
+   - Configure project scope for observability events (optional)
+   - For threshold-based triggers (errors, cost, latency, feedback scores):
+     - **Threshold**: Set the threshold value that triggers the alert
+     - **Operator**: Choose comparison operator (`>`, `<`) for feedback score alerts
+     - **Window**: Pick the time window the metric is aggregated over
+     - **Feedback Score Name**: Select which feedback score to monitor (for feedback score alerts only). Any score logged to the project can be selected, including [custom metrics](/evaluation/metrics/custom_metric) you define yourself.
+   - Expand **Example payload** on a trigger to see the JSON it will send, and click **Test trigger** to send that payload to your endpoint
 
 3. **Configure webhook settings**
    - **Destination**: Select the alert destination type:
@@ -55,30 +61,21 @@ Opik provides three destination types for alerts:
      - For Slack: Use your Slack Incoming Webhook URL (e.g., `https://hooks.slack.com/services/...`)
      - For PagerDuty: Use your PagerDuty Events API v2 integration URL (e.g., `https://events.pagerduty.com/v2/enqueue`)
      - For General: Use any HTTP endpoint that can receive POST requests
+   - Click **Test connection**, next to the Endpoint URL field, to send a sample webhook and check the response status
 
 4. **Advanced webhook settings** (optional)
    - **Secret token**: Add a secret token to verify webhook authenticity (recommended for General destination)
    - **Custom headers**: Add HTTP headers for authentication or routing
      - Example: `X-Custom-Auth: Bearer your-token-here`
 
-5. **Add triggers**
-   - Click "Add trigger" to select event types
-   - Choose one or more event types from the list
-   - Configure project scope for observability events (optional)
-   - For threshold-based alerts (errors, cost, latency, feedback scores):
-     - **Threshold**: Set the threshold value that triggers the alert
-     - **Operator**: Choose comparison operator (`>`, `<`) for feedback score alerts
-     - **Window**: Configure the time window in seconds for metric aggregation
-     - **Feedback Score Name**: Select which feedback score to monitor (for feedback score alerts only). This list is not limited to Opik's built-in metrics — it contains every feedback score name logged to the project, so you can alert on your own custom metrics in exactly the same way. See [Alerting on custom metrics](#alerting-on-custom-metrics).
+5. **Name the alert**
+   - **Name**: Opik suggests a name from your first trigger as soon as you add one — for example `Trace errors > 5 in 5 mins`, or `Trace feedback score: policy_compliance < 0.8`. Additional triggers are summarised as `+N more`.
+   - Type your own name at any point to override the suggestion; clear the field to go back to the suggested one
 
-6. **Test your configuration**
-   - Click "Test connection" to send a sample webhook
-   - Verify your endpoint receives the test payload
-   - Check the response status in the Opik UI
-
-7. **Create the alert**
+6. **Create the alert**
    - Click "Create alert" to save your configuration
-   - The alert will start monitoring events immediately
+   - New alerts are enabled and start monitoring events immediately
+   - To pause an alert later, open it and switch off **Enable alert** at the bottom of the form
 
 ## Integration examples
 
@@ -107,11 +104,11 @@ Opik provides native Slack integration that automatically formats alert messages
 2. **In Opik**:
    - Go to Configuration → Alerts tab
    - Click "Create new alert"
-   - Give your alert a descriptive name
+   - Add triggers for the events you want to monitor
    - Select **Slack** as the destination type
    - Paste your Slack webhook URL in the Endpoint URL field
-   - Add triggers for the events you want to monitor
    - Click "Test connection" to verify
+   - Adjust the suggested alert name if you want a different one
    - Click "Create alert"
 
 Opik will automatically format all alert payloads into Slack-compatible messages with rich formatting, including:
@@ -140,12 +137,12 @@ Opik provides native PagerDuty integration that automatically formats alert even
 2. **In Opik**:
    - Go to Configuration → Alerts tab
    - Click "Create new alert"
-   - Give your alert a descriptive name
+   - Add triggers for the events you want to monitor
    - Select **PagerDuty** as the destination type
    - Enter the PagerDuty Events API v2 endpoint: `https://events.pagerduty.com/v2/enqueue`
    - In the **Routing Key** field, enter your PagerDuty Integration Key (this field appears when PagerDuty is selected as the destination)
-   - Add triggers for the events you want to monitor
    - Click "Test connection" to verify
+   - Adjust the suggested alert name if you want a different one
    - Click "Create alert"
 
 Opik will automatically format all alert payloads into PagerDuty-compatible events with:
@@ -329,34 +326,13 @@ Opik supports ten types of alert events:
 
 #### Alerting on custom metrics
 
-The two feedback score events above are not restricted to Opik's built-in metrics. They threshold on a feedback score **name**, and any score logged to your project is eligible — including custom metrics you define yourself. Opik does not care which system produced the score.
+Both feedback score events threshold on a score **name**, and any score logged to your project is eligible — so custom metrics can be alerted on just like Opik's built-in ones. Pick the trigger above, then select your metric's name in **Feedback Score Name**.
 
-There are two ways to get a custom metric's scores onto your production traces:
-
-1. **Run it as an [online evaluation rule](/production/online-evaluation/rules).** Custom LLM as a Judge and custom Python code metrics both write feedback scores under the name you give them, which then becomes selectable in the alert's **Feedback Score Name** field.
-2. **Score in your own pipeline and push the result to Opik.** Keep your [custom metric](/evaluation/metrics/custom_metric) code wherever you like — your application, a scheduled job, your CI — and attach the score to the trace, span or thread:
-
-   ```python
-   metric = MyCustomMetric()
-   result = metric.score(input=..., output=...)
-
-   client.log_traces_feedback_scores(
-       [{"id": trace_id, "name": "policy_compliance", "value": result.value, "reason": result.reason}]
-   )
-   ```
-
-   `log_spans_feedback_scores` and `log_threads_feedback_scores` do the same for spans and threads, and `opik_context.update_current_trace(feedback_scores=[...])` works inline inside a tracked function. From any other language, use the `PUT /v1/private/traces/feedback-scores` REST endpoint. Use this path when you want full control over the metric logic, the model it uses (if any), and its cost.
-
-Scores added by human review — in the traces sidebar or through an annotation queue — are also feedback scores, and are alertable in exactly the same way.
+The score has to be on a production trace, span or thread for an alert to see it. Scores that exist only inside an experiment cannot be thresholded. For how to get a custom metric scoring production data, see [Using your custom metric in production](/evaluation/metrics/custom_metric#using-your-custom-metric-in-production).
 
 <Note>
-  A feedback score name only appears in the **Feedback Score Name** dropdown once at least one score with that name has been logged to the project. If you have just defined a custom metric, log one score before creating the alert.
+  A score name appears in the **Feedback Score Name** dropdown only after at least one score with that name has been logged to the project.
 </Note>
-
-Two limits are worth knowing when planning an alert on a custom metric:
-
-- **The score must be attached to a trace, span or thread.** Metrics computed purely offline as part of an experiment (via `evaluate()`) cannot be thresholded — the only experiment-related event is `experiment:finished`, which reports completion and carries no threshold. To alert on a metric value, the metric has to score production data.
-- **Set the time window wider than your scoring cadence.** Alerts are evaluated on a recurring job and compare the *average* score within the window. If a window contains no scores the alert is skipped rather than fired, so a nightly batch scoring job paired with a one-hour window will rarely fire.
 
 **Guardrails triggered**
 - **Event type**: `trace:guardrails_triggered`
