@@ -560,8 +560,11 @@ class DatasetServiceImpl implements DatasetService {
         }
 
         // For now, we are not going to use the criteria.withExperimentsOnly() method due to the migration.
-        // Enrichment runs outside the transaction: it opens its own MySQL connection for the dataset versions,
-        // which would otherwise be held concurrently with this one for the same request.
+        // Enrichment runs outside the transaction so the MySQL connection is not held open across the three
+        // ClickHouse round-trips it makes. Trade-off: the page rows and the dataset versions were previously
+        // read in one READ_ONLY transaction and are now two, so a version written between them is observable
+        // where it was not before. Benign for count/summary metadata, and only find() is affected -- findById,
+        // findByNameDetailed and the experiments-only branch already enriched outside any transaction.
         DatasetPage rawPage = template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(DatasetDAO.class);
@@ -722,13 +725,17 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // collect(...) with Collectors.toMap rather than Flux.collectMap: collectMap is last-wins, whereas the
+        // serial code this replaces threw on a duplicate dataset_id. All three queries GROUP BY dataset_id so
+        // duplicates should not occur; keeping the loud form means a query change that broke that assumption
+        // fails instead of silently dropping one row's summary.
         var enrichmentData = Mono.zip(
                 experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
-                        .collectMap(ExperimentSummary::datasetId, Function.identity()),
+                        .collect(toMap(ExperimentSummary::datasetId, Function.identity())),
                 datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
-                        .collectMap(DatasetItemSummary::datasetId, Function.identity()),
+                        .collect(toMap(DatasetItemSummary::datasetId, Function.identity())),
                 optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
-                        .collectMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()),
+                        .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity())),
                 // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all,
                 // which would turn an absent-versions result into a null and NPE below.
                 Mono.fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))

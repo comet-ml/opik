@@ -128,6 +128,26 @@ class DatasetServiceEnrichmentTest {
     }
 
     @Test
+    @DisplayName("A duplicate dataset_id from a lookup fails loudly instead of silently dropping a row")
+    void enrichmentWhenLookupReturnsDuplicateKeyFailsLoudly() {
+        var datasetId = UUID.randomUUID();
+        stubDataset(datasetId);
+
+        // The queries GROUP BY dataset_id so this should not happen; if a query change ever broke that,
+        // last-wins collection would quietly return one row's summary instead of surfacing the problem.
+        when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet()))
+                .thenReturn(Flux.just(new ExperimentItemDAO.ExperimentSummary(datasetId, 1, null),
+                        new ExperimentItemDAO.ExperimentSummary(datasetId, 99, null)));
+        when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet())).thenReturn(Flux.empty());
+        when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet())).thenReturn(Flux.empty());
+        when(datasetVersionDAO.findLatestVersionsByDatasetIds(anySet(), any())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.findById(datasetId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Duplicate key");
+    }
+
+    @Test
     @DisplayName("Enrichment combines all four summaries when every lookup returns data")
     void enrichmentWhenAllSummariesPresentReturnsCombinedDataset() {
         var datasetId = UUID.randomUUID();
@@ -257,6 +277,12 @@ class DatasetServiceEnrichmentTest {
         var datasetId = UUID.randomUUID();
         stubDataset(datasetId);
 
+        // Scope note: the mocks below add .subscribeOn(boundedElastic()), which production does not. The real
+        // ClickHouse sources are async at subscribe (ClickHouseConnection forces ASYNC=true), so Mono.zip's
+        // sequential subscription does not serialize them. This test therefore fences off a structural
+        // regression -- reverting to collect-each-result-eagerly -- but NOT a DAO becoming blocking at
+        // subscribe, which would silently degrade the zip back to serial while this test still passed.
+        //
         // Each lookup counts itself in, then blocks until all three have arrived. A serial implementation
         // parks on the first lookup and never reaches the second, so SUBSCRIBE_TIMEOUT expires and the
         // assertion below fails. The worker deadline is deliberately much longer than the assertion
