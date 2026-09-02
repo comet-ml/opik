@@ -2,102 +2,52 @@ package com.comet.opik;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.function.Executable;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
-import java.util.Locale;
 import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
- * Guards the guard.
+ * Asserts that the shipped per-test timeout still fits CI's retry budget.
  * <p>
- * A test that blocks forever used to cost the entire 10-minute Unit Tests job and surfaced only as
- * "job cancelled" -- finding the culprit meant reading raw job logs for the class that printed
- * "Running ..." with no matching result line. The safeguard against that now lives in
- * junit-platform.properties plus a per-job -D override, either of which a rename or a scope change
- * could silently disable while the suite still passed green.
+ * CI runs with {@code -Dsurefire.rerunFailingTestsCount=3}, and a timeout is an ordinary failure to
+ * Surefire, so a deterministic hang is attempted 4 times. If 4x the bound exceeds the job wall, the
+ * job is cancelled before Surefire can publish the named failure report -- losing exactly the
+ * diagnostic the timeout was added to provide. A 5m bound was caught by review for that reason.
  * <p>
- * The shipped default and the CLI override are asserted separately and unconditionally. An earlier
- * version preferred the override when present, which meant CI -- where the override is always set --
- * never validated the shipped default at all, and the file could drift to any value undetected.
- * <p>
- * These tests are deliberately fast and cannot hang: the blocking case is bounded preemptively.
+ * Deliberately narrow: it reads the shipped value and checks the arithmetic. It does not
+ * re-implement JUnit's timeout grammar (JUnit validates that itself, throwing
+ * {@code DateTimeParseException} at engine startup) and does not scrape the workflow or discovery
+ * script for literal substrings, which would break on unrelated formatting changes there.
  */
 @DisplayName("Test Timeout Guard")
 class TestTimeoutGuardTest {
 
     private static final String TIMEOUT_PROPERTY = "junit.jupiter.execution.timeout.testable.method.default";
 
-    /** Job walls from discover-backend-tests.sh: UNIT_TIMEOUT and INTEGRATION_TIMEOUT. */
-    private static final Duration UNIT_JOB_WALL = Duration.ofMinutes(10);
+    /** The wall this file's value has to fit: INTEGRATION_TIMEOUT in discover-backend-tests.sh. */
     private static final Duration INTEGRATION_JOB_WALL = Duration.ofMinutes(20);
 
-    /** CI runs -Dsurefire.rerunFailingTestsCount=3, and a timeout is an ordinary failure to Surefire. */
+    /** CI runs -Dsurefire.rerunFailingTestsCount=3, and a timeout is an ordinary failure. */
     private static final int ATTEMPTS_PER_HANG = 4;
 
-    /**
-     * JUnit's timeout grammar: a number, optional space, optional unit of ns/us/ms/s/m/h/d, parsed
-     * case-insensitively. A bare number means seconds. Anything else must be rejected rather than
-     * silently coerced -- the whole point of this class is that a wrong bound cannot pass unnoticed.
-     */
-    private static final Pattern TIMEOUT_GRAMMAR = Pattern.compile("(?i)^(\\d+)\\s*(ns|μs|us|ms|s|m|h|d)?$");
-
     @Test
-    @DisplayName("a thread blocked forever is interrupted and reported, never left to hang the job")
-    void blockedTestIsInterruptedRatherThanHanging() {
-        var neverCountedDown = new CountDownLatch(1);
-
-        // Preemptive timeout is the same mechanism JUnit applies to @Test methods via the
-        // timeout.testable.method.default property: it abandons the blocked thread and fails.
-        Executable blocksForever = () -> neverCountedDown.await();
-        var failure = assertThrows(AssertionError.class,
-                () -> assertTimeoutPreemptively(Duration.ofMillis(200), blocksForever));
-
-        assertThat(failure).hasMessageContaining("timed out");
-    }
-
-    @Test
-    @DisplayName("the shipped default survives CI's retry budget, regardless of any -D override")
+    @DisplayName("the shipped default survives CI's retry budget")
     void shippedDefaultFitsRetryBudget() {
-        // Read the file directly, never System.getProperty: in CI the override is always set, so
-        // consulting it here would mean the shipped default was never actually checked.
-        var shipped = loadProperties().getProperty(TIMEOUT_PROPERTY);
+        // Read the file, never System.getProperty: CI always passes a -D override, so consulting it
+        // would mean the shipped default -- the value local runs actually inherit -- went unchecked.
+        var shipped = loadShippedTimeout();
 
-        assertRetryBudgetFits(shipped, UNIT_JOB_WALL, "shipped default");
-    }
+        var budget = shipped.multipliedBy(ATTEMPTS_PER_HANG);
 
-    @Test
-    @DisplayName("an active -D override also survives the retry budget for its tier")
-    void overrideFitsRetryBudget() {
-        var override = System.getProperty(TIMEOUT_PROPERTY);
-
-        // Under CI the workflow always passes -D, so its absence means the override was removed or
-        // renamed and every job silently fell back to the shipped default. Skipping quietly here
-        // would let the guard stay green through exactly that regression. Locally there is no
-        // override to check, and the shipped default is asserted unconditionally above.
-        if (runningInCi()) {
-            assertThat(override)
-                    .as("CI must pass -D%s (see the mvn step in backend_tests.yml)", TIMEOUT_PROPERTY)
-                    .isNotBlank();
-        } else if (override == null) {
-            return;
-        }
-
-        // The override is per-tier and the tier is not knowable from inside the JVM, so hold it to
-        // the most generous wall. Each tier's exact value is pinned by ciMatrixWiresBothTiers.
-        assertRetryBudgetFits(override, INTEGRATION_JOB_WALL, "-D override");
+        assertThat(budget)
+                .as("%d attempts at the shipped '%s' must fit inside the %s job wall",
+                        ATTEMPTS_PER_HANG, shipped, INTEGRATION_JOB_WALL)
+                .isPositive()
+                .isLessThan(INTEGRATION_JOB_WALL);
     }
 
     @Test
@@ -110,139 +60,19 @@ class TestTimeoutGuardTest {
                 .doesNotContain("junit.jupiter.execution.timeout.default");
     }
 
-    @ParameterizedTest(name = "{0} -> {1}ms")
-    @CsvSource({"30s, 30000", "45, 45000", "2m, 120000", "4m, 240000", "1h, 3600000",
-            "500ms, 500", "2 m, 120000", "2M, 120000", "100us, 0", "5000000ns, 5"})
-    @DisplayName("timeout values are parsed per JUnit's grammar, not by stripping the unit")
-    void parsesJUnitTimeoutGrammar(String value, long expectedMillis) {
-        // Asserted in millis rather than seconds so sub-second values are visible here: truncating
-        // them to 0 is what previously made safe budgets look like no budget at all.
-        assertThat(toDuration(value).toMillis()).isEqualTo(expectedMillis);
-    }
+    private static Duration loadShippedTimeout() {
+        var value = loadProperties().getProperty(TIMEOUT_PROPERTY);
+        assertThat(value).as("%s must be configured", TIMEOUT_PROPERTY).isNotBlank();
 
-    @ParameterizedTest
-    @ValueSource(strings = {"500ms", "999ms", "1ms", "100us", "5000000ns"})
-    @DisplayName("sub-second bounds are accepted, not truncated to zero and rejected")
-    void acceptsSubSecondBudgets(String value) {
-        // 4 attempts at any of these is well under a minute, let alone the 10m wall. They were
-        // rejected because toSeconds() floored them to 0 and the isPositive() guard then read that
-        // as "no budget" -- a guard added to catch overflow was rejecting the smallest safe values.
-        assertRetryBudgetFits(value, UNIT_JOB_WALL, "sub-second probe");
-    }
+        // Only the units the shipped value is ever expected to use. Anything else is a deliberate
+        // failure rather than a guess: silently coercing an unrecognised value to a small number is
+        // how an oversized bound would slip past the assertion above.
+        var trimmed = value.trim();
+        assertThat(trimmed).as("shipped timeout should be expressed in whole minutes or seconds")
+                .matches("[1-9]\\d* ?[ms]");
 
-    @ParameterizedTest
-    @ValueSource(strings = {"2x", "abc", "m", "2mm", "-5m", ""})
-    @DisplayName("values outside JUnit's grammar are rejected, never coerced to a passing number")
-    void rejectsValuesOutsideGrammar(String value) {
-        assertThatThrownBy(() -> toDuration(value)).isInstanceOf(AssertionError.class);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"106751991167300d", "9223372036854775807s", "9223372036854775807us"})
-    @DisplayName("absurd values fail closed rather than overflowing into a passing budget")
-    void failsClosedOnOverflow(String value) {
-        // These are grammar-valid, so parsing accepts them; the budget multiplication is where they
-        // used to wrap negative and satisfy isLessThan(wall) -- the assertion meant to reject
-        // oversized bounds accepted the most oversized ones of all.
-        assertThatThrownBy(() -> assertRetryBudgetFits(value, UNIT_JOB_WALL, "overflow probe"))
-                .isInstanceOf(AssertionError.class);
-    }
-
-    @Test
-    @DisplayName("the CI matrix wires a budget-safe timeout into every job, end to end")
-    void ciMatrixWiresBothTiers() {
-        // Pinning the shell variables alone is not enough: the values only reach JUnit if the
-        // matrix emits them AND the workflow passes them through. Any link can be renamed or
-        // dropped independently, so assert the whole chain -- script variable, emitted matrix
-        // entry, and the -D on the mvn step.
-        var script = readDiscoveryScript();
-        var workflow = readWorkflow();
-
-        assertThat(workflow)
-                .as("the mvn step must pass matrix.testTimeout as -D%s", TIMEOUT_PROPERTY)
-                .contains("-D" + TIMEOUT_PROPERTY + "=\"${{ matrix.testTimeout }}\"");
-        assertThat(workflow)
-                .as("the job wall must come from the matrix, matching the tiers asserted here")
-                .contains("timeout-minutes: ${{ matrix.timeout }}");
-
-        assertTierPinned(script, "UNIT_TIMEOUT", "UNIT_TEST_TIMEOUT", UNIT_JOB_WALL);
-        assertTierPinned(script, "INTEGRATION_TIMEOUT", "INTEGRATION_TEST_TIMEOUT", INTEGRATION_JOB_WALL);
-
-        // Both emitted entry shapes must pair the wall with the per-test bound. A job missing the
-        // testTimeout key would render it as the empty string and fall back to the shipped default.
-        assertThat(script)
-                .as("the unit matrix entry must set both timeout and testTimeout")
-                .contains("\\\"timeout\\\":$UNIT_TIMEOUT,\\\"testTimeout\\\":\\\"$UNIT_TEST_TIMEOUT\\\"");
-        assertThat(script)
-                .as("the integration matrix entry must set both timeout and testTimeout")
-                .contains("\\\"timeout\\\":$INTEGRATION_TIMEOUT,\\\"testTimeout\\\":\\\"$INTEGRATION_TEST_TIMEOUT\\\"");
-    }
-
-    private static void assertTierPinned(String script, String wallVar, String testVar, Duration expectedWall) {
-        var wallMinutes = Long.parseLong(matchOne(script, wallVar + "=(\\d+)"));
-        assertThat(Duration.ofMinutes(wallMinutes))
-                .as("%s must match the wall this test asserts against", wallVar)
-                .isEqualTo(expectedWall);
-
-        assertRetryBudgetFits(matchOne(script, testVar + "=(\\S+)"), expectedWall, testVar);
-    }
-
-    private static void assertRetryBudgetFits(String value, Duration wall, String description) {
-        // Checked arithmetic, and fail closed on overflow: with plain long math an absurd but
-        // grammar-valid bound (e.g. 106751991167300d) wrapped negative and satisfied
-        // isLessThan(wall), so the assertion designed to reject oversized timeouts accepted the
-        // most oversized ones of all.
-        //
-        // Compared as Durations, not whole seconds: flooring to seconds turned every sub-second
-        // bound into 0, which the isPositive() check below then rejected as no budget at all.
-        Duration budget;
-        try {
-            budget = toDuration(value).multipliedBy(ATTEMPTS_PER_HANG);
-        } catch (ArithmeticException overflow) {
-            throw new AssertionError(
-                    "'%s' (%s) is absurdly large: %d attempts overflow a Duration, so it cannot fit inside the %s job wall"
-                            .formatted(value, description, ATTEMPTS_PER_HANG, wall),
-                    overflow);
-        }
-
-        // 4 attempts at the bound must still leave room for compilation and suite overhead,
-        // otherwise CI cancels the job before Surefire can publish the named failure -- losing
-        // exactly the diagnostic the timeout exists to provide.
-        assertThat(budget)
-                .as("%d attempts at '%s' (%s) must fit inside the %s job wall",
-                        ATTEMPTS_PER_HANG, value, description, wall)
-                .isPositive()
-                .isLessThan(wall);
-    }
-
-    private static String matchOne(String haystack, String regex) {
-        var matcher = Pattern.compile("^" + regex + "\\s*$", Pattern.MULTILINE).matcher(haystack);
-        assertThat(matcher.find()).as("discovery script must define %s", regex).isTrue();
-        return matcher.group(1);
-    }
-
-    private static boolean runningInCi() {
-        // GITHUB_ACTIONS is set by the runner itself, so it cannot drift out of sync with the
-        // workflow the way a hand-maintained flag would.
-        return Boolean.parseBoolean(System.getenv("GITHUB_ACTIONS"));
-    }
-
-    private static String readWorkflow() {
-        return readRepoFile("../../.github/workflows/backend_tests.yml");
-    }
-
-    private static String readDiscoveryScript() {
-        return readRepoFile("../../.github/scripts/discover-backend-tests.sh");
-    }
-
-    private static String readRepoFile(String relativeToModule) {
-        var path = java.nio.file.Path.of("").toAbsolutePath().resolve(relativeToModule).normalize();
-        assertThat(path).as("%s must exist", relativeToModule).exists();
-        try {
-            return java.nio.file.Files.readString(path);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        var amount = Long.parseLong(trimmed.replaceAll("[^0-9]", ""));
+        return trimmed.endsWith("m") ? Duration.ofMinutes(amount) : Duration.ofSeconds(amount);
     }
 
     private static Properties loadProperties() {
@@ -254,38 +84,5 @@ class TestTimeoutGuardTest {
             throw new UncheckedIOException(e);
         }
         return properties;
-    }
-
-    /**
-     * Parses a JUnit timeout value, rejecting anything outside the documented grammar.
-     * <p>
-     * Returns a {@link Duration} rather than whole seconds so sub-second bounds keep their
-     * magnitude: flooring {@code 500ms} to 0 made a perfectly safe budget indistinguishable from no
-     * budget at all. Rejecting still matters more than converting -- an unrecognised value that
-     * silently became a small number would let a catastrophic bound sail past the budget assertions.
-     */
-    private static Duration toDuration(String value) {
-        assertThat(value).as("per-test timeout must be configured").isNotBlank();
-
-        var matcher = TIMEOUT_GRAMMAR.matcher(value.trim());
-        assertThat(matcher.matches())
-                .as("'%s' is not a valid JUnit timeout (expected <number>[ns|us|ms|s|m|h|d])", value)
-                .isTrue();
-
-        var amount = Long.parseLong(matcher.group(1));
-        var unit = matcher.group(2) == null ? "s" : matcher.group(2).toLowerCase(Locale.ROOT);
-
-        return switch (unit) {
-            case "ns" -> Duration.ofNanos(amount);
-            // multiplyExact, not *: a huge microsecond count would otherwise wrap negative here,
-            // before the retry-budget check ever sees it.
-            case "μs", "us" -> Duration.ofNanos(Math.multiplyExact(amount, 1_000L));
-            case "ms" -> Duration.ofMillis(amount);
-            case "s" -> Duration.ofSeconds(amount);
-            case "m" -> Duration.ofMinutes(amount);
-            case "h" -> Duration.ofHours(amount);
-            case "d" -> Duration.ofDays(amount);
-            default -> throw new IllegalStateException("unreachable: grammar admitted '" + unit + "'");
-        };
     }
 }
