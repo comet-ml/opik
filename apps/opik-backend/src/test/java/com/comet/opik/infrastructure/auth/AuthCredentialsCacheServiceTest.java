@@ -310,9 +310,10 @@ public class AuthCredentialsCacheServiceTest {
     }
 
     Stream<Arguments> cacheAndRetrieveDeviceId() {
+        // One value used as both the argument and the expectation, so the two cannot drift apart.
+        String deviceId = UUID.randomUUID().toString();
         return Stream.of(
-                arguments(named("a device id", "8f4b2c1e-0000-4a1b-9c3d-2e5f6a7b8c9d"),
-                        "8f4b2c1e-0000-4a1b-9c3d-2e5f6a7b8c9d"),
+                arguments(named("a device id", deviceId), deviceId),
                 // Every non-device credential, which must read back as no device rather than as a blank one.
                 arguments(named("no device id", null), null));
     }

@@ -6,6 +6,7 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,11 +40,17 @@ import static org.mockito.Mockito.when;
 @DisplayName("CipxTokenValidationService")
 class CipxTokenValidationServiceTest {
 
-    private static final String TOKEN = CipxTokenUtils.ACCESS_PREFIX + "Zm9vYmFy";
-    private static final String WORKSPACE_NAME = "__ai_spend_acme__";
-    private static final String WORKSPACE_ID = "6f0a1c2d-1111-4b2c-8d3e-4f5a6b7c8d9e";
-    private static final String DEVICE_ID = "8f4b2c1e-0000-4a1b-9c3d-2e5f6a7b8c9d";
-    private static final String TRACE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+    // The prefix stays literal: it is what triggers the branch. Only the secret part is data.
+    private static final String TOKEN = CipxTokenUtils.ACCESS_PREFIX + RandomStringUtils.secure()
+            .nextAlphanumeric(32);
+    // Likewise the __ai_spend_ fence, which is the contract shape of a device's bound workspace.
+    private static final String WORKSPACE_NAME = "__ai_spend_" + RandomStringUtils.secure().nextAlphanumeric(8)
+            + "__";
+    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String PROJECT_ID = UUID.randomUUID().toString();
+    private static final String DEVICE_ID = UUID.randomUUID().toString();
+    // UUID-shaped deliberately: the allowlist's trace-update pattern matches only a UUID path segment.
+    private static final String TRACE_ID = UUID.randomUUID().toString();
 
     @Mock
     private Client client;
@@ -122,7 +130,7 @@ class CipxTokenValidationServiceTest {
                 // POST is allowed on other paths, so the pairing has to bite, not the method alone.
                 arguments(named("search traces", "POST"), "/v1/private/traces/search"),
                 arguments(named("read the span batch path", "GET"), "/v1/private/spans/batch"),
-                arguments(named("delete a project", "DELETE"), "/v1/private/projects/" + WORKSPACE_ID),
+                arguments(named("delete a project", "DELETE"), "/v1/private/projects/" + PROJECT_ID),
                 arguments(named("delete traces", "POST"), "/v1/private/traces/delete"));
     }
 

@@ -8,6 +8,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.UriInfo;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,11 +43,15 @@ import static org.mockito.Mockito.when;
 @DisplayName("AuthFilter CIPX device token branch")
 class AuthFilterCipxTokenTest {
 
-    private static final String TOKEN = CipxTokenUtils.ACCESS_PREFIX + "Zm9vYmFy";
+    // The prefix stays literal: it is what triggers the branch. Only the secret part is data.
+    private static final String TOKEN = CipxTokenUtils.ACCESS_PREFIX + RandomStringUtils.secure()
+            .nextAlphanumeric(32);
     private static final String INGEST_PATH = "/v1/private/traces";
-    private static final String WORKSPACE_ID = "6f0a1c2d-1111-4b2c-8d3e-4f5a6b7c8d9e";
-    private static final String BOUND_WORKSPACE = "__ai_spend_acme__";
-    private static final String DEVICE_ID = "8f4b2c1e-0000-4a1b-9c3d-2e5f6a7b8c9d";
+    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    // The __ai_spend_ fence is the contract shape of a device's bound workspace; only the org part is data.
+    private static final String BOUND_WORKSPACE = "__ai_spend_" + RandomStringUtils.secure().nextAlphanumeric(8)
+            + "__";
+    private static final String DEVICE_ID = UUID.randomUUID().toString();
 
     @Mock
     private AuthService authService;
