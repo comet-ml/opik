@@ -560,7 +560,12 @@ class DatasetServiceImpl implements DatasetService {
         }
 
         // For now, we are not going to use the criteria.withExperimentsOnly() method due to the migration.
-        return template.inTransaction(READ_ONLY, handle -> {
+        // Enrichment runs outside the transaction so the MySQL connection is not held open across the three
+        // ClickHouse round-trips it makes. Trade-off: the page rows and the dataset versions were previously
+        // read in one READ_ONLY transaction and are now two, so a version written between them is observable
+        // where it was not before. Benign for count/summary metadata, and only find() is affected -- findById,
+        // findByNameDetailed and the experiments-only branch already enriched outside any transaction.
+        DatasetPage rawPage = template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(DatasetDAO.class);
             int offset = (page - 1) * size;
@@ -569,14 +574,17 @@ class DatasetServiceImpl implements DatasetService {
                     criteria.withExperimentsOnly(),
                     criteria.withOptimizationsOnly(), visibility, filtersSQL, filterMapping);
 
-            List<Dataset> datasets = enrichDatasetWithAdditionalInformation(
-                    repository.find(size, offset, workspaceId, criteria.name(), criteria.projectId(),
-                            criteria.withExperimentsOnly(),
-                            criteria.withOptimizationsOnly(),
-                            sortingFieldsSql, visibility, filtersSQL, filterMapping));
+            List<Dataset> datasets = repository.find(size, offset, workspaceId, criteria.name(), criteria.projectId(),
+                    criteria.withExperimentsOnly(),
+                    criteria.withOptimizationsOnly(),
+                    sortingFieldsSql, visibility, filtersSQL, filterMapping);
 
             return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
         });
+
+        List<Dataset> datasets = enrichDatasetWithAdditionalInformation(rawPage.content());
+
+        return new DatasetPage(datasets, page, datasets.size(), rawPage.total(), sortingFactory.getSortableFields());
     }
 
     private Mono<DatasetPage> fetchUsingTempTable(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
@@ -708,31 +716,45 @@ class DatasetServiceImpl implements DatasetService {
     private List<Dataset> enrichDatasetWithAdditionalInformation(List<Dataset> datasets) {
         Set<UUID> ids = datasets.stream().map(Dataset::id).collect(toSet());
 
-        Map<UUID, ExperimentSummary> experimentSummary = experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                .toStream()
-                .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
+        if (ids.isEmpty()) {
+            return datasets;
+        }
 
-        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                .toStream()
-                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
+        // RequestContext is @RequestScoped and therefore thread-bound: resolve it here, on the request thread,
+        // so the concurrent subscriptions below never call requestContext.get() from a worker thread.
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
-        Map<UUID, OptimizationDAO.OptimizationSummary> optimizationSummaryMap = optimizationDAO
-                .findOptimizationSummaryByDatasetIds(ids)
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                .toStream()
-                .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()));
+        // BENCHMARK BASELINE ONLY -- serial enrichment, matching origin/main's shape (each lookup drained to
+        // completion before the next begins). Not for merge; exists to produce the "before" number.
+        var t1 = experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .collect(toMap(ExperimentSummary::datasetId, Function.identity()))
+                .block();
+        var t2 = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()))
+                .block();
+        var t3 = optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()))
+                .block();
+        var t4 = fetchLatestVersionsByDatasetIds(ids, workspaceId);
+        var enrichmentData = reactor.util.function.Tuples.of(t1, t2, t3, t4);
 
-        Map<UUID, DatasetVersion> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
+        Map<UUID, ExperimentSummary> experimentSummaryMap = enrichmentData.getT1();
+        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = enrichmentData.getT2();
+        Map<UUID, OptimizationDAO.OptimizationSummary> optimizationSummaryMap = enrichmentData.getT3();
+        Map<UUID, DatasetVersion> latestVersionsByDatasetId = enrichmentData.getT4();
 
         return datasets.stream()
                 .map(dataset -> {
-                    var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
-                    var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(),
-                            DatasetItemSummary::empty);
-                    var optimizationSummary = optimizationSummaryMap.computeIfAbsent(dataset.id(),
-                            OptimizationDAO.OptimizationSummary::empty);
+                    var experimentSummary = experimentSummaryMap.getOrDefault(dataset.id(),
+                            ExperimentSummary.empty(dataset.id()));
+                    var datasetItemSummary = datasetItemSummaryMap.getOrDefault(dataset.id(),
+                            DatasetItemSummary.empty(dataset.id()));
+                    var optimizationSummary = optimizationSummaryMap.getOrDefault(dataset.id(),
+                            OptimizationDAO.OptimizationSummary.empty(dataset.id()));
                     var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
                     // When versioning is enabled and a latest version exists, use itemsTotal from the version
@@ -746,10 +768,10 @@ class DatasetServiceImpl implements DatasetService {
                     }
 
                     return dataset.toBuilder()
-                            .experimentCount(resume.experimentCount())
+                            .experimentCount(experimentSummary.experimentCount())
                             .datasetItemsCount(itemsCount)
                             .optimizationCount(optimizationSummary.optimizationCount())
-                            .mostRecentExperimentAt(resume.mostRecentExperimentAt())
+                            .mostRecentExperimentAt(experimentSummary.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
                             .latestVersion(DatasetVersionMapper.INSTANCE.toDatasetVersionSummary(latestVersion))
                             .build();
@@ -757,12 +779,10 @@ class DatasetServiceImpl implements DatasetService {
                 .toList();
     }
 
-    private Map<UUID, DatasetVersion> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
+    private Map<UUID, DatasetVersion> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds, String workspaceId) {
         if (datasetIds.isEmpty()) {
             return Map.of();
         }
-
-        String workspaceId = requestContext.get().getWorkspaceId();
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
