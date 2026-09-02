@@ -677,14 +677,22 @@ areas:
     label: Alerts
     nav_group: Production
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
+    spec_dir: alerts
     specs:
+      - alerts/alert-enable-disable.spec.ts
+      - alerts/alert-name-suggestion.spec.ts
     capabilities:
       list-alerts:         { covered: false }
-      create-alert:        { covered: false }
+      create-alert:        { covered: true,  tier: t2-cuj, note: "create form's generated name: follows the trigger's own fields, yields to a typed name, resumes when cleared, and de-duplicates within the project; both alerts asserted persisted" }
+      # Deliberately still false. alert-enable-disable.spec.ts and
+      # alert-name-suggestion.spec.ts both open the edit form, but only to flip
+      # the Enable switch and to prove the naming effect is exempt there.
+      # Editing an alert's triggers, destination or webhook settings is
+      # untested, and this key names all of that.
       edit-alert:          { covered: false }
       event-triggers:      { covered: false }
       webhook-destination: { covered: false }
-      enable-disable:      { covered: false }
+      enable-disable:      { covered: true,  tier: t2-cuj, note: "create form has no toggle and writes enabled=true; edit form's switch disables it. Asserted through the list's Status cell AND GET /alerts/{id}, with a bystander alert proving the update's blast radius" }
       delete-alert:        { covered: false }
       test-alert:          { covered: false }
 

@@ -166,6 +166,25 @@ export interface AutomationRuleLogRef {
 }
 
 /**
+ * An alert as the alerts list and the alert editor read it back.
+ *
+ * `enabled` is deliberately non-optional here even though the generated REST
+ * type marks it optional: the alerts specs exist to prove a specific persisted
+ * `enabled` value, so a missing field must fail loudly rather than be defaulted
+ * to the value under test (same reasoning as `requireSamplingRate`).
+ */
+export interface AlertRef {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** The project the alert is scoped to, or null for a workspace-wide alert. */
+  projectId: string | null;
+  webhookUrl: string;
+  /** `trace:errors`, `prompt:created`, … in the backend's own spelling. */
+  eventTypes: string[];
+}
+
+/**
  * A trace `input`/`output`/`metadata` payload as the REST API accepts it.
  *
  * The endpoint stores a bare `JsonNode`, so a scalar, an array and an object
@@ -497,6 +516,36 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * Same contract as `requireSamplingRate`: the generated `AlertPublic` marks
+   * `enabled` optional, and defaulting an absent value to `true` would read
+   * exactly like a correctly-created enabled alert — which is the fact the
+   * alerts specs are trying to prove. Fail loudly instead of guessing.
+   */
+  const toAlertRef = (a: {
+    id?: string;
+    name?: string;
+    enabled?: boolean;
+    projectId?: string;
+    webhook?: { url?: string };
+    triggers?: { eventType?: string }[];
+  }): AlertRef => {
+    if (typeof a.enabled !== 'boolean') {
+      throw new Error(
+        `alert '${a.name ?? a.id}' returned no 'enabled' field — ` +
+          `cannot assert on its enabled/disabled state.`,
+      );
+    }
+    return {
+      id: String(a.id),
+      name: a.name ?? '',
+      enabled: a.enabled,
+      projectId: a.projectId ? String(a.projectId) : null,
+      webhookUrl: a.webhook?.url ?? '',
+      eventTypes: (a.triggers ?? []).map((t) => String(t.eventType)),
+    };
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -1505,6 +1554,80 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           projectId,
           body: { ids: [ruleId] },
         });
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
+    },
+
+    /**
+     * Every alert scoped to a project — the exact read the alerts list issues
+     * (`GET /v1/private/projects/{id}/alerts`).
+     *
+     * Project-scoped rather than the workspace-wide `findAlerts` used by the
+     * teardown sweeps above, because an alerts spec has to be able to assert
+     * the *whole* answer for its own project: "my alert is in there" would pass
+     * just as well if the list also carried another project's alerts.
+     */
+    async listAlertsForProject(projectId: string): Promise<AlertRef[]> {
+      const page = await opik.api.projects.findAlertsByProject(projectId, { size: 500 });
+      return (page.content ?? []).map(toAlertRef);
+    },
+
+    async getAlert(alertId: string): Promise<AlertRef | null> {
+      try {
+        return toAlertRef(await opik.api.alerts.getAlertById(alertId));
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * Seed an alert and return its id.
+     *
+     * Goes through `rawFetch` for the same reason as `createAutomationRule`:
+     * creation answers 201 with an empty body, so the id exists only in the
+     * `Location` header, which the SDK's `void` return discards. Recovering it
+     * by name afterwards would risk picking up an alert an earlier run left
+     * behind under the same namespace.
+     */
+    async createAlert(args: {
+      projectId: string;
+      name: string;
+      webhookUrl: string;
+      /** Backend spelling, e.g. `prompt:created`. */
+      eventType: string;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/alerts', {
+        body: {
+          name: args.name,
+          enabled: args.enabled ?? true,
+          alert_type: 'general',
+          project_id: args.projectId,
+          webhook: { url: args.webhookUrl },
+          triggers: [{ event_type: args.eventType }],
+        },
+      });
+      if (status !== 201) {
+        throw new Error(
+          `createAlert: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createAlert: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the alert.`,
+        );
+      }
+      return id;
+    },
+
+    async deleteAlert(alertId: string): Promise<void> {
+      try {
+        await opik.api.alerts.deleteAlertBatch({ ids: [alertId] });
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;
