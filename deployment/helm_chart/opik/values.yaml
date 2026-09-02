@@ -198,7 +198,9 @@ component:
       # self-hosted deployments do not run, and while disabled the backend
       # never inspects the token prefix.
       CIPX_TOKEN_VALIDATION_ENABLED: "false"
-      CIPX_TOKEN_VALIDATION_URL: ""
+      # The in-cluster service, not the public front door: the validator is
+      # reached only from inside the cluster.
+      CIPX_TOKEN_VALIDATION_URL: "http://ai-cost-backend"
       # Shared service credential for the validator. Supply it from a secret
       # via `envFrom` rather than here when enabling the feature.
       CIPX_TOKEN_VALIDATION_SERVICE_TOKEN: ""

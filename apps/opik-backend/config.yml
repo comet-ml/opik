@@ -401,9 +401,9 @@ cipxTokenValidation:
   # Default: false
   # Description: Whether to accept CIPX device tokens as a credential
   enabled: ${CIPX_TOKEN_VALIDATION_ENABLED:-false}
-  # Default: empty
-  # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it
-  url: ${CIPX_TOKEN_VALIDATION_URL:-}
+  # Default: http://ai-cost-backend
+  # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
+  url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
   # Default: empty
   # Description: Shared service credential presented to the validator as a bearer token. Required when enabled: an unauthenticated validator is a token oracle
   serviceToken: ${CIPX_TOKEN_VALIDATION_SERVICE_TOKEN:-}

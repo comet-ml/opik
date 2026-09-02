@@ -37,13 +37,19 @@ import java.util.Set;
  * <p>
  * Caches the resolved caller under the token, mirroring the API-key path, so a warm request is one cache read
  * with no outbound call at all.
+ * <p>
+ * The validator lives under {@code /v1/internal/} deliberately, and must stay there. cost-api's public routing
+ * contract is the {@code /v1/private/ai-spend/} prefix, which nginx forwards to it from the internet; an
+ * endpoint that answers a caller's token with a user name, workspace and device id would be a validation
+ * oracle behind nothing but the service credential. Nothing routes {@code /v1/internal/} publicly, and this
+ * endpoint's only caller is in-cluster.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class CipxTokenValidationService {
 
-    private static final String VALIDATE_PATH = "/v1/private/ai-spend/devices/validate";
+    private static final String VALIDATE_PATH = "/v1/internal/cipx-device-tokens/validate";
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String INVALID_TOKEN = "CIPX device token is not valid";
     private static final String VALIDATION_UNAVAILABLE = "CIPX device token validation is unavailable";

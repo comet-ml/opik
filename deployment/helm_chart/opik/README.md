@@ -245,7 +245,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
 | component.backend.env.CIPX_TOKEN_VALIDATION_ENABLED | string | `"false"` |  |
 | component.backend.env.CIPX_TOKEN_VALIDATION_SERVICE_TOKEN | string | `""` |  |
-| component.backend.env.CIPX_TOKEN_VALIDATION_URL | string | `""` |  |
+| component.backend.env.CIPX_TOKEN_VALIDATION_URL | string | `"http://ai-cost-backend"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_DEFAULT_RESOURCE | string | `"llm-models-default.yaml"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH | string | `""` |  |
