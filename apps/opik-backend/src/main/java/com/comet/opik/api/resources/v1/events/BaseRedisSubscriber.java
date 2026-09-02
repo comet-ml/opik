@@ -517,9 +517,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         //     (it used to arrive as a NullPointerException out of processEvent).
         if (message == null) {
             var keyFailure = undecodableKeyCause(entry.getValue());
-            recordUndecodable(messageId, keyFailure != null ? keyFailure : null,
-                    keyFailure != null ? "undecodable_field_name" : "missing_payload");
             if (keyFailure != null) {
+                recordUndecodable(messageId, keyFailure, "undecodable_field_name");
                 log.warn("Message field name could not be decoded, payload unreachable: messageId '{}', "
                         + "stream '{}'", messageId, config.getStreamName(), keyFailure);
                 return Mono.just(ProcessingResult.builder()
@@ -532,6 +531,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .context(MessageContext.UNKNOWN)
                         .build());
             }
+            // Deliberately NOT on *_undecodable_messages_total: nothing failed to decode here, and
+            // mixing a deterministic malformed entry into that counter would make a decoder alert fire
+            // on it. messageProcessingErrors already counts it via postProcessFailureMessages.
+            recordQueueDelay(messageId);
             log.warn("Message has no payload under field '{}': messageId '{}', stream '{}'",
                     payloadField, messageId, config.getStreamName());
             return Mono.just(ProcessingResult.builder()
@@ -590,6 +593,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 ErrorMetricsResolver.ERROR_TYPE_KEY,
                 errorType != null ? errorType : ErrorMetricsResolver.errorType(cause),
                 ErrorMetricsResolver.STREAM_KEY, config.getStreamName()));
+        recordQueueDelay(messageId);
+    }
+
+    /**
+     * Keeps an entry that returns early visible in the queue-delay histogram. Its growing age is the
+     * signal that shows an entry cycling in a growing PEL, so the paths most worth noticing must not be
+     * the ones that skip it.
+     */
+    private void recordQueueDelay(StreamMessageId messageId) {
         extractTimeFromMessageId(messageId)
                 .ifPresent(messageMillis -> messageQueueDelay.record(System.currentTimeMillis() - messageMillis));
     }

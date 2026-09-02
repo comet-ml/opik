@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
+import lombok.NonNull;
+
 /**
  * Stand-in for a stream entry whose payload the codec could not decode.
  * <p>
@@ -23,5 +25,5 @@ package com.comet.opik.infrastructure.redis;
  * @param payloadBytes readable bytes the decoder was handed, for sizing the offending entry
  * @param cause        the decode failure, kept for the log rather than rethrown
  */
-public record UndecodableStreamMessage(int payloadBytes, Throwable cause) {
+public record UndecodableStreamMessage(int payloadBytes, @NonNull Throwable cause) {
 }
