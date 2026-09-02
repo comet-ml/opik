@@ -1,6 +1,7 @@
 import threading
 import time
-from unittest.mock import Mock
+from typing import Optional
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -110,6 +111,102 @@ def test_insert_deduplication__three_dicts_passed__one_unique__two_duplicates__t
     inserted_rest_items = call_args[1]["items"]
 
     assert len(inserted_rest_items) == 2, "Two items should be inserted"
+
+
+def test_insert__deduplication_disabled__duplicates_are_inserted():
+    mock_rest_client = Mock()
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    item_dict = {
+        "input": {"key": "value"},
+        "expected_output": {"key": "output"},
+        "metadata": {"key": "meta"},
+    }
+
+    dataset.insert([item_dict, item_dict], deduplication=False)
+
+    call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
+    assert len(call_args[1]["items"]) == 2, (
+        "Both identical items must be sent when deduplication is disabled"
+    )
+
+
+def test_insert__deduplication_disabled__backend_items_are_not_downloaded():
+    mock_rest_client = Mock()
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+    # The state `get_dataset`/`get_datasets` leave behind: the backend holds
+    # items this object has not hashed yet.
+    dataset.__internal_api__hashes_synced__ = False
+
+    dataset.insert(_make_items(3), deduplication=False)
+
+    mock_rest_client.datasets.stream_dataset_items.assert_not_called()
+
+
+def test_insert__deduplication_disabled__next_deduplicated_insert_syncs_hashes():
+    mock_rest_client = Mock()
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    dataset.insert(_make_items(3), deduplication=False)
+    assert not dataset.__internal_api__hashes_synced__, (
+        "Skipping deduplication leaves the local hash cache stale"
+    )
+
+    with patch.object(dataset, "__internal_api__sync_hashes__") as sync_hashes:
+        dataset.insert(_make_items(3))
+
+    sync_hashes.assert_called_once()
+
+
+def test_update__deduplication_disabled__unchanged_item_is_still_sent():
+    mock_rest_client = Mock()
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    item = {
+        "input": {"key": "value"},
+        "expected_output": {"key": "output"},
+        "metadata": {"key": "meta"},
+    }
+    dataset.insert([item])
+
+    inserted_id = mock_rest_client.datasets.create_or_update_dataset_items.call_args[1][
+        "items"
+    ][0].id
+
+    dataset.update([{"id": inserted_id, **item}], deduplication=False)
+
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2
+    updated_items = mock_rest_client.datasets.create_or_update_dataset_items.call_args[
+        1
+    ]["items"]
+    assert len(updated_items) == 1, (
+        "An update with unchanged content must still be sent when deduplication "
+        "is disabled"
+    )
 
 
 def test_update__happyflow():
@@ -312,14 +409,19 @@ _SEQUENTIAL_HOLD_SECONDS = 0.05
 def _batches_overlapped(
     monkeypatch,
     mock_rest_client: Mock,
-    num_threads: int,
+    num_threads: Optional[int],
     expect_overlap: bool,
+    item_count: int = _GATE_ITEM_COUNT,
 ) -> bool:
     """Insert through the public API and report whether batches ran concurrently.
 
     Uploads record how many of them are in flight at once, observed at the REST
     boundary rather than at the gate's internal decision — so this still fails
     if insert() stops honouring the worker count downstream.
+
+    ``num_threads=None`` omits the argument so the call exercises the default.
+    ``item_count`` sets how many batches there are, which must not exceed the
+    worker count when overlap is expected — the barrier is sized to it.
 
     ``expect_overlap`` selects how uploads are held, because the two
     expectations fail in opposite directions and need opposite instruments.
@@ -339,12 +441,13 @@ def _batches_overlapped(
     hold once per batch.
     """
     _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    batch_count = item_count // _GATE_BATCH_SIZE
 
     lock = threading.Lock()
     in_flight = 0
     peak_in_flight = 0
     barrier = (
-        threading.Barrier(_GATE_BATCH_COUNT, timeout=_OVERLAP_TIMEOUT_SECONDS)
+        threading.Barrier(batch_count, timeout=_OVERLAP_TIMEOUT_SECONDS)
         if expect_overlap
         else None
     )
@@ -375,11 +478,15 @@ def _batches_overlapped(
         project_name="Test project",
         rest_client=mock_rest_client,
     )
-    dataset.insert(_make_items(_GATE_ITEM_COUNT), num_threads=num_threads)
+    items = _make_items(item_count)
+    if num_threads is None:
+        dataset.insert(items)
+    else:
+        dataset.insert(items, num_threads=num_threads)
 
     assert (
         mock_rest_client.datasets.create_or_update_dataset_items.call_count
-        == _GATE_BATCH_COUNT
+        == batch_count
     ), "Every batch must be uploaded regardless of the thread count"
 
     return peak_in_flight > 1
@@ -451,5 +558,39 @@ def test_insert__sequential__uploads_sequentially_without_probing_version(monkey
         monkeypatch, mock_rest_client, num_threads=1, expect_overlap=False
     ), "num_threads=1 must upload sequentially"
 
-    # The default path must not pay an extra request.
+    # An explicitly sequential upload cannot race, so it must not pay the probe.
     mock_rest_client.version.assert_not_called()
+
+
+# 4 batches, which is the default worker count — so all of them fit in flight
+# together and the barrier can prove the default really uses the pool.
+_DEFAULT_THREADS_ITEM_COUNT = _GATE_BATCH_SIZE * 4
+
+
+def test_insert__num_threads_not_given__uploads_concurrently_by_default(monkeypatch):
+    assert _batches_overlapped(
+        monkeypatch,
+        _mock_rest_client(),
+        num_threads=None,
+        expect_overlap=True,
+        item_count=_DEFAULT_THREADS_ITEM_COUNT,
+    ), "insert() must upload in parallel without being asked to"
+
+
+def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = _mock_rest_client()
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    for _ in range(3):
+        dataset.insert(_make_items(4), deduplication=False)
+
+    assert mock_rest_client.version.call_count == 1, (
+        "Parallel upload is the default, so the version gate must be probed once "
+        "per dataset rather than once per insert"
+    )
