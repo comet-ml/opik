@@ -623,14 +623,17 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
         rest_client=mock_rest_client,
     )
 
+    # The spy calls through, so the upload still happens and the assertions
+    # below cover the items actually reaching the backend, not just the
+    # argument the gate computed.
     used_workers = []
-    monkeypatch.setattr(
-        Dataset,
-        "_send_batches",
-        lambda self, batches, batch_group_id, num_threads: used_workers.append(
-            num_threads
-        ),
-    )
+    original_send = Dataset._send_batches
+
+    def spy_send_batches(self, batches, batch_group_id, num_threads):
+        used_workers.append(num_threads)
+        return original_send(self, batches, batch_group_id, num_threads)
+
+    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
 
     dataset.__internal_api__insert_items_as_dataclasses__(
         [dataset_item.DatasetItem(**item) for item in _make_items(4)],
@@ -641,6 +644,36 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
         "A backend that predates parallel insert must force a sequential upload "
         "even when the internal API is called directly"
     )
+
+    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+    submitted = sorted(
+        item.data["input"]["i"]
+        for call in create_or_update.call_args_list
+        for item in call.kwargs["items"]
+    )
+    assert submitted == [0, 1, 2, 3], (
+        "Forcing a sequential upload must still deliver every item exactly once"
+    )
+
+
+@pytest.mark.parametrize("bad_value", [0, -1, 1.5, "2", True, None])
+def test_internal_insert__invalid_num_threads__raises_value_error(bad_value):
+    """Direct callers get the named ValueError, not a TypeError from the gate."""
+    mock_rest_client = Mock()
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(ValueError, match="num_threads must be a positive integer"):
+        dataset.__internal_api__insert_items_as_dataclasses__(
+            [dataset_item.DatasetItem(**item) for item in _make_items(2)],
+            num_threads=bad_value,
+        )
+
+    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
 
 
 @pytest.mark.parametrize("bad_value", ["false", 0, 1, None, "", []])

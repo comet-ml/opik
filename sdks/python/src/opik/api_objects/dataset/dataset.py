@@ -741,9 +741,15 @@ class Dataset(DatasetExportOperations):
     ) -> None:
         # Validated here rather than in each public entry point: every insert
         # path funnels through this method. A truthy string or None would
-        # otherwise silently pick the wrong duplicate-checking behaviour.
+        # otherwise silently pick the wrong duplicate-checking behaviour, and
+        # a non-integer worker count would fail on the comparison below with a
+        # TypeError instead of naming the offending argument.
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
 
         # Gated here rather than in `insert` so every caller of this funnel is
         # covered: older backends race on concurrent batches that share a
