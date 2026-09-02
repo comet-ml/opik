@@ -725,24 +725,22 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // collect(...) with Collectors.toMap rather than Flux.collectMap: collectMap is last-wins, whereas the
-        // serial code this replaces threw on a duplicate dataset_id. All three queries GROUP BY dataset_id so
-        // duplicates should not occur; keeping the loud form means a query change that broke that assumption
-        // fails instead of silently dropping one row's summary.
-        var enrichmentData = Mono.zip(
-                experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
-                        .collect(toMap(ExperimentSummary::datasetId, Function.identity())),
-                datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
-                        .collect(toMap(DatasetItemSummary::datasetId, Function.identity())),
-                optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
-                        .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity())),
-                // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all,
-                // which would turn an absent-versions result into a null and NPE below.
-                Mono.fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .defaultIfEmpty(Map.of()))
+        // BENCHMARK BASELINE ONLY -- serial enrichment, matching origin/main's shape (each lookup drained to
+        // completion before the next begins). Not for merge; exists to produce the "before" number.
+        var t1 = experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .collect(toMap(ExperimentSummary::datasetId, Function.identity()))
                 .block();
+        var t2 = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()))
+                .block();
+        var t3 = optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()))
+                .block();
+        var t4 = fetchLatestVersionsByDatasetIds(ids, workspaceId);
+        var enrichmentData = reactor.util.function.Tuples.of(t1, t2, t3, t4);
 
         Map<UUID, ExperimentSummary> experimentSummaryMap = enrichmentData.getT1();
         Map<UUID, DatasetItemSummary> datasetItemSummaryMap = enrichmentData.getT2();
