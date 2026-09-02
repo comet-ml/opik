@@ -14,6 +14,8 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.CipxSpendDAO;
+import com.comet.opik.domain.CipxTraceIdentityDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -42,6 +44,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,13 +97,18 @@ class CostIntelligenceIngestionTest {
     private TransactionTemplate mySqlTemplate;
     private SpanResourceClient spanResourceClient;
     private TraceResourceClient traceResourceClient;
+    private CipxSpendDAO cipxSpendDAO;
+    private CipxTraceIdentityDAO cipxTraceIdentityDAO;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate,
-            TransactionTemplate mySqlTemplate) {
+            TransactionTemplate mySqlTemplate, CipxSpendDAO cipxSpendDAO,
+            CipxTraceIdentityDAO cipxTraceIdentityDAO) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.clickHouseTemplate = clickHouseTemplate;
         this.mySqlTemplate = mySqlTemplate;
+        this.cipxSpendDAO = cipxSpendDAO;
+        this.cipxTraceIdentityDAO = cipxTraceIdentityDAO;
 
         ClientSupportUtils.config(client);
 
@@ -149,6 +157,11 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
+                assertThat(row.get().trigger()).isEqualTo("subagent");
+                assertThat(row.get().triggerDetail()).isEqualTo("code-reviewer");
+                assertThat(row.get().turnKey()).isEqualTo("abc123turnkey");
+                assertThat(row.get().parentToolUseId()).isEqualTo("toolu_parent_agent");
+                assertThat(row.get().linkFailureReason()).isEmpty();
             });
 
             // Carried on every block row too.
@@ -160,6 +173,107 @@ class CostIntelligenceIngestionTest {
             // listener has already decided this one: it must not have produced a row.
             assertThat(getCipxSpend(plainSpan.id(), ws.workspaceId())).isEmpty();
             assertThat(getCipxBlocks(plainSpan.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a call carrying no trigger fields ingests with empty attribution columns")
+        void spanWithoutTriggerFieldsLandsWithEmptyAttribution() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(systemToolsCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().trigger()).isEmpty();
+                assertThat(row.get().triggerDetail()).isEmpty();
+                assertThat(row.get().turnKey()).isEmpty();
+                assertThat(row.get().parentToolUseId()).isEmpty();
+                assertThat(row.get().linkFailureReason()).isEmpty();
+            });
+        }
+
+        @Test
+        @DisplayName("a fail-closed subagent and a lost-dispatch subagent stay distinguishable")
+        void unattributedSubagentsKeepTheirLinkFailureReason() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var failClosed = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(unattributedSubagentCipxMetadata("ambiguous_prompt"))
+                    .build();
+            var lostDispatch = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(unattributedSubagentCipxMetadata("no_dispatch_captured"))
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(failClosed, lostDispatch), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var refused = getCipxSpend(failClosed.id(), ws.workspaceId());
+                var lost = getCipxSpend(lostDispatch.id(), ws.workspaceId());
+                assertThat(refused).isPresent();
+                assertThat(lost).isPresent();
+                assertThat(refused.get().trigger()).isEqualTo("subagent");
+                assertThat(lost.get().trigger()).isEqualTo("subagent");
+                assertThat(refused.get().parentToolUseId()).isEmpty();
+                assertThat(lost.get().parentToolUseId()).isEmpty();
+                assertThat(refused.get().linkFailureReason()).isEqualTo("ambiguous_prompt");
+                assertThat(lost.get().linkFailureReason()).isEqualTo("no_dispatch_captured");
+            });
+        }
+
+        @Test
+        @DisplayName("every positional bind lands in its own column, across a multi-row insert")
+        void everyPositionalBindLandsInItsOwnColumn() {
+            var ws = newWorkspace();
+
+            var rowOne = sentinelRow(1);
+            var rowTwo = sentinelRow(2);
+
+            cipxSpendDAO.insert(List.of(rowOne, rowTwo), ws.workspaceId(), USER).block();
+
+            assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowOne);
+            assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowTwo);
+        }
+
+        @Test
+        @DisplayName("a call carrying fields the DAO does not know still ingests")
+        void unknownFieldsDoNotRejectTheRow() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(unknownFieldsCipxMetadata("claude-sonnet-4-6"))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().model()).isEqualTo("claude-sonnet-4-6");
+                assertThat(row.get().uInput()).isEqualTo(11L);
+                assertThat(row.get().uCacheRead()).isEqualTo(22L);
+                assertThat(row.get().uCacheCreation()).isEqualTo(33L);
+                assertThat(row.get().uCacheCreation5m()).isEqualTo(44L);
+                assertThat(row.get().uCacheCreation1h()).isEqualTo(55L);
+                assertThat(row.get().uOutput()).isEqualTo(66L);
+                assertThat(row.get().effort()).isEqualTo("high");
+                assertThat(row.get().speed()).isEqualTo("fast");
+                assertThat(row.get().trigger()).isEqualTo("subagent");
+                assertThat(row.get().triggerDetail()).isEqualTo("Explore");
+                assertThat(row.get().turnKey()).isEqualTo("unknown-fields-turnkey");
+                assertThat(row.get().parentToolUseId()).isEqualTo("toolu_unknown_fields");
+                assertThat(row.get().linkFailureReason()).isEqualTo("parent_unresolved");
+                assertThat(getCipxBlocks(span.id(), ws.workspaceId())).isNotEmpty();
+            });
         }
 
         @Test
@@ -470,11 +584,42 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().filesDeleted()).isEqualTo(1);
                 assertThat(row.get().linesAdded()).isEqualTo(40);
                 assertThat(row.get().linesDeleted()).isEqualTo(5);
+                assertThat(row.get().agentsDispatched()).isEqualTo(17);
+                assertThat(row.get().agentsLinked()).isEqualTo(12);
+                assertThat(row.get().agentsAmbiguous()).isEqualTo(4);
+                assertThat(row.get().agentsDispatched() - row.get().agentsAmbiguous()
+                        - row.get().agentsLinked()).isEqualTo(1);
+                assertThat(row.get().cipxVersion()).isEqualTo("0.0.56");
 
                 assertThat(getUserMappings(email)).containsExactly(userUuid);
             });
 
             assertThat(getCipxIdentity(plainTrace.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a session carrying no agent rollup lands as zeros with an empty cipx_version")
+        void traceWithoutAgentRollupLandsAsZeros() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(traceCipxMetadataWithoutAgentRollup(userUuid, email))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().userUuid()).isEqualTo(userUuid);
+                assertThat(row.get().agentsDispatched()).isZero();
+                assertThat(row.get().agentsLinked()).isZero();
+                assertThat(row.get().agentsAmbiguous()).isZero();
+                assertThat(row.get().cipxVersion()).isEmpty();
+            });
         }
 
         @Test
@@ -547,6 +692,100 @@ class CostIntelligenceIngestionTest {
                 assertThat(getUserMappings(newEmail)).containsExactly(userUuid);
             });
         }
+
+        @Test
+        @DisplayName("every positional bind lands in its own column, across a multi-row identity insert")
+        void everyIdentityPositionalBindLandsInItsOwnColumn() {
+            var ws = newWorkspace();
+
+            var rowOne = sentinelIdentityRow(1);
+            var rowTwo = sentinelIdentityRow(2);
+
+            cipxTraceIdentityDAO.upsert(List.of(rowOne, rowTwo), ws.workspaceId(), USER).block();
+
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), rowOne);
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), rowTwo);
+        }
+
+        @Test
+        @DisplayName("a reordered re-upsert of one trace keeps the newer snapshot's counters")
+        void reorderedReUpsertKeepsTheNewerSnapshot() {
+            var ws = newWorkspace();
+
+            var base = sentinelIdentityRow(3);
+            var newer = base.toBuilder()
+                    .agentsDispatched(90L)
+                    .lastUpdatedAt(base.lastUpdatedAt().plusMillis(10))
+                    .build();
+            var older = base.toBuilder().agentsDispatched(80L).build();
+
+            cipxTraceIdentityDAO.upsert(List.of(newer), ws.workspaceId(), USER).block();
+            cipxTraceIdentityDAO.upsert(List.of(older), ws.workspaceId(), USER).block();
+
+            var stored = getCipxIdentityAllColumns(base.traceId(), ws.workspaceId());
+            assertThat(stored).isPresent();
+            assertThat(stored.get().agentsDispatched())
+                    .as("agents_dispatched after the older snapshot was inserted last")
+                    .isEqualTo(90L);
+        }
+
+        @Test
+        @DisplayName("a UInt32 counter survives its whole range; anything unusable records 0, not a ceiling")
+        void agentCountersKeepTheFullUInt32RangeAndRefuseToInventOne() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "4294967295", "3000000000",
+                            "9999999999"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).as("identity row for a trace whose counters exceed Integer.MAX_VALUE").isPresent();
+                assertThat(row.get().agentsDispatched()).as("agents_dispatched at the UInt32 ceiling, unnarrowed")
+                        .isEqualTo(4294967295L);
+                assertThat(row.get().agentsLinked()).as("agents_linked above Integer.MAX_VALUE, unnarrowed")
+                        .isEqualTo(3000000000L);
+                assertThat(row.get().agentsAmbiguous())
+                        .as("agents_ambiguous past the UInt32 ceiling records 0, not the ceiling")
+                        .isEqualTo(0L);
+            });
+        }
+
+        @DisplayName("a counter that is present but unusable records 0, never a number that reads as real")
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "malformed  | \"not-a-number\" | -5  | true",
+                "fractional | 1.5              | 2.9 | 3000000000.5",
+        })
+        void presentButUnusableAgentCountersRecordZero(String kind, String dispatched, String linked,
+                String ambiguous) {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, dispatched, linked, ambiguous))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).as("the row still lands — one bad metric must not lose the identity").isPresent();
+                assertThat(row.get().agentsDispatched()).as("[%s] agents_dispatched=%s", kind, dispatched)
+                        .isEqualTo(0L);
+                assertThat(row.get().agentsLinked()).as("[%s] agents_linked=%s", kind, linked).isEqualTo(0L);
+                assertThat(row.get().agentsAmbiguous()).as("[%s] agents_ambiguous=%s", kind, ambiguous)
+                        .isEqualTo(0L);
+            });
+        }
     }
 
     private WorkspaceContext newWorkspace() {
@@ -555,6 +794,290 @@ class CostIntelligenceIngestionTest {
         String workspaceId = UUID.randomUUID().toString();
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
         return new WorkspaceContext(apiKey, workspaceName, workspaceId);
+    }
+
+    private CipxSpendDAO.SpanRow sentinelRow(int n) {
+        long base = n * 1_000_000L;
+        return CipxSpendDAO.SpanRow.builder()
+                .projectId(UUID.randomUUID().toString())
+                .traceId(UUID.randomUUID().toString())
+                .spanId(UUID.randomUUID().toString())
+                .startTime(Instant.ofEpochMilli(1_800_000_000_000L + n))
+                .model("sentinel-" + n + "-model")
+                .uInput(base + 1)
+                .uCacheRead(base + 2)
+                .uCacheCreation(base + 3)
+                .uCacheCreation5m(base + 4)
+                .uCacheCreation1h(base + 5)
+                .uOutput(base + 6)
+                .effort("sentinel-" + n + "-effort")
+                .thinkingType("sentinel-" + n + "-thinking-type")
+                .maxTokens(base + 7)
+                .contextManagement("sentinel-" + n + "-context-management")
+                .speed("sentinel-" + n + "-speed")
+                .trigger("sentinel-" + n + "-trigger")
+                .triggerDetail("sentinel-" + n + "-trigger-detail")
+                .turnKey("sentinel-" + n + "-turn-key")
+                .parentToolUseId("sentinel-" + n + "-parent-tool-use-id")
+                .linkFailureReason("sentinel-" + n + "-link-failure-reason")
+                .build();
+    }
+
+    private void assertEveryColumnHoldsItsOwnValue(String workspaceId, CipxSpendDAO.SpanRow expected) {
+        var stored = getCipxSpendAllColumns(expected.spanId(), workspaceId);
+        assertThat(stored).as("row for span_id %s", expected.spanId()).isPresent();
+        var actual = stored.get();
+
+        assertThat(actual.workspaceId()).as("workspace_id").isEqualTo(workspaceId);
+        assertThat(actual.projectId()).as("project_id").isEqualTo(expected.projectId());
+        assertThat(actual.traceId()).as("trace_id").isEqualTo(expected.traceId());
+        assertThat(actual.spanId()).as("span_id").isEqualTo(expected.spanId());
+        assertThat(actual.startMs()).as("start_time").isEqualTo(expected.startTime().toEpochMilli());
+        assertThat(actual.model()).as("model").isEqualTo(expected.model());
+        assertThat(actual.uInput()).as("u_input").isEqualTo(expected.uInput());
+        assertThat(actual.uCacheRead()).as("u_cache_read").isEqualTo(expected.uCacheRead());
+        assertThat(actual.uCacheCreation()).as("u_cache_creation").isEqualTo(expected.uCacheCreation());
+        assertThat(actual.uCacheCreation5m()).as("u_cache_creation_5m").isEqualTo(expected.uCacheCreation5m());
+        assertThat(actual.uCacheCreation1h()).as("u_cache_creation_1h").isEqualTo(expected.uCacheCreation1h());
+        assertThat(actual.uOutput()).as("u_output").isEqualTo(expected.uOutput());
+        assertThat(actual.effort()).as("effort").isEqualTo(expected.effort());
+        assertThat(actual.thinkingType()).as("thinking_type").isEqualTo(expected.thinkingType());
+        assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
+        assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
+        assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
+        assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
+        assertThat(actual.turnKey()).as("turn_key").isEqualTo(expected.turnKey());
+        assertThat(actual.parentToolUseId()).as("parent_tool_use_id").isEqualTo(expected.parentToolUseId());
+        assertThat(actual.linkFailureReason()).as("link_failure_reason").isEqualTo(expected.linkFailureReason());
+    }
+
+    private Optional<SentinelSpendRow> getCipxSpendAllColumns(String spanId, String workspaceId) {
+        String sql = """
+                SELECT
+                    workspace_id AS workspace_id,
+                    project_id AS project_id,
+                    trace_id AS trace_id,
+                    span_id AS span_id,
+                    toUnixTimestamp64Milli(start_time) AS start_ms,
+                    model AS model,
+                    u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
+                    effort, thinking_type, max_tokens, context_management, speed,
+                    `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
+                    link_failure_reason
+                FROM cipx_spends FINAL
+                WHERE workspace_id = :workspace_id AND span_id = :span_id
+                """;
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("workspace_id", workspaceId)
+                    .bind("span_id", spanId);
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> new SentinelSpendRow(
+                            row.get("workspace_id", String.class),
+                            row.get("project_id", String.class),
+                            row.get("trace_id", String.class),
+                            row.get("span_id", String.class),
+                            row.get("start_ms", Long.class),
+                            row.get("model", String.class),
+                            row.get("u_input", Long.class),
+                            row.get("u_cache_read", Long.class),
+                            row.get("u_cache_creation", Long.class),
+                            row.get("u_cache_creation_5m", Long.class),
+                            row.get("u_cache_creation_1h", Long.class),
+                            row.get("u_output", Long.class),
+                            row.get("effort", String.class),
+                            row.get("thinking_type", String.class),
+                            row.get("max_tokens", Long.class),
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class),
+                            row.get("trigger_kind", String.class),
+                            row.get("trigger_detail", String.class),
+                            row.get("turn_key", String.class),
+                            row.get("parent_tool_use_id", String.class),
+                            row.get("link_failure_reason", String.class)))));
+        }).blockOptional();
+    }
+
+    private CipxTraceIdentityDAO.TraceIdentityRow sentinelIdentityRow(int n) {
+        long base = n * 1_000_000L;
+        return CipxTraceIdentityDAO.TraceIdentityRow.builder()
+                .projectId(UUID.randomUUID().toString())
+                .traceId(UUID.randomUUID().toString())
+                .startTime(Instant.ofEpochMilli(1_800_000_000_000L + n))
+                .userUuid(UUID.randomUUID().toString())
+                .userEmail("sentinel-" + n + "-email")
+                .userDisplayName("sentinel-" + n + "-display-name")
+                .repository("sentinel-" + n + "-repository")
+                .sessionId("sentinel-" + n + "-session-id")
+                .harness("sentinel-" + n + "-harness")
+                .schemaVersion(n * 100 + 1)
+                .billingMode("sentinel-" + n + "-billing-mode")
+                .plan("sentinel-" + n + "-plan")
+                .planUsageStatus("sentinel-" + n + "-plan-usage-status")
+                .organizationType("sentinel-" + n + "-organization-type")
+                .seatTier("sentinel-" + n + "-seat-tier")
+                .billingType("sentinel-" + n + "-billing-type")
+                .branch("sentinel-" + n + "-branch")
+                .headShaStart("sentinel-" + n + "-head-sha-start")
+                .headShaEnd("sentinel-" + n + "-head-sha-end")
+                .dirty(n % 2 == 1)
+                .commitsInTrace(base + 1)
+                .filesAdded(base + 2)
+                .filesDeleted(base + 3)
+                .linesAdded(base + 4)
+                .linesDeleted(base + 5)
+                .agentsDispatched(base + 6)
+                .agentsLinked(base + 7)
+                .agentsAmbiguous(base + 8)
+                .cipxVersion("sentinel-" + n + "-cipx-version")
+                .lastUpdatedAt(Instant.ofEpochMilli(1_700_000_000_000L + n))
+                .build();
+    }
+
+    private void assertEveryIdentityColumnHoldsItsOwnValue(String workspaceId,
+            CipxTraceIdentityDAO.TraceIdentityRow expected) {
+        var stored = getCipxIdentityAllColumns(expected.traceId(), workspaceId);
+        assertThat(stored).as("row for trace_id %s", expected.traceId()).isPresent();
+        var actual = stored.get();
+
+        assertThat(actual.workspaceId()).as("workspace_id").isEqualTo(workspaceId);
+        assertThat(actual.projectId()).as("project_id").isEqualTo(expected.projectId());
+        assertThat(actual.traceId()).as("trace_id").isEqualTo(expected.traceId());
+        assertThat(actual.startMs()).as("start_time").isEqualTo(expected.startTime().toEpochMilli());
+        assertThat(actual.userUuid()).as("user_uuid").isEqualTo(expected.userUuid());
+        assertThat(actual.userEmail()).as("user_email").isEqualTo(expected.userEmail());
+        assertThat(actual.userDisplayName()).as("user_display_name").isEqualTo(expected.userDisplayName());
+        assertThat(actual.repository()).as("repository").isEqualTo(expected.repository());
+        assertThat(actual.sessionId()).as("session_id").isEqualTo(expected.sessionId());
+        assertThat(actual.harness()).as("harness").isEqualTo(expected.harness());
+        assertThat(actual.schemaVersion()).as("schema_version").isEqualTo(expected.schemaVersion());
+        assertThat(actual.billingMode()).as("billing_mode").isEqualTo(expected.billingMode());
+        assertThat(actual.plan()).as("plan").isEqualTo(expected.plan());
+        assertThat(actual.planUsageStatus()).as("plan_usage_status").isEqualTo(expected.planUsageStatus());
+        assertThat(actual.organizationType()).as("organization_type").isEqualTo(expected.organizationType());
+        assertThat(actual.seatTier()).as("seat_tier").isEqualTo(expected.seatTier());
+        assertThat(actual.billingType()).as("billing_type").isEqualTo(expected.billingType());
+        assertThat(actual.branch()).as("branch").isEqualTo(expected.branch());
+        assertThat(actual.headShaStart()).as("head_sha_start").isEqualTo(expected.headShaStart());
+        assertThat(actual.headShaEnd()).as("head_sha_end").isEqualTo(expected.headShaEnd());
+        assertThat(actual.dirty()).as("dirty").isEqualTo(expected.dirty());
+        assertThat(actual.commitsInTrace()).as("commits_in_trace").isEqualTo(expected.commitsInTrace());
+        assertThat(actual.filesAdded()).as("files_added").isEqualTo(expected.filesAdded());
+        assertThat(actual.filesDeleted()).as("files_deleted").isEqualTo(expected.filesDeleted());
+        assertThat(actual.linesAdded()).as("lines_added").isEqualTo(expected.linesAdded());
+        assertThat(actual.linesDeleted()).as("lines_deleted").isEqualTo(expected.linesDeleted());
+        assertThat(actual.agentsDispatched()).as("agents_dispatched").isEqualTo(expected.agentsDispatched());
+        assertThat(actual.agentsLinked()).as("agents_linked").isEqualTo(expected.agentsLinked());
+        assertThat(actual.agentsAmbiguous()).as("agents_ambiguous").isEqualTo(expected.agentsAmbiguous());
+        assertThat(actual.cipxVersion()).as("cipx_version").isEqualTo(expected.cipxVersion());
+        assertThat(actual.lastUpdatedMs()).as("last_updated_at").isEqualTo(expected.lastUpdatedAt().toEpochMilli());
+    }
+
+    private Optional<SentinelIdentityRow> getCipxIdentityAllColumns(String traceId, String workspaceId) {
+        String sql = """
+                SELECT
+                    workspace_id AS workspace_id,
+                    project_id AS project_id,
+                    trace_id AS trace_id,
+                    toUnixTimestamp64Milli(start_time) AS start_ms,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
+                    billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
+                    branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
+                    files_added, files_deleted, lines_added, lines_deleted,
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
+                    toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms
+                FROM cipx_trace_identities FINAL
+                WHERE workspace_id = :workspace_id AND trace_id = :trace_id
+                """;
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("workspace_id", workspaceId)
+                    .bind("trace_id", traceId);
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> SentinelIdentityRow.builder()
+                            .workspaceId(row.get("workspace_id", String.class))
+                            .projectId(row.get("project_id", String.class))
+                            .traceId(row.get("trace_id", String.class))
+                            .startMs(row.get("start_ms", Long.class))
+                            .userUuid(row.get("user_uuid", String.class))
+                            .userEmail(row.get("user_email", String.class))
+                            .userDisplayName(row.get("user_display_name", String.class))
+                            .repository(row.get("repository", String.class))
+                            .sessionId(row.get("session_id", String.class))
+                            .harness(row.get("harness", String.class))
+                            .schemaVersion(row.get("schema_version", Integer.class))
+                            .billingMode(row.get("billing_mode", String.class))
+                            .plan(row.get("plan", String.class))
+                            .planUsageStatus(row.get("plan_usage_status", String.class))
+                            .organizationType(row.get("organization_type", String.class))
+                            .seatTier(row.get("seat_tier", String.class))
+                            .billingType(row.get("billing_type", String.class))
+                            .branch(row.get("branch", String.class))
+                            .headShaStart(row.get("head_sha_start", String.class))
+                            .headShaEnd(row.get("head_sha_end", String.class))
+                            .dirty(row.get("dirty", Boolean.class))
+                            .commitsInTrace(row.get("commits_in_trace", Long.class))
+                            .filesAdded(row.get("files_added", Long.class))
+                            .filesDeleted(row.get("files_deleted", Long.class))
+                            .linesAdded(row.get("lines_added", Long.class))
+                            .linesDeleted(row.get("lines_deleted", Long.class))
+                            .agentsDispatched(row.get("agents_dispatched", Long.class))
+                            .agentsLinked(row.get("agents_linked", Long.class))
+                            .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
+                            .cipxVersion(row.get("cipx_version", String.class))
+                            .lastUpdatedMs(row.get("last_updated_ms", Long.class))
+                            .build())));
+        }).blockOptional();
+    }
+
+    private static JsonNode unknownFieldsCipxMetadata(String model) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "unrelated_top_level": {"anything": true},
+                          "cipx": {
+                            "future_section": {"whatever": [1, 2, 3]},
+                            "call": {
+                              "model": "%s",
+                              "future_scalar": "ignored",
+                              "future_object": {"nested": {"deep": 1}},
+                              "future_array": [{"a": 1}, {"b": 2}],
+                              "usage": {
+                                "input_tokens": 11,
+                                "cache_read_input_tokens": 22,
+                                "cache_creation_input_tokens": 33,
+                                "cache_creation": {
+                                  "ephemeral_5m_input_tokens": 44,
+                                  "ephemeral_1h_input_tokens": 55,
+                                  "ephemeral_7d_input_tokens": 77
+                                },
+                                "output_tokens": 66,
+                                "service_tier": "standard",
+                                "inference_geo": "not_available"
+                              },
+                              "config": {
+                                "effort": "high",
+                                "thinking_type": "adaptive",
+                                "max_tokens": 64000,
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast",
+                                "future_knob": true
+                              },
+                              "trigger": "subagent",
+                              "trigger_detail": "Explore",
+                              "turn_key": "unknown-fields-turnkey",
+                              "parent_tool_use_id": "toolu_unknown_fields",
+                              "link_failure_reason": "parent_unresolved",
+                              "spawn_depth": 2
+                            },
+                            "blocks": [
+                              {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":100,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text","future_block_field":"ignored"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model));
     }
 
     private static JsonNode spanCipxMetadata(String model, long input, long cacheRead, long cacheCreation,
@@ -581,7 +1104,11 @@ class CostIntelligenceIngestionTest {
                                 "max_tokens": 64000,
                                 "context_management": "clear_thinking_20251015",
                                 "speed": "fast"
-                              }
+                              },
+                              "trigger": "subagent",
+                              "trigger_detail": "code-reviewer",
+                              "turn_key": "abc123turnkey",
+                              "parent_tool_use_id": "toolu_parent_agent"
                             },
                             "blocks": [
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
@@ -625,6 +1152,34 @@ class CostIntelligenceIngestionTest {
                         }
                         """
                         .formatted(model, lump == 0 ? 50 : lump, cacheCreation5m, cacheCreation1h));
+    }
+
+    private static JsonNode unattributedSubagentCipxMetadata(String linkFailureReason) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "claude-sonnet-4-6",
+                              "usage": {
+                                "input_tokens": 10,
+                                "cache_read_input_tokens": 0,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 5
+                              },
+                              "trigger": "subagent",
+                              "trigger_detail": "",
+                              "turn_key": "unattributed-turnkey",
+                              "parent_tool_use_id": "",
+                              "link_failure_reason": "%s"
+                            },
+                            "blocks": [
+                              {"category":"agent_overhead","side":"input","cache_status":"none","parent_category":"context","chars":10,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(linkFailureReason));
     }
 
     private static JsonNode systemToolsCipxMetadata(String model, long cacheRead) {
@@ -694,6 +1249,10 @@ class CostIntelligenceIngestionTest {
                       "schema_version": %d,
                       "session_id": "cc-session-abc",
                       "harness": "%s",
+                      "agents_dispatched": 17,
+                      "agents_linked": 12,
+                      "agents_ambiguous": 4,
+                      "cipx_version": "0.0.56",
                       "repository": {
                         "remote": "%s",
                         "branch": "main",
@@ -723,6 +1282,49 @@ class CostIntelligenceIngestionTest {
                 """.formatted(schemaVersion, harness, repository, userUuid, email, displayName));
     }
 
+    private static JsonNode traceCipxMetadataWithAgentCounters(String userUuid, String email, String dispatched,
+            String linked, String ambiguous) {
+        return JsonUtils.getJsonNodeFromString("""
+                {
+                  "cipx": {
+                    "session": {
+                      "schema_version": 3,
+                      "session_id": "cc-session-big-counters",
+                      "harness": "claude_code",
+                      "agents_dispatched": %s,
+                      "agents_linked": %s,
+                      "agents_ambiguous": %s,
+                      "cipx_version": "0.0.56",
+                      "identity": {
+                        "user_uuid": "%s",
+                        "email": "%s",
+                        "display_name": "Big Counters Dev"
+                      }
+                    }
+                  }
+                }
+                """.formatted(dispatched, linked, ambiguous, userUuid, email));
+    }
+
+    private static JsonNode traceCipxMetadataWithoutAgentRollup(String userUuid, String email) {
+        return JsonUtils.getJsonNodeFromString("""
+                {
+                  "cipx": {
+                    "session": {
+                      "schema_version": 1,
+                      "session_id": "cc-session-legacy",
+                      "harness": "claude_code",
+                      "identity": {
+                        "user_uuid": "%s",
+                        "email": "%s",
+                        "display_name": "Legacy Dev"
+                      }
+                    }
+                  }
+                }
+                """.formatted(userUuid, email));
+    }
+
     private Optional<CipxSpendRow> getCipxSpend(UUID spanId, String workspaceId) {
         String sql = """
                 SELECT
@@ -730,7 +1332,9 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed
+                    effort, thinking_type, max_tokens, context_management, speed,
+                    `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
+                    link_failure_reason
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -753,7 +1357,12 @@ class CostIntelligenceIngestionTest {
                             row.get("thinking_type", String.class),
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
-                            row.get("speed", String.class)))));
+                            row.get("speed", String.class),
+                            row.get("trigger_kind", String.class),
+                            row.get("trigger_detail", String.class),
+                            row.get("turn_key", String.class),
+                            row.get("parent_tool_use_id", String.class),
+                            row.get("link_failure_reason", String.class)))));
         }).blockOptional();
     }
 
@@ -815,7 +1424,8 @@ class CostIntelligenceIngestionTest {
                     user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
-                    files_added, files_deleted, lines_added, lines_deleted
+                    files_added, files_deleted, lines_added, lines_deleted,
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -844,11 +1454,15 @@ class CostIntelligenceIngestionTest {
                             .headShaStart(row.get("head_sha_start", String.class))
                             .headShaEnd(row.get("head_sha_end", String.class))
                             .dirty(row.get("dirty", Boolean.class))
-                            .commitsInTrace(row.get("commits_in_trace", Integer.class))
-                            .filesAdded(row.get("files_added", Integer.class))
-                            .filesDeleted(row.get("files_deleted", Integer.class))
-                            .linesAdded(row.get("lines_added", Integer.class))
-                            .linesDeleted(row.get("lines_deleted", Integer.class))
+                            .commitsInTrace(row.get("commits_in_trace", Long.class))
+                            .filesAdded(row.get("files_added", Long.class))
+                            .filesDeleted(row.get("files_deleted", Long.class))
+                            .linesAdded(row.get("lines_added", Long.class))
+                            .linesDeleted(row.get("lines_deleted", Long.class))
+                            .agentsDispatched(row.get("agents_dispatched", Long.class))
+                            .agentsLinked(row.get("agents_linked", Long.class))
+                            .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
+                            .cipxVersion(row.get("cipx_version", String.class))
                             .build())));
         }).blockOptional();
     }
@@ -878,7 +1492,15 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement, String speed) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed, String trigger,
+            String triggerDetail, String turnKey, String parentToolUseId, String linkFailureReason) {
+    }
+
+    private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
+            Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
+            Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
+            String contextManagement, String speed, String trigger, String triggerDetail, String turnKey,
+            String parentToolUseId, String linkFailureReason) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
@@ -893,7 +1515,18 @@ class CostIntelligenceIngestionTest {
             String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
             String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
             String billingType,
-            String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
-            Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted) {
+            String branch, String headShaStart, String headShaEnd, Boolean dirty, Long commitsInTrace,
+            Long filesAdded, Long filesDeleted, Long linesAdded, Long linesDeleted,
+            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion) {
+    }
+
+    @Builder
+    private record SentinelIdentityRow(String workspaceId, String projectId, String traceId, Long startMs,
+            String userUuid, String userEmail, String userDisplayName, String repository, String sessionId,
+            String harness, Integer schemaVersion, String billingMode, String plan, String planUsageStatus,
+            String organizationType, String seatTier, String billingType, String branch, String headShaStart,
+            String headShaEnd, Boolean dirty, Long commitsInTrace, Long filesAdded, Long filesDeleted,
+            Long linesAdded, Long linesDeleted, Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous,
+            String cipxVersion, Long lastUpdatedMs) {
     }
 }
