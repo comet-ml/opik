@@ -4,6 +4,9 @@ import com.comet.opik.infrastructure.CipxTokenValidationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.Invocation;
+import jakarta.ws.rs.client.WebTarget;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -13,6 +16,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -26,7 +31,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -108,6 +116,40 @@ class CipxTokenValidationServiceTest {
                 arguments(named("span batch update", "PATCH"), "/v1/private/spans/batch"),
                 arguments(named("trace create", "POST"), "/v1/private/traces"),
                 arguments(named("trace update", "PATCH"), "/v1/private/traces/" + TRACE_ID));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t"})
+    @DisplayName("rejects a successful validation response without a device id")
+    void rejectsValidationResponseWithoutDeviceId(String deviceId) {
+        WebTarget target = mock(WebTarget.class);
+        Invocation.Builder request = mock(Invocation.Builder.class);
+        Response response = mock(Response.class);
+        when(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(TOKEN, "", List.of()))
+                .thenReturn(Optional.empty());
+        when(client.target(URI.create("http://ai-cost-backend/v1/internal/cipx-device-tokens/validate")))
+                .thenReturn(target);
+        when(target.request()).thenReturn(request);
+        when(request.accept(MediaType.APPLICATION_JSON)).thenReturn(request);
+        when(request.post(any())).thenReturn(response);
+        when(response.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
+        when(response.getStatusInfo()).thenReturn(Response.Status.OK);
+        when(response.readEntity(ValidatedCipxToken.class)).thenReturn(ValidatedCipxToken.builder()
+                .userName(MDM_EMAIL)
+                .workspaceId(WORKSPACE_ID)
+                .workspaceName(WORKSPACE_NAME)
+                .deviceId(deviceId)
+                .build());
+
+        assertThatThrownBy(() -> service.authenticate(TOKEN, contextInfo("POST", "/v1/private/traces")))
+                .isInstanceOf(ClientErrorException.class)
+                .satisfies(rejected -> assertThat(((ClientErrorException) rejected).getResponse().getStatus())
+                        .isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode()));
+
+        verify(cacheService, never()).cache(any(), any(), any(), any());
+        assertThat(requestContext.getWorkspaceId()).isNull();
+        assertThat(requestContext.getCipxDeviceId()).isNull();
     }
 
     @ParameterizedTest

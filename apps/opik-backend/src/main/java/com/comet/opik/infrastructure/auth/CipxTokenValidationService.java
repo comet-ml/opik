@@ -135,8 +135,8 @@ public class CipxTokenValidationService {
             }
 
             var validated = response.readEntity(ValidatedCipxToken.class);
-            if (validated == null || StringUtils.isBlank(validated.userName())
-                    || StringUtils.isBlank(validated.workspaceId())) {
+            if (validated == null || StringUtils.isAnyBlank(
+                    validated.userName(), validated.workspaceId(), validated.deviceId())) {
                 log.warn("CIPX token validation returned an incomplete response");
                 throw new ClientErrorException(INVALID_TOKEN, Response.Status.UNAUTHORIZED);
             }
