@@ -267,3 +267,37 @@ def test_track_event__action_is_not_a_string__does_not_raise(action, recording_w
     api.track_event("client", action)
 
     assert recording_worker.names == []
+
+
+class TestReportingAllowed:
+    """The question a call site asks before doing work to enrich an event.
+
+    Enrichment can cost a round-trip, so `OPIK_ANALYTICS_ENABLE=false` has to
+    switch that off too, not just the sending.
+    """
+
+    def test_reporting_allowed__happyflow(self, monkeypatch):
+        monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
+        # Switched off for good is process-wide state, and an earlier test asking
+        # for a worker under pytest is enough to have set it.
+        monkeypatch.setattr(api, "_DISABLED", False)
+
+        assert analytics.reporting_allowed() is True
+
+    def test_reporting_allowed__rules_say_no__is_false(self):
+        """Running under pytest is one of those rules."""
+        assert analytics.reporting_allowed() is False
+
+    def test_reporting_allowed__already_disabled__is_false(self, monkeypatch):
+        monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
+        monkeypatch.setattr(api, "_DISABLED", True)
+
+        assert analytics.reporting_allowed() is False
+
+    def test_reporting_allowed__config_unreadable__is_false(self, monkeypatch):
+        def broken():
+            raise ValueError("boom")
+
+        monkeypatch.setattr(api.config, "OpikConfig", broken)
+
+        assert analytics.reporting_allowed() is False

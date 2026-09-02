@@ -210,6 +210,40 @@ class TestInstallCommand:
         assert setup_spy.call_args.args[0]["use_local"] is True
 
 
+class TestIdentityIsReportedWithBothEvents:
+    """Both events of the pair have to name the account, or neither joins.
+
+    The entry event is what a drop-off is counted from, so identity only on the
+    result event would attribute the runs that finished and none of the ones worth
+    acting on.
+    """
+
+    def test_configure__entry_and_result__both_carry_the_account(self):
+        runner = CliRunner()
+        identity = {"user_id": "someone", "identity_lookup": "resolved"}
+
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.assistants, "setup"),
+            patch.object(
+                mcp_cli.account_identity, "event_properties", return_value=identity
+            ),
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+
+        assert result.exit_code == 0
+        assert len(track.call_args_list) == 2
+        for call in track.call_args_list:
+            assert call.kwargs["user_id"] == "someone"
+            assert call.kwargs["identity_lookup"] == "resolved"
+
+
 class TestHostFlag:
     """`--host` is what lets an agent, a Dockerfile, or CI run this at all."""
 

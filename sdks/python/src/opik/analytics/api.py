@@ -200,6 +200,25 @@ if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_after_fork)
 
 
+def reporting_allowed() -> bool:
+    """
+    Whether an event reported from this process would be sent anywhere.
+
+    For a call site that has to do work to enrich an event - a lookup, a round-trip
+    - and must not do that work when nothing will be reported. Asking here keeps
+    `OPIK_ANALYTICS_ENABLE` the single switch that governs analytics, the work done
+    to produce it included.
+    """
+    if _DISABLED:
+        return False
+
+    try:
+        return rules.reporting_allowed(config.OpikConfig())
+    except Exception:
+        LOGGER.debug("Failed to decide whether analytics may report", exc_info=True)
+        return False
+
+
 def _disable_after_rejection() -> None:
     """
     Called from the worker thread when the destination has told us to stop. Turning
