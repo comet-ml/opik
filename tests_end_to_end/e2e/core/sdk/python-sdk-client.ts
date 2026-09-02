@@ -60,14 +60,35 @@ export interface PythonSdkClient {
    * One `Dataset.insert(...)` into an existing dataset — and therefore exactly
    * one new dataset version, however many 1000-item batches the SDK splits the
    * payload into. `num_threads` > 1 uploads those batches in parallel.
+   *
+   * `deduplication: false` sends every item as-is with no content-hash
+   * comparison, so re-sending items already in the dataset persists a second
+   * copy under fresh ids. Omitted, the bridge leaves the SDK's default (on).
    */
   insertDatasetItems(args: {
     dataset_name: string;
     project_name: string;
     items: Array<Record<string, unknown>>;
     num_threads?: number;
+    deduplication?: boolean;
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number }>;
+  /**
+   * Several `Dataset.insert(...)` calls, in order, against ONE in-process
+   * Dataset object — one version per step that actually sends items.
+   *
+   * Reach for this over repeated `insertDatasetItems` calls only when the
+   * behaviour under test lives on the object rather than in the backend: the
+   * content-hash cache `deduplication` invalidates is per-Dataset, and every
+   * `insertDatasetItems` call resolves a fresh one, which re-syncs on its own
+   * and so cannot show whether the SDK invalidated anything.
+   */
+  insertDatasetItemSequence(args: {
+    dataset_name: string;
+    project_name: string;
+    steps: Array<{ items: Array<Record<string, unknown>>; deduplication?: boolean }>;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; steps_run: number }>;
   evaluateExperiment(args: {
     project_name: string;
     dataset_name: string;
@@ -325,6 +346,16 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       return request<{ dataset_id: string; inserted: number }>(
         'POST',
         '/datasets/insert-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async insertDatasetItemSequence(args) {
+      // Same budget as insert-items, for the same reason — except this route
+      // pays it once for every step in the sequence.
+      return request<{ dataset_id: string; steps_run: number }>(
+        'POST',
+        '/datasets/insert-sequence',
         args,
         { timeoutMs: 180_000 },
       );

@@ -139,18 +139,53 @@ class DatasetInsertItemsRequest(BaseModel):
     dataset_name: str
     project_name: str
     items: list[dict[str, Any]]
-    # Worker threads Dataset.insert uses to upload this call's batches. 1 (the
-    # SDK default) uploads them sequentially; >1 uploads them in parallel, and
-    # both paths must land in ONE dataset version with identical counters.
-    # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
-    # (2.2.8); against an older one the SDK silently falls back to sequential.
+    # Worker threads Dataset.insert uses to upload this call's batches. 1
+    # uploads them sequentially; >1 uploads them in parallel, and both paths
+    # must land in ONE dataset version with identical counters. Parallel upload
+    # needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT (2.2.8);
+    # against an older one the SDK silently falls back to sequential.
+    #
+    # Defaulted to 1 by this bridge, NOT by the SDK: `Dataset.insert` defaults
+    # to 4 as of 2.2.48. Pinning it keeps a caller that passes nothing on the
+    # sequential path, which is what the specs contrasting the two arms rely on.
     num_threads: int = 1
+    # False sends every item as-is with no content-hash comparison — duplicates
+    # are persisted rather than skipped. It also marks the Dataset object's
+    # local hash cache stale, so the next deduplicated insert on the SAME
+    # object re-syncs it from the backend. That second half is only observable
+    # across calls on one object; see DatasetInsertSequenceRequest.
+    deduplication: bool = True
     workspace: str | None = None
 
 
 class DatasetInsertItemsResponse(BaseModel):
     dataset_id: str
     inserted: int
+
+
+class DatasetInsertStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]]
+    deduplication: bool = True
+
+
+class DatasetInsertSequenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    # Run in order against ONE in-process Dataset object. Each step is one
+    # Dataset.insert(...) and therefore at most one dataset version.
+    steps: list[DatasetInsertStep]
+    workspace: str | None = None
+
+
+class DatasetInsertSequenceResponse(BaseModel):
+    dataset_id: str
+    # Echoed back so a caller can tell "the sequence ran to the end" from "the
+    # bridge accepted the body and did less than was asked".
+    steps_run: int
 
 
 class ExperimentItemSeed(BaseModel):

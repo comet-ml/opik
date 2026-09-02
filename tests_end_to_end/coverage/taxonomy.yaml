@@ -506,6 +506,8 @@ areas:
       - datasets/dataset-version-counters.spec.ts
       - datasets/dataset-version-repeated-item-id.spec.ts
       - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-insert-deduplication-off.spec.ts
+      - datasets/dataset-insert-deduplication-resync.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
@@ -517,8 +519,8 @@ areas:
       filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
       filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
-      sdk-round-trip:         { covered: true,  tier: t1-smoke }
-      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50) and a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent)" }
+      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + item read back through the SDK; plus the reverse at t2-cuj — a four-insert SDK sequence on one Dataset object, where a deduplication=False insert must invalidate the local content-hash cache so the next deduplicated insert re-syncs and still suppresses the repeats" }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the deduplication=False branch (two identical inserts -> 20 rows and v1 10 / v2 20 rendered, against a dedup-on control arm that stores 10 and cuts no v2)" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
