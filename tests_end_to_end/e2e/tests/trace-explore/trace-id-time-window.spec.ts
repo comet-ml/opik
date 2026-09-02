@@ -13,25 +13,38 @@ import { LogsPage } from '@e2e/pom/logs.page';
  * other windowed read is a 24-hour window — so a wrapped bound left the suite
  * green.
  *
- * Both surfaces on purpose, but they carry different weight. The API half is
- * the bound itself, read at exactly the ages that discriminate: those steps
- * fail against the wrapped expression and pass against the Date32 one.
+ * What this spec does and does not establish, stated plainly because a
+ * windowing spec is easy to over-read.
  *
- * The UI half does NOT discriminate the fix, and does not claim to. Every Logs
- * date range sends a `from_time` — the default preset is `past30days`, and even
- * `alltime` reaches only five years back while the picker clamps to one year —
- * which the read applies as `id >= :uuid_from_time` before the week predicate.
- * An epoch-week id fails that id-range bound with or without the fix, so the
- * table assertion below would pass either way. It is a default-range smoke
- * check: the epoch row stays out of the view a user actually sees, and the
- * panel step proves the row existed to be excluded rather than never seeded.
+ * It asserts that time-windowed reads window on the id's own week, at id ages
+ * that no other spec in the estate exercises. That is worth having: nothing
+ * else varies the embedded timestamp, so a future change to the bound would
+ * otherwise land unnoticed.
+ *
+ * It is NOT a regression gate for the wrap. On this schema `traces.id_at` is
+ * `DateTime('UTC')`, so an out-of-range instant truncates before the week
+ * expression sees it, and `toMonday` saturates rather than wrapping — checked
+ * on ClickHouse 26.3: `toMonday(toDateTime('1970-01-01'))` is `1970-01-01`, not
+ * a wrapped 2149 date. Old and new expressions therefore agree on every bound
+ * reachable here, and no assertion below distinguishes them. This is the same
+ * limitation the far-future half has (see the fixture), and it lifts when
+ * `traces_local_v2` widens `id_at` to `DateTime64` — at which point these
+ * assertions start discriminating without needing to be rewritten.
+ *
+ * The UI half is narrower still. Every Logs date range sends a `from_time` —
+ * the default preset is `past30days`, and even `alltime` reaches only five
+ * years back while the picker clamps to one year — which the read applies as
+ * `id >= :uuid_from_time` ahead of the week predicate. An epoch-week id fails
+ * that bound regardless, so the table step is a default-range smoke check: the
+ * epoch row stays out of the view a user sees, and the panel step proves the
+ * row existed to be excluded rather than never seeded.
  *
  * Deterministic despite naming a week: the ids are minted, not clocked, and
  * every bound below is either far outside any plausible run week or derived
  * from the run's own clock.
  */
 test.describe('Trace id time window — CUJ', { tag: ['@t2-cuj', '@area:traces'] }, () => {
-  test('a trace whose id predates the epoch is windowed on its real week, not a wrapped one', { tag: ['@cap:traces.list-traces'] }, async ({
+  test('a trace whose id predates the epoch is windowed on the week its id embeds', { tag: ['@cap:traces.list-traces'] }, async ({
     epochWindowTraces,
     project,
     backendClient,

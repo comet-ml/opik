@@ -46,15 +46,25 @@ export interface IdAgedTracesFixtures {
 }
 
 /**
- * 1970-01-01. Its ISO week starts Monday 1969-12-29, which is below the floor
- * of ClickHouse's 16-bit `Date` (1970-01-01) — so a week bound taken on the
- * stored id underflows and wraps to ~2149-06-06 unless the expression widens to
- * `Date32` first. That wrap is what OPIK-7456 removed from the read path, and
- * it is the only half of the fix reachable while `id_at` is still a `DateTime`.
+ * 1970-01-01. Its ISO week starts Monday 1969-12-29, below the floor of
+ * ClickHouse's 16-bit `Date` — the age OPIK-7456's read-path bound has to
+ * handle, and the one no other spec in the estate exercises.
+ *
+ * Not a regression probe for the wrap, though. `toMonday` saturates rather than
+ * underflowing (ClickHouse 26.3: `toMonday(toDateTime('1970-01-01'))` is
+ * `1970-01-01`), and `traces.id_at` is a 32-bit `DateTime` that truncates an
+ * out-of-range instant before the week expression sees it — so on this schema
+ * the pre- and post-fix expressions agree at every age seeded here. These ages
+ * start discriminating once `traces_local_v2` widens `id_at` to `DateTime64`.
  */
 const EPOCH_WEEK_MOMENT = new Date(0);
 
-/** Above the 16-bit `Date` ceiling (2149-06-06) at the other end. */
+/**
+ * Above the 16-bit `Date` ceiling (2149-06-06) at the other end. Used only by
+ * assertions that resolve a row BY id, which are indifferent to windowing —
+ * see the note on EPOCH_WEEK_MOMENT for why a windowed read cannot tell the
+ * two expressions apart on the current schema.
+ */
 const FAR_FUTURE_MOMENT = new Date(Date.UTC(2201, 0, 15));
 
 /** How long a just-written trace may take to become readable. */
