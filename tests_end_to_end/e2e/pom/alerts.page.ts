@@ -63,6 +63,19 @@ export class AlertsPage {
     return this.alertRow(alertId).getByRole('cell', { name: text, exact: true });
   }
 
+  /**
+   * The Events cell of an alert's row, located by the trigger title it must
+   * contain.
+   *
+   * Separate from `cell()` because the cell holds a joined list of every
+   * trigger, so an exact-name match never hits it. Both this and `cell()`
+   * avoid column indices: the visible column set is user-configurable and
+   * persisted in localStorage.
+   */
+  eventsCellContaining(alertId: string, triggerTitle: string): Locator {
+    return this.alertRow(alertId).getByRole('cell').filter({ hasText: triggerTitle });
+  }
+
   /** Opens the create form through the page's own CTA. */
   async openCreateForm(): Promise<AlertEditorPage> {
     return test.step('open the create-alert form', async () => {

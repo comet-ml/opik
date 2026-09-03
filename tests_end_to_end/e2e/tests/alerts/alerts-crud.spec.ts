@@ -57,7 +57,8 @@ test.describe('Alerts — smoke', { tag: ['@t1-smoke', '@area:alerts'] }, () => 
   test(
     'An alert created through the form lands on the list with its webhook destination',
     { tag: ['@cap:alerts.create-alert', '@cap:alerts.webhook-destination'] },
-    async ({ project, registerAlertCleanup, testNamespace, backendClient, page }) => {
+    async ({ project, uiAlertCleanup, testNamespace, backendClient, page }) => {
+      void uiAlertCleanup;
       const name = `${testNamespace}-alert-ui-created`;
       const webhookUrl = 'https://example.com/e2e-webhook-ui-created';
       const alerts = new AlertsPage(page);
@@ -86,7 +87,6 @@ test.describe('Alerts — smoke', { tag: ['@t1-smoke', '@area:alerts'] }, () => 
 
         const id = await row.getAttribute('data-row-id');
         expect(id).toBeTruthy();
-        registerAlertCleanup(id!);
 
         await expect(alerts.cell(id!, 'Slack')).toBeVisible();
         await expect(alerts.cell(id!, PROMPT_CREATED)).toBeVisible();
@@ -154,7 +154,11 @@ test.describe('Alerts — lifecycle', { tag: ['@t2-cuj', '@area:alerts'] }, () =
         await alerts.waitForReady();
         await expect(alerts.cell(alert.id, renamed)).toBeVisible();
         await expect(alerts.cell(alert.id, 'Disabled')).toBeVisible();
-        await expect(alerts.cell(alert.id, `${PROMPT_CREATED}, ${COST_THRESHOLD}`)).toBeVisible();
+        // Asserted as membership, not as one string: AlertDAO.FIND aggregates
+        // triggers with JSON_ARRAYAGG and no ORDER BY, and AlertsEventsCell
+        // joins them in API order, so the order is not guaranteed.
+        await expect(alerts.eventsCellContaining(alert.id, PROMPT_CREATED)).toBeVisible();
+        await expect(alerts.eventsCellContaining(alert.id, COST_THRESHOLD)).toBeVisible();
       });
 
       // A reopen, not a reload: the threshold and window live in trigger

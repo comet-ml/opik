@@ -20,7 +20,7 @@ import { Separator } from "@/ui/separator";
 import { Input } from "@/ui/input";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { AlertFormType } from "./schema";
-import { TRIGGER_CONFIG } from "./helpers";
+import { TRIGGER_CONFIG, alertTriggerTestId } from "./helpers";
 import { WINDOW_OPTIONS } from "./constants";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { GuardrailTypes } from "@/types/guardrails";
@@ -363,7 +363,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                     <div className="flex items-stretch gap-4">
                       <div
                         className="flex flex-auto flex-col gap-3"
-                        data-testid={`alert-trigger-${field.eventType}`}
+                        data-testid={alertTriggerTestId(field.eventType)}
                       >
                         <div className="flex gap-4">
                           <div className="flex flex-1 flex-col gap-1">

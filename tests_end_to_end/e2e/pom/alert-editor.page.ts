@@ -99,7 +99,9 @@ export class AlertEditorPage {
    * there instead and finds none of the config controls.
    */
   triggerConfig(eventType: AlertEventType): Locator {
-    return this.page.getByTestId(`alert-trigger-${eventType}`);
+    // Mirrors `alertTriggerTestId` in the alerts page helpers: the wire values
+    // carry `:`, which is normalized to `-` for the selector.
+    return this.page.getByTestId(`alert-trigger-${eventType.replace(/:/g, '-')}`);
   }
 
   async fillName(name: string): Promise<void> {

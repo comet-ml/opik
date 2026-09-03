@@ -6,8 +6,11 @@ import { uuid7 } from '../core/backend/uuid7';
 export const ALERT_EVENT_TYPE = {
   promptCreated: 'prompt:created',
   promptCommitted: 'prompt:committed',
+  promptDeleted: 'prompt:deleted',
   experimentFinished: 'experiment:finished',
   traceCost: 'trace:cost',
+  traceLatency: 'trace:latency',
+  traceErrors: 'trace:errors',
 } as const;
 
 export type AlertEventType = (typeof ALERT_EVENT_TYPE)[keyof typeof ALERT_EVENT_TYPE];
@@ -16,8 +19,11 @@ export type AlertEventType = (typeof ALERT_EVENT_TYPE)[keyof typeof ALERT_EVENT_
 export const ALERT_EVENT_TITLE: Record<AlertEventType, string> = {
   [ALERT_EVENT_TYPE.promptCreated]: 'New prompt added',
   [ALERT_EVENT_TYPE.promptCommitted]: 'New prompt version created',
+  [ALERT_EVENT_TYPE.promptDeleted]: 'Prompt deleted',
   [ALERT_EVENT_TYPE.experimentFinished]: 'Experiment finished',
   [ALERT_EVENT_TYPE.traceCost]: 'Cost threshold',
+  [ALERT_EVENT_TYPE.traceLatency]: 'Latency threshold',
+  [ALERT_EVENT_TYPE.traceErrors]: 'Trace errors threshold',
 };
 
 export interface AlertSeed {
@@ -51,11 +57,15 @@ export interface AlertFixtures {
   seedAlerts: (seeds: AlertSeed[]) => Promise<AlertRef[]>;
 
   /**
-   * Registers an alert id for teardown. For alerts a test creates through the
-   * UI: they have no id until the form submits and the row renders, so no
-   * fixture can know them upfront.
+   * Cleans up alerts a test creates through the UI, which have no id until the
+   * form submits and the row renders.
+   *
+   * Requesting the fixture is the whole API — alerts are found at teardown by
+   * the test's own namespace prefix rather than registered by the test. An
+   * id-registration call would be skipped by a failure between the create and
+   * the registration, leaking exactly the alert whose run went wrong.
    */
-  registerAlertCleanup: (id: string) => void;
+  uiAlertCleanup: void;
 }
 
 /**
@@ -130,18 +140,25 @@ export const test = baseTest.extend<AlertFixtures>({
     await use(seeded);
   },
 
-  registerAlertCleanup: async ({ backendClient }, use, testInfo) => {
-    const ids: string[] = [];
-    await use((id) => ids.push(id));
+  uiAlertCleanup: [
+    async ({ backendClient, testNamespace }, use, testInfo) => {
+      await use();
 
-    if (ids.length === 0 || shouldLeaveArtifacts(testInfo)) return;
+      if (shouldLeaveArtifacts(testInfo)) return;
 
-    try {
-      await backendClient.deleteAlertsBatch(ids);
-    } catch (err) {
-      console.warn('[alert fixture] UI-created alert cleanup warning:', err);
-    }
-  },
+      // Deletes by prefix, so this also sweeps the fixture-seeded alerts —
+      // harmless, since `deleteAlertsBatch` is idempotent for ids already gone.
+      try {
+        const leftover = await backendClient.listAlertsWithPrefix(`${testNamespace}-alert-`);
+        await backendClient.deleteAlertsBatch(leftover.map((a) => a.id));
+      } catch (err) {
+        console.warn('[alert fixture] UI-created alert cleanup warning:', err);
+      }
+    },
+    // Opted into by name, so the extra workspace-wide read stays off every
+    // test that only seeds through `seedAlerts`.
+    { auto: false },
+  ],
 });
 
 export { expect } from './dashboard-cleanup.fixture';
