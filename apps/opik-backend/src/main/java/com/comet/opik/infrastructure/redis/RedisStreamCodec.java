@@ -102,16 +102,17 @@ public enum RedisStreamCodec {
 
         private static Decoder<Object> tolerant(Decoder<Object> decoder) {
             return (buf, state) -> {
-                int payloadBytes = buf.readableBytes();
+                int encodedBytes = buf.readableBytes();
                 try {
                     return decoder.decode(buf, state);
                 } catch (Exception decodeFailure) {
-                    // Consume whatever the failed decode left behind, so the buffer looks the same to
-                    // Redisson as it would after a successful decode.
+                    // Belt-and-braces: Redisson hands us a bounded readSlice and never inspects its
+                    // reader index afterwards, so this is not required for framing. Drained anyway so
+                    // the wrapper stays correct if it is ever handed an unsliced buffer.
                     if (buf.isReadable()) {
                         buf.skipBytes(buf.readableBytes());
                     }
-                    return new UndecodableStreamMessage(payloadBytes, decodeFailure);
+                    return new UndecodableStreamMessage(encodedBytes, decodeFailure);
                 }
             };
         }

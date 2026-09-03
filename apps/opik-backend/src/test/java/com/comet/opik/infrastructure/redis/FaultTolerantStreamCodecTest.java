@@ -47,13 +47,13 @@ class FaultTolerantStreamCodecTest {
     void oversizedPayloadYieldsSentinel() throws IOException {
         var oversized = "\"%s\"".formatted("a".repeat(SMALL_STRING_LIMIT + 1));
         var buf = json(oversized);
-        var payloadBytes = buf.readableBytes();
+        var encodedBytes = buf.readableBytes();
 
         var decoded = codecWithSmallStringLimit().getMapValueDecoder().decode(buf, null);
 
         assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
         var undecodable = (UndecodableStreamMessage) decoded;
-        assertThat(undecodable.payloadBytes()).isEqualTo(payloadBytes);
+        assertThat(undecodable.encodedBytes()).isEqualTo(encodedBytes);
         assertThat(undecodable.cause())
                 .hasMessageContaining("maximum allowed");
         // The size is reported from the buffer, so it survives the failed decode consuming it.
@@ -125,7 +125,7 @@ class FaultTolerantStreamCodecTest {
     @DisplayName("a partially consumed buffer is drained and the pre-decode size reported")
     void partiallyConsumedBufferIsDrained() throws IOException {
         var buf = json("0123456789");
-        var payloadBytes = buf.readableBytes();
+        var encodedBytes = buf.readableBytes();
         Codec partialReader = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
             b.skipBytes(4);
             throw new IllegalStateException("failed after consuming 4 bytes");
@@ -134,7 +134,7 @@ class FaultTolerantStreamCodecTest {
         var decoded = partialReader.getMapValueDecoder().decode(buf, null);
 
         assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
-        assertThat(((UndecodableStreamMessage) decoded).payloadBytes()).isEqualTo(payloadBytes);
+        assertThat(((UndecodableStreamMessage) decoded).encodedBytes()).isEqualTo(encodedBytes);
         assertThat(buf.isReadable()).isFalse();
     }
 

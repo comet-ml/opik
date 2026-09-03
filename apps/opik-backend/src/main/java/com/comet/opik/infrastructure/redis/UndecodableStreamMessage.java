@@ -22,8 +22,11 @@ import lombok.NonNull;
  * is why the failure is raised as the retryable {@link UndecodablePayloadException} rather than
  * deleted on sight — see that class for the reasoning.
  *
- * @param payloadBytes readable bytes the decoder was handed, for sizing the offending entry
- * @param cause        the decode failure, kept for the log rather than rethrown
+ * @param encodedBytes size of the slice Redisson handed the decoder, i.e. the wire-encoded size of
+ *                      this one field's value -- LZ4-compressed on the {@link RedisStreamCodec#JAVA}
+ *                      value path, not the decoded size of whatever the payload represents. There is
+ *                      no decoded size to report: the decode is exactly what failed.
+ * @param cause         the decode failure, kept for the log rather than rethrown
  */
-public record UndecodableStreamMessage(int payloadBytes, @NonNull Throwable cause) {
+public record UndecodableStreamMessage(int encodedBytes, @NonNull Throwable cause) {
 }

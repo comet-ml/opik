@@ -494,15 +494,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             // Warn, not error: on its own this is one delivery of one entry, and the retryable path may
             // still decode it on another pod. handleMaxRetriesReached logs at error when it is finally
             // removed, which is the event worth waking someone for.
-            log.warn("Undecodable message: messageId '{}', stream '{}', payloadBytes '{}'",
-                    messageId, config.getStreamName(), undecodable.payloadBytes(), undecodable.cause());
+            log.warn("Undecodable message: messageId '{}', stream '{}', encodedBytes '{}'",
+                    messageId, config.getStreamName(), undecodable.encodedBytes(), undecodable.cause());
             return Mono.just(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     // Retryable on purpose: "this pod cannot decode it" is not "nobody can". maxRetries
                     // bounds the cycling, so it still terminates. See UndecodablePayloadException.
                     .error(new UndecodablePayloadException(
-                            "Undecodable stream payload of %d bytes".formatted(undecodable.payloadBytes()),
+                            "Undecodable stream field of %d encoded bytes".formatted(undecodable.encodedBytes()),
                             undecodable.cause()))
                     .context(MessageContext.UNKNOWN)
                     .build());
@@ -729,10 +729,17 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Exception handling: see {@link #isRetryableException(Throwable)} for the full non-retryable classification.
      * Non-retryable exceptions are immediately removed from the stream.
      * All other exceptions are retried up to {@code maxRetries} times before being removed.
+     * <p>
+     * {@code message} is never {@code null}. An entry with nothing under the configured payload field,
+     * or one whose field name itself failed to decode, is retired in {@code processMessage} before
+     * this method is ever called (OPIK-8192) — implementations do not need to guard against it, and
+     * previously did not consistently: {@link com.comet.opik.api.resources.v1.events.OnlineScoringBaseScorer}
+     * dereferences {@code message} unconditionally on the first line of its own {@code processEvent},
+     * which a null used to reach as a live NullPointerException on {@code main}.
      *
-     * @param message a Redis message
+     * @param message a Redis message, guaranteed non-null
      */
-    protected abstract Mono<Void> processEvent(M message);
+    protected abstract Mono<Void> processEvent(@NonNull M message);
 
     /**
      * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>
