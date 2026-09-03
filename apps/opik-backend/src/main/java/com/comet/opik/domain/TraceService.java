@@ -537,7 +537,7 @@ class TraceServiceImpl implements TraceService {
      * Resolves every owning project for each id: a bounded fast pass, then an unbounded pass over only the ids the
      * bounded one leaves unresolved. Returns id -> owning projects; ids absent from the result have no live row.
      * <p>
-     * The bounded pass's week window can miss a row whose week {@link com.comet.opik.utils.WeeklyPartitions#of}
+     * The bounded pass's week window can miss a row whose week {@link com.comet.opik.utils.WeeklyPartitions#groupByPartition}
      * cannot derive exactly — an id at or past the end of {@code DateTime64}'s range, where {@code id_at} saturates
      * to {@code 2299-12-31} whatever the real week — so the unbounded pass re-resolves the miss set and the bounded
      * query is never a delete's sole resolver. A far-future timestamp short of that ceiling is no longer such a case:
@@ -566,6 +566,12 @@ class TraceServiceImpl implements TraceService {
                 });
     }
 
+    /**
+     * All-or-nothing over the batch: an error anywhere skips {@code TracesDeleted} and the deletion-events capture for
+     * every pair, not just the failed one. OPIK-8230 widens the window — the DAO can now emit several statements per
+     * batch, so earlier partitions' rows may already be gone. Deletes are idempotent; restructuring this coupling is
+     * out of that ticket's scope.
+     */
     private Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, Connection connection) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
