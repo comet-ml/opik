@@ -1768,8 +1768,10 @@ public class SpanDAO {
                 <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
                 <if(model)> :model <else> s.model <endif> as model,
                 <if(provider)> :provider <else> s.provider <endif> as provider,
-                <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
-                <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
+                <if(recalculated_cost)> if(s.total_estimated_cost > 0 AND s.total_estimated_cost_version = '', s.total_estimated_cost, toDecimal128(:total_estimated_cost, 12))
+                <elseif(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
+                <if(recalculated_cost)> if(s.total_estimated_cost > 0 AND s.total_estimated_cost_version = '', s.total_estimated_cost_version, :total_estimated_cost_version)
+                <elseif(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
                 """
             + TagOperations.tagUpdateFragment("s.tags")
             + """
@@ -3218,9 +3220,16 @@ public class SpanDAO {
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
 
-        if (spanUpdate.totalEstimatedCost() != null) {
+        boolean shouldRecalculateEstimatedCost = spanUpdate.totalEstimatedCost() == null
+                && isUpdateCostRecalculationAvailable(spanUpdate);
+        if (spanUpdate.totalEstimatedCost() != null || shouldRecalculateEstimatedCost) {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
+        }
+        if (shouldRecalculateEstimatedCost) {
+            // Bulk doesn't load the rows it updates, so a cost the user set manually is kept by the
+            // query itself, the way isManualCost keeps it on the single span path.
+            template.add("recalculated_cost", "recalculated_cost");
         }
         Optional.ofNullable(spanUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
@@ -3268,6 +3277,11 @@ public class SpanDAO {
         if (spanUpdate.totalEstimatedCost() != null) {
             statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
+        } else if (isUpdateCostRecalculationAvailable(spanUpdate)) {
+            BigDecimal estimatedCost = CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(),
+                    spanUpdate.usage(), spanUpdate.metadata());
+            statement.bind("total_estimated_cost", estimatedCost.toString());
+            statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
         }
         Optional.ofNullable(spanUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
