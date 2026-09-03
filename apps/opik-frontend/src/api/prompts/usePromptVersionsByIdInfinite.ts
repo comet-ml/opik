@@ -1,10 +1,10 @@
-import { QueryFunctionContext, useInfiniteQuery } from "@tanstack/react-query";
-import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
-import { PromptVersion } from "@/types/prompts";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Sorting } from "@/types/sorting";
-import { processSorting } from "@/lib/sorting";
 import { Filter } from "@/types/filters";
-import { processFilters } from "@/lib/filters";
+import {
+  getPromptVersionsById,
+  PromptVersionsByIdResponse,
+} from "./getPromptVersionsById";
 
 const PAGE_SIZE = 25;
 
@@ -20,46 +20,11 @@ type UsePromptVersionsByIdInfiniteOptions = {
   refetchInterval?: number;
 };
 
-type UsePromptVersionsByIdInfiniteResponse = {
-  content: PromptVersion[];
-  page: number;
-  size: number;
-  total: number;
-  sortable_by: string[];
-};
-
-const getPromptVersionsById = async (
-  { signal }: QueryFunctionContext,
-  {
-    promptId,
-    page,
-    sorting,
-    filters,
-    search,
-  }: UsePromptVersionsByIdInfiniteParams & { page: number },
-): Promise<UsePromptVersionsByIdInfiniteResponse> => {
-  const { data } = await api.get(
-    `${PROMPTS_REST_ENDPOINT}${promptId}/versions`,
-    {
-      signal,
-      params: {
-        ...processFilters(filters),
-        ...processSorting(sorting),
-        size: PAGE_SIZE,
-        page,
-        ...(search && { search }),
-      },
-    },
-  );
-
-  return data;
-};
-
 export default function usePromptVersionsByIdInfinite(
   params: UsePromptVersionsByIdInfiniteParams,
   options?: UsePromptVersionsByIdInfiniteOptions,
 ) {
-  return useInfiniteQuery<UsePromptVersionsByIdInfiniteResponse>({
+  return useInfiniteQuery<PromptVersionsByIdResponse>({
     // Shares the "prompt-versions" key prefix (and the same
     // `{ promptId, ... }` params shape) with usePromptVersionsById so the
     // mutation hooks that invalidate that prefix (create/delete/deploy a
@@ -70,6 +35,7 @@ export default function usePromptVersionsByIdInfinite(
     queryFn: (context) =>
       getPromptVersionsById(context, {
         ...params,
+        size: PAGE_SIZE,
         page: context.pageParam as number,
       }),
     // `size` on the response is the actual item count returned (not the

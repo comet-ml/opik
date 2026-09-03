@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Blocks,
   ChevronDown,
@@ -11,8 +11,6 @@ import {
   Sparkles,
   User,
 } from "lucide-react";
-import { keepPreviousData } from "@tanstack/react-query";
-import { StringParam, useQueryParam } from "use-query-params";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -22,9 +20,9 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import {
-  PromptVersion,
   PromptWithLatestVersion,
   PROMPT_TEMPLATE_STRUCTURE,
+  PROMPT_VERSION_TYPE,
 } from "@/types/prompts";
 import { Separator } from "@/ui/separator";
 import {
@@ -44,10 +42,8 @@ import VersionHistoryTimeline, {
 import DiffVersionMenu from "@/v2/pages-shared/version-history/DiffVersionMenu";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import ComparePromptVersionDialog from "@/v2/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
-import usePromptVersionsByIdInfinite from "@/api/prompts/usePromptVersionsByIdInfinite";
-import usePromptVersionById, {
-  useFetchPromptVersion,
-} from "@/api/prompts/usePromptVersionById";
+import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
+import usePromptVersionHistory from "@/v2/pages/PromptPage/PromptTab/usePromptVersionHistory";
 import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
 import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
 import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
@@ -74,10 +70,6 @@ interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
 }
 
-interface VersionWithMaybeAuthor extends PromptVersion {
-  created_by?: string;
-}
-
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const {
     permissions: { canUsePlayground, canEditPrompts },
@@ -86,7 +78,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
   const [openCompare, setOpenCompare] = useState(false);
   const [openLoadConfirm, setOpenLoadConfirm] = useState(false);
-  const [isDiffMenuOpen, setIsDiffMenuOpen] = useState(false);
   const [compareAgainstVersionId, setCompareAgainstVersionId] = useState<
     string | null
   >(null);
@@ -95,116 +86,28 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const { loadPrompt, isPlaygroundEmpty, isPendingProviderKeys } =
     useLoadPromptIntoPlayground();
 
-  const [activeVersionId, setActiveVersionId] = useQueryParam(
-    "activeVersionId",
-    StringParam,
-  );
-
   const {
-    data,
-    isLoading: isVersionsLoading,
-    hasNextPage,
-    isFetching: isFetchingVersions,
-    isFetchingNextPage,
-    fetchNextPage,
-  } = usePromptVersionsByIdInfinite(
-    {
-      promptId: prompt?.id || "",
-      sorting: [{ id: "created_at", desc: true }],
-    },
-    {
-      enabled: !!prompt?.id,
-      refetchInterval: 30000,
-    },
-  );
-
-  const versions = useMemo(
-    () =>
-      data?.pages.flatMap((p) => p.content) as
-        | VersionWithMaybeAuthor[]
-        | undefined,
-    [data],
-  );
-  const historyItems = useMemo<VersionHistoryItem[]>(() => {
-    if (!versions) return [];
-    return versions.map((v) => ({
-      id: v.id,
-      label: v.version_number ?? v.commit,
-      tags: v.tags ?? [],
-      description: v.change_description,
-      created_at: v.created_at,
-      created_by: v.created_by,
-      environments: v.environments ?? [],
-    }));
-  }, [versions]);
-
-  // A deep link to an old version not yet in the loaded pages still renders
-  // correctly (fetched independently below), but the sidebar can't highlight
-  // it or scroll it into view until its page is loaded — keep paging until
-  // it's found (or there's nothing left to load) so the two stay in sync.
-  // Must wait for `isFetchingVersions` (not just `isFetchingNextPage`) to go
-  // idle: a background refetch of an already-loaded page (e.g. after a
-  // version-create invalidation) reports `isFetchingNextPage: false` too,
-  // and fetching the next page against that stale intermediate state can
-  // request an offset that no longer lines up with the refreshed page,
-  // producing an overlapping/duplicate row once both resolve.
-  useEffect(() => {
-    if (
-      activeVersionId &&
-      versions &&
-      !versions.some((v) => v.id === activeVersionId) &&
-      hasNextPage &&
-      !isFetchingVersions
-    ) {
-      fetchNextPage();
-    }
-  }, [
-    activeVersionId,
+    setActiveVersionId,
     versions,
+    historyItems,
+    effectiveVersionId,
+    versionFromList,
+    fetchedActiveVersion,
+    activeVersion,
+    activeVersionLabel,
+    isVersionsLoading,
+    isActiveVersionLoading,
     hasNextPage,
+    isFetchingNextPage,
     isFetchingVersions,
+    isVersionsError,
     fetchNextPage,
-  ]);
-
-  // The Diff menu's "Compare against" list only offers whatever pages are
-  // already loaded — while it's open, keep paging until every version is
-  // available so it doesn't silently omit older, not-yet-loaded versions.
-  useEffect(() => {
-    if (isDiffMenuOpen && hasNextPage && !isFetchingVersions) {
-      fetchNextPage();
-    }
-  }, [isDiffMenuOpen, hasNextPage, isFetchingVersions, fetchNextPage]);
-
-  const effectiveVersionId = useMemo(() => {
-    if (activeVersionId) return activeVersionId;
-    return prompt?.latest_version?.id ?? versions?.[0]?.id ?? "";
-  }, [activeVersionId, versions, prompt?.latest_version?.id]);
-
-  const { data: fetchedActiveVersion, isLoading: isActiveVersionLoading } =
-    usePromptVersionById(
-      { versionId: effectiveVersionId },
-      {
-        enabled: !!effectiveVersionId,
-        placeholderData: keepPreviousData,
-      },
-    );
-
-  // A stale or crafted activeVersionId query param can reference a version
-  // belonging to a different prompt (it's fetched independently of the
-  // current prompt's own version list) — never render foreign content here.
-  const activeVersion =
-    fetchedActiveVersion &&
-    prompt &&
-    fetchedActiveVersion.prompt_id === prompt.id
-      ? fetchedActiveVersion
-      : prompt?.latest_version;
-
-  const activeVersionLabel =
-    activeVersion?.version_number ?? activeVersion?.commit ?? "";
+    isDiffMenuOpen,
+    setIsDiffMenuOpen,
+  } = usePromptVersionHistory(prompt);
 
   const activeStage = pickHighestStage(activeVersion?.tags);
-  const activeAuthor =
-    (activeVersion as VersionWithMaybeAuthor | undefined)?.created_by ?? "";
+  const activeAuthor = activeVersion?.created_by ?? "";
   const activeVersionEnvironments = useMemo(
     () => activeVersion?.environments ?? [],
     [activeVersion?.environments],
@@ -228,15 +131,26 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     // activeVersion can hold stale data when switching versions because
     // usePromptVersionById uses placeholderData: keepPreviousData — fall back
     // to an imperative fetch so we always load the version actually selected.
+    // Not needed when the version came from `versionFromList`: that's always
+    // freshly derived from the current version list, never stale.
     let version = activeVersion;
-    if (effectiveVersionId && fetchedActiveVersion?.id !== effectiveVersionId) {
+    if (
+      !versionFromList &&
+      effectiveVersionId &&
+      fetchedActiveVersion?.id !== effectiveVersionId
+    ) {
       try {
         const fetched = await fetchPromptVersion({
           versionId: effectiveVersionId,
         });
         // Guard against a stale/crafted activeVersionId pointing at a
-        // different prompt's version — never load foreign content.
-        version = fetched.prompt_id === prompt.id ? fetched : activeVersion;
+        // different prompt's version, or at a mask — never load that
+        // content into the playground.
+        version =
+          fetched.prompt_id === prompt.id &&
+          fetched.version_type !== PROMPT_VERSION_TYPE.MASK
+            ? fetched
+            : activeVersion;
       } catch {
         // Refetch failed — bail rather than ship stale `activeVersion`
         // (placeholder from the previously-selected version) into the
@@ -249,6 +163,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     loadPrompt,
     prompt,
     activeVersion,
+    versionFromList,
     fetchedActiveVersion,
     effectiveVersionId,
     fetchPromptVersion,
@@ -347,7 +262,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   onSelect={() => setActiveVersionId(item.id)}
                   className={cn(
                     "flex flex-col items-start gap-1",
-                    item.id === effectiveVersionId &&
+                    item.id === activeVersion?.id &&
                       "bg-muted text-foreground focus:bg-muted",
                   )}
                 >
@@ -577,6 +492,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           onSelect={(item) => setActiveVersionId(item.id)}
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
+          isFetching={isFetchingVersions}
+          hasError={isVersionsError}
           onLoadMore={fetchNextPage}
         />
       </div>
