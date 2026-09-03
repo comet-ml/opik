@@ -30,7 +30,6 @@ type DeployToEnvironmentMenuProps = {
   versionId: string;
   versionLabel: string;
   versions: PromptVersion[] | undefined;
-  totalVersions: number;
   activeEnvironments: string[];
 };
 
@@ -39,7 +38,6 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   versionId,
   versionLabel,
   versions,
-  totalVersions,
   activeEnvironments,
 }) => {
   const { toast } = useToast();
@@ -64,13 +62,13 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   );
 
   const environmentOwners = useMemo(() => {
-    const map = new Map<string, { version: PromptVersion; index: number }>();
+    const map = new Map<string, PromptVersion>();
     // `versions` is newest-first; only keep the first writer per environment so
     // the "Currently vN" label reflects the newest version assigned to that env,
     // not whichever historical version was iterated last.
-    versions?.forEach((v, index) => {
+    versions?.forEach((v) => {
       v.environments?.forEach((env) => {
-        if (!map.has(env)) map.set(env, { version: v, index });
+        if (!map.has(env)) map.set(env, v);
       });
     });
     return map;
@@ -143,8 +141,8 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
             const owner = environmentOwners.get(env.name);
             const isActiveHere = activeEnvSet.has(env.name);
             const ownerLabel =
-              !isActiveHere && owner && totalVersions > 0
-                ? `Currently v${totalVersions - owner.index}`
+              !isActiveHere && owner
+                ? `Currently ${owner.version_number ?? owner.commit}`
                 : "";
             return (
               <DropdownMenuItem

@@ -312,12 +312,8 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   const anyMediaChanged = mediaChanges.some((m) => m.changed);
 
   const versionLabelByCommit = useMemo(() => {
-    const sortedDesc = [...versions].sort((a, b) =>
-      b.created_at.localeCompare(a.created_at),
-    );
-    const total = sortedDesc.length;
     const map = new Map<string, string>();
-    sortedDesc.forEach((v, idx) => map.set(v.commit, `v${total - idx}`));
+    versions.forEach((v) => map.set(v.commit, v.version_number ?? v.commit));
     return map;
   }, [versions]);
 
