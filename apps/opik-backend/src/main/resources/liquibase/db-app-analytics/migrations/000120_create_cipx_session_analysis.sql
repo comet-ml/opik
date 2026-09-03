@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andriid:000119_create_cipx_session_analysis
+--changeset andriid:000120_create_cipx_session_analysis
 --comment: LLM session analysis results (phase segmentation), written by the cost API analysis runner
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}'
