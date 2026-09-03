@@ -1062,4 +1062,29 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code replicate} and {@code watsonx} as canonical providers so that their
+     * token-priced entries in {@code model_prices_and_context_window.json} are no longer silently
+     * dropped at load time. Each case exercises a representative token-priced model routed through
+     * {@link SpanCostCalculator#textGenerationCost}. Per-second-priced models under these providers
+     * (for example Watsonx transcription) use a pricing shape this calculator does not cover and
+     * stay out of scope here.
+     */
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideReplicateWatsonxProviderCases")
+    void calculateCostHandlesReplicateAndWatsonxModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideReplicateWatsonxProviderCases() {
+        return Stream.of(
+                // replicate/openai/o1: input 1.5e-05, output 6e-05 -> 1000*1.5e-05 + 200*6e-05 = 0.027
+                Arguments.of("replicate", "replicate/openai/o1", "0.027"),
+                // watsonx/openai/gpt-oss-120b: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("watsonx", "watsonx/openai/gpt-oss-120b", "0.00027"));
+    }
 }
