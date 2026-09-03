@@ -731,15 +731,22 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * All other exceptions are retried up to {@code maxRetries} times before being removed.
      * <p>
      * {@code message} is never {@code null}. An entry with nothing under the configured payload field,
-     * or one whose field name itself failed to decode, is retired in {@code processMessage} before
+     * or one whose field name itself failed to decode, is retired in {@link #processMessage} before
      * this method is ever called (OPIK-8192) — implementations do not need to guard against it, and
      * previously did not consistently: {@link com.comet.opik.api.resources.v1.events.OnlineScoringBaseScorer}
      * dereferences {@code message} unconditionally on the first line of its own {@code processEvent},
      * which a null used to reach as a live NullPointerException on {@code main}.
+     * <p>
+     * Deliberately <em>not</em> annotated {@code @NonNull}. Lombok injects its check at the start of a
+     * method body, and an abstract method has none, so the annotation would generate nothing here;
+     * parameter annotations are not inherited either, so it would give the implementations nothing.
+     * The invariant is established at exactly one place — the guards in {@link #processMessage} — and
+     * this contract is where it is recorded. Annotating the overrides instead would only add a check
+     * for a condition the caller already excludes.
      *
-     * @param message a Redis message, guaranteed non-null
+     * @param message a Redis message, guaranteed non-null by {@link #processMessage}
      */
-    protected abstract Mono<Void> processEvent(@NonNull M message);
+    protected abstract Mono<Void> processEvent(M message);
 
     /**
      * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>

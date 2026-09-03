@@ -6,6 +6,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.client.codec.Codec;
 import org.redisson.client.protocol.Decoder;
 import org.redisson.client.protocol.Encoder;
@@ -105,7 +107,7 @@ class FaultTolerantStreamCodecTest {
     @DisplayName("the shipped JAVA codec tolerates an undecodable field name too")
     void shippedJavaCodecToleratesUndecodableMapKey() throws IOException {
         // The first four bytes are LZ4CodecV2's decompressed-length header, which its decoder reads and
-        // allocates. Kept explicit and small (well under MAX_MAP_KEY_DECODED_LENGTH, see the boundary
+        // allocates. Kept explicit and small (well under MAX_LZ4_DECODED_LENGTH, see the boundary
         // tests below) so this exercises the OUTER FaultTolerantCodec.tolerant() catching an ordinary
         // decompression failure on a legitimately-sized declared length, distinct from
         // mapKeyDecoderRejectsImplausibleDeclaredLength below, which never reaches a decoder at all.
@@ -118,34 +120,26 @@ class FaultTolerantStreamCodecTest {
     }
 
     /**
-     * The vulnerability this guards: {@code LZ4CodecV2.decode} reads its 4-byte declared length and
-     * hands it straight to {@code ByteBufAllocator.DEFAULT.buffer(...)} with no bound of its own
-     * (verified against Redisson 4.7.0 bytecode). A corrupted or truncated frame can therefore claim
-     * an arbitrary 31-bit length; left unguarded, an {@link OutOfMemoryError} from that allocation
-     * would be an {@link Error} the wrapper does not absorb, reproducing the OPIK-8164 wedge through a
-     * corrupted header instead of an oversized string.
+     * The vulnerability this guards: {@code LZ4CodecV2$1.decode} reads its 4-byte declared length and
+     * immediately allocates a raw heap {@code byte[]} of that size -- {@code readInt()} then
+     * {@code newarray byte} -- building the decompressor and parsing the frame only afterwards
+     * (verified against the Redisson 4.7.0 bytecode on the classpath). A corrupted or truncated frame
+     * can therefore claim an arbitrary 31-bit length; left unguarded the resulting
+     * {@code OutOfMemoryError: Java heap space} is an {@link Error} the wrapper does not absorb,
+     * reproducing the OPIK-8164 wedge through a corrupted header instead of an oversized string.
      * <p>
-     * "plai" -- the first four bytes of the free-text buffer this test replaced in an earlier revision
-     * -- decodes as 1,886,151,017: a ~1.8 GiB request. This test proves that length is rejected before
-     * any allocation is attempted, not merely that it happens not to OOM on this runner.
+     * 1,886,151,017 is the big-endian reading of {@code "plai"} -- the first four bytes of the
+     * free-text buffer an earlier revision of this file used, which is how the hazard was found. Both
+     * cases assert the length is rejected <em>before</em> any allocation is attempted, not merely that
+     * it happens not to OOM on this runner.
      */
-    @Test
+    @ParameterizedTest
+    @ValueSource(ints = {1_886_151_017, Integer.MAX_VALUE, -1, Integer.MIN_VALUE})
     @DisplayName("an implausible declared length is rejected before LZ4CodecV2 ever allocates")
-    void mapKeyDecoderRejectsImplausibleDeclaredLength() throws IOException {
-        var declaredLength = "plai".getBytes(StandardCharsets.US_ASCII); // 1,886,151,017
-        var buf = Unpooled.wrappedBuffer(declaredLength, "n-frame-body".getBytes(StandardCharsets.UTF_8));
-
-        var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(buf, null);
-
-        assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
-        assertThat(((UndecodableStreamMessage) decoded).cause())
-                .hasMessageContaining("sanity ceiling");
-    }
-
-    @Test
-    @DisplayName("a negative declared length is rejected the same way")
-    void mapKeyDecoderRejectsNegativeDeclaredLength() throws IOException {
-        var buf = Unpooled.buffer().writeInt(-1).writeBytes("garbage".getBytes(StandardCharsets.UTF_8));
+    void mapKeyDecoderRejectsImplausibleDeclaredLength(int declaredLength) throws IOException {
+        var buf = Unpooled.buffer()
+                .writeInt(declaredLength)
+                .writeBytes("frame-body".getBytes(StandardCharsets.UTF_8));
 
         var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(buf, null);
 
@@ -163,7 +157,7 @@ class FaultTolerantStreamCodecTest {
     @DisplayName("a declared length exactly at the ceiling is not rejected pre-allocation")
     void mapKeyDecoderDoesNotRejectDeclaredLengthAtTheCeiling() throws IOException {
         var buf = Unpooled.buffer()
-                .writeInt(RedisStreamCodec.MAX_MAP_KEY_DECODED_LENGTH)
+                .writeInt(RedisStreamCodec.MAX_LZ4_DECODED_LENGTH)
                 .writeBytes("not a real lz4 frame body".getBytes(StandardCharsets.UTF_8));
 
         var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(buf, null);
