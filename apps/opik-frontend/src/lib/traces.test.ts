@@ -538,4 +538,110 @@ describe("prettifyMessage", () => {
       prettified: true,
     });
   });
+
+  it("prettifies canonical OpenInference output messages", () => {
+    const result = prettifyMessage(
+      {
+        messages: [
+          {
+            role: "model",
+            contents: [
+              { type: "reasoning", text: "Check the facts" },
+              { type: "text", text: "The answer is 42" },
+            ],
+          },
+        ],
+      },
+      { type: "output" },
+    );
+
+    expect(result).toEqual({
+      message: "Check the facts\n\nThe answer is 42",
+      prettified: true,
+    });
+  });
+
+  it("prettifies OpenInference completion prompts and choices", () => {
+    expect(
+      prettifyMessage(
+        { prompts: [{ text: "First" }, { text: "Latest prompt" }] },
+        { type: "input" },
+      ),
+    ).toEqual({ message: "Latest prompt", prettified: true });
+    expect(
+      prettifyMessage(
+        { choices: [{ text: "One" }, { text: "Final completion" }] },
+        { type: "output" },
+      ),
+    ).toEqual({ message: "Final completion", prettified: true });
+  });
+
+  it("prettifies historical flattened OpenInference output stored in input", () => {
+    const storedInput = {
+      "openinference.span.kind": "LLM",
+      "llm.input_messages.0.message.role": "user",
+      "llm.input_messages.0.message.content": "Question",
+      "llm.output_messages.4.message.role": "assistant",
+      "llm.output_messages.4.message.content": "Recovered answer",
+    };
+
+    expect(prettifyMessage(storedInput, { type: "output" })).toEqual({
+      message: "Recovered answer",
+      prettified: true,
+    });
+
+    expect(
+      prettifyMessage(undefined, {
+        type: "output",
+        openInferenceInput: storedInput,
+      }),
+    ).toEqual({
+      message: "Recovered answer",
+      prettified: true,
+    });
+
+    expect(
+      prettifyMessage(
+        { value: { choices: [{ text: "Less precise raw answer" }] } },
+        { type: "output", openInferenceInput: storedInput },
+      ),
+    ).toEqual({
+      message: "Recovered answer",
+      prettified: true,
+    });
+  });
+
+  it("does not replace canonical output with canonical input messages", () => {
+    expect(
+      prettifyMessage(
+        {
+          messages: [{ role: "assistant", content: "Canonical answer" }],
+        },
+        {
+          type: "output",
+          openInferenceInput: {
+            messages: [{ role: "tool", content: "Tool result" }],
+          },
+        },
+      ),
+    ).toEqual({
+      message: "Canonical answer",
+      prettified: true,
+    });
+  });
+
+  it("does not treat the legacy input raw value as recovered output", () => {
+    expect(
+      prettifyMessage("Actual answer", {
+        type: "output",
+        openInferenceInput: {
+          value: "Question",
+          "llm.finish_reason": "stop",
+        },
+      }),
+    ).toEqual({
+      message: "Actual answer",
+      prettified: true,
+    });
+  });
 });

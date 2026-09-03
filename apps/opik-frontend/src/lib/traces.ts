@@ -11,6 +11,10 @@ import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
+import {
+  extractLegacyOpenInferenceOutputText,
+  extractOpenInferencePrettyText,
+} from "@/lib/openinference";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -41,6 +45,7 @@ export const traceVisible = (item: ExperimentItem) =>
 
 type PrettifyMessageConfig = {
   type: "input" | "output";
+  openInferenceInput?: object | string;
 };
 
 type PrettifyMessageResponse = {
@@ -613,6 +618,17 @@ export const prettifyMessage = (
     type: "input",
   },
 ): PrettifyMessageResponse => {
+  const recoveredOpenInferenceOutput =
+    config.type === "output"
+      ? extractLegacyOpenInferenceOutputText(config.openInferenceInput)
+      : undefined;
+  if (isString(recoveredOpenInferenceOutput)) {
+    return {
+      message: recoveredOpenInferenceOutput,
+      prettified: true,
+    };
+  }
+
   if (isString(message)) {
     const extracted = extractTextFieldFromTruncatedJson(message, config);
     return {
@@ -621,7 +637,11 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
   try {
-    let processedMessage = prettifyOpenAIMessageLogic(message, config);
+    let processedMessage = extractOpenInferencePrettyText(message, config.type);
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyOpenAIMessageLogic(message, config);
+    }
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyOpenAIAgentsMessageLogic(message, config);

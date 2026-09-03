@@ -26,11 +26,15 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const { fieldType = "input", colorIndicator = false } = (custom ??
     {}) as CustomMeta;
   const value = context.getValue() as string | object | undefined | null;
+  const rowInput = (context.row.original as { input?: object | string })?.input;
 
   const displayMessage = useMemo(() => {
-    if (!value) return "-";
+    const pretty = prettifyMessage(value ?? undefined, {
+      type: fieldType,
+      openInferenceInput: fieldType === "output" ? rowInput : undefined,
+    });
 
-    const pretty = prettifyMessage(value, { type: fieldType });
+    if (!pretty.message) return "-";
 
     let message: string;
     if (isObject(pretty.message)) {
@@ -44,7 +48,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     }
 
     return message;
-  }, [value, fieldType, truncationEnabled, maxDataLength]);
+  }, [value, fieldType, rowInput, truncationEnabled, maxDataLength]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??

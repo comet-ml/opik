@@ -123,8 +123,10 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
           id: trace.id,
           input: prettifyMessage(trace.input, { type: "input" })
             .message as JsonNode,
-          output: prettifyMessage(trace.output, { type: "output" })
-            .message as JsonNode,
+          output: prettifyMessage(trace.output, {
+            type: "output",
+            openInferenceInput: trace.input,
+          }).message as JsonNode,
           metadata: trace.metadata ?? {},
         };
 

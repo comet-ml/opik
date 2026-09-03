@@ -512,6 +512,88 @@ class OpenTelemetryResourceTest {
         }
 
         @Test
+        @DisplayName("normalizes OpenInference spans through the OTLP protobuf endpoint")
+        void testOpenInferenceSpanNormalization() {
+            String workspaceName = UUID.randomUUID().toString();
+            String projectName = "OpenInference Test";
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            long startTimeUnixNano = (System.currentTimeMillis() - 1_000) * 1_000_000L;
+            long endTimeUnixNano = System.currentTimeMillis() * 1_000_000L;
+
+            var openInferenceSpan = Span.newBuilder()
+                    .setName("openinference llm call")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano(startTimeUnixNano)
+                    .setEndTimeUnixNano(endTimeUnixNano)
+                    .addAttributes(stringAttribute("llm.output_messages.4.message.content", "Hello from Opik"))
+                    .addAttributes(intAttribute("llm.token_count.completion", 4))
+                    .addAttributes(stringAttribute("input.value", "{\"request_id\":\"request-7\"}"))
+                    .addAttributes(stringAttribute("llm.input_messages.2.message.content", "Hello"))
+                    .addAttributes(stringAttribute("llm.response.model_name", "gpt-4o-mini"))
+                    .addAttributes(stringAttribute("output.mime_type", "application/json"))
+                    .addAttributes(intAttribute("llm.token_count.prompt", 3))
+                    .addAttributes(stringAttribute("llm.output_messages.4.message.role", "assistant"))
+                    .addAttributes(stringAttribute("llm.provider", "openai"))
+                    .addAttributes(stringAttribute("input.mime_type", "application/json"))
+                    .addAttributes(intAttribute("llm.token_count.total", 7))
+                    .addAttributes(stringAttribute("output.value", "{\"response_id\":\"response-7\"}"))
+                    .addAttributes(stringAttribute("llm.input_messages.2.message.role", "user"))
+                    .addAttributes(stringAttribute("openinference.span.kind", "LLM"))
+                    .build();
+
+            // A neighboring span in the same protobuf batch must keep the legacy generic mapping.
+            var unmarkedSpan = Span.newBuilder()
+                    .setName("unmarked call")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano(startTimeUnixNano + 1)
+                    .setEndTimeUnixNano(endTimeUnixNano)
+                    .addAttributes(stringAttribute("llm.output_messages.0.message.content", "leave me unchanged"))
+                    .build();
+
+            var expectedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(
+                    otelTraceId, Duration.ofNanos(startTimeUnixNano).toMillis());
+
+            sendProtobufTraces(List.of(openInferenceSpan, unmarkedSpan), projectName, workspaceName, okApikey, true,
+                    null);
+
+            var persistedSpans = spanResourceClient.getByTraceIdAndProject(
+                    expectedTraceId, projectName, workspaceName, okApikey).content();
+            assertThat(persistedSpans).hasSize(2);
+
+            var persistedOpenInferenceSpan = persistedSpans.stream()
+                    .filter(span -> "openinference llm call".equals(span.name()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(persistedOpenInferenceSpan.type()).isEqualTo(SpanType.llm);
+            assertThat(persistedOpenInferenceSpan.model()).isEqualTo("gpt-4o-mini");
+            assertThat(persistedOpenInferenceSpan.provider()).isEqualTo("openai");
+            assertThat(persistedOpenInferenceSpan.usage())
+                    .containsEntry("prompt_tokens", 3)
+                    .containsEntry("completion_tokens", 4)
+                    .containsEntry("total_tokens", 7);
+            assertThat(persistedOpenInferenceSpan.input().path("request_id").asText()).isEqualTo("request-7");
+            assertThat(persistedOpenInferenceSpan.input().path("messages").get(0).path("role").asText())
+                    .isEqualTo("user");
+            assertThat(persistedOpenInferenceSpan.output().path("response_id").asText()).isEqualTo("response-7");
+            assertThat(persistedOpenInferenceSpan.output().path("messages").get(0).path("content").asText())
+                    .isEqualTo("Hello from Opik");
+            assertThat(persistedOpenInferenceSpan.metadata().path("openinference.span.kind").asText())
+                    .isEqualTo("LLM");
+
+            var persistedUnmarkedSpan = persistedSpans.stream()
+                    .filter(span -> "unmarked call".equals(span.name()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(persistedUnmarkedSpan.input().path("llm.output_messages.0.message.content").asText())
+                    .isEqualTo("leave me unchanged");
+            assertThat(persistedUnmarkedSpan.output()).isNull();
+        }
+
+        @Test
         @DisplayName("test thread_id support in OpenTelemetry")
         void testThreadIdSupport() {
             String workspaceName = UUID.randomUUID().toString();

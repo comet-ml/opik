@@ -52,7 +52,10 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.input, jsonViewTheme]);
 
   const output = useMemo(() => {
-    const message = prettifyMessage(trace.output, { type: "output" }).message;
+    const message = prettifyMessage(trace.output, {
+      type: "output",
+      openInferenceInput: trace.input,
+    }).message;
 
     if (isObject(message)) {
       return (
@@ -69,7 +72,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.output, jsonViewTheme]);
+  }, [trace.input, trace.output, jsonViewTheme]);
 
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>
