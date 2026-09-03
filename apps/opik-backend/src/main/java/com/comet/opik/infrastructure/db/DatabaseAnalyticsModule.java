@@ -29,8 +29,11 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Override
     protected void configure() {
         databaseAnalyticsFactory = configuration().getDatabaseAnalytics();
-        connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
-                .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
+        // FastBindConnectionFactory makes every statement bind parameters by index; see its javadoc.
+        connectionFactory = new com.comet.opik.utils.FastBindConnectionFactory(
+                R2dbcTelemetry.create(GlobalOpenTelemetry.get())
+                        .wrapConnectionFactory(databaseAnalyticsFactory.build(),
+                                ConnectionFactoryOptions.builder().build()));
 
         clickHouseClient = databaseAnalyticsFactory.buildClient();
         environment().lifecycle().manage(new Managed() {

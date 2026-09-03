@@ -35,6 +35,17 @@ public final class FastBindStatement implements Statement {
 
     private static final String NAMED_PARAMETERS_FIELD = "namedParameters";
 
+    /**
+     * Below this many parameters the driver's linear scan is cheaper than building a map, so the
+     * statement is left alone. Bulk inserts render tens of thousands of parameters; ordinary
+     * queries bind a handful, and wrapping those was measured as a net loss.
+     */
+    private static final int MIN_PARAMETERS = 64;
+
+    /** The reflected field is the same for every statement; resolve it once, not per statement. */
+    private static volatile Field cachedField;
+    private static volatile Class<?> cachedFieldOwner;
+
     /** Escape hatch: {@code -Dopik.fastBind=false} restores the driver's named binding. */
     private static final boolean ENABLED = !"false".equalsIgnoreCase(System.getProperty("opik.fastBind", "true"));
 
@@ -60,16 +71,18 @@ public final class FastBindStatement implements Statement {
     private static Map<String, Integer> resolveIndex(Statement statement) {
         try {
             Object target = unwrap(statement);
-            Field field = findField(target.getClass());
+            Field field = resolveField(target.getClass());
             if (field == null) {
                 return null;
             }
-            field.setAccessible(true);
             Object value = field.get(target);
             if (!(value instanceof List<?> names) || names.isEmpty()) {
                 return null;
             }
-            Map<String, Integer> index = new HashMap<>(names.size() * 2);
+            if (names.size() < MIN_PARAMETERS) {
+                return null;
+            }
+            Map<String, Integer> index = HashMap.newHashMap(names.size());
             for (int i = 0; i < names.size(); i++) {
                 if (!(names.get(i) instanceof String name)) {
                     return null;
@@ -95,6 +108,20 @@ public final class FastBindStatement implements Statement {
             target = inner;
         }
         return target;
+    }
+
+    /** Caches the reflected field per owning class, so setAccessible runs once rather than per statement. */
+    private static Field resolveField(Class<?> owner) {
+        if (owner.equals(cachedFieldOwner)) {
+            return cachedField;
+        }
+        Field field = findField(owner);
+        if (field != null) {
+            field.setAccessible(true);
+        }
+        cachedField = field;
+        cachedFieldOwner = owner;
+        return field;
     }
 
     private static Field findField(Class<?> type) {

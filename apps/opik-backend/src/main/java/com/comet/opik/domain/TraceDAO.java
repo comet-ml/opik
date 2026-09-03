@@ -30,7 +30,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
-import com.comet.opik.utils.FastBindStatement;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.WeeklyPartitions;
@@ -3361,7 +3360,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Statement buildInsertStatement(Trace trace, Connection connection, ST template) {
-        Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+        Statement statement = connection.createStatement(template.render())
                 .bind("id", trace.id())
                 .bind("project_id", trace.projectId())
                 .bind("name", StringUtils.defaultIfBlank(trace.name(), ""))
@@ -3632,7 +3631,7 @@ class TraceDAOImpl implements TraceDAO {
     private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
         var template = getSTWithLogComment(SELECT_DETAILS_BY_ID, "get_trace_details_by_id", "", "", "");
 
-        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+        var statement = connection.createStatement(template.render())
                 .bind("id", id);
 
         Segment segment = startSegment("traces", "Clickhouse", "getDetailsById");
@@ -3667,7 +3666,7 @@ class TraceDAOImpl implements TraceDAO {
                     // never through the template, so the rendered SQL is constant regardless of batch contents.
                     partitions.ifPresent(_ -> template.add("partitions", true));
 
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
                             .bind("project_ids", projectIds)
                             .bind("trace_ids", traceIds);
@@ -3697,7 +3696,7 @@ class TraceDAOImpl implements TraceDAO {
                         var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_TRACES,
                                 "get_target_project_ids_for_traces", workspaceId, "", ids.size());
 
-                        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                        var statement = connection.createStatement(template.render())
                                 .bind("ids", ids.toArray(UUID[]::new));
 
                         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
@@ -3749,7 +3748,7 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("has_target_projects", true);
                     }
 
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("ids", ids.toArray(UUID[]::new));
 
                     if (CollectionUtils.isNotEmpty(targetProjectIds)) {
@@ -4018,7 +4017,7 @@ class TraceDAOImpl implements TraceDAO {
                 }
             }
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_id", traceSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
 
@@ -4049,7 +4048,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = buildUpdateTemplate(traceUpdate, INSERT_UPDATE, "partial_insert_trace", workspaceId,
                     userName);
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()));
+            var statement = connection.createStatement(template.render());
 
             statement.bind("id", traceId);
             statement.bind("project_id", projectId);
@@ -4220,7 +4219,7 @@ class TraceDAOImpl implements TraceDAO {
 
             template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_id", traceSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId)
                     .bind("limit", size)
@@ -4313,7 +4312,7 @@ class TraceDAOImpl implements TraceDAO {
                 template.add("trace_id_prefilter", true);
             }
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_id", traceSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
 
@@ -4338,7 +4337,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = getSTWithLogComment(SELECT_TRACE_ID_AND_WORKSPACE, "get_trace_workspace", "", "",
                 traceIds.size());
 
-        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+        var statement = connection.createStatement(template.render())
                 .bind("traceIds", traceIds.toArray(UUID[]::new));
 
         return Mono.from(statement.execute())
@@ -4371,7 +4370,7 @@ class TraceDAOImpl implements TraceDAO {
                     .add("items", queryItems)
                     .add("log_comment", logComment);
 
-            Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()));
+            Statement statement = connection.createStatement(template.render());
 
             // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
             // the same timestamp — matches the prior server-side now64(6) semantics (CH evaluates
@@ -4448,7 +4447,7 @@ class TraceDAOImpl implements TraceDAO {
         return asyncTemplate
                 .nonTransaction(
                         connection -> {
-                            Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()));
+                            Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
                                 statement.bind("excluded_project_ids",
@@ -4484,7 +4483,7 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-            Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()));
+            Statement statement = connection.createStatement(template.render());
 
             if (!excludedProjectIds.isEmpty()) {
                 statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -4518,7 +4517,7 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
 
-                        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                        var statement = connection.createStatement(template.render())
                                 .bind("project_ids", List.of(criteria.projectId()))
                                 .bind("workspace_id", workspaceId);
                         bindTraceThreadSearchCriteria(criteria, statement);
@@ -4568,7 +4567,7 @@ class TraceDAOImpl implements TraceDAO {
             template.add("dedup_by_argmax", true);
         }
 
-        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+        var statement = connection.createStatement(template.render())
                 .bind("project_ids", List.of(criteria.projectId()))
                 .bind("workspace_id", workspaceId);
         bindTraceThreadSearchCriteria(criteria, statement);
@@ -4604,7 +4603,7 @@ class TraceDAOImpl implements TraceDAO {
             template.add("dedup_by_argmax", true);
         }
 
-        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+        var statement = connection.createStatement(template.render())
                 .bind("project_ids", projectIds)
                 .bind("workspace_id", workspaceId);
         if (uuidFromTime != null) {
@@ -4709,7 +4708,7 @@ class TraceDAOImpl implements TraceDAO {
         return asyncTemplate
                 .nonTransaction(
                         connection -> {
-                            Statement statement = FastBindStatement.wrap(connection.createStatement(template.render()));
+                            Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
                                 statement.bind("excluded_project_ids",
@@ -4768,7 +4767,7 @@ class TraceDAOImpl implements TraceDAO {
                                     .toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                                     .ifPresent(traceFilters -> template.add("filters", traceFilters));
                         }
-                        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                        var statement = connection.createStatement(template.render())
                                 .bind("project_ids", projectIds)
                                 .bind("workspace_id", workspaceId);
                         if (uuidFromTime != null) {
@@ -4817,7 +4816,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_MINIMAL_THREAD_INFO_BY_IDS, "get_minimal_thread_info_by_ids",
                     workspaceId, userName, threadId.size());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
                     .bind("workspace_id", workspaceId)
                     .bind("thread_ids", threadId.toArray(String[]::new));
@@ -4854,7 +4853,7 @@ class TraceDAOImpl implements TraceDAO {
         // Exact (workspace_id, project_id) tuple match in one query for the whole sweep.
         template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
 
-        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+        var statement = connection.createStatement(template.render())
                 .bind("from_time", from.toString())
                 .bind("to_time", to.toString());
 
@@ -4879,7 +4878,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_TRACE, "get_project_id_from_trace", workspaceId,
                     userName, "");
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("id", traceId)
                     .bind("workspace_id", workspaceId);
 
@@ -4898,7 +4897,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS, "get_project_ids_by_trace_ids",
                     workspaceId, userName, traceIds.size());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
             return collectTraceIdToProjectId(statement);
@@ -4929,7 +4928,7 @@ class TraceDAOImpl implements TraceDAO {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS, "get_all_project_ids_by_trace_ids",
                     workspaceId, userName, "trace_ids_size=%s".formatted(traceIds.size()));
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
             return collectTraceIdToProjectIds(statement);
         }));
@@ -4948,7 +4947,7 @@ class TraceDAOImpl implements TraceDAO {
                     "get_all_project_ids_by_trace_ids_bounded", workspaceId, userName,
                     "trace_ids_size=%s".formatted(traceIds.size()));
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new))
                     .bind("min_id", minId)
                     .bind("max_id", maxId);
@@ -4972,7 +4971,7 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(connection -> {
                     var template = getSTWithLogComment(SELECT_START_TIMES_BY_TRACE_IDS, "get_start_times_by_trace_ids",
                             workspaceId, "", traceIds.size());
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("ids", traceIds.toArray(UUID[]::new))
                             .bind("workspace_id", workspaceId);
                     return Flux.from(statement.execute())
@@ -4993,7 +4992,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_THREAD_IDS, "get_trace_ids_by_thread_ids",
                     workspaceId, userName, threadIds.size());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
                     .bind("workspace_id", workspaceId)
                     .bind("thread_ids", threadIds.toArray(String[]::new));
@@ -5014,7 +5013,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_trace_by_id", workspaceId, userName,
                     "");
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("id", id)
                     .bind("workspace_id", workspaceId);
             var segment = startSegment("traces", "Clickhouse", "get_partial_by_id");
@@ -5053,7 +5052,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_COUNT_TRACES_BY_PROJECT_IDS, "count_traces_by_project_ids",
                     workspaceId, userName, projectIds.size());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_ids", projectIds)
                     .bind("workspace_id", workspaceId);
 
@@ -5086,7 +5085,7 @@ class TraceDAOImpl implements TraceDAO {
 
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("project_id", criteria.projectId())
                     .bind("workspace_id", workspaceId)
                     .bind("limit", limit);
@@ -5225,7 +5224,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("workspace_ids", workspaceIds.toArray(String[]::new))
                             .bind("cutoff_id", cutoffId)
                             .bind("lower_bound", lowerBound);
@@ -5247,7 +5246,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("workspace_ids", workspaceIds.toArray(String[]::new))
                             .bind("cutoff_id", cutoffId)
                             .bind("lower_bound", lowerBound);
@@ -5273,7 +5272,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("cutoff_id", cutoffId)
                             .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
                             .bind("min_lower_bound", lowerBound);
@@ -5299,7 +5298,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                    var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
                             .bind("range_start", rangeStart)
                             .bind("range_end", rangeEnd);

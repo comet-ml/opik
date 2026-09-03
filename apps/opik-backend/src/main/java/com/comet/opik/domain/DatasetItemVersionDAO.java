@@ -26,7 +26,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.ErrorUtils;
-import com.comet.opik.utils.FastBindStatement;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -2927,7 +2926,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
                         addDatasetItemFiltersToTemplate(template, criteria.filters());
 
-                        var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                        var statement = connection.createStatement(template.render())
                                 .bind("datasetId", criteria.datasetId().toString())
                                 .bind("versionId", versionId.toString())
                                 .bind("limit", size)
@@ -3135,7 +3134,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     template.add("experiment_ids", true);
                 }
 
-                var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                var statement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("datasetId", datasetId);
 
@@ -3201,7 +3200,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     template.add("has_target_projects", true);
                 }
 
-                var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+                var statement = connection.createStatement(template.render())
                         .bind("datasetId", criteria.datasetId());
 
                 if (!slimCount) {
@@ -3238,7 +3237,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_COUNT);
             addDatasetItemFiltersToTemplate(template, criteria.filters());
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("datasetId", criteria.datasetId().toString())
                     .bind("versionId", versionId.toString());
 
@@ -3703,7 +3702,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             var template = TemplateUtils.newST(BATCH_INSERT_ITEMS)
                     .add("items", queryItems);
 
-            var statement = FastBindStatement.wrap(connection.createStatement(template.render()))
+            var statement = connection.createStatement(template.render())
                     .bind("dataset_id", datasetId.toString())
                     .bind("dataset_version_id", newVersionId.toString())
                     .bind("created_by", userName)
