@@ -24,9 +24,10 @@ Three keys are reported, because no single one covers the population. Measured o
 
 The login is a plaintext personal identifier, which is a narrow, deliberate amendment
 to the analytics privacy contract in `opik.analytics`: hashing it would make it
-unjoinable, which is the only reason to report it. The key digest is one-way and the
-raw key never leaves the process. These two commands are the only place either is
-reported, and nothing else personal goes with them.
+unjoinable, which is the only reason to report it. The key is reported only as a
+one-way digest; the key itself is never sent anywhere but the Opik deployment it
+authenticates against. These two commands are the only place either is reported, and
+nothing else personal goes with them.
 
 Three rules, so that none of this is ever something a user feels:
 
@@ -52,7 +53,6 @@ by value - which is what the warehouse joins on - and not as one PostHog person.
 """
 
 import dataclasses
-import functools
 import hashlib
 import logging
 import pathlib
@@ -77,6 +77,11 @@ _MCP_INSTALL_ID_PATH = pathlib.Path.home() / ".opik-mcp" / "install-id"
 # at most once however many events it reports.
 _TIMEOUT_SECONDS = 3.0
 
+# A CLI run configures one account, so this exists to serve the second event of a
+# pair rather than to hold a directory. Bounded so nothing accumulates in a process
+# that calls `opik.configure()` in a loop.
+_MAX_CACHED_ACCOUNTS = 4
+
 
 @dataclasses.dataclass(frozen=True)
 class _Account:
@@ -84,6 +89,11 @@ class _Account:
 
     user_name: Optional[str]
     default_workspace_name: Optional[str]
+
+
+# Keyed by `(key digest, base url)`: recognising a key we already resolved needs no
+# more than its digest, so the process never holds a credential to do it.
+_RESOLVED: Dict[Tuple[str, str], Optional[_Account]] = {}
 
 
 def event_properties() -> Dict[str, analytics.PropertyValue]:
@@ -184,17 +194,36 @@ def _workspace(
     return None, "unknown"
 
 
-@functools.lru_cache(maxsize=None)
 def _fetch(api_key: str, base_url: str) -> Optional[_Account]:
     """Ask Comet who holds this key. `None` on any failure whatsoever.
 
     Cached for the process: a command reports an entry event and a result event, and
-    the second must not cost a second round-trip.
+    the second must not cost a second round-trip. The cache is keyed by a digest of
+    the key rather than the key itself, and bounded, so a long-lived process that
+    configures several accounts never accumulates credentials in memory - it holds
+    only what it needs to recognise a key it has already resolved.
 
     TLS is always verified, matching the analytics sender: `check_tls_certificate`
     exists for a self-hosted deployment's own certificate, and this only ever calls
     Comet's cloud host.
     """
+    cache_key = (_digest(api_key), base_url)
+    if cache_key in _RESOLVED:
+        return _RESOLVED[cache_key]
+
+    account = _request(api_key, base_url)
+
+    # A plain dict with a bound rather than an LRU: one CLI run resolves one
+    # account, so eviction order cannot matter, and dropping the oldest keeps the
+    # common case (one entry) allocation-free.
+    if len(_RESOLVED) >= _MAX_CACHED_ACCOUNTS:
+        _RESOLVED.pop(next(iter(_RESOLVED)))
+    _RESOLVED[cache_key] = account
+
+    return account
+
+
+def _request(api_key: str, base_url: str) -> Optional[_Account]:
     try:
         with httpx.Client(timeout=_TIMEOUT_SECONDS, verify=True) as client:
             response = client.get(
@@ -234,7 +263,9 @@ def _digest(api_key: str) -> str:
 
     - This is a label, not a verifier. Nothing compares it to anything to grant
       access; it exists so two reports of the same credential can be recognised as
-      one setup. The raw key never leaves the process.
+      one setup. Only the digest is ever reported - the key itself goes nowhere
+      except the Opik deployment it authenticates against, which is where the
+      configure flow already sends it.
     - A password KDF cannot do the job. bcrypt / scrypt / PBKDF2 are salted, so the
       same key would digest differently on every machine and join to nothing - and
       an unsalted slow hash would still have to match what the MCP server emits,

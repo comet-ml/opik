@@ -208,12 +208,17 @@ def reporting_allowed() -> bool:
     - and must not do that work when nothing will be reported. Asking here keeps
     `OPIK_ANALYTICS_ENABLE` the single switch that governs analytics, the work done
     to produce it included.
+
+    Every reason `_start_worker` refuses to report has to be a reason here too, or
+    an enrichment pays for an event that is then dropped - which is why a missing
+    destination counts, not just the opt-out.
     """
     if _DISABLED:
         return False
 
     try:
-        return rules.reporting_allowed(config.OpikConfig())
+        config_ = config.OpikConfig()
+        return rules.reporting_allowed(config_) and bool(config_.analytics_url)
     except Exception:
         LOGGER.debug("Failed to decide whether analytics may report", exc_info=True)
         return False

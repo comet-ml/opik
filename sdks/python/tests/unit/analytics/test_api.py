@@ -1,6 +1,7 @@
 import pytest
 
 from opik import analytics
+from opik import config
 from opik.analytics import api
 
 
@@ -305,3 +306,17 @@ class TestReportingAllowed:
         monkeypatch.setattr(api.config, "OpikConfig", broken)
 
         assert analytics.reporting_allowed() is False
+
+
+def test_reporting_allowed__no_analytics_url__is_false(monkeypatch):
+    """A missing destination has to refuse enrichment, not just sending.
+
+    `_start_worker` already gives up without a URL, so a call site that pays for
+    a lookup before reporting would be doing it for an event that is dropped.
+    """
+    monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
+    monkeypatch.setattr(
+        api.config, "OpikConfig", lambda: config.OpikConfig(analytics_url="")
+    )
+
+    assert analytics.reporting_allowed() is False

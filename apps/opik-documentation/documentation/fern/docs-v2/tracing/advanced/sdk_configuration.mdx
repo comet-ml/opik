@@ -485,7 +485,7 @@ left on the default workspace are attributed to a one-way hash of the hostname a
 username instead.
 
 The two configuration commands — `opik configure` and `opik mcp configure` — report
-three additional things, so that setting Opik up can be tied to how the MCP server is
+four additional things, so that setting Opik up can be tied to how the MCP server is
 used afterwards and we can see where the onboarding flow loses people:
 
 - the **Comet username** of the account being configured, when you are on Opik Cloud.
@@ -493,8 +493,9 @@ used afterwards and we can see where the onboarding flow loses people:
 - a **one-way SHA-256 digest of your API key** — never the key itself, and it cannot be
   turned back into one. It exists so that two setup steps performed with the same
   credential can be recognised as the same setup.
-- the **workspace** that was configured, and the MCP server's machine id if that server
-  is already installed on this machine.
+- the **workspace** that was configured.
+- the **MCP server's machine id**, if that server is already installed on this machine.
+  It is read, never created.
 
 No other event reports any of these.
 

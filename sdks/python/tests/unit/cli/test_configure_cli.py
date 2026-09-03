@@ -418,6 +418,9 @@ class TestIdentityIsReportedWithBothEvents:
         assert entry.kwargs["identity_lookup"] == "no_credential"
         assert "user_id" not in entry.kwargs
         assert outcome.kwargs["user_id"] == "someone"
+        # Asserted alongside the login: without it the pair still passes when the
+        # metadata that says how to read the login goes missing or changes value.
+        assert outcome.kwargs["identity_lookup"] == "resolved"
 
 
 class TestAssistantOutcomeReachesTheCaller:

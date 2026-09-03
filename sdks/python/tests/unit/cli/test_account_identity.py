@@ -5,6 +5,8 @@ import hashlib
 import pytest
 from unittest import mock
 
+from opik.analytics import api as analytics_api
+from opik.analytics import rules as analytics_rules
 from opik.cli import account_identity
 
 
@@ -17,7 +19,7 @@ def reporting_on(monkeypatch, tmp_path):
     """
     monkeypatch.setattr(account_identity.analytics, "reporting_allowed", lambda: True)
     # Resolution is cached for the process, which outlives a single test.
-    account_identity._fetch.cache_clear()
+    account_identity._RESOLVED.clear()
     # Away from the developer's own home directory: whoever runs these has the MCP
     # server installed, and the tests would then assert against their machine's id.
     monkeypatch.setattr(
@@ -25,12 +27,20 @@ def reporting_on(monkeypatch, tmp_path):
     )
 
 
-def _config(api_key="key", workspace="my-ws", cloud=True):
+def _config(
+    api_key="key",
+    workspace="my-ws",
+    cloud=True,
+    analytics_url="https://stats.invalid/notify/event/",
+    analytics_enable=True,
+):
     return mock.Mock(
         api_key=api_key,
         workspace=workspace,
         is_cloud_installation=cloud,
         url_override="https://www.comet.com/opik/api",
+        analytics_url=analytics_url,
+        analytics_enable=analytics_enable,
     )
 
 
@@ -265,3 +275,67 @@ class TestNeverFeltByTheUser:
             "identity_lookup": "miss",
             "workspace_kind": "unknown",
         }
+
+
+class TestThePublicEntryPoint:
+    """`event_properties()` is what the CLI calls, so the gate and the config
+    loading it does have to be exercised through it rather than around it.
+
+    The tests above call `_properties` with a config they built, which says
+    nothing about whether the real entry point reads the configuration, honours
+    the analytics switch, or assembles the same payload.
+    """
+
+    def test_configured_cloud_account__properties_assembled_end_to_end(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr(
+            account_identity.analytics, "reporting_allowed", lambda: True
+        )
+        monkeypatch.setattr(
+            account_identity.opik_config,
+            "OpikConfig",
+            lambda: _config(api_key="secret-key", workspace="their-ws"),
+        )
+
+        with mock.patch.object(
+            account_identity.httpx,
+            "Client",
+            return_value=_responding(
+                body={"userName": "someone", "defaultWorkspaceName": "their-ws"}
+            ),
+        ):
+            properties = account_identity.event_properties()
+
+        assert properties == {
+            "identity_lookup": "resolved",
+            "workspace_kind": "configured",
+            "user_id": "someone",
+            "workspace": "their-ws",
+            "api_key_sha256": hashlib.sha256(b"secret-key").hexdigest(),
+        }
+
+    def test_analytics_url_empty__nothing_reported_and_nothing_asked(self, monkeypatch):
+        """No destination means the event would be dropped, so the lookup is waste.
+
+        `_start_worker` already refuses to report without an analytics URL; the
+        gate has to refuse the enrichment for the same reason, or a configure run
+        pays for a round trip whose event goes nowhere.
+        """
+        # The autouse fixture stubs the gate out; this test is about the real one.
+        monkeypatch.setattr(
+            account_identity.analytics,
+            "reporting_allowed",
+            analytics_api.reporting_allowed,
+        )
+        monkeypatch.setattr(
+            account_identity.opik_config,
+            "OpikConfig",
+            lambda: _config(analytics_url="", analytics_enable=True),
+        )
+        monkeypatch.setattr(analytics_rules.environment, "in_pytest", lambda: False)
+
+        with mock.patch.object(account_identity.httpx, "Client") as client:
+            assert account_identity.event_properties() == {}
+
+        client.assert_not_called()
