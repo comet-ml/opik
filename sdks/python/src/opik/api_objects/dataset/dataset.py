@@ -353,6 +353,11 @@ class Dataset(DatasetExportOperations):
         # one-shot sync on the first `insert()` instead of paying an N+1
         # sync at list time.
         self._hashes_synced: bool = True
+        # None until the backend version has actually been determined. Only a
+        # conclusive answer is stored, so a probe that failed to reach the
+        # backend is retried instead of pinning this dataset to sequential
+        # uploads for the rest of the session.
+        self._parallel_insert_supported_cache: Optional[bool] = None
 
     @classmethod
     def from_public(
@@ -611,44 +616,60 @@ class Dataset(DatasetExportOperations):
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
 
-    @functools.cached_property
+    @property
     def _parallel_insert_supported(self) -> bool:
         """Whether the backend tolerates concurrent batches sharing a batch_group_id.
 
         Older backends race on them, so parallelism is only safe from
         ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the
-        version cannot be determined at all — unreachable endpoint, non-semver
-        build string — we report unsupported rather than risk the race.
+        version cannot be determined we report unsupported rather than risk the
+        race.
 
-        Cached because the backend cannot change version mid-session, and
-        parallel upload is the default: probing per ``insert`` would add a
-        round trip to every call in a loop.
+        The answer is cached because the backend cannot change version
+        mid-session and parallel upload is the default: probing per ``insert``
+        would add a round trip to every call in a loop. Only a conclusive
+        answer is cached — an unreachable backend is re-probed on the next
+        insert so parallel upload resumes once it recovers.
         """
+        if self._parallel_insert_supported_cache is not None:
+            return self._parallel_insert_supported_cache
+
         try:
             backend_version = self._rest_client.version()["version"]
+        except Exception:
+            LOGGER.warning(
+                "Could not reach the Opik backend to determine its version, "
+                "falling back to a sequential dataset upload for this insert.",
+                exc_info=True,
+            )
+            return False
+
+        try:
             supported = (
                 semantic_version.SemanticVersion.parse(backend_version)
                 >= constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
             )
         except Exception:
             LOGGER.warning(
-                "Could not determine the Opik backend version, falling back to a "
+                "Could not parse the Opik backend version %s, falling back to a "
                 "sequential dataset upload. Parallel upload requires backend %s "
                 "or newer.",
+                backend_version,
                 constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
                 exc_info=True,
             )
-            return False
+            supported = False
+        else:
+            if not supported:
+                LOGGER.warning(
+                    "Opik backend %s does not support parallel dataset upload, "
+                    "falling back to a sequential upload. Upgrade to backend %s or "
+                    "newer to use num_threads.",
+                    backend_version,
+                    constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                )
 
-        if not supported:
-            LOGGER.warning(
-                "Opik backend %s does not support parallel dataset upload, falling "
-                "back to a sequential upload. Upgrade to backend %s or newer to use "
-                "num_threads.",
-                backend_version,
-                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
-            )
-
+        self._parallel_insert_supported_cache = supported
         return supported
 
     def _send_batches(
@@ -718,6 +739,25 @@ class Dataset(DatasetExportOperations):
         num_threads: int = 1,
         deduplication: bool = True,
     ) -> None:
+        # Validated here rather than in each public entry point: every insert
+        # path funnels through this method. A truthy string or None would
+        # otherwise silently pick the wrong duplicate-checking behaviour, and
+        # a non-integer worker count would fail on the comparison below with a
+        # TypeError instead of naming the offending argument.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+
+        # Gated here rather than in `insert` so every caller of this funnel is
+        # covered: older backends race on concurrent batches that share a
+        # batch_group_id, and a direct caller asking for workers must not be
+        # able to skip that check.
+        if num_threads > 1 and not self._parallel_insert_supported:
+            num_threads = 1
+
         if deduplication:
             items_to_send = self._deduplicate(items)
         else:
@@ -756,7 +796,8 @@ class Dataset(DatasetExportOperations):
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
-                on large datasets.
+                on large datasets. The next insert that does deduplicate has to
+                re-read the dataset's items to account for what was skipped.
             num_threads: Number of worker threads used to upload the item
                 batches. Must be a positive integer, defaults to ``4``; pass
                 ``1`` to upload sequentially. All batches land in a single
@@ -764,14 +805,18 @@ class Dataset(DatasetExportOperations):
                 batches that already succeeded stay persisted. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, or
+                ``deduplication`` is not a bool.
         """
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
-
-        if num_threads > 1 and not self._parallel_insert_supported:
-            num_threads = 1
+        # Checked here too so bad input raises before any item is converted.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
 
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
