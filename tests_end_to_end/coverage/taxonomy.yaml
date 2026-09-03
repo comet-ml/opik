@@ -249,6 +249,8 @@ areas:
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-attachments.spec.ts
+      - trace-explore/trace-id-time-window.spec.ts
+      - trace-explore/trace-partial-update-merge.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -271,6 +273,7 @@ areas:
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
+      update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----

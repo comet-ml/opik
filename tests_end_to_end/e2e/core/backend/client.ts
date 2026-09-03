@@ -122,6 +122,28 @@ export interface TraceDetail {
   input: Record<string, unknown> | null;
 }
 
+/**
+ * The fields of a trace that a partial update must carry through untouched.
+ *
+ * Deliberately not `TraceDetail`: that shape exists for feedback-score reads
+ * and flattens away `output`, `metadata` and `tags`, which are exactly the
+ * fields an update that failed to resolve its target row would silently drop.
+ *
+ * `input`/`output`/`metadata` are `unknown` for the same reason
+ * `getTraceSections` keeps them untyped — the caller asserts on what it seeded,
+ * and any shaped type here would let a wrongly-shaped read compare equal.
+ * `tags` is `string[] | null` because an untagged trace answers with the field
+ * absent, which is a different answer from an empty list.
+ */
+export interface TracePayload {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  metadata: unknown;
+  tags: string[] | null;
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -1386,6 +1408,50 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return null;
         throw err;
       }
+    },
+
+    /**
+     * A trace's whole mutable payload — the read that can tell a merged update
+     * from a replacing one.
+     *
+     * Returns null on 404, like `getTrace` and `getTraceSections`: the REST
+     * write answers 201 before the row is queryable, so callers poll rather
+     * than treating an immediate miss as a failure.
+     */
+    async getTracePayload(traceId: string): Promise<TracePayload | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return {
+          id: String(t.id ?? ''),
+          name: t.name ?? '',
+          input: t.input ?? null,
+          output: t.output ?? null,
+          metadata: t.metadata ?? null,
+          // Absent and empty are different answers here — see TracePayload.
+          tags: t.tags ?? null,
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * `PATCH /v1/private/traces/{id}` carrying tags and nothing else — the
+     * update path's smallest possible partial write.
+     *
+     * Scoped by `projectName` because a bare id-only update falls back to the
+     * Default Project, which would silently update nothing in a fixture's own
+     * project.
+     */
+    async updateTraceTags(args: {
+      traceId: string;
+      projectName: string;
+      tags: string[];
+    }): Promise<void> {
+      await opik.api.traces.updateTrace(args.traceId, {
+        body: { projectName: args.projectName, tags: args.tags },
+      });
     },
 
     async deleteTraces(ids: string[]): Promise<void> {
