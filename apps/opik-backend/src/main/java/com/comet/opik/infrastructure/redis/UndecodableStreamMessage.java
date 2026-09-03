@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.redis;
 
+import lombok.Builder;
 import lombok.NonNull;
 
 /**
@@ -22,11 +23,15 @@ import lombok.NonNull;
  * is why the failure is raised as the retryable {@link UndecodablePayloadException} rather than
  * deleted on sight — see that class for the reasoning.
  *
- * @param encodedBytes size of the slice Redisson handed the decoder, i.e. the wire-encoded size of
- *                      this one field's value -- LZ4-compressed on the {@link RedisStreamCodec#JAVA}
- *                      value path, not the decoded size of whatever the payload represents. There is
- *                      no decoded size to report: the decode is exactly what failed.
+ * @param encodedBytes size of the slice Redisson handed the decoder, i.e. the RESP-encoded wire size
+ *                      of this one field's value as read off the stream. On {@link RedisStreamCodec#JAVA}
+ *                      that is the payload's raw JSON size for the map-VALUE (trace) path -- Redisson's
+ *                      {@code CompositeCodec} routes values through {@code JsonJacksonCodec}, not
+ *                      LZ4, on this codec's wiring -- and LZ4-compressed for the map-KEY (field-name)
+ *                      path. Not the decoded size of whatever the payload represents either way: there
+ *                      is no decoded size to report, since the decode is exactly what failed.
  * @param cause         the decode failure, kept for the log rather than rethrown
  */
+@Builder(toBuilder = true)
 public record UndecodableStreamMessage(int encodedBytes, @NonNull Throwable cause) {
 }

@@ -25,8 +25,8 @@ import java.util.function.Supplier;
 @AllArgsConstructor
 @Getter
 public enum RedisStreamCodec {
-    JAVA(Constants.JAVA, Suppliers.memoize(() -> faultTolerant(new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(buildStreamMapper()))))),
+    JAVA(Constants.JAVA, Suppliers.memoize(() -> faultTolerant(new CompositeCodec(
+            lengthBoundedLz4Codec(new LZ4CodecV2()), new JsonJacksonCodec(buildStreamMapper()))))),
     JSON(Constants.JSON, () -> StringCodec.INSTANCE);
 
     /**
@@ -95,6 +95,109 @@ public enum RedisStreamCodec {
      * here — still propagates, because a JVM in that state should not have its failure recorded as a
      * routine per-message drop.
      */
+    /**
+     * Ceiling on a field name's declared LZ4-decompressed length, checked before {@link LZ4CodecV2}
+     * ever allocates for it.
+     * <p>
+     * {@code LZ4CodecV2.decode} reads a 4-byte declared length straight off the wire and hands it to
+     * {@code ByteBufAllocator.DEFAULT.buffer(declaredLength)} with no bound -- verified against
+     * Redisson 4.7.0 bytecode: {@code readInt()} then {@code buffer(int)}, before Kryo5 or
+     * {@link FaultTolerantCodec} is ever consulted. A corrupted or truncated frame can therefore claim
+     * any 31-bit length, and the resulting {@link OutOfMemoryError} -- or, under a Netty pool with a
+     * configured direct-memory cap, the smaller {@code OutOfDirectMemoryError} -- is an {@link Error},
+     * which {@link FaultTolerantCodec} deliberately does not absorb (an OOM from a legitimate
+     * multi-hundred-MB document is meant to propagate). Left unguarded this reproduces the OPIK-8164
+     * wedge through a corrupted length header instead of an oversized string: the allocation throws
+     * before any {@code StreamMessageId} exists, so the entry can never be acked, retried or removed.
+     * <p>
+     * On this codec {@code LZ4CodecV2} is used only for the map-KEY (field-name) path -- see the
+     * {@link CompositeCodec} arguments above -- and every stream field name in this codebase is the
+     * seven-character constant {@code "message"} (e.g. {@code OnlineScoringConfig.PAYLOAD_FIELD}). 4 KB
+     * is generous by three orders of magnitude, not a tight fit to today's constant: rejecting above it
+     * costs nothing, because no legitimate field name will ever approach it.
+     */
+    @VisibleForTesting
+    static final int MAX_MAP_KEY_DECODED_LENGTH = 4096;
+
+    private static Codec lengthBoundedLz4Codec(LZ4CodecV2 lz4) {
+        return new LengthBoundedLz4Codec(lz4);
+    }
+
+    /**
+     * Rejects an implausible declared length before {@code LZ4CodecV2} ever allocates for it. See
+     * {@link #MAX_MAP_KEY_DECODED_LENGTH} for the vulnerability and why the bound is safe.
+     * <p>
+     * Deliberately narrow rather than folded into {@link FaultTolerantCodec}'s generic wrapper: this
+     * class assumes a specific wire layout (a 4-byte declared-length header), which only holds for
+     * {@link LZ4CodecV2}. {@link FaultTolerantCodec} stays codec-agnostic on purpose -- its own javadoc
+     * says as much -- so a peek this specific does not belong inside it.
+     * <p>
+     * Both {@code getMapKeyDecoder} and {@code getValueDecoder} are bounded, not just the one this
+     * codec's wiring exercises ({@code getMapKeyDecoder}, which {@code BaseCodec} falls through to
+     * {@code getValueDecoder} for): {@link LZ4CodecV2} could be composed as a value codec elsewhere,
+     * and the same allocation is reachable through either accessor.
+     */
+    @RequiredArgsConstructor
+    private static final class LengthBoundedLz4Codec implements Codec {
+
+        private final LZ4CodecV2 delegate;
+
+        private static Decoder<Object> bounded(Decoder<Object> decoder) {
+            return (buf, state) -> {
+                if (buf.readableBytes() >= Integer.BYTES) {
+                    int declaredLength = buf.getInt(buf.readerIndex());
+                    if (declaredLength < 0 || declaredLength > MAX_MAP_KEY_DECODED_LENGTH) {
+                        int encodedBytes = buf.readableBytes();
+                        buf.skipBytes(encodedBytes);
+                        return UndecodableStreamMessage.builder()
+                                .encodedBytes(encodedBytes)
+                                .cause(new IllegalStateException(
+                                        "LZ4 frame declares a %d-byte decompressed length, over the %d-byte "
+                                                + "sanity ceiling for a stream field name"
+                                                        .formatted(declaredLength, MAX_MAP_KEY_DECODED_LENGTH)))
+                                .build();
+                    }
+                }
+                return decoder.decode(buf, state);
+            };
+        }
+
+        @Override
+        public Decoder<Object> getMapValueDecoder() {
+            return delegate.getMapValueDecoder();
+        }
+
+        @Override
+        public Encoder getMapValueEncoder() {
+            return delegate.getMapValueEncoder();
+        }
+
+        @Override
+        public Decoder<Object> getMapKeyDecoder() {
+            return bounded(delegate.getMapKeyDecoder());
+        }
+
+        @Override
+        public Encoder getMapKeyEncoder() {
+            return delegate.getMapKeyEncoder();
+        }
+
+        @Override
+        public Decoder<Object> getValueDecoder() {
+            return bounded(delegate.getValueDecoder());
+        }
+
+        @Override
+        public Encoder getValueEncoder() {
+            return delegate.getValueEncoder();
+        }
+
+        @Override
+        public ClassLoader getClassLoader() {
+            return delegate.getClassLoader();
+        }
+    }
+
     @RequiredArgsConstructor
     private static final class FaultTolerantCodec implements Codec {
 
@@ -112,7 +215,10 @@ public enum RedisStreamCodec {
                     if (buf.isReadable()) {
                         buf.skipBytes(buf.readableBytes());
                     }
-                    return new UndecodableStreamMessage(encodedBytes, decodeFailure);
+                    return UndecodableStreamMessage.builder()
+                            .encodedBytes(encodedBytes)
+                            .cause(decodeFailure)
+                            .build();
                 }
             };
         }

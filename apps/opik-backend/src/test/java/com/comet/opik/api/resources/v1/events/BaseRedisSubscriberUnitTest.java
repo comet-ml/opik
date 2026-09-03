@@ -384,8 +384,10 @@ class BaseRedisSubscriberUnitTest {
                         if (readCount.incrementAndGet() == 1) {
                             // The sentinel is the KEY, so no entry matches PAYLOAD_FIELD.
                             Map<Object, Object> entry = new java.util.HashMap<>();
-                            entry.put(new UndecodableStreamMessage(64,
-                                    new IllegalStateException("not an LZ4 frame")), "unreachable");
+                            entry.put(UndecodableStreamMessage.builder()
+                                    .encodedBytes(64)
+                                    .cause(new IllegalStateException("not an LZ4 frame"))
+                                    .build(), "unreachable");
                             return Mono.just(Map.of(badKeyId, entry));
                         }
                         return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
@@ -412,9 +414,11 @@ class BaseRedisSubscriberUnitTest {
                     .thenAnswer(invocation -> readCount.incrementAndGet() == 1
                             ? Mono.just(Map.of(undecodableId,
                                     Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
-                                            new UndecodableStreamMessage(20_054_016,
-                                                    new IllegalStateException(
-                                                            "String value length (20054016) exceeds the maximum allowed")))))
+                                            UndecodableStreamMessage.builder()
+                                                    .encodedBytes(20_054_016)
+                                                    .cause(new IllegalStateException(
+                                                            "String value length (20054016) exceeds the maximum allowed"))
+                                                    .build())))
                             : Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), readCount.get()),
                                     Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
                                             podamFactory.manufacturePojo(String.class)))));
