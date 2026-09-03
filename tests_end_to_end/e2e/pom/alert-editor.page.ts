@@ -101,7 +101,29 @@ export class AlertEditorPage {
   triggerConfig(eventType: AlertEventType): Locator {
     // Mirrors `alertTriggerTestId` in the alerts page helpers: the wire values
     // carry `:`, which is normalized to `-` for the selector.
+    //
+    // One trigger per event type, so this is deliberately not `.first()`: the
+    // editor's popover binds each checkbox to `selectedEventTypes.has(type)`
+    // and so cannot add a second, but `POST /v1/private/alerts` accepts a
+    // duplicate pair. An alert seeded that way renders two identical blocks,
+    // and a strict-mode violation naming this method is the right outcome —
+    // `.first()` would silently drive one of two indistinguishable triggers.
+    // `assertSingleTriggerConfig` turns that into a legible message.
     return this.page.getByTestId(`alert-trigger-${eventType.replace(/:/g, '-')}`);
+  }
+
+  /**
+   * Fails with an explicit message when an alert carries duplicate triggers of
+   * one event type — a shape only reachable by seeding through the API.
+   */
+  private async assertSingleTriggerConfig(eventType: AlertEventType): Promise<void> {
+    const count = await this.triggerConfig(eventType).count();
+    if (count > 1) {
+      throw new Error(
+        `alert has ${count} "${eventType}" triggers, so its config block is ambiguous. ` +
+          'The editor cannot create duplicates; seed one trigger per event type.',
+      );
+    }
   }
 
   async fillName(name: string): Promise<void> {
@@ -169,6 +191,7 @@ export class AlertEditorPage {
     window: AlertWindow,
   ): Promise<void> {
     return test.step(`configure ${eventType} at ${threshold} over ${window}`, async () => {
+      await this.assertSingleTriggerConfig(eventType);
       const config = this.triggerConfig(eventType);
       await config.locator('input[type="number"]').fill(threshold);
       await config.getByRole('combobox').click();
