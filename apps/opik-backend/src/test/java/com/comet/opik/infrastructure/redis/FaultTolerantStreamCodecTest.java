@@ -176,13 +176,18 @@ class FaultTolerantStreamCodecTest {
      * an {@link Error}, and which row a length lands in moves with {@code -Xmx} -- 1.8 GiB is an
      * {@code IOException} on a 9 GB heap and an {@link OutOfMemoryError} on a 1 GB container.
      * <p>
-     * All three must yield the sentinel, because any of them escaping is the OPIK-8164 wedge reached
-     * through a corrupted length header. {@code Integer.MAX_VALUE} is the case that actually exercises
-     * the OOM arm on a large heap; the others exercise the Exception arm and are included so the
-     * behaviour is pinned as heap-independent rather than accidentally uniform.
+     * The lengths here are deliberately ones that fail <em>without</em> a large allocation: negatives
+     * throw {@code NegativeArraySizeException} before any array exists, and 1024 allocates a kilobyte
+     * and then fails parsing the frame. Multi-gigabyte declared lengths are NOT exercised against the
+     * real decoder, even though they are the more dramatic case — {@code LZ4CodecV2} would allocate
+     * them for real, and a transient 1.8 GiB inside the shared surefire JVM can disturb unrelated test
+     * classes or trip the fork's heap ceiling. That is the same hazard an earlier revision of this file
+     * shipped and had to fix, so it is not being reintroduced. The OOM arm those lengths would reach is
+     * covered deterministically by {@code heapExhaustionDuringMaterializationIsAbsorbed}, and the
+     * measured per-length outcomes are recorded in {@code FaultTolerantCodec}'s javadoc.
      */
     @ParameterizedTest
-    @ValueSource(ints = {-1, Integer.MIN_VALUE, 1_886_151_017, Integer.MAX_VALUE})
+    @ValueSource(ints = {-1, Integer.MIN_VALUE, 1024})
     @DisplayName("a corrupted LZ4 declared length yields the sentinel however it fails")
     void corruptedDeclaredLengthYieldsSentinel(int declaredLength) throws IOException {
         var buf = Unpooled.buffer()

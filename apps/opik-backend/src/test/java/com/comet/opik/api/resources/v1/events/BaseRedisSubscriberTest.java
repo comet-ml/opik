@@ -165,7 +165,8 @@ class BaseRedisSubscriberTest {
             subscriber.start();
 
             // Writes fine: Jackson constrains reads, not writes. This is the asymmetry behind OPIK-8164.
-            smallLimitStream.add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, oversized)).block();
+            var oversizedId = smallLimitStream
+                    .add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, oversized)).block();
             smallLimitStream.add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, healthy)).block();
             assertThat(smallLimitStream.size().block()).isEqualTo(2);
 
@@ -173,14 +174,34 @@ class BaseRedisSubscriberTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(1));
 
-            // The undecodable entry is NOT gone yet: it is retryable, so it stays pending for another
-            // consumer rather than being deleted on sight.
-            assertThat(smallLimitStream.size().block()).isEqualTo(1);
-
-            // And it does eventually leave, once the delivery count reaches maxRetries -- bounded, not
-            // permanent. This is the half that distinguishes this fix from the pre-PR wedge.
+            // And the undecodable entry eventually leaves too, once the delivery count reaches
+            // maxRetries -- bounded, not permanent. This is the half that distinguishes the fix from
+            // the pre-PR wedge, where XLEN never returned to zero.
+            //
+            // Deliberately NOT asserting an intermediate "still exactly 1 entry" here. Ack and remove
+            // are asynchronous and batched (postProcessSuccessMessages runs after bufferTimeout), so
+            // processEvent completing does not mean the healthy entry's XACK/XDEL has landed -- an
+            // immediate size check races it and legitimately observes 2. That the undecodable entry
+            // survives its first delivery is pinned deterministically by the mocked unit tests
+            // (shouldNotRemoveUndecodableMessageBeforeMaxRetries), which control the delivery count
+            // directly instead of inferring it from wall-clock ordering.
             await().atMost(AWAIT_TIMEOUT_SECONDS * 10, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(smallLimitStream.size().block()).isZero());
+
+            // XDEL alone is not enough. A broken XACK would leave the id in the consumer group's PEL,
+            // where XAUTOCLAIM keeps reclaiming it -- a wedge by another name, and invisible to XLEN.
+            // Checked by id, and via listPending rather than pendingRange so the assertion does not
+            // itself have to decode the payload that cannot be decoded.
+            // defaultIfEmpty: Redisson's reactive listPending COMPLETES EMPTY rather than emitting an
+            // empty list when the PEL is clear, so block() returns null on the passing path.
+            var stillPending = smallLimitStream.listPending(
+                    smallLimitConfig.getConsumerGroupName(),
+                    StreamMessageId.MIN, StreamMessageId.MAX, Integer.MAX_VALUE)
+                    .defaultIfEmpty(List.of())
+                    .block();
+            assertThat(stillPending).noneSatisfy(
+                    entry -> assertThat(entry.getId()).isEqualTo(oversizedId));
+            assertThat(stillPending).isEmpty();
 
             // It never reached processEvent: the sentinel is intercepted in processMessage.
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
