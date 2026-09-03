@@ -728,7 +728,7 @@ class DatasetServiceImpl implements DatasetService {
 
         // The dataset_items count is deliberately NOT part of this zip: it is O(N) in each dataset's item count,
         // and which datasets need it is only known once the latest versions are in hand. It is chained below
-        // instead, over the narrowed id set. The other three stay concurrent.
+        // instead, over the narrowed id set. The remaining lookups stay concurrent.
         //
         // collect(...) with Collectors.toMap rather than Flux.collectMap: collectMap is last-wins, whereas the
         // serial code this replaces threw on a duplicate dataset_id. All queries GROUP BY dataset_id so
