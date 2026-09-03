@@ -64,6 +64,35 @@ Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), wh
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
+## Java imports (backend)
+Types are imported at the top of the file and referenced by their simple name — not written out fully qualified inline. Write `Locale.ROOT` with `import java.util.Locale;`, not `java.util.Locale.ROOT`. This applies to any external package (`java.*`, `jakarta.*`, `io.dropwizard.*`, `lombok.*`, third-party), not just the JDK.
+
+This is enforced by [PMD](https://pmd.github.io/) via a single custom rule (`InlineFullyQualifiedName` in [`apps/opik-backend/pmd-ruleset.xml`](apps/opik-backend/pmd-ruleset.xml)), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Java files under `apps/opik-backend`. PMD is fetched from Maven Central by the hook wrapper, so it needs only the Maven/JDK toolchain the Spotless hook already uses — no manual install. Note this is a *custom* rule: PMD's built-in `UnnecessaryFullyQualifiedName` only flags a qualifier that is already redundant (the simple name is imported), not one that would become redundant by adding an import.
+
+It's a heuristic, so exceptions are expected — a simple-name collision in one file (`java.util.Date` vs `java.sql.Date`, `java.util.stream.Stream` vs a domain `Stream`), or any other case where the inline form is deliberate. Take the exception inline, with a reason:
+
+```java
+import java.util.Date;
+...
+java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
+```
+
+`@SuppressWarnings("PMD.InlineFullyQualifiedName")` on the declaration works too, but the annotation has nowhere to put prose, so pair it with a `// NOPMD - <reason>` marker on its own line or the line directly above:
+
+```java
+// NOPMD - collides with the imported java.util.Date
+@SuppressWarnings("PMD.InlineFullyQualifiedName")
+java.sql.Date sqlDate;
+```
+
+The reason is enforced, not just expected: a bare suppression fails the hook. The marker is required because an ordinary nearby comment can't be told apart from unrelated Javadoc. Both forms are scoped and visible in review; don't disable the rule repo-wide. The check only inspects suppressions that target this rule, so suppressions of *other* PMD rules are unaffected — and, like the gate itself, it only looks at suppressions your change actually touches.
+
+Nested-type access (`Alert.View.Public.class`, `Schema.AccessMode.READ_ONLY`) is not an inline FQN and is not reported. Neither are FQNs inside comments, javadoc, or string literals — the rule matches the parsed AST, so MapStruct's `@Mapping(expression = "java(java.util.Map.of())")`, where the FQN is required and no import can satisfy it, passes as-is. Inline `com.comet.opik.*` self-references are the same smell but are currently out of scope.
+
+The gate is **going-forward-only**: it inspects changed files — which covers every automatic path (commits lint staged files, CI lints the PR/push diff) — so pre-existing inline FQNs elsewhere in the module are not reported until that file is touched. The on-demand full-repo audits (`make precommit-all`, or the `Code Quality` workflow dispatched with `all_files`) do report them, as they do for other pre-existing debt.
+
+To run it on specific files: `pre-commit run pmd-inline-fqn --files <paths>`.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`
