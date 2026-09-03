@@ -65,6 +65,22 @@ export interface RawApiResult {
   location?: string | null;
 }
 
+/**
+ * One version of a prompt, as the version-history sidebar reads it.
+ *
+ * `label` is the backend's own `version_number` ("v7") — the value the sidebar,
+ * the Diff menu and the compare dialog are all supposed to agree on. It is
+ * deliberately not derived from the row's position in a page, which is exactly
+ * the labelling this shape exists to let a spec check.
+ */
+export interface PromptVersionRef {
+  id: string;
+  promptId: string;
+  label: string;
+  template: string;
+  environments: string[];
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -319,6 +335,9 @@ export interface BackendSort {
  * names* checked — a typo'd `feild`, or the `type` key the SDK does not accept,
  * still fails the build — which a bare `as never` would silently swallow.
  */
+/** The prompt-version shape the SDK answers with, taken from its own signature. */
+type SdkPromptVersion = Awaited<ReturnType<Opik['api']['prompts']['createPromptVersion']>>;
+
 type SdkDatasetItemFilters = NonNullable<
   Parameters<Opik['api']['datasets']['deleteDatasetItems']>[0]
 >['filters'];
@@ -414,6 +433,30 @@ function toMetricSeries(json: unknown): MetricSeries[] {
       value: p.value ?? null,
     })),
   }));
+}
+
+/**
+ * A prompt version as the REST answer carries it.
+ *
+ * The generated type marks `id`, `promptId` and `versionNumber` optional, but a
+ * version that came back without them is a broken answer, not a version with an
+ * unknown label — so throw here rather than let a `?? ''` reach an assertion,
+ * where "" would compare cleanly against a locator that found nothing either.
+ */
+function toPromptVersionRef(version: SdkPromptVersion): PromptVersionRef {
+  const { id, promptId, versionNumber } = version;
+  if (!id || !promptId || !versionNumber) {
+    throw new Error(
+      `[backendClient] prompt version answer is missing id/prompt_id/version_number: ${JSON.stringify(version)}`,
+    );
+  }
+  return {
+    id: String(id),
+    promptId: String(promptId),
+    label: versionNumber,
+    template: version.template,
+    environments: version.environments ?? [],
+  };
 }
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
@@ -768,6 +811,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Commit one more version of `name`, creating the prompt on the first call.
+     *
+     * The Python SDK's `create_prompt` also appends a version, but hands back
+     * only the version id — `promptId` is what teardown and every by-prompt
+     * lookup need, so read it off the response here rather than resolving the
+     * name afterwards.
+     */
+    async createPromptVersion(args: {
+      name: string;
+      template: string;
+      projectId?: string;
+      changeDescription?: string;
+    }): Promise<PromptVersionRef> {
+      const created = await opik.api.prompts.createPromptVersion({
+        name: args.name,
+        version: {
+          template: args.template,
+          ...(args.changeDescription ? { changeDescription: args.changeDescription } : {}),
+        },
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+      });
+      return toPromptVersionRef(created);
+    },
+
+    /**
+     * The write behind the "Deploy to" menu: point `environments` at this
+     * version, clearing whichever version held them before.
+     */
+    async setPromptVersionEnvironments(versionId: string, environments: string[]): Promise<void> {
+      await opik.api.prompts.setPromptVersionEnvironment(versionId, { environments });
+    },
+
+    /**
+     * One page of a prompt's versions, newest first — the same order, page size
+     * and sort the version-history sidebar requests, so a spec can assert what
+     * the UI is being handed before it asserts what the UI drew.
+     */
+    async listPromptVersions(
+      promptId: string,
+      opts: { page?: number; size?: number } = {},
+    ): Promise<{ total: number; versions: PromptVersionRef[] }> {
+      const page = await opik.api.prompts.getPromptVersions(promptId, {
+        page: opts.page ?? 1,
+        size: opts.size ?? 25,
+        sorting: JSON.stringify([{ field: 'created_at', direction: 'DESC' } satisfies BackendSort]),
+      });
+      return {
+        total: Number(page.total ?? 0),
+        versions: (page.content ?? []).map(toPromptVersionRef),
+      };
     },
 
     /**

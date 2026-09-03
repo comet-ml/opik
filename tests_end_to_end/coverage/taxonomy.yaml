@@ -398,6 +398,7 @@ areas:
     specs:
       - prompts/prompt-library-smoke.spec.ts
       - prompts/prompt-delete.spec.ts
+      - prompts/prompt-version-history-pagination.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -405,8 +406,8 @@ areas:
       sdk-seeded-visible:      { covered: true,  tier: t1-smoke }
       edit-creates-version:    { covered: true,  tier: t1-smoke }
       old-version-preserved:   { covered: true,  tier: t1-smoke }
-      version-history:         { covered: true,  tier: t1-smoke }
-      compare-versions:        { covered: false }
+      version-history:         { covered: true,  tier: t1-smoke, note: "paginated history past the 25-version page boundary, and the Deploy-to menu naming an owner version on a later page, at t2-cuj in prompt-version-history-pagination.spec.ts. That menu is filed here because there is no prompts.deploy-to-environment key; deploying a version from the menu is still uncovered" }
+      compare-versions:        { covered: true,  tier: t2-cuj, note: "Diff menu across the page boundary, and the compare sheet's version labelling; the sheet's own version pickers and pretty/JSON toggle are untested" }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
       delete-prompt:           { covered: true,  tier: t2-cuj }
 

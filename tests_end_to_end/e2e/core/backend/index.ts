@@ -7,6 +7,7 @@ export {
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
   type DatasetVersionRef,
+  type PromptVersionRef,
   type RawApiResult,
   type BackendSort,
   type MetricSeries,
