@@ -9,6 +9,7 @@ export type {
   LLMMapperResult,
   FormatDetector,
   FormatMapper,
+  LLMMessagePrettifyConfig,
   LLMMessageFormatImplementation,
 } from "./types";
 
