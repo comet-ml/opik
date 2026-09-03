@@ -41,6 +41,14 @@ export const ALERT_TYPE_ICONS = {
   [ALERT_TYPE.pagerduty]: PagerDutyIcon,
 };
 
+/**
+ * Test-id slug for an event type: the wire values carry `:` (`trace:cost`),
+ * which has no place in a selector. Shared with the E2E page object.
+ */
+export const alertTriggerTestId = (
+  eventType: ALERT_EVENT_TYPE | string,
+): string => `alert-trigger-${String(eventType).replace(/:/g, "-")}`;
+
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   [ALERT_EVENT_TYPE.trace_errors]: {
     title: "Trace errors threshold",
