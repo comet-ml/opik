@@ -681,6 +681,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         .map((a) => ({ id: String(a.id), name: a.name as string }));
     },
 
+    // The project-scoped read the alerts page itself uses. Unlike
+    // `listAlertsWithPrefix` this filters server-side, so it returns exactly
+    // the alerts under one project — which is what lets a test assert the
+    // whole answer, and what lets teardown sweep a project it owns outright
+    // without needing to know the names the app generated.
+    async listAlertsByProject(projectId: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages(
+        (page) => opik.api.projects.findAlertsByProject(projectId, { size: 500, page }),
+        500,
+      );
+      return content.map((a) => ({ id: String(a.id), name: String(a.name) }));
+    },
+
     async deleteAlertsBatch(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
       await opik.api.alerts.deleteAlertBatch({ ids });

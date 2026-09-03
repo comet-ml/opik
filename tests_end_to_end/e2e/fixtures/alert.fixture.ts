@@ -67,6 +67,21 @@ export interface AlertFixtures {
    * and a prefix delete would reach across them.
    */
   uiAlertCleanup: (names: string[]) => void;
+
+  /**
+   * Deletes every alert under the `project` fixture at teardown. Opted into by
+   * naming it in the test's arguments; it takes no call.
+   *
+   * `uiAlertCleanup` cannot cover a test whose alerts are named by the app —
+   * it matches names the test declares up front, and the create form's
+   * generated name is the thing under test. Discovering the alerts through the
+   * project-scoped read instead means there is no registration call for a
+   * mid-test failure to skip, and no dependence on the name at all.
+   *
+   * Safe to sweep wholesale: `project` mints a fresh run-prefixed project per
+   * test, so every alert scoped to it was created by that test.
+   */
+  projectAlertCleanup: void;
 }
 
 /**
@@ -160,6 +175,24 @@ export const test = baseTest.extend<AlertFixtures>({
     },
     // Opted into by name, so the extra workspace-wide read stays off every
     // test that only seeds through `seedAlerts`.
+    { auto: false },
+  ],
+
+  projectAlertCleanup: [
+    async ({ backendClient, project }, use, testInfo) => {
+      await use();
+
+      if (shouldLeaveArtifacts(testInfo)) return;
+
+      try {
+        const found = await backendClient.listAlertsByProject(project.id);
+        await backendClient.deleteAlertsBatch(found.map((a) => a.id));
+      } catch (err) {
+        console.warn('[alert fixture] project-scoped alert cleanup warning:', err);
+      }
+    },
+    // Opted into by name: the read costs a request, and tests that seed only
+    // through `seedAlerts` already have teardown.
     { auto: false },
   ],
 });

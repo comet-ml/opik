@@ -26,13 +26,19 @@ export class AlertsPage {
   async waitForReady(timeoutMs = 30_000): Promise<void> {
     return test.step('Wait for alerts list ready', async () => {
       await Promise.race([
-        this.page
-          .locator('tbody tr[data-row-id]')
-          .first()
-          .waitFor({ state: 'visible', timeout: timeoutMs }),
+        this.alertRows.first().waitFor({ state: 'visible', timeout: timeoutMs }),
         this.emptyState.waitFor({ state: 'visible', timeout: timeoutMs }),
       ]);
     });
+  }
+
+  /**
+   * Every rendered alert row. Skeleton rows carry no `data-row-id`, so this
+   * never counts a still-loading table — which is what makes it usable as the
+   * "these are all the alerts there are" assertion.
+   */
+  get alertRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
   }
 
   /**

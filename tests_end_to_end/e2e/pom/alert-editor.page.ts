@@ -99,9 +99,6 @@ export class AlertEditorPage {
    * there instead and finds none of the config controls.
    */
   triggerConfig(eventType: AlertEventType): Locator {
-    // Mirrors `alertTriggerTestId` in the alerts page helpers: the wire values
-    // carry `:`, which is normalized to `-` for the selector.
-    //
     // One trigger per event type, so this is deliberately not `.first()`: the
     // editor's popover binds each checkbox to `selectedEventTypes.has(type)`
     // and so cannot add a second, but `POST /v1/private/alerts` accepts a
@@ -109,7 +106,15 @@ export class AlertEditorPage {
     // and a strict-mode violation naming this method is the right outcome —
     // `.first()` would silently drive one of two indistinguishable triggers.
     // `assertSingleTriggerConfig` turns that into a legible message.
-    return this.page.getByTestId(`alert-trigger-${eventType.replace(/:/g, '-')}`);
+    return this.page.getByTestId(this.triggerTestId(eventType));
+  }
+
+  /**
+   * Mirrors `alertTriggerTestId` in the alerts page helpers: the wire values
+   * carry `:`, which is normalized to `-` for the selector.
+   */
+  private triggerTestId(eventType: AlertEventType): string {
+    return `alert-trigger-${eventType.replace(/:/g, '-')}`;
   }
 
   /**
@@ -184,6 +189,21 @@ export class AlertEditorPage {
   }
 
   /**
+   * Removes a selected trigger through the `X` beside its config block.
+   *
+   * Asserts the block is gone rather than returning immediately: the form's
+   * derived state (the suggested name among it) recomputes off the trigger
+   * array, so a caller asserting on that needs the removal to have landed.
+   */
+  async removeTrigger(eventType: AlertEventType): Promise<void> {
+    return test.step(`remove the ${eventType} trigger`, async () => {
+      await this.assertSingleTriggerConfig(eventType);
+      await this.page.getByTestId(`${this.triggerTestId(eventType)}-remove`).click();
+      await expect(this.triggerConfig(eventType)).toHaveCount(0);
+    });
+  }
+
+  /**
    * Fills a threshold trigger's threshold and rolling window. Only
    * `trace:cost`, `trace:latency` and `trace:errors` render these controls.
    */
@@ -193,10 +213,30 @@ export class AlertEditorPage {
     window: AlertWindow,
   ): Promise<void> {
     return test.step(`configure ${eventType} at ${threshold} over ${window}`, async () => {
+      await this.setTriggerThreshold(eventType, threshold);
+      await this.setTriggerWindow(eventType, window);
+    });
+  }
+
+  /**
+   * Sets a threshold trigger's threshold, leaving its window alone.
+   *
+   * Split out of `configureThresholdTrigger` for tests that assert on state
+   * derived from one field at a time — the suggested alert name recomputes on
+   * each, and setting both at once would hide a field that stopped feeding it.
+   */
+  async setTriggerThreshold(eventType: AlertEventType, threshold: string): Promise<void> {
+    return test.step(`set the ${eventType} threshold to ${threshold}`, async () => {
       await this.assertSingleTriggerConfig(eventType);
-      const config = this.triggerConfig(eventType);
-      await config.locator('input[type="number"]').fill(threshold);
-      await config.getByRole('combobox').click();
+      await this.triggerConfig(eventType).locator('input[type="number"]').fill(threshold);
+    });
+  }
+
+  /** Sets a threshold trigger's rolling window, leaving its threshold alone. */
+  async setTriggerWindow(eventType: AlertEventType, window: AlertWindow): Promise<void> {
+    return test.step(`set the ${eventType} window to ${window}`, async () => {
+      await this.assertSingleTriggerConfig(eventType);
+      await this.triggerConfig(eventType).getByRole('combobox').click();
       await this.page.getByRole('option', { name: window, exact: true }).click();
     });
   }

@@ -26,7 +26,11 @@ import {
 import { Input } from "@/ui/input";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { AlertFormType } from "./schema";
-import { TRIGGER_CONFIG, alertTriggerTestId } from "./helpers";
+import {
+  TRIGGER_CONFIG,
+  alertTriggerRemoveTestId,
+  alertTriggerTestId,
+} from "./helpers";
 import { WINDOW_OPTIONS } from "./constants";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { GuardrailTypes } from "@/types/guardrails";
@@ -443,6 +447,10 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                           type="button"
                           variant="minimal"
                           size="icon-xs"
+                          aria-label="Remove trigger"
+                          data-testid={alertTriggerRemoveTestId(
+                            field.eventType,
+                          )}
                           onClick={() => removeTrigger(index)}
                         >
                           <X />

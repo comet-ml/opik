@@ -686,6 +686,7 @@ areas:
     spec_dir: alerts
     specs:
       - alerts/alerts-crud.spec.ts
+      - alerts/alert-name-suggestion.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }
       create-alert:        { covered: true,  tier: t1-smoke }
@@ -694,6 +695,11 @@ areas:
       webhook-destination: { covered: true,  tier: t1-smoke }
       enable-disable:      { covered: true,  tier: t2-cuj }
       delete-alert:        { covered: true,  tier: t2-cuj }
+      # New in OPIK-8198: the create form derives the alert's name from its
+      # triggers, and stops as soon as the user types their own. Its own
+      # capability rather than part of `create-alert`, which is about an alert
+      # reaching the list at all and says nothing about what it ends up called.
+      suggested-alert-name: { covered: true, tier: t2-cuj, note: "Create form only — the edit form never re-derives. The empty-field path that hands naming back to the form is deliberately not covered: it garbles the name on this branch (see the PR discussion), so a spec for it would pin the defect." }
       # "Test connection" / "Test trigger" POST the draft alert to the endpoint
       # in the form. Asserting a *success* needs a receiver the suite controls;
       # against example.com the mutation answers failure, so a passing test

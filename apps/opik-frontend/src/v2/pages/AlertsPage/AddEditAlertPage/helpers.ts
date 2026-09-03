@@ -49,6 +49,15 @@ export const alertTriggerTestId = (
   eventType: ALERT_EVENT_TYPE | string,
 ): string => `alert-trigger-${String(eventType).replace(/:/g, "-")}`;
 
+/**
+ * Test-id for a trigger's remove button. It is an icon-only button with no
+ * accessible name, and it sits outside the trigger's own config block, so
+ * there is nothing else to address it by.
+ */
+export const alertTriggerRemoveTestId = (
+  eventType: ALERT_EVENT_TYPE | string,
+): string => `${alertTriggerTestId(eventType)}-remove`;
+
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   [ALERT_EVENT_TYPE.trace_errors]: {
     title: "Trace errors threshold",
