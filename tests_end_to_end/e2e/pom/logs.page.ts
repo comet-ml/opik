@@ -42,6 +42,17 @@ export class LogsPage {
     });
   }
 
+  /** Open Logs with the Spans tab active for the given project. */
+  async gotoSpans(projectId: string): Promise<void> {
+    return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=spans`,
+      );
+    });
+  }
+
   async waitForReady(): Promise<void> {
     return test.step('Wait for Logs table ready', async () => {
       const realRow = this.page.locator('tr[data-row-id]').first();
@@ -140,6 +151,43 @@ export class LogsPage {
    */
   traceRow(traceId: string): Locator {
     return this.page.locator(`tr[data-row-id="${traceId}"]`);
+  }
+
+  /**
+   * A span row in the Spans view, keyed by span id — the same `data-row-id`
+   * hook the traces table stamps, since both render through the shared
+   * DataTable.
+   */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  /**
+   * The "Cost" cell of a span row, addressed by the table's own
+   * `data-cell-id` (`<rowId>_<columnId>`).
+   *
+   * By cell id rather than by column position: the Spans table's columns are
+   * user-configurable and their order is persisted, so any `nth-child` locator
+   * would be asserting on a column layout instead of on a cost. `Cost` is one
+   * of `DEFAULT_SPANS_COLUMNS`, so it is present without touching the column
+   * picker; it may be scrolled out of the viewport, which is why callers should
+   * assert on its text rather than on its visibility.
+   */
+  spanCostCell(spanId: string): Locator {
+    return this.page.locator(`td[data-cell-id="${spanId}_total_estimated_cost"]`);
+  }
+
+  /**
+   * Wait for the Spans view to have rendered rows.
+   *
+   * Deliberately has no empty-state escape hatch: the only callers seed spans
+   * first, so an empty table is a seeding failure, and waiting it out reports
+   * that instead of letting a later assertion pass against nothing.
+   */
+  async waitForSpansReady(): Promise<void> {
+    return test.step('Wait for Logs (Spans) table ready', async () => {
+      await this.page.locator('tr[data-row-id]').first().waitFor({ state: 'visible', timeout: 30_000 });
+    });
   }
 
   /** Tick the selection checkbox on a trace's row. */

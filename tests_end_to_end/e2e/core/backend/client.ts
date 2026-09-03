@@ -144,6 +144,30 @@ export interface TracePayload {
   tags: string[] | null;
 }
 
+/**
+ * One span as `GET /v1/private/spans` answers it, narrowed to the fields the
+ * server-side cost estimate is derived from and lands in.
+ *
+ * `totalEstimatedCost` is optional on purpose and must stay that way. A span the
+ * price table cannot price comes back with the field **omitted** — not null, not
+ * zero — and "unpriced" versus "priced at nothing" is precisely the distinction
+ * the compact-date-suffix guard exists to hold. Defaulting it to 0 here would
+ * erase the only evidence a caller has.
+ */
+export interface SpanCostRef {
+  id: string;
+  name: string;
+  model: string | null;
+  provider: string | null;
+  /**
+   * The seeded token counts, untyped keys and all. Carried alongside the cost
+   * because the estimate is a function of them: two spans whose costs are being
+   * compared are only comparable if their usage landed identically.
+   */
+  usage: Record<string, number> | null;
+  totalEstimatedCost?: number;
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -1724,6 +1748,35 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
       return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * The spans of one trace — `GET /v1/private/spans?trace_id=…`.
+     *
+     * Scoped to a trace rather than to a project because the caller compares
+     * spans to each other: two spans that differ only in their model name must
+     * be read from the same answer for the comparison to mean anything.
+     *
+     * `totalEstimatedCost` is passed through exactly as the wire carried it, so
+     * an unpriced span stays `undefined` rather than becoming 0. See
+     * `SpanCostRef`.
+     */
+    async listSpanCosts(args: { projectId: string; traceId: string }): Promise<SpanCostRef[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        traceId: args.traceId,
+        size: 200,
+        page: 1,
+        truncate: true,
+      });
+      return (page.content ?? []).map((s) => ({
+        id: String(s.id),
+        name: String(s.name ?? ''),
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        usage: s.usage ?? null,
+        totalEstimatedCost: s.totalEstimatedCost,
+      }));
     },
 
     /**

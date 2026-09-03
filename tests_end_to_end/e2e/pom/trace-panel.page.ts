@@ -46,6 +46,25 @@ export class TracePanelPage {
     return this.root.getByTestId(`trace-tree-node-${name}`);
   }
 
+  /**
+   * The estimated-cost readout inside a span's tree node.
+   *
+   * The node renders a row of small "data blocks" — duration, provider/model,
+   * cost, token count — none of which carries a `data-testid`, and the cost one
+   * has no accessible name either (its label lives in a hover tooltip portal).
+   * Scoping to the node's own testid and matching the leading `$` is what
+   * distinguishes it: cost is the only block that renders a currency symbol.
+   * A `data-testid` on the cost block would be better and should be added when
+   * the front end is next touched.
+   *
+   * Absent, not empty, when the span could not be priced: the block is not
+   * rendered at all for an undefined cost, so `toHaveCount(0)` is the assertion
+   * for "unpriced" and `toHaveText` the one for a value.
+   */
+  spanTreeNodeCost(name: string): Locator {
+    return this.spanTreeNode(name).getByText(/^\s*\$/);
+  }
+
   /** The expand/collapse toggle within a given tree node. */
   spanTreeToggle(name: string): Locator {
     return this.spanTreeNode(name).getByRole('button', { name: 'Expand or collapse span' });

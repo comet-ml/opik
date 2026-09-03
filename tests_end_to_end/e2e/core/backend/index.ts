@@ -23,6 +23,7 @@ export {
   type FeedbackScoreRef,
   type TraceDetail,
   type TracePayload,
+  type SpanCostRef,
   type AutomationRuleRef,
   type AutomationRuleDetail,
   type AutomationRuleLogRef,

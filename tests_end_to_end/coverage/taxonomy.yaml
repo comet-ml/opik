@@ -251,6 +251,7 @@ areas:
       - trace-explore/trace-attachments.spec.ts
       - trace-explore/trace-id-time-window.spec.ts
       - trace-explore/trace-partial-update-merge.spec.ts
+      - trace-explore/span-estimated-cost.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -258,7 +259,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "two branches: a client-supplied total_cost stored verbatim (trace-spans-depth), and the server-side price-table estimate for a span logged without one, incl. compact YYYYMMDD model-name suffixes (span-estimated-cost)" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }

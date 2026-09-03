@@ -1,4 +1,4 @@
-export { test, expect } from './alert.fixture';
+export { test, expect } from './estimated-cost-spans.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -113,4 +113,9 @@ export type {
   AlertFixtures,
 } from './alert.fixture';
 export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
+export type {
+  EstimatedCostSpanSeed,
+  EstimatedCostSpansRef,
+  EstimatedCostSpansFixtures,
+} from './estimated-cost-spans.fixture';
 export type { ProjectRef } from '../core/backend';
