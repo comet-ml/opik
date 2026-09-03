@@ -84,6 +84,7 @@ jobs:
                 -Dtest="${{ matrix.tests }}"
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
+                -Djunit.jupiter.execution.timeout.testable.method.default="${{ matrix.testTimeout }}"
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2
