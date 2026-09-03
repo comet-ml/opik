@@ -353,6 +353,11 @@ class Dataset(DatasetExportOperations):
         # one-shot sync on the first `insert()` instead of paying an N+1
         # sync at list time.
         self._hashes_synced: bool = True
+        # None until the backend version has actually been determined. Only a
+        # conclusive answer is stored, so a probe that failed to reach the
+        # backend is retried instead of pinning this dataset to sequential
+        # uploads for the rest of the session.
+        self._parallel_insert_supported_cache: Optional[bool] = None
 
     @classmethod
     def from_public(
@@ -611,42 +616,61 @@ class Dataset(DatasetExportOperations):
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
 
-    def _resolve_num_threads(self, num_threads: int) -> int:
-        """Downgrade to a sequential upload when the backend predates parallel support.
+    @property
+    def _parallel_insert_supported(self) -> bool:
+        """Whether the backend tolerates concurrent batches sharing a batch_group_id.
 
-        Older backends race on concurrent batches that share a batch_group_id,
-        so parallelism is only safe from
+        Older backends race on them, so parallelism is only safe from
         ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the
-        version cannot be determined at all — unreachable endpoint, non-semver
-        build string — we fall back to sequential rather than risk the race.
+        version cannot be determined we report unsupported rather than risk the
+        race.
+
+        The answer is cached because the backend cannot change version
+        mid-session and parallel upload is the default: probing per ``insert``
+        would add a round trip to every call in a loop. Only a conclusive
+        answer is cached — an unreachable backend is re-probed on the next
+        insert so parallel upload resumes once it recovers.
         """
+        if self._parallel_insert_supported_cache is not None:
+            return self._parallel_insert_supported_cache
+
         try:
             backend_version = self._rest_client.version()["version"]
+        except Exception:
+            LOGGER.warning(
+                "Could not reach the Opik backend to determine its version, "
+                "falling back to a sequential dataset upload for this insert.",
+                exc_info=True,
+            )
+            return False
+
+        try:
             supported = (
                 semantic_version.SemanticVersion.parse(backend_version)
                 >= constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
             )
         except Exception:
             LOGGER.warning(
-                "Could not determine the Opik backend version, falling back to a "
+                "Could not parse the Opik backend version %s, falling back to a "
                 "sequential dataset upload. Parallel upload requires backend %s "
                 "or newer.",
+                backend_version,
                 constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
                 exc_info=True,
             )
-            return 1
+            supported = False
+        else:
+            if not supported:
+                LOGGER.warning(
+                    "Opik backend %s does not support parallel dataset upload, "
+                    "falling back to a sequential upload. Upgrade to backend %s or "
+                    "newer to use num_threads.",
+                    backend_version,
+                    constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                )
 
-        if not supported:
-            LOGGER.warning(
-                "Opik backend %s does not support parallel dataset upload, falling "
-                "back to a sequential upload. Upgrade to backend %s or newer to use "
-                "num_threads.",
-                backend_version,
-                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
-            )
-            return 1
-
-        return num_threads
+        self._parallel_insert_supported_cache = supported
+        return supported
 
     def _send_batches(
         self,
@@ -681,11 +705,10 @@ class Dataset(DatasetExportOperations):
             for future in futures.as_completed(submitted):
                 future.result()
 
-    def __internal_api__insert_items_as_dataclasses__(
-        self,
-        items: List[dataset_item.DatasetItem],
-        num_threads: int = 1,
-    ) -> None:
+    def _deduplicate(
+        self, items: List[dataset_item.DatasetItem]
+    ) -> List[dataset_item.DatasetItem]:
+        """Drop items whose content hash was already seen locally or on the backend."""
         # Lazy-sync against the backend the first time we insert into a
         # dataset that was fetched from the backend (list or get-by-name
         # factory), so content-hash dedup still works without paying an
@@ -693,7 +716,6 @@ class Dataset(DatasetExportOperations):
         if not self._hashes_synced:
             self.__internal_api__sync_hashes__()
 
-        # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:
             item_hash = item.content_hash()
@@ -709,7 +731,42 @@ class Dataset(DatasetExportOperations):
             self._hashes.add(item_hash)
             self._id_to_hash[item.id] = item_hash
 
-        rest_items = [self._convert_to_rest_item(item) for item in deduplicated_items]
+        return deduplicated_items
+
+    def __internal_api__insert_items_as_dataclasses__(
+        self,
+        items: List[dataset_item.DatasetItem],
+        num_threads: int = 1,
+        deduplication: bool = True,
+    ) -> None:
+        # Validated here rather than in each public entry point: every insert
+        # path funnels through this method. A truthy string or None would
+        # otherwise silently pick the wrong duplicate-checking behaviour, and
+        # a non-integer worker count would fail on the comparison below with a
+        # TypeError instead of naming the offending argument.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+
+        # Gated here rather than in `insert` so every caller of this funnel is
+        # covered: older backends race on concurrent batches that share a
+        # batch_group_id, and a direct caller asking for workers must not be
+        # able to skip that check.
+        if num_threads > 1 and not self._parallel_insert_supported:
+            num_threads = 1
+
+        if deduplication:
+            items_to_send = self._deduplicate(items)
+        else:
+            # Nothing was hashed, so the local cache no longer describes the
+            # backend; force a re-sync before the next deduplicated insert.
+            items_to_send = items
+            self._hashes_synced = False
+
+        rest_items = [self._convert_to_rest_item(item) for item in items_to_send]
 
         batches = sequence_splitter.split_into_batches(
             rest_items,
@@ -724,42 +781,49 @@ class Dataset(DatasetExportOperations):
         # Invalidate the cached count so it will be fetched from backend on next access
         self._dataset_items_count = None
 
-    def insert(self, items: Sequence[Dict[str, Any]], num_threads: int = 1) -> None:
+    def insert(
+        self,
+        items: Sequence[Dict[str, Any]],
+        num_threads: int = 4,
+        deduplication: bool = True,
+    ) -> None:
         """
         Insert new items into the dataset. A new dataset version will be created.
 
         Args:
             items: List of dicts (which will be converted to dataset items)
                 to add to the dataset.
+            deduplication: Whether to skip items whose content already exists
+                in the dataset. Pass ``False`` to insert every item as-is
+                without any duplicate checking, which is significantly faster
+                on large datasets. The next insert that does deduplicate has to
+                re-read the dataset's items to account for what was skipped.
             num_threads: Number of worker threads used to upload the item
-                batches. Must be a positive integer. With ``1`` (the default)
-                batches are uploaded sequentially. With more than ``1`` the
-                batches of this single ``insert`` are uploaded in parallel;
-                they all land in one dataset version. If any batch fails the
-                call re-raises; there is no rollback, so batches that already
-                succeeded remain persisted. Items are keyed by their ``id``, so
-                parallel and sequential inserts of the same items produce
-                identical dataset content; the input order is not a read-back
-                guarantee. Requires an Opik backend of at least
-                ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT``; against
-                older backends, or when the backend version cannot be
-                determined, the upload falls back to sequential and logs a
-                warning.
+                batches. Must be a positive integer, defaults to ``4``; pass
+                ``1`` to upload sequentially. All batches land in a single
+                dataset version. If a batch fails the call raises, and the
+                batches that already succeeded stay persisted. Older Opik
+                backends do not support parallel upload and fall back to a
+                sequential one.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, or
+                ``deduplication`` is not a bool.
         """
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
-
-        if num_threads > 1:
-            num_threads = self._resolve_num_threads(num_threads)
+        # Checked here too so bad input raises before any item is converted.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
 
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
         ]
         self.__internal_api__insert_items_as_dataclasses__(
-            dataset_items, num_threads=num_threads
+            dataset_items, num_threads=num_threads, deduplication=deduplication
         )
 
     @property
@@ -794,12 +858,14 @@ class Dataset(DatasetExportOperations):
         self._hashes_synced = True
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: List[Dict[str, Any]]) -> None:
+    def update(self, items: List[Dict[str, Any]], deduplication: bool = True) -> None:
         """
         Update existing items in the dataset.
 
         Args:
             items: List of DatasetItem objects to update in the dataset. You need to provide the full item object as it will override what has been supplied previously.
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
 
         Raises:
             DatasetItemUpdateOperationRequiresItemId: If any item in the list is missing an id.
@@ -810,7 +876,7 @@ class Dataset(DatasetExportOperations):
                     "Missing id for dataset item to update: %s", item
                 )
 
-        self.insert(items)
+        self.insert(items, deduplication=deduplication)
 
     def _delete_batch_with_retry(
         self,
@@ -912,6 +978,7 @@ class Dataset(DatasetExportOperations):
         json_array: str,
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Args:
@@ -921,6 +988,8 @@ class Dataset(DatasetExportOperations):
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
@@ -929,13 +998,14 @@ class Dataset(DatasetExportOperations):
             json_array, keys_mapping=keys_mapping, ignore_keys=ignore_keys
         )
 
-        self.insert(new_items)
+        self.insert(new_items, deduplication=deduplication)
 
     def read_jsonl_from_file(
         self,
         file_path: str,
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Read JSONL from a file and insert it into the dataset.
@@ -946,17 +1016,20 @@ class Dataset(DatasetExportOperations):
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
         new_items = converters.from_jsonl_file(file_path, keys_mapping, ignore_keys)
-        self.insert(new_items)
+        self.insert(new_items, deduplication=deduplication)
 
     def insert_from_pandas(
         self,
         dataframe: "pd.DataFrame",
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Requires: `pandas` library to be installed.
@@ -967,13 +1040,15 @@ class Dataset(DatasetExportOperations):
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your dataframe contains columns that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
 
         new_items = converters.from_pandas(dataframe, keys_mapping, ignore_keys)
 
-        self.insert(new_items)
+        self.insert(new_items, deduplication=deduplication)
 
     def get_version_view(self, version_name: str) -> DatasetVersion:
         """

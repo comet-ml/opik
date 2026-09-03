@@ -394,6 +394,17 @@ mcpOAuth:
   # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
   scrubLockWaitTime: ${MCP_OAUTH_SCRUB_LOCK_WAIT_TIME:-PT0.1S}
 
+# Delegated validation of CIPX device tokens (Authorization: opik_cipx_at_...). Validation, revocation and the
+# device registry live in cost-api, so no key material or crypto is needed here. Disabled by default: while
+# disabled the authentication filter never inspects the prefix and API-key auth is untouched.
+cipxTokenValidation:
+  # Default: false
+  # Description: Whether to accept CIPX device tokens as a credential
+  enabled: ${CIPX_TOKEN_VALIDATION_ENABLED:-false}
+  # Default: http://ai-cost-backend
+  # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
+  url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false

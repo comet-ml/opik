@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.46](https://img.shields.io/badge/Version-2.2.46-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.46](https://img.shields.io/badge/AppVersion-2.2.46-informational?style=flat-square)
+![Version: 2.2.49](https://img.shields.io/badge/Version-2.2.49-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.49](https://img.shields.io/badge/AppVersion-2.2.49-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -243,6 +243,8 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PORT | string | `"8123"` |  |
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
+| component.backend.env.CIPX_TOKEN_VALIDATION_ENABLED | string | `"false"` |  |
+| component.backend.env.CIPX_TOKEN_VALIDATION_URL | string | `"http://ai-cost-backend"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_DEFAULT_RESOURCE | string | `"llm-models-default.yaml"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH | string | `""` |  |

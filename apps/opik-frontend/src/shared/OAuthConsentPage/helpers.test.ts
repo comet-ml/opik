@@ -165,7 +165,11 @@ describe("buildConsentRequest", () => {
 
   it("maps params, workspace, and csrf into the wire shape", () => {
     expect(
-      buildConsentRequest(params, { id: "ws-1", name: "Default" }, "csrf-123"),
+      buildConsentRequest(
+        params,
+        { id: "ws-1", name: "Default", is_default: true },
+        "csrf-123",
+      ),
     ).toEqual({
       client_id: "abc",
       redirect_uri: "https://host.example/cb",
