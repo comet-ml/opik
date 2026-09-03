@@ -4,6 +4,12 @@ set -euo pipefail
 NUM_GROUPS=16
 UNIT_TIMEOUT=10
 INTEGRATION_TIMEOUT=20
+# Per-test timeout handed to JUnit, overriding the default in junit-platform.properties.
+# CI reruns failures 3 times, so a deterministic hang costs 4x these values: 8m against the 10m
+# unit wall, 16m against the 20m integration wall. Both must stay under their job timeout above,
+# or the job is cancelled before Surefire can name the offending test.
+UNIT_TEST_TIMEOUT=2m
+INTEGRATION_TEST_TIMEOUT=4m
 TEST_DIR="src/test/java"
 PATTERN="DropwizardAppExtensionProvider\|MySQLContainer\|ClickHouseContainer\|RedisContainer\|MinIOContainer"
 
@@ -62,9 +68,9 @@ done
 
 # Build JSON matrix: unit tests + N integration groups
 matrix="{\"include\":["
-matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT}"
+matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT,\"testTimeout\":\"$UNIT_TEST_TIMEOUT\"}"
 for ((i=1; i<=NUM_GROUPS; i++)); do
-  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":$INTEGRATION_TIMEOUT}"
+  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":$INTEGRATION_TIMEOUT,\"testTimeout\":\"$INTEGRATION_TEST_TIMEOUT\"}"
 done
 matrix+="]}"
 echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
