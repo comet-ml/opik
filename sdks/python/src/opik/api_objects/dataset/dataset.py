@@ -717,10 +717,9 @@ class Dataset(DatasetExportOperations):
                     for future in done:
                         future.result()
 
-                # The splitter never yields an empty batch, so None is
-                # unambiguously "no more batches".
-                batch = next(batch_iterator, None)
-                if batch is None:
+                try:
+                    batch = next(batch_iterator)
+                except StopIteration:
                     break
 
                 in_flight.add(
@@ -817,10 +816,14 @@ class Dataset(DatasetExportOperations):
 
         batch_group_id = id_helpers.generate_id()
 
-        self._send_batches(batches, batch_group_id, num_threads)
-
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
+        try:
+            self._send_batches(batches, batch_group_id, num_threads)
+        finally:
+            # In a `finally` because a partial insert still changed the dataset:
+            # a source that fails halfway, or a batch that fails after earlier
+            # ones landed, leaves items on the backend that a stale cached count
+            # would not include.
+            self._dataset_items_count = None
 
     def insert(
         self,

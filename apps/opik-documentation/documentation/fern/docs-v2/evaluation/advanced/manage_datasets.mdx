@@ -304,6 +304,8 @@ list first. Hand it a generator and items are converted and uploaded in batches 
 the batches currently in flight:
 
 ```python title="Python" language="python"
+import json
+
 def read_items(path):
     with open(path) as file:
         for line in file:

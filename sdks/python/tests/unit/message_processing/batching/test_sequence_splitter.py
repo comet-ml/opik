@@ -148,7 +148,10 @@ class TestStreamIntoBatches:
             ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], {"max_length": 4}),
             ([1, 2, 3], {"max_length": 10}),
             ([], {"max_length": 4}),
-            ([ONE_MEGABYTE_OBJECT_A] * 2 + [ONE_MEGABYTE_OBJECT_B] * 2, {"max_payload_size_MB": 3.5}),
+            (
+                [ONE_MEGABYTE_OBJECT_A] * 2 + [ONE_MEGABYTE_OBJECT_B] * 2,
+                {"max_payload_size_MB": 3.5},
+            ),
             (
                 [ONE_MEGABYTE_OBJECT_A] * 2
                 + [[ONE_MEGABYTE_OBJECT_C] * 4]

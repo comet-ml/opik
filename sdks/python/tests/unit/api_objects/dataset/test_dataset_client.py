@@ -767,7 +767,9 @@ class TestStreamingInsert:
             for call in create_or_update.call_args_list
             for item in call.kwargs["items"]
         )
-        assert sent == list(range(7)), "A generator must upload the same items a list does"
+        assert sent == list(range(7)), (
+            "A generator must upload the same items a list does"
+        )
 
     def test_generator_input__consumed_exactly_once(self, monkeypatch):
         """A second pass would silently double-insert, or read nothing at all."""
@@ -800,9 +802,7 @@ class TestStreamingInsert:
             rest_client=mock_rest_client,
         )
 
-        dataset.insert(
-            dataset_item.DatasetItem(input={"i": i}) for i in range(3)
-        )
+        dataset.insert(dataset_item.DatasetItem(input={"i": i}) for i in range(3))
 
         create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
         sent = sorted(
@@ -958,4 +958,36 @@ class TestStreamingInsert:
             for call in create_or_update.call_args_list
             for item in call.kwargs["items"]
         ]
-        assert sent == [0, 1, 2, 3], "The item still accumulating is lost with the source"
+        assert sent == [0, 1, 2, 3], (
+            "The item still accumulating is lost with the source"
+        )
+
+    def test_source_raises_mid_stream__cached_item_count_is_invalidated(
+        self, monkeypatch
+    ):
+        """A partial insert still changed the dataset, so the count cannot stand.
+
+        The invalidation used to sit after the upload call, which a failure
+        skipped — leaving `items_count` reporting the number from before an
+        insert that had in fact added items.
+        """
+        _small_batches(monkeypatch, size=2)
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+        dataset._dataset_items_count = 7
+
+        def failing_source():
+            yield from _make_items(5)
+            raise RuntimeError("the source could not be read to the end")
+
+        with pytest.raises(RuntimeError):
+            dataset.insert(failing_source(), num_threads=1)
+
+        assert dataset._dataset_items_count is None, (
+            "A partially applied insert must not leave a stale cached count"
+        )

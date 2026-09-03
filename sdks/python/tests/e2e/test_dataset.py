@@ -204,6 +204,52 @@ def test_insert_parallel__same_data_regardless_of_thread_count(
         assert version_info.items_total == N_ITEMS
 
 
+@pytest.mark.parametrize("num_threads", [1, 4])
+def test_insert_generator__same_data_as_a_list(
+    opik_client: opik.Opik, dataset_name: str, num_threads: int
+):
+    """A one-shot generator must land the same dataset a list does.
+
+    `insert` consumes its argument lazily and uploads as it reads, so the
+    producer runs interleaved with the uploads against a real backend rather
+    than being drained first. Enough items to cross the batch cap in both
+    modes, so the sequential and the fanned-out paths each exercise a real
+    multi-batch stream.
+    """
+    DESCRIPTION = "E2E generator insert dataset"
+    N_ITEMS = 2_500
+
+    name = f"{dataset_name}-gen-t{num_threads}"
+    expected_items = [
+        dataset_item.DatasetItem(
+            input={"question": f"question {i}"},
+            expected_output={"output": f"answer {i}"},
+        )
+        for i in range(N_ITEMS)
+    ]
+
+    def item_source():
+        for i in range(N_ITEMS):
+            yield {
+                "input": {"question": f"question {i}"},
+                "expected_output": {"output": f"answer {i}"},
+            }
+
+    dataset = opik_client.create_dataset(
+        name, description=DESCRIPTION, project_name=PROJECT_NAME
+    )
+
+    dataset.insert(item_source(), num_threads=num_threads, deduplication=False)
+
+    verifiers.verify_dataset(
+        opik_client=opik_client,
+        name=name,
+        description=DESCRIPTION,
+        dataset_items=expected_items,
+        project_name=PROJECT_NAME,
+    )
+
+
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"
 
