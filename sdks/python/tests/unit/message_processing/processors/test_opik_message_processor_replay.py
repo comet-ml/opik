@@ -760,6 +760,36 @@ class TestAttachmentUploadCallbacks:
             72, failure_reason=str(error)
         )
 
+    def test_process__attachment__failed_callback_s3_remote_disconnect__retains_for_replay(
+        self,
+        processor: OpikMessageProcessor,
+        mock_replay: mock.MagicMock,
+        mock_file_uploader: mock.MagicMock,
+    ):
+        msg = _create_attachment_message(message_id=74)
+        remote_error = httpx.RemoteProtocolError(
+            "Server disconnected without sending a response"
+        )
+        error = s3_upload_error.S3UploadFileError(
+            file="attachment.bin",
+            reason=str(remote_error),
+            connection_error=True,
+        )
+        error.__cause__ = remote_error
+
+        def fake_upload(message, on_upload_success=None, on_upload_failed=None):
+            on_upload_failed(error)
+
+        mock_file_uploader.upload.side_effect = fake_upload
+        mock_replay.reset_mock()
+
+        processor.process(msg)
+
+        mock_replay.message_sent_failed.assert_called_once_with(
+            74, failure_reason=str(error)
+        )
+        mock_replay.unregister_message.assert_not_called()
+
     def test_process__attachment__failed_callback_s3_non_connection_error__no_failed_mark(
         self,
         processor: OpikMessageProcessor,

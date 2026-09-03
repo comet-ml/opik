@@ -11,7 +11,12 @@ READ_TIMEOUT_SECONDS = 100
 WRITE_TIMEOUT_SECONDS = 100
 POOL_TIMEOUT_SECONDS = 20
 
-RETRYABLE_STATUS_CODES = [500, 502, 503, 504]
+RETRYABLE_STATUS_CODES = frozenset({500, 502, 503, 504})
+RETRYABLE_CONNECTION_ERRORS = (
+    httpx.RemoteProtocolError,  # handle retries for expired connections
+    httpx.ConnectError,
+    httpx.TimeoutException,
+)
 
 
 @functools.lru_cache
@@ -44,14 +49,7 @@ def get() -> httpx.Client:
 
 
 def _allowed_to_retry(exception: Exception) -> bool:
-    if isinstance(
-        exception,
-        (
-            httpx.RemoteProtocolError,  # handle retries for expired connections
-            httpx.ConnectError,
-            httpx.TimeoutException,
-        ),
-    ):
+    if isinstance(exception, RETRYABLE_CONNECTION_ERRORS):
         return True
 
     if isinstance(exception, httpx.HTTPStatusError):
