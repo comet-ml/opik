@@ -158,6 +158,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1,
+      label: "Claude Fable 5.1",
+    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -284,6 +288,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5,
       label: "anthropic/claude-fable-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1,
+      label: "anthropic/claude-fable-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1_BATCH,
+      label: "anthropic/claude-fable-5.1:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_BATCH,
@@ -824,6 +836,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.7-flash:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_8_FLASH,
+      label: "google/gemini-3.8-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_8_FLASH_BATCH,
+      label: "google/gemini-3.8-flash:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -918,6 +938,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2,
       label: "inception/mercury-2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2_5_PREVIEW,
+      label: "inception/mercury-2.5-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
@@ -1126,6 +1150,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2_CONTRIBUTOR,
       label: "meta/muse-spark-1.2-contributor",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_3,
+      label: "meta/muse-spark-1.3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_3_CONTRIBUTOR,
+      label: "meta/muse-spark-1.3-contributor",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -2865,12 +2897,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~x-ai/grok-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_FLASH_LATEST,
+      label: "~z-ai/glm-flash-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_LATEST,
       label: "~z-ai/glm-latest",
     },
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
+      label: "Gemini 3.8 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
       label: "Gemini 3.7 Flash",
@@ -2922,6 +2962,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
       label: "Gemma 4 31B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
+      label: "Gemini Flash Latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
