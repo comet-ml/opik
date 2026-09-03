@@ -16,7 +16,7 @@ import { getFormat, getAllFormats } from "./providers/registry";
 export const detectLLMMessages = (
   data: unknown,
   prettifyConfig?: { fieldType?: "input" | "output" },
-  formatHint?: string,
+  formatHint?: LLMMessageFormat,
 ): LLMMessageFormatDetectionResult => {
   const isEmpty =
     data == null ||
@@ -28,8 +28,8 @@ export const detectLLMMessages = (
 
   // If format hint provided, try that first
   if (formatHint) {
-    const format = getFormat(formatHint as LLMMessageFormat);
-    if (format && format.detector(data, prettifyConfig)) {
+    const format = getFormat(formatHint);
+    if (format && format.detector(data, { ...prettifyConfig, formatHint })) {
       return {
         supported: true,
         format: format.name,
@@ -41,7 +41,7 @@ export const detectLLMMessages = (
   // Auto-detect by trying all formats
   const formats = getAllFormats();
   for (const format of formats) {
-    if (format.detector(data, prettifyConfig)) {
+    if (format.detector(data, { ...prettifyConfig, formatHint })) {
       return {
         supported: true,
         format: format.name,

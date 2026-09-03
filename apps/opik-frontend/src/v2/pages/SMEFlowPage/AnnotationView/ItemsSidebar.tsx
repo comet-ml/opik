@@ -17,11 +17,11 @@ import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 const getPreviewText = (
   obj: object | undefined,
   type: "input" | "output",
+  openInferenceInput?: object,
 ): string => {
-  if (!obj) return "";
-  const result = prettifyMessage(obj, { type });
+  const result = prettifyMessage(obj, { type, openInferenceInput });
   if (typeof result.message === "string") return result.message;
-  return JSON.stringify(obj).slice(0, 80);
+  return obj ? JSON.stringify(obj).slice(0, 80) : "";
 };
 
 const getItemPreviews = (
@@ -44,7 +44,7 @@ const getItemPreviews = (
   return {
     name: trace.name || trace.id.slice(-12),
     input: getPreviewText(trace.input, "input"),
-    output: getPreviewText(trace.output, "output"),
+    output: getPreviewText(trace.output, "output", trace.input),
   };
 };
 
