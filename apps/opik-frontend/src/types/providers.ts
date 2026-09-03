@@ -1028,7 +1028,16 @@ export interface LLMOpenRouterConfigsType {
   maxConcurrentRequests?: number;
 }
 
-export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
+// "auto" and "off" are Opik's own, not Google levels: pre-Gemini-3 models take a numeric
+// thinking_budget, and these are how the level control expresses that model's dynamic default
+// (send no thinkingConfig) and a zero budget.
+export type GeminiThinkingLevel =
+  | "auto"
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high";
 
 export interface LLMGeminiConfigsType {
   temperature: number;
