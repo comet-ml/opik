@@ -747,6 +747,13 @@ class Dataset(DatasetExportOperations):
         number of items inserted and outlive the call - streaming bounds what an
         insert holds *in transit*, not the dedup cache itself. `deduplication=False`
         is what avoids that cost.
+
+        The cache is also not transactional: an item is recorded here before its
+        batch is known to have been accepted, so a batch that fails leaves its
+        items looking inserted to the next deduplicated insert. That predates
+        streaming - deduplication used to run to completion before the first
+        upload, so the hashes landed before any batch either way - and closing it
+        needs the backend's answer to drive the cache.
         """
         for item in items:
             item_hash = item.content_hash()
