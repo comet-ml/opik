@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -32,7 +33,18 @@ class FaultTolerantStreamCodecTest {
 
     private static final int SMALL_STRING_LIMIT = 64;
 
-    /** A mapper whose string limit is small enough to breach without allocating megabytes. */
+    /**
+     * A mapper whose string limit is small enough to breach without allocating megabytes.
+     * <p>
+     * This is the same code path as the shipped codec's value decoder --
+     * {@code faultTolerant(JsonJacksonCodec).getMapValueDecoder()} either way, since
+     * {@code CompositeCodec} routes map values to {@code JsonJacksonCodec} here -- with only the
+     * mapper's limit differing. Deliberately not driven through {@code RedisStreamCodec.JAVA} at its
+     * real limit: the enum memoizes a copy of {@code JsonUtils}' mapper at build time, and
+     * {@code RedisStreamCodecTest} calls {@code JsonUtils.configure} in the same JVM, so the effective
+     * limit there is order-dependent and a test asserting it either skips or flakes. The real-limit
+     * behaviour is recorded as measured evidence in {@code FaultTolerantCodec}'s javadoc instead.
+     */
     private static Codec codecWithSmallStringLimit() {
         var mapper = new ObjectMapper();
         mapper.getFactory().setStreamReadConstraints(
@@ -56,7 +68,12 @@ class FaultTolerantStreamCodecTest {
         assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
         var undecodable = (UndecodableStreamMessage) decoded;
         assertThat(undecodable.encodedBytes()).isEqualTo(encodedBytes);
+        // The type matters, not just the text: this is the OPIK-8164 failure, and it is an ordinary
+        // IOException, NOT an Error. Whether the Exception arm alone suffices for the incident turns on
+        // exactly this -- see heapExhaustionDuringMaterializationIsAbsorbed for the case where it does not.
         assertThat(undecodable.cause())
+                .isInstanceOf(StreamConstraintsException.class)
+                .isNotInstanceOf(Error.class)
                 .hasMessageContaining("maximum allowed");
         // The size is reported from the buffer, so it survives the failed decode consuming it.
         assertThat(buf.isReadable()).isFalse();
@@ -186,12 +203,24 @@ class FaultTolerantStreamCodecTest {
     }
 
     /**
-     * The OOM arm, driven directly rather than through LZ4's allocation, so it is pinned independently
-     * of any heap size. See {@code corruptedDeclaredLengthYieldsSentinel} for why it is absorbed.
+     * Why the {@link OutOfMemoryError} arm is not only about corrupted LZ4 lengths: it also covers the
+     * PRIMARY payload path. A payload <em>under</em> {@code maxStringLength} but larger than the heap
+     * OOMs inside Jackson's own String materialization, before any constraint is breached.
+     * <p>
+     * Measured, not reasoned: on a fork with {@code -Xmx64m}, a 12,000,000-character payload (well
+     * under the 20,000,000 limit) through {@code RedisStreamCodec.JAVA}'s value decoder yields
+     * {@code SENTINEL, cause=java.lang.OutOfMemoryError, isError=true}. This matters in production,
+     * where {@code maxStringLength} is 100 MB and {@code consumerBatchSize} is 10 -- ten concurrent
+     * materializations of a large trace is exactly this case, and without this arm the OOM escapes into
+     * {@code CommandDecoder} and wedges the stream.
+     * <p>
+     * Driven here through a stub rather than a real allocation, because the surefire JVM's heap is far
+     * too large to provoke it and forcing a small {@code -Xmx} for one test would slow every other one.
+     * The real-heap reproduction above is the evidence; this pins the arm.
      */
     @Test
     @DisplayName("an OutOfMemoryError from a decoder is absorbed into the sentinel")
-    void outOfMemoryErrorIsAbsorbed() throws IOException {
+    void heapExhaustionDuringMaterializationIsAbsorbed() throws IOException {
         Codec throwsOom = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
             throw new OutOfMemoryError("simulated");
         }));
