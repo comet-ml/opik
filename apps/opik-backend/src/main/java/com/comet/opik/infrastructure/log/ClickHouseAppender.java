@@ -30,6 +30,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     private static final long INSERT_RETRY_ATTEMPTS = 3;
     private static final Duration INSERT_RETRY_MIN_BACKOFF = Duration.ofMillis(100);
+    private static final Retry INSERT_RETRY = Retry.backoff(INSERT_RETRY_ATTEMPTS, INSERT_RETRY_MIN_BACKOFF);
 
     private static ClickHouseAppender instance;
 
@@ -104,12 +105,10 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                         // The batch is already drained out of the queue, so a failed insert would lose
                         // these events outright. Retry transient failures, and put the events back on
                         // the queue if the retries are exhausted so a later flush can pick them up.
-                        // saveAll is called inside the try so that a synchronous throw re-queues too,
-                        // rather than only errors signalled through the returned Mono.
                         try {
                             tableDAO
                                     .saveAll(events)
-                                    .retryWhen(Retry.backoff(INSERT_RETRY_ATTEMPTS, INSERT_RETRY_MIN_BACKOFF))
+                                    .retryWhen(INSERT_RETRY)
                                     .subscribe(
                                             noop -> {
                                             },
@@ -118,8 +117,10 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                                                 requeue(events);
                                             });
                         } catch (Exception e) {
-                            log.error("Failed to insert logs", e);
-                            requeue(events);
+                            // A synchronous throw from saveAll means the batch itself is rejected before
+                            // any I/O (e.g. an event missing workspace_id or rule_id). Requeueing would
+                            // fail identically on every later flush, so drop it instead of looping.
+                            log.error("Dropping '{}' logs rejected before insert", events.size(), e);
                         }
                     }
                 });

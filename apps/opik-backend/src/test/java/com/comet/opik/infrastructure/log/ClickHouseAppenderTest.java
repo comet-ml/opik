@@ -54,8 +54,36 @@ class ClickHouseAppenderTest {
 
         appender.doAppend(event("a message"));
 
+        // The attempt count is what pins Retry.backoff: without it a batch requeued and picked up by a
+        // later flush would also persist eventually, so hasSize(1) alone would not prove a retry ran.
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertThat(persisted).hasSize(1));
+                .untilAsserted(() -> {
+                    assertThat(persisted).hasSize(1);
+                    assertThat(attempts).hasValue(2);
+                });
+    }
+
+    @Test
+    @DisplayName("when the batch is rejected before insert, then it is dropped rather than requeued")
+    void whenBatchRejectedBeforeInsert__thenItIsDroppedRatherThanRequeued() {
+        var attempts = new AtomicInteger();
+
+        // A synchronous throw means the batch is malformed (e.g. missing workspace_id), so it would
+        // fail identically forever. Requeueing it would spin the flush thread on a poison batch.
+        startAppender(events -> {
+            attempts.incrementAndGet();
+            throw new IllegalStateException("workspace_id is not set");
+        });
+
+        appender.doAppend(event("a malformed message"));
+
+        await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(attempts).hasValue(1));
+
+        // Give several further flush intervals a chance to re-attempt the dropped batch.
+        await().during(FLUSH_INTERVAL.multipliedBy(10))
+                .atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(attempts).hasValue(1));
     }
 
     @Test
@@ -76,8 +104,15 @@ class ClickHouseAppenderTest {
 
         appender.doAppend(event("first"));
 
+        // The first batch is dropped (it was rejected before insert), so the surviving scheduler is
+        // proven by a later event still being persisted rather than by the failed batch reappearing.
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertThat(persisted).isNotEmpty());
+                .untilAsserted(() -> assertThat(failNext).hasValue(0));
+
+        appender.doAppend(event("second"));
+
+        await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(persisted).hasSize(1));
     }
 
     private void startAppender(SaveAll saveAll) {
