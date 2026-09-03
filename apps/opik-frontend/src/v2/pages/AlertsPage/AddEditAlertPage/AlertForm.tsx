@@ -283,37 +283,33 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
             />
 
             {isEdit && (
-              <>
-                <Separator />
-
-                <FormField
-                  control={form.control}
-                  name="enabled"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between space-y-0">
-                      <div className="flex flex-col">
-                        <Label
-                          htmlFor="enabled"
-                          className="comet-body-s-accented"
-                        >
-                          Enable alert
-                        </Label>
-                        <Description>
-                          Enable to send automatic notifications to the
-                          specified URL for selected events.
-                        </Description>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          id="enabled"
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </>
+              <FormField
+                control={form.control}
+                name="enabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between space-y-0">
+                    <div className="flex flex-col">
+                      <Label
+                        htmlFor="enabled"
+                        className="comet-body-s-accented"
+                      >
+                        Enable alert
+                      </Label>
+                      <Description>
+                        Enable to send automatic notifications to the specified
+                        URL for selected events.
+                      </Description>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        id="enabled"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
             )}
 
             <div className="flex gap-2 pt-4">
