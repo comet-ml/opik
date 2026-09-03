@@ -625,6 +625,63 @@ class DatasetServiceEnrichmentTest {
         assertThat(itemsCountById(actual.content())).containsExactlyInAnyOrderEntriesOf(Map.of(datasetId, 4L));
     }
 
+    @Test
+    @DisplayName("The item-count query does not wait on the experiment and optimization summaries")
+    void enrichmentDoesNotBlockItemCountOnUnrelatedSummaries() throws Exception {
+        var datasetId = UUID.randomUUID();
+        stubPage(datasetId);
+        stubVersioningEnabled();
+        stubLatestVersions();
+
+        // The item count depends only on the versions, so it must be subscribed while the two unrelated
+        // summaries are still in flight. Both are held open until the count has been issued; if the count
+        // were chained off the whole zip it would never be reached and the latch would time out.
+        var itemCountSubscribed = new CountDownLatch(1);
+        var releaseSummaries = new CountDownLatch(1);
+
+        Flux<ExperimentItemDAO.ExperimentSummary> heldExperiments = Flux.defer(() -> {
+            awaitQuietly(releaseSummaries);
+            return Flux.<ExperimentItemDAO.ExperimentSummary>empty();
+        }).subscribeOn(Schedulers.boundedElastic());
+
+        Flux<OptimizationDAO.OptimizationSummary> heldOptimizations = Flux.defer(() -> {
+            awaitQuietly(releaseSummaries);
+            return Flux.<OptimizationDAO.OptimizationSummary>empty();
+        }).subscribeOn(Schedulers.boundedElastic());
+
+        when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet())).thenReturn(heldExperiments);
+        when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet())).thenReturn(heldOptimizations);
+        when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet())).thenAnswer(invocation -> {
+            itemCountSubscribed.countDown();
+            return Flux.just(new DatasetItemSummary(datasetId, 6));
+        });
+
+        var enrichment = CompletableFuture
+                .supplyAsync(() -> service.find(1, 10, DatasetCriteria.builder().build(), List.of()));
+
+        try {
+            assertThat(itemCountSubscribed.await(SUBSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    .as("the item-count query should be issued while the unrelated summaries are still pending")
+                    .isTrue();
+        } finally {
+            releaseSummaries.countDown();
+        }
+
+        var actual = enrichment.get(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(itemsCountById(actual.content())).containsExactlyInAnyOrderEntriesOf(Map.of(datasetId, 6L));
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            if (!latch.await(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("summaries were never released");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
     private void stubVersioningEnabled() {
         when(featureFlags.isDatasetVersioningEnabled()).thenReturn(true);
     }

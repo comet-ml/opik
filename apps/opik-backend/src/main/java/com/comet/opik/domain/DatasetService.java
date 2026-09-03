@@ -41,7 +41,6 @@ import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuples;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -726,26 +725,33 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // The dataset_items count is deliberately NOT part of this zip: it is O(N) in each dataset's item count,
-        // and which datasets need it is only known once the latest versions are in hand. It is chained below
-        // instead, over the narrowed id set. The remaining lookups stay concurrent.
+        // The dataset_items count cannot join the zip directly: it is O(N) in each dataset's item count, and
+        // which datasets need it is only known once the latest versions are in hand. So it is chained off the
+        // version lookup alone -- not off the whole zip, which would make it wait on the experiment and
+        // optimization summaries it has no dependency on and serialize a round trip on fallback-heavy pages.
+        // cache() lets the version result feed both the chain and the zip from one execution.
         //
         // collect(...) with Collectors.toMap rather than Flux.collectMap: collectMap is last-wins, whereas the
         // serial code this replaces threw on a duplicate dataset_id. All queries GROUP BY dataset_id so
         // duplicates should not occur; keeping the loud form means a query change that broke that assumption
         // fails instead of silently dropping one row's summary.
+        //
+        // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all, which
+        // would turn an absent-versions result into a null and NPE below.
+        Mono<Map<UUID, DatasetVersion>> latestVersions = Mono
+                .fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .defaultIfEmpty(Map.of())
+                .cache();
+
         var enrichmentData = Mono.zip(
                 experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
                         .collect(toMap(ExperimentSummary::datasetId, Function.identity())),
                 optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
                         .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity())),
-                // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all,
-                // which would turn an absent-versions result into a null and NPE below.
-                Mono.fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .defaultIfEmpty(Map.of()))
-                .flatMap(data -> fetchDatasetItemSummaries(idsNeedingItemCount(datasets, data.getT3()))
-                        .map(itemSummaries -> Tuples.of(data.getT1(), data.getT2(), data.getT3(), itemSummaries)))
+                latestVersions,
+                latestVersions.flatMap(
+                        versions -> fetchDatasetItemSummaries(idsNeedingItemCount(datasets, versions))))
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 
