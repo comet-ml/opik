@@ -767,6 +767,129 @@ class BaseRedisSubscriberUnitTest {
         return entry;
     }
 
+    /**
+     * OPIK-8240. Redis caps each {@code XAUTOCLAIM} at {@code COUNT * 10} PEL entries <em>examined</em>,
+     * so a scan that always restarts at {@link StreamMessageId#MIN} only ever inspects the first ~100
+     * pending entries. A backlog above that grows a tail nothing ever reclaims: verified against a real
+     * Redis, entries beyond the window sat at delivery-count 1 for weeks while the head cycled. These
+     * tests pin the cursor being carried forward, which is what walks the rest of the PEL.
+     */
+    @Nested
+    class ClaimCursorTests {
+
+        @BeforeEach
+        void setUp() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+        }
+
+        @Test
+        void shouldResumeTheNextScanFromTheReturnedCursor() {
+            var fastConfig = CONFIG.toBuilder().claimIntervalRatio(2).build();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            var starts = new CopyOnWriteArrayList<StreamMessageId>();
+            // Never returns 0-0, so a correct implementation keeps walking forward and a regressed one
+            // (restarting at MIN) is immediately visible in the captured start arguments.
+            var cursor = new AtomicInteger();
+            when(stream.autoClaim(
+                    eq(fastConfig.getConsumerGroupName()),
+                    anyString(),
+                    eq(fastConfig.getPendingMessageDuration().toJavaDuration().toMillis()),
+                    eq(TimeUnit.MILLISECONDS),
+                    any(StreamMessageId.class),
+                    eq(fastConfig.getConsumerBatchSize())))
+                    .thenAnswer(invocation -> {
+                        starts.add(invocation.getArgument(4));
+                        return Mono.just(new AutoClaimResult<>(
+                                new StreamMessageId(100L + cursor.incrementAndGet(), 0),
+                                Map.of(),
+                                List.of()));
+                    });
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).until(() -> starts.size() >= 3);
+
+            // First scan starts at the beginning; every later scan resumes where the previous one stopped.
+            assertThat(starts.get(0)).isEqualTo(StreamMessageId.MIN);
+            assertThat(starts.get(1)).isEqualTo(new StreamMessageId(101L, 0));
+            assertThat(starts.get(2)).isEqualTo(new StreamMessageId(102L, 0));
+        }
+
+        @Test
+        void shouldWrapBackToTheStartAfterAFullPass() {
+            var fastConfig = CONFIG.toBuilder().claimIntervalRatio(2).build();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            var starts = new CopyOnWriteArrayList<StreamMessageId>();
+            var calls = new AtomicInteger();
+            when(stream.autoClaim(
+                    eq(fastConfig.getConsumerGroupName()),
+                    anyString(),
+                    eq(fastConfig.getPendingMessageDuration().toJavaDuration().toMillis()),
+                    eq(TimeUnit.MILLISECONDS),
+                    any(StreamMessageId.class),
+                    eq(fastConfig.getConsumerBatchSize())))
+                    .thenAnswer(invocation -> {
+                        starts.add(invocation.getArgument(4));
+                        // Advance once, then report the pass complete.
+                        var nextId = calls.incrementAndGet() == 1
+                                ? new StreamMessageId(500L, 0)
+                                : new StreamMessageId(0, 0);
+                        return Mono.just(new AutoClaimResult<>(nextId, Map.of(), List.of()));
+                    });
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).until(() -> starts.size() >= 3);
+
+            assertThat(starts.get(0)).isEqualTo(StreamMessageId.MIN);
+            assertThat(starts.get(1)).isEqualTo(new StreamMessageId(500L, 0));
+            // 0-0 came back, so the oldest-first bias is restored rather than the scan parking at the end.
+            assertThat(starts.get(2)).isEqualTo(StreamMessageId.MIN);
+        }
+
+        @Test
+        void shouldRetryTheSameWindowAfterAFailedScan() {
+            var fastConfig = CONFIG.toBuilder().claimIntervalRatio(2).build();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            var starts = new CopyOnWriteArrayList<StreamMessageId>();
+            var calls = new AtomicInteger();
+            when(stream.autoClaim(
+                    eq(fastConfig.getConsumerGroupName()),
+                    anyString(),
+                    eq(fastConfig.getPendingMessageDuration().toJavaDuration().toMillis()),
+                    eq(TimeUnit.MILLISECONDS),
+                    any(StreamMessageId.class),
+                    eq(fastConfig.getConsumerBatchSize())))
+                    .thenAnswer(invocation -> {
+                        starts.add(invocation.getArgument(4));
+                        if (calls.incrementAndGet() == 1) {
+                            return Mono.just(new AutoClaimResult<>(
+                                    new StreamMessageId(700L, 0), Map.of(), List.of()));
+                        }
+                        // A failed scan must not advance the cursor, or the window it covered would be
+                        // skipped entirely and its entries left unreachable until the next full wrap.
+                        return Mono.error(new RuntimeException("Redis autoClaim error"));
+                    });
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).until(() -> starts.size() >= 3);
+
+            assertThat(starts.get(1)).isEqualTo(new StreamMessageId(700L, 0));
+            assertThat(starts.get(2)).isEqualTo(new StreamMessageId(700L, 0));
+        }
+    }
+
     private TestRedisSubscriber trackSubscriber(TestRedisSubscriber subscriber) {
         subscribers.add(subscriber);
         return subscriber;
