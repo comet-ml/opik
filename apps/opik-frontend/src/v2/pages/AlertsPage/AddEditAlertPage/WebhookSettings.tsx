@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Label } from "@/ui/label";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
 import { Input } from "@/ui/input";
+import { Button } from "@/ui/button";
 import EyeInput from "@/shared/EyeInput/EyeInput";
 import { Description } from "@/ui/description";
 import {
@@ -21,9 +22,17 @@ import { AlertFormType } from "./schema";
 
 type WebhookSettingsProps = {
   form: UseFormReturn<AlertFormType>;
+  onTestConnection: () => void;
+  isTestPending: boolean;
+  isPending: boolean;
 };
 
-const WebhookSettings: React.FC<WebhookSettingsProps> = ({ form }) => {
+const WebhookSettings: React.FC<WebhookSettingsProps> = ({
+  form,
+  onTestConnection,
+  isTestPending,
+  isPending,
+}) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -86,7 +95,21 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({ form }) => {
           const validationErrors = get(formState.errors, ["url"]);
           return (
             <FormItem>
-              <Label>Endpoint URL</Label>
+              <div className="flex items-center justify-between">
+                <Label>Endpoint URL</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onTestConnection}
+                  disabled={isPending || isTestPending}
+                >
+                  {isTestPending && (
+                    <div className="mr-2 size-4 animate-spin rounded-full border-2 border-light-slate border-r-transparent" />
+                  )}
+                  Test connection
+                </Button>
+              </div>
               <FormControl>
                 <Input
                   className={cn({

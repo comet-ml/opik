@@ -1,10 +1,12 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import get from "lodash/get";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, UseFormReturn } from "react-hook-form";
+import { useForm, UseFormReturn, useWatch } from "react-hook-form";
 import { useNavigate } from "@tanstack/react-router";
+import { ExternalLink } from "lucide-react";
 
 import { buildFullBaseUrl, cn } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
@@ -17,13 +19,15 @@ import Loader from "@/shared/Loader/Loader";
 import { Alert, ALERT_TYPE } from "@/types/alerts";
 import useAlertCreateMutation from "@/api/alerts/useAlertCreateMutation";
 import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
+import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { AlertFormType, AlertFormSchema } from "./schema";
-import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
-import TestWebhookSection from "./TestWebhookSection";
+import WebhookSettings from "./WebhookSettings";
+import useWebhookTest from "./useWebhookTest";
+import { buildAlertName, ensureUniqueAlertName } from "./alertNameHelpers";
 import {
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
@@ -100,6 +104,48 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
     };
   }, [form, activeProjectId, alert?.metadata]);
 
+  const { testConnection, testTrigger, isTestPending } = useWebhookTest({
+    getAlert,
+  });
+
+  const triggers = useWatch({ control: form.control, name: "triggers" });
+  const nameValue = useWatch({ control: form.control, name: "name" });
+
+  // The last name we suggested. formState.dirtyFields can't stand in for this:
+  // once a suggestion is written, the value differs from the "" default, so RHF
+  // reports the field as dirty and we could never tell a suggestion apart from
+  // something the user typed.
+  const suggestedNameRef = useRef("");
+
+  const { data: alertsList } = useProjectAlertsList(
+    { projectId: activeProjectId!, page: 1, size: 100 },
+    { enabled: !isEdit && Boolean(activeProjectId) },
+  );
+
+  const existingAlertNames = useMemo(
+    () => (alertsList?.content ?? []).map(({ name }) => name),
+    [alertsList],
+  );
+
+  // Name new alerts after their triggers until the user types their own.
+  // Clearing the field back to empty hands naming back to us.
+  useEffect(() => {
+    if (isEdit) return;
+
+    const currentName = form.getValues("name");
+    if (currentName && currentName !== suggestedNameRef.current) return;
+
+    const generated = buildAlertName(triggers ?? []);
+    const nextName = generated
+      ? ensureUniqueAlertName(generated, existingAlertNames)
+      : "";
+
+    if (nextName !== currentName) {
+      suggestedNameRef.current = nextName;
+      form.setValue("name", nextName, { shouldDirty: false });
+    }
+  }, [form, isEdit, triggers, nameValue, existingAlertNames]);
+
   const handleNavigateBack = useCallback(() => {
     navigate({
       to: "/$workspaceName/projects/$projectId/alerts",
@@ -168,40 +214,77 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
           />
         </div>
       )}
-      <h1 className="comet-title-xs">{title}</h1>
+      <div className="flex min-h-7 max-w-[720px] items-center justify-between gap-2">
+        <h1 className="comet-title-xs truncate">{title}</h1>
+        <Button
+          variant="ghost"
+          size="2xs"
+          className="comet-body-xs shrink-0 text-muted-slate"
+          asChild
+        >
+          <a
+            href={buildDocsUrl("/production/alerts/alerts")}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Go to docs
+            <ExternalLink className="ml-1 size-3.5 shrink-0" />
+          </a>
+        </Button>
+      </div>
 
-      <div className="relative mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex-1 lg:max-w-[720px]">
-          <Form {...form}>
-            <form
-              className="flex flex-col gap-6"
-              onSubmit={form.handleSubmit(onSubmit)}
-            >
-              <div className="flex flex-col gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field, formState }) => {
-                    const validationErrors = get(formState.errors, ["name"]);
-                    return (
-                      <FormItem>
-                        <Label>Name</Label>
-                        <FormControl>
-                          <Input
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                            placeholder="Name"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
+      <div className="relative mt-6 max-w-[720px]">
+        <Form {...form}>
+          <form
+            className="flex flex-col gap-6"
+            onSubmit={form.handleSubmit(onSubmit)}
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, ["name"]);
+                return (
+                  <FormItem>
+                    <Label>Name</Label>
+                    <FormControl>
+                      <Input
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        placeholder="Name"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+
+            <Separator />
+
+            <EventTriggers
+              form={form}
+              projectId={alert?.project_id || activeProjectId!}
+              getAlert={getAlert}
+              onTestTrigger={testTrigger}
+              isTestPending={isTestPending}
+              isPending={isPending}
+            />
+
+            <WebhookSettings
+              form={form}
+              onTestConnection={testConnection}
+              isTestPending={isTestPending}
+              isPending={isPending}
+            />
+
+            {isEdit && (
+              <>
+                <Separator />
 
                 <FormField
                   control={form.control}
@@ -230,58 +313,28 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
                     </FormItem>
                   )}
                 />
-              </div>
+              </>
+            )}
 
-              <Separator />
-
-              <WebhookSettings form={form} />
-
-              <EventTriggers
-                form={form}
-                projectId={alert?.project_id || activeProjectId!}
-              />
-
-              <Separator className="lg:hidden" />
-
-              <div className="lg:hidden">
-                <TestWebhookSection
-                  form={form}
-                  getAlert={getAlert}
-                  isPending={isPending}
-                />
-              </div>
-
-              <Separator className="lg:hidden" />
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  type="submit"
-                  disabled={form.formState.isSubmitting || isPending}
-                >
-                  {submitText}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleNavigateBack}
-                  disabled={form.formState.isSubmitting || isPending}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </div>
-
-        <div className="hidden w-full lg:sticky lg:top-6 lg:block lg:w-2/5 lg:min-w-[320px] lg:max-w-[480px]">
-          <TestWebhookSection
-            form={form}
-            getAlert={getAlert}
-            isPending={isPending}
-          />
-        </div>
+            <div className="flex gap-2 pt-4">
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting || isPending}
+              >
+                {submitText}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleNavigateBack}
+                disabled={form.formState.isSubmitting || isPending}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
       </div>
-
       {DialogComponent}
     </div>
   );
