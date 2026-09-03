@@ -115,6 +115,20 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     [activeVersion?.environments],
   );
 
+  // While a deep-linked/active version's page hasn't loaded yet, it's
+  // missing from `versions` — passing that incomplete list to the compare
+  // dialog makes it silently fall back to whatever's newest loaded instead
+  // of the version the user actually asked to compare. `activeVersion` is
+  // already resolved independently (by id, not by pagination), so inject it
+  // whenever it isn't already present.
+  const versionsForCompare = useMemo(() => {
+    if (!versions) return activeVersion ? [activeVersion] : [];
+    if (!activeVersion || versions.some((v) => v.id === activeVersion.id)) {
+      return versions;
+    }
+    return [...versions, activeVersion];
+  }, [versions, activeVersion]);
+
   const isChatPrompt =
     prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   const template = activeVersion?.template ?? "";
@@ -516,7 +530,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       <ComparePromptVersionDialog
         open={openCompare}
         setOpen={setOpenCompare}
-        versions={versions ?? []}
+        versions={versionsForCompare}
         initialBaseVersionId={compareAgainstVersionId ?? undefined}
         initialDiffVersionId={effectiveVersionId || undefined}
       />
