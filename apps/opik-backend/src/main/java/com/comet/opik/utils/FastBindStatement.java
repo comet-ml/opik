@@ -11,6 +11,9 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Binds named parameters by position instead of by name.
@@ -46,8 +49,13 @@ public final class FastBindStatement implements Statement {
     private static volatile Field cachedField;
     private static volatile Class<?> cachedFieldOwner;
 
-    /** Escape hatch: {@code -Dopik.fastBind=false} restores the driver's named binding. */
-    private static final boolean ENABLED = !"false".equalsIgnoreCase(System.getProperty("opik.fastBind", "true"));
+    /**
+     * Escape hatch: anything other than an explicit "true" restores the driver's named binding.
+     * Deliberately fails closed - this is the control reached for mid-incident, and
+     * {@code -Dopik.fastBind=0} or {@code =off} silently leaving it enabled would send the
+     * investigation down the wrong path.
+     */
+    private static final boolean ENABLED = Boolean.parseBoolean(System.getProperty("opik.fastBind", "true"));
 
     private final Statement delegate;
     private final Map<String, Integer> indexByName;
@@ -73,10 +81,17 @@ public final class FastBindStatement implements Statement {
             Object target = unwrap(statement);
             Field field = resolveField(target.getClass());
             if (field == null) {
+                warnOnce("noField", "field '{}' not found on {} - the driver's layout changed",
+                        NAMED_PARAMETERS_FIELD, target.getClass().getName());
                 return null;
             }
             Object value = field.get(target);
-            if (!(value instanceof List<?> names) || names.isEmpty()) {
+            if (!(value instanceof List<?> names)) {
+                warnOnce("badType", "field '{}' is {}, expected a List", NAMED_PARAMETERS_FIELD,
+                        value == null ? "null" : value.getClass().getName());
+                return null;
+            }
+            if (names.isEmpty()) {
                 return null;
             }
             if (names.size() < MIN_PARAMETERS) {
@@ -85,15 +100,38 @@ public final class FastBindStatement implements Statement {
             Map<String, Integer> index = HashMap.newHashMap(names.size());
             for (int i = 0; i < names.size(); i++) {
                 if (!(names.get(i) instanceof String name)) {
+                    warnOnce("badElement", "parameter list holds a non-String element at {}", i);
                     return null;
                 }
                 // First occurrence wins, mirroring List.indexOf.
                 index.putIfAbsent(name, i);
             }
+            announceOnce(names.size());
             return index;
         } catch (Exception e) {
-            log.debug("Positional bind unavailable, falling back to named binding", e);
+            warnOnce("exception", "reflective access failed: {}", e.toString());
             return null;
+        }
+    }
+
+    private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
+    private static final AtomicBoolean ANNOUNCED = new AtomicBoolean();
+
+    /**
+     * Logs each distinct fallback reason once at WARN. Without this the optimization can switch
+     * itself off after a driver upgrade and give no signal at all: production runs at INFO, CI
+     * stays green, and the only symptom is the CPU regression coming back.
+     */
+    private static void warnOnce(String key, String message, Object... args) {
+        if (WARNED.add(key)) {
+            log.warn("Positional bind disabled, falling back to the driver's named binding - " + message, args);
+        }
+    }
+
+    private static void announceOnce(int parameterCount) {
+        if (ANNOUNCED.compareAndSet(false, true)) {
+            log.info("Positional bind active (first statement carried {} parameters, threshold {})",
+                    parameterCount, MIN_PARAMETERS);
         }
     }
 
