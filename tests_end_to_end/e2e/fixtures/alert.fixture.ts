@@ -1,4 +1,4 @@
-import { test as baseTest } from './dashboard-cleanup.fixture';
+import { test as baseTest } from './id-aged-traces.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7 } from '../core/backend/uuid7';
 
@@ -164,4 +164,4 @@ export const test = baseTest.extend<AlertFixtures>({
   ],
 });
 
-export { expect } from './dashboard-cleanup.fixture';
+export { expect } from './id-aged-traces.fixture';
