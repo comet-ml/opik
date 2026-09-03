@@ -633,10 +633,12 @@ class DatasetServiceEnrichmentTest {
         stubVersioningEnabled();
         stubLatestVersions();
 
-        // The item count depends only on the versions, so it must be subscribed while the two unrelated
-        // summaries are still in flight. Both are held open until the count has been issued; if the count
-        // were chained off the whole zip it would never be reached and the latch would time out.
-        var itemCountSubscribed = new CountDownLatch(1);
+        // The item count depends only on the versions, so the query must be issued while the two unrelated
+        // summaries are still in flight. The latch counts down in the Mockito answer -- i.e. when the DAO
+        // method is invoked, which is the point the narrowed id set is computed and handed over, not the
+        // later subscription to the returned Flux. That is the property under test: if the count were
+        // chained off the whole zip it would never be requested and the latch would time out.
+        var itemCountQueryIssued = new CountDownLatch(1);
         var releaseSummaries = new CountDownLatch(1);
 
         Flux<ExperimentItemDAO.ExperimentSummary> heldExperiments = Flux.defer(() -> {
@@ -652,7 +654,7 @@ class DatasetServiceEnrichmentTest {
         when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet())).thenReturn(heldExperiments);
         when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet())).thenReturn(heldOptimizations);
         when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet())).thenAnswer(invocation -> {
-            itemCountSubscribed.countDown();
+            itemCountQueryIssued.countDown();
             return Flux.just(new DatasetItemSummary(datasetId, 6));
         });
 
@@ -660,7 +662,7 @@ class DatasetServiceEnrichmentTest {
                 .supplyAsync(() -> service.find(1, 10, DatasetCriteria.builder().build(), List.of()));
 
         try {
-            assertThat(itemCountSubscribed.await(SUBSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertThat(itemCountQueryIssued.await(SUBSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
                     .as("the item-count query should be issued while the unrelated summaries are still pending")
                     .isTrue();
         } finally {
