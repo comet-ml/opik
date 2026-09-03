@@ -144,7 +144,7 @@ class DatasetServiceEnrichmentTest {
 
         assertThatThrownBy(() -> service.findById(datasetId))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Duplicate key");
+                .hasMessageContaining(datasetId.toString());
     }
 
     @Test
