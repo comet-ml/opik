@@ -5,7 +5,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from opik import config
 from opik.api_objects import constants
+from opik.message_processing.batching import sequence_splitter
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
 
@@ -991,3 +993,106 @@ class TestStreamingInsert:
         assert dataset._dataset_items_count is None, (
             "A partially applied insert must not leave a stale cached count"
         )
+
+    def test_many_items_from_a_generator__batched_at_the_real_count_cap(self):
+        """Volume, against the real cap rather than a shrunken one.
+
+        Every other test here narrows `DATASET_ITEMS_MAX_BATCH_SIZE` to 2 to make
+        batching observable, which means none of them would notice the streaming
+        splitter mis-handling the boundary at its actual value. This runs enough
+        items through a one-shot generator to fill two whole batches and leave a
+        partial one, on the default worker count, and checks that what arrives is
+        exactly what went in.
+        """
+        cap = constants.DATASET_ITEMS_MAX_BATCH_SIZE
+        item_count = cap * 2 + cap // 2
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        dataset.insert(item for item in _make_items(item_count))
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        batch_sizes = [
+            len(call.kwargs["items"]) for call in create_or_update.call_args_list
+        ]
+        assert batch_sizes == [cap, cap, cap // 2], (
+            "Two full batches then the remainder, at the real cap"
+        )
+        assert all(size <= cap for size in batch_sizes)
+
+        sent = sorted(
+            item.data["input"]["i"]
+            for call in create_or_update.call_args_list
+            for item in call.kwargs["items"]
+        )
+        assert sent == list(range(item_count)), (
+            "Every item exactly once: nothing dropped at a batch boundary, "
+            "nothing sent twice by the pool"
+        )
+        assert (
+            len(
+                {
+                    item.id
+                    for call in create_or_update.call_args_list
+                    for item in call.kwargs["items"]
+                }
+            )
+            == item_count
+        )
+
+        # One batch_group_id, so the whole stream is a single dataset version
+        # however many batches it took.
+        assert (
+            len(
+                {
+                    call.kwargs["batch_group_id"]
+                    for call in create_or_update.call_args_list
+                }
+            )
+            == 1
+        )
+
+    def test_large_items_from_a_generator__split_by_payload_size(self):
+        """The size cap has to bite mid-stream, before the count cap does.
+
+        The splitter accumulates an estimate as it reads rather than measuring a
+        finished list, so this is the rule most at risk from streaming: items are
+        sized so that a batch fills on bytes long before it fills on count, and
+        no batch may exceed the limit the uploads are built around.
+        """
+        item_size_bytes = 100 * 1024
+        item_count = 120  # ~12MB, so several batches at the 5MB cap
+        payload = "x" * item_size_bytes
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        def large_item_source():
+            for i in range(item_count):
+                yield {"input": {"i": i, "filler": payload}}
+
+        dataset.insert(large_item_source(), num_threads=1, deduplication=False)
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        batches = [call.kwargs["items"] for call in create_or_update.call_args_list]
+
+        assert len(batches) > 1, "12MB of items cannot arrive as one batch"
+        for batch in batches:
+            assert len(batch) < constants.DATASET_ITEMS_MAX_BATCH_SIZE, (
+                "The count cap must not be what split these"
+            )
+            assert (
+                sequence_splitter.get_payload_size_MB(batch) <= config.MAX_BATCH_SIZE_MB
+            ), "A batch was built larger than the uploads allow"
+
+        sent = sorted(item.data["input"]["i"] for batch in batches for item in batch)
+        assert sent == list(range(item_count))
