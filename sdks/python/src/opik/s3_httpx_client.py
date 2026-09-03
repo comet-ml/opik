@@ -11,7 +11,7 @@ READ_TIMEOUT_SECONDS = 100
 WRITE_TIMEOUT_SECONDS = 100
 POOL_TIMEOUT_SECONDS = 20
 
-RETRYABLE_STATUS_CODES = [500]
+RETRYABLE_STATUS_CODES = [500, 502, 503, 504]
 
 
 @functools.lru_cache
@@ -47,6 +47,7 @@ def _allowed_to_retry(exception: Exception) -> bool:
     if isinstance(
         exception,
         (
+            httpx.RemoteProtocolError,  # handle retries for expired connections
             httpx.ConnectError,
             httpx.TimeoutException,
         ),
@@ -62,6 +63,7 @@ def _allowed_to_retry(exception: Exception) -> bool:
 
 s3_retry = tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
-    wait=tenacity.wait_exponential(multiplier=5, min=10, max=45),
+    wait=tenacity.wait_random_exponential(multiplier=1, min=1, max=10),
     retry=tenacity.retry_if_exception(_allowed_to_retry),
+    reraise=True,
 )
