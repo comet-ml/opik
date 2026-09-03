@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
@@ -154,6 +155,34 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      * scoring chain (feedback-score persistence reads it). Per-message throughput and error metrics are
      * attributed automatically by {@link BaseRedisSubscriber} from {@link #messageContext(Object)}.
      */
+    /**
+     * Picks which of several sibling failures represents the batch, when one message fans out over many
+     * thread ids and more than one of them fails.
+     *
+     * <p><b>Retryable wins.</b> The whole batch travels as a single stream entry, so the type re-emitted
+     * here decides the fate of every sibling in it: a {@code ClientErrorException} tells
+     * {@code BaseRedisSubscriber} to ack and remove, taking any retryable sibling down with it, unretried.
+     * Picking arbitrarily -- {@code errors.getFirst()}, i.e. whichever the {@code flatMap} happened to
+     * emit first -- made that a race. It was harmless while every provider failure was a blanket 500 and
+     * the choice could not change retryability; it stopped being harmless once OPIK-8240 split permanent
+     * from transient.
+     *
+     * <p>The asymmetry is deliberate. Preferring retryable costs a bounded replay of the permanent sibling
+     * ({@code maxRetries} caps it) and the permanent one is dropped for good on the final attempt.
+     * Preferring non-retryable costs recoverable work, silently and permanently. Only one of those is
+     * recoverable, so the tie goes to retrying.
+     *
+     * @param errors the sibling failures, never empty
+     * @return the first retryable failure if any, otherwise the first failure
+     */
+    // Package-private for unit tests.
+    static Throwable representativeError(@NonNull List<Throwable> errors) {
+        return errors.stream()
+                .filter(error -> !(error instanceof ClientErrorException))
+                .findFirst()
+                .orElseGet(errors::getFirst);
+    }
+
     @Override
     protected final Mono<Void> processEvent(M message) {
         var workspaceName = StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId());

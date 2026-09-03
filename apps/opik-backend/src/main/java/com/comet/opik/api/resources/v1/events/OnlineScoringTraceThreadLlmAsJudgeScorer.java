@@ -124,7 +124,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                         .then(Mono.<Throwable>empty())
                         .onErrorResume(Mono::just))
                 .collectList()
-                .flatMap(errors -> errors.isEmpty() ? Mono.<Void>empty() : Mono.error(errors.getFirst()))
+                .flatMap(errors -> errors.isEmpty() ? Mono.<Void>empty() : Mono.error(representativeError(errors)))
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName())
                         .put(RequestContext.VISIBILITY, Visibility.PRIVATE))

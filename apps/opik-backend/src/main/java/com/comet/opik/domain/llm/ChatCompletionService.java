@@ -36,6 +36,7 @@ import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
@@ -147,16 +148,38 @@ public class ChatCompletionService {
 
             Optional<ErrorMessage> providerError = provider.getLlmProviderError(runtimeException);
 
-            providerError
-                    .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+            // Deliberately NOT failHandlingLLMProviderError here, unlike create() and the streaming handler.
+            // Those two answer an HTTP caller, so they want the provider's status verbatim - a 429 upstream
+            // should be a 429 downstream. This method answers the online-scoring subscribers instead, where
+            // the thrown type decides retryability: BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS matches on
+            // ClientErrorException, so the whole 4xx family would be dropped on the first failure - taking
+            // genuinely transient 408s and 429s with it. Route through the retryability split instead, which
+            // separates "this request can never succeed" from "try again later" inside that family.
+            // Cause-chain HttpException FIRST, provider mapping only as fallback. The mappers synthesize
+            // a status when they cannot read one off the body -- CustomLlmErrorMessage defaults to 400,
+            // OpenAiErrorMessage to 500 -- and a synthetic value must never outrank the code the provider
+            // actually put on the wire. Getting this backwards is not cosmetic: a real upstream 503 behind
+            // an unparseable body would surface as CustomLlm's synthetic 400, be classified permanent, and
+            // have a retryable failure dropped on its first delivery. Same precedence, and same reasoning,
+            // as findProviderHttpStatus applies within its own chain walk.
+            int status = findProviderHttpStatus(runtimeException)
+                    .or(() -> providerError.map(ErrorMessage::getCode).filter(ChatCompletionService::isErrorStatus))
+                    .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
-            // No failIfProviderReportedHttpStatus here, unlike create() and the streaming handler. This method is
-            // called only by the online-scoring subscribers, never from a resource, so a recovered status reaches no
-            // HTTP client — while BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS lists ClientErrorException, so turning
-            // a rate limit into a 429 or a provider timeout into a 408 would make the subscriber ack and drop the
-            // evaluation instead of honouring onlineScoring.maxRetries. Both are RetriableException upstream, so the
-            // blanket 500 is what keeps them retryable.
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+
+            if (isPermanentFailure(status)) {
+                // Non-retryable: the subscriber acks and removes on the first delivery instead of burning
+                // maxRetries x pendingMessageDuration on a request whose outcome cannot change. This is the
+                // OPIK-8240 case - a provider rejecting an oversized/invalid request rejects every retry of
+                // it identically.
+                throw new ClientErrorException(buildDetailedErrorMessage(runtimeException), status,
+                        runtimeException);
+            }
+            // Everything else stays a blanket 500 so it lands outside NON_RETRYABLE_EXCEPTIONS and honours
+            // onlineScoring.maxRetries. Note this keeps transient 4xx (408/429) retryable even though their
+            // real status is a client error, which is exactly the distinction ClientErrorException cannot
+            // express on its own.
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         } finally {
             // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
@@ -290,6 +313,35 @@ public class ChatCompletionService {
     private static boolean isErrorStatus(int status) {
         var family = familyOf(status);
         return family == Response.Status.Family.CLIENT_ERROR || family == Response.Status.Family.SERVER_ERROR;
+    }
+
+    /**
+     * Statuses in the 4xx family that a retry could still clear, so they must NOT be treated as permanent.
+     *
+     * <p>{@code 408 Request Timeout}, {@code 425 Too Early} and {@code 429 Too Many Requests} all say
+     * "not now", not "not ever" - langchain4j models the latter two as {@code RetriableException} upstream.
+     * They sit in the client-error family purely by HTTP numbering, which is why family alone is too blunt
+     * a discriminator for retryability.
+     */
+    private static final Set<Integer> TRANSIENT_CLIENT_ERRORS = Set.of(
+            Response.Status.REQUEST_TIMEOUT.getStatusCode(),
+            425, // Too Early - no jakarta.ws.rs.core.Response.Status constant
+            429); // Too Many Requests - no jakarta.ws.rs.core.Response.Status constant
+
+    /**
+     * Whether a provider status means "this exact request can never succeed", so the caller should give up
+     * rather than retry.
+     *
+     * <p>True only for the client-error family minus {@link #TRANSIENT_CLIENT_ERRORS}: a malformed,
+     * oversized, unauthorised or forbidden request is rejected identically however many times it is
+     * replayed. Server errors are excluded - a 5xx is the provider having a bad moment, and that is the
+     * textbook retry case. An unrecognised status is treated as retryable, matching
+     * {@code BaseRedisSubscriber}'s own "unknown defaults to retryable for safety" stance.
+     */
+    // Package-private for unit tests.
+    static boolean isPermanentFailure(int status) {
+        return familyOf(status) == Response.Status.Family.CLIENT_ERROR
+                && !TRANSIENT_CLIENT_ERRORS.contains(status);
     }
 
     /**

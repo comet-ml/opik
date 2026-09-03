@@ -127,6 +127,27 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongHistogram listPendingTime;
     private final LongCounter unexpectedErrors;
 
+    /**
+     * Resume point for the next {@code XAUTOCLAIM} scan.
+     *
+     * <p>Redis caps each {@code XAUTOCLAIM} at {@code COUNT * 10} PEL entries <em>examined</em> (not
+     * claimed), so with the default {@code consumerBatchSize} of 10 a single call only ever inspects the
+     * first 100 entries of the pending list. Restarting every scan at {@link StreamMessageId#MIN} —
+     * which this class used to do, discarding the cursor Redis hands back — means anything past that
+     * first window is never examined at all: a backlog above ~100 entries develops a permanently
+     * unreachable tail, whatever the retry or decode behaviour further down. Carrying the returned
+     * cursor forward walks the whole PEL instead, a window at a time.
+     *
+     * <p>Redis returns {@code 0-0} once a pass has covered the entire pending list; that resets this
+     * back to {@link StreamMessageId#MIN} so the next pass starts over from the oldest entry, keeping
+     * the oldest-first bias the original code intended.
+     *
+     * <p>Volatile rather than synchronized: {@code concatMap} in {@link #setupStreamListener()} already
+     * serializes claim calls, so this is only ever written by one claim at a time; volatile just
+     * publishes that write to whichever scheduler thread runs the next one.
+     */
+    private volatile StreamMessageId claimCursor = StreamMessageId.MIN;
+
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
     private volatile Scheduler timerScheduler;
@@ -398,11 +419,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 consumerId,
                 config.getPendingMessageDuration().toJavaDuration().toMillis(),
                 TimeUnit.MILLISECONDS,
-                StreamMessageId.MIN, // Start from the beginning of pending list
+                claimCursor, // Resume where the previous scan stopped; see claimCursor
                 config.getConsumerBatchSize())
                 .subscribeOn(consumerScheduler)
                 .filter(Objects::nonNull)
-                .map(AutoClaimResult::getMessages)
+                .map(this::advanceCursorAndExtractMessages)
                 .filter(Objects::nonNull)
                 .doOnSuccess(claimedMessages -> {
                     claimedMessages = Objects.requireNonNullElse(claimedMessages, Map.of());
@@ -412,12 +433,46 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorResume(throwable -> {
                     claimErrors.add(1);
                     log.error("Error claiming pending messages", throwable);
+                    // A failed scan leaves the cursor where it was, so the next attempt retries the same
+                    // window rather than skipping it. Except on NOGROUP: the group is being recreated, so
+                    // any cursor into the old group's PEL is meaningless.
                     if (isNoGroupError(throwable)) {
+                        claimCursor = StreamMessageId.MIN;
                         return recoverFromNoGroup();
                     }
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> claimTime.record(System.currentTimeMillis() - startMillis));
+    }
+
+    /**
+     * Advances {@link #claimCursor} to where Redis says the next scan should resume, then returns the
+     * batch this scan actually claimed.
+     *
+     * <p>A {@code null} or {@code 0-0} next-id means the pass reached the end of the pending list, so the
+     * cursor goes back to {@link StreamMessageId#MIN} and the following pass starts from the oldest entry
+     * again.
+     */
+    private Map<StreamMessageId, Map<String, M>> advanceCursorAndExtractMessages(AutoClaimResult<String, M> result) {
+        claimCursor = nextCursor(result.getNextId());
+        return result.getMessages();
+    }
+
+    /**
+     * The cursor to use for the next scan, given the next-id Redis returned.
+     *
+     * <p>Compared numerically rather than against {@link StreamMessageId#MIN} / {@link StreamMessageId#ALL}:
+     * those are wire sentinels that serialize to {@code -} and {@code 0}, and neither is
+     * {@code equals()} to the {@code StreamMessageId(0, 0)} that Redisson parses Redis's literal
+     * {@code 0-0} end-of-pass reply into. Matching on the constants would therefore never fire, and the
+     * scan would run off the end of the PEL and stay there instead of wrapping.
+     */
+    // Package-private for unit tests.
+    static StreamMessageId nextCursor(StreamMessageId nextId) {
+        if (nextId == null || (nextId.getId0() == 0 && nextId.getId1() == 0)) {
+            return StreamMessageId.MIN;
+        }
+        return nextId;
     }
 
     private Mono<Map<StreamMessageId, Map<String, M>>> readMessages() {
