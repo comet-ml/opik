@@ -72,6 +72,11 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
      * Matched on the model id rather than an allowlist so a newly synced Gemini 3+ model is not silently treated as
      * 2.5. Ids look like {@code gemini-3.7-flash} or {@code vertex_ai/gemini-2.5-pro}, so the major version is the
      * digits following the first {@code gemini-} in the id.
+     * <p>
+     * An id carrying no version — {@code gemini-omni-flash-preview}, {@code gemini-flash-latest} — reads as pre-3 and
+     * therefore gets a translated budget rather than a level. That is the safe direction of the two: a budget is
+     * accepted on every Gemini generation, while a level on a pre-3 model is rejected outright. Erring towards the
+     * budget degrades the request; erring the other way would break it.
      */
     public static boolean modelAcceptsLevel(String model) {
         if (StringUtils.isBlank(model)) {

@@ -209,7 +209,16 @@ class VertexAIClientGeneratorTest {
         var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
         assertThat(requests).hasSize(1);
 
-        return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString()).path("generationConfig");
+        // get() rather than path(): path() degrades to a MissingNode, which would make every negative
+        // assertion below pass even if the generation config stopped being sent or were renamed.
+        var generationConfig = JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString())
+                .get("generationConfig");
+
+        assertThat(generationConfig)
+                .as("outbound body should carry a generationConfig")
+                .isNotNull();
+
+        return generationConfig;
     }
 
     private void assertCalledWithLocation(String expectedLocation) {
@@ -363,8 +372,13 @@ class VertexAIClientGeneratorTest {
         void levelOffDisablesThinking() {
             completeWithCustomParameters(Map.of("thinking", Map.of("level", "off")));
 
-            var thinkingConfig = sentGenerationConfig().path("thinkingConfig");
-            assertThat(thinkingConfig.path("thinkingBudget").asInt()).isZero();
+            // has() before asInt(): a MissingNode also reports 0, so without this the test could not
+            // tell "thinkingBudget: 0 was sent" from "no thinkingConfig at all" — the regression it exists
+            // to catch.
+            var thinkingConfig = sentGenerationConfig().get("thinkingConfig");
+            assertThat(thinkingConfig).isNotNull();
+            assertThat(thinkingConfig.has("thinkingBudget")).isTrue();
+            assertThat(thinkingConfig.get("thinkingBudget").asInt()).isZero();
         }
 
         @Test

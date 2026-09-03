@@ -116,6 +116,14 @@ class GeminiThinkingParamsTest {
                     .isNull();
         }
 
+        @ParameterizedTest
+        @CsvSource({"0,0", "2147483647,2147483647"})
+        @DisplayName("both accepted boundaries survive: 0 disables thinking, MAX_VALUE is the ceiling")
+        void keepsBudgetsAtTheAcceptedBoundaries(long given, int expected) {
+            assertThat(GeminiThinkingParams.from(Map.of("thinking", Map.of("budget_tokens", (int) given)))
+                    .budgetTokens()).isEqualTo(expected);
+        }
+
         @Test
         void ignoresWronglyTypedValues() {
             var params = GeminiThinkingParams.from(Map.of(
@@ -128,6 +136,39 @@ class GeminiThinkingParamsTest {
         void treatsNullAndNonMapThinkingAsAbsent() {
             assertThat(GeminiThinkingParams.from((Map<String, Object>) null).isAbsent()).isTrue();
             assertThat(GeminiThinkingParams.from(Map.of("thinking", "high")).isAbsent()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Which models take a level on the wire")
+    class ModelVersionGate {
+
+        @ParameterizedTest
+        @CsvSource({
+                "gemini-3-flash-preview,true",
+                "gemini-3.7-flash,true",
+                "gemini-3.1-pro-preview,true",
+                "vertex_ai/gemini-3.5-flash,true",
+                "gemini-2.5-flash,false",
+                "gemini-2.5-pro,false",
+                "vertex_ai/gemini-2.5-flash-lite-preview-06-17,false",
+                "gemini-2.0-flash,false",
+                "gemini-1.5-flash-latest,false"})
+        void recognisesTheMajorVersion(String model, boolean acceptsLevel) {
+            assertThat(GeminiThinkingParams.modelAcceptsLevel(model)).isEqualTo(acceptsLevel);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "gemini-omni-flash-preview",
+                "gemini-omni-1.1-flash",
+                "gemini-flash-latest",
+                "gemini-99999999999-flash",
+                "",
+                "not-a-gemini-model"})
+        @DisplayName("an id with no readable version falls back to a budget, the direction every generation accepts")
+        void unversionedIdsDoNotClaimLevelSupport(String model) {
+            assertThat(GeminiThinkingParams.modelAcceptsLevel(model)).isFalse();
         }
     }
 
