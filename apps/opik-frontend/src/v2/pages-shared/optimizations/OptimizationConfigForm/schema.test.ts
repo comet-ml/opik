@@ -4,8 +4,10 @@ import {
   CodeMetricParamsSchema,
   OptimizationConfigSchema,
   OptimizationConfigFormType,
+  convertFormDataToStudioConfig,
   convertOptimizationStudioToFormData,
 } from "./schema";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
@@ -179,5 +181,65 @@ describe("convertOptimizationStudioToFormData — seeded prompt shape", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe(LLM_MESSAGE_ROLE.user);
     expect(messages[0].content).toBe("Answer {question}");
+  });
+});
+
+describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
+  const formData = (modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  // The optimizer renders the same Gemini config panel as the playground, so a level picked
+  // there has to survive serialization instead of being dropped as a flat field.
+  it("nests a selected thinking level under custom_parameters", () => {
+    const config = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5, thinkingLevel: "off" }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      temperature: 0.5,
+      custom_parameters: { thinking: { level: "off" } },
+    });
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>).thinkingLevel,
+    ).toBeUndefined();
+  });
+
+  // The control shows the model's default even when the config holds no level, so the request has
+  // to carry that same default rather than silently falling back to the provider's own.
+  it("sends the model's default when the config holds no level", () => {
+    const config = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5 }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      custom_parameters: { thinking: { level: "off" } },
+    });
+  });
+
+  it("adds nothing for a model without thinking support", () => {
+    const config = convertFormDataToStudioConfig(
+      {
+        ...formData({ temperature: 0.5 }),
+        modelName: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      } as unknown as OptimizationConfigFormType,
+      "my-dataset",
+    );
+
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>)
+        .custom_parameters,
+    ).toBeUndefined();
   });
 });

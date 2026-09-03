@@ -9614,6 +9614,8 @@ components:
           type: string
         name:
           type: string
+        is_default:
+          type: boolean
     AuthorizationServerMetadata:
       type: object
       properties:

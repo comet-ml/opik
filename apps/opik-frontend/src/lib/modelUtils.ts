@@ -1,6 +1,7 @@
 import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
+  GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
   ReasoningEffort,
@@ -15,6 +16,7 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import omit from "lodash/omit";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 export const getRoutableProviderModelValue = (
@@ -77,38 +79,183 @@ export const getDefaultTemperatureForModel = (
   return isReasoningModel(model) ? 1 : 0;
 };
 
+// Which thinking levels each Gemini model accepts, per Google's own support table
+// (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
+// has no "minimal", 3.1 Flash Lite has only "minimal" and "high" — and sending a level a model does
+// not accept is rejected upstream, so this cannot be collapsed into one list per family.
+//
+// Keep both provider spellings of a model on the same row: the level support is a property of the
+// underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
+// the automated `sync provider model definitions` PRs, which cannot know about this table — so a
+// newly synced thinking model shows no control until it is added here.
+const MINIMAL_TO_HIGH: readonly GeminiThinkingLevel[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+];
+const LOW_TO_HIGH: readonly GeminiThinkingLevel[] = ["low", "medium", "high"];
+
+const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
+  PROVIDER_MODEL_TYPE,
+  readonly GeminiThinkingLevel[]
+> = new Map([
+  // Gemini 3.x
+  [PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH],
+  // 3.1 Flash Lite is the odd one out: minimal and high only, no low/medium.
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["minimal", "high"]],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW, ["minimal", "high"]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE, ["minimal", "high"]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+    ["minimal", "high"],
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, ["low", "high"]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"]],
+  // Gemini 2.5 takes a numeric thinking_budget rather than a level, so these levels are translated
+  // server-side. They lead with "auto" because a budget left unset is how Google's own default works
+  // — "the model automatically controls how much it thinks up to a maximum of 8,192 tokens" — and
+  // without it, merely opening the control would pin a hard budget over that default.
+  //
+  // Only Flash Lite gets "off": it is the one 2.5 model Google ships with thinking already off, and
+  // 2.5 Pro cannot disable thinking at all.
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, ["auto", "off", ...LOW_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+    ["auto", "off", ...LOW_TO_HIGH],
+  ],
+]);
+
+const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
+  auto: "Auto",
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+// Which of the two providers a model id belongs to is encoded in the id itself (Vertex ids are
+// namespaced `vertex_ai/...`). Deliberately not getProviderFromModel: that resolves through the
+// runtime model registry, so it depends on fetched state and returns a fallback provider before
+// the registry loads — a gate on it would flicker with load order.
+const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
+  typeof model === "string" && model.startsWith("vertex_ai/");
+
 /**
  * Checks if a Gemini model supports thinking level parameter
- * Currently Gemini 3 Pro and Gemini 3 Flash support thinking level
  *
  * @param model - The model type to check
  * @returns true if the model supports thinking level, false otherwise
  */
 export const supportsGeminiThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
-  return (
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO ||
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO ||
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH
-  );
-};
+): boolean =>
+  !isVertexModel(model) &&
+  THINKING_LEVELS_BY_MODEL.has(model as PROVIDER_MODEL_TYPE);
 
 /**
  * Checks if a Vertex AI model supports thinking level parameter
- * Currently only Vertex AI Gemini 3 Pro supports thinking level
  *
  * @param model - The model type to check
  * @returns true if the model supports thinking level, false otherwise
  */
 export const supportsVertexAIThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
-  return (
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO ||
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO
+): boolean =>
+  isVertexModel(model) &&
+  THINKING_LEVELS_BY_MODEL.has(model as PROVIDER_MODEL_TYPE);
+
+/**
+ * The thinking levels a model accepts, as select options. Empty for models without thinking.
+ */
+export const getThinkingLevelOptions = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): Array<{ label: string; value: GeminiThinkingLevel }> =>
+  (THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? []).map(
+    (value) => ({ label: THINKING_LEVEL_LABELS[value], value }),
   );
-};
+
+// Each model's own default thinking level, from the same Google support table. Preselecting the
+// documented default keeps the control from silently changing a model's behaviour just by being
+// shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
+// ("auto"), 3.7/3.6/3.5 Flash default to medium, and 3.5 Flash Lite to minimal — none of which is
+// "high". Models absent here default to "high", which is what the Gemini 3 Pro rows document.
+const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
+  PROVIDER_MODEL_TYPE,
+  GeminiThinkingLevel
+> = new Map([
+  // Flash Lite ships with thinking off, so "off" rather than "auto" is its documented default.
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, "off" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+    "off" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, "auto" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, "auto" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, "auto" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    "auto" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, "medium" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+    "medium" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH, "medium" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+    "medium" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, "medium" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+    "medium" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+    "minimal" as GeminiThinkingLevel,
+  ],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+    "minimal" as GeminiThinkingLevel,
+  ],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+    "minimal" as GeminiThinkingLevel,
+  ],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+    "minimal" as GeminiThinkingLevel,
+  ],
+]);
+
+/**
+ * The level to preselect: the model's own documented default, so showing the control does not
+ * change how the model behaves.
+ */
+export const getDefaultThinkingLevel = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): GeminiThinkingLevel =>
+  DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   adaptive: "Adaptive",
@@ -172,6 +319,7 @@ export const updateProviderConfig = <
     topP?: number;
     thinkingEffort?: AnthropicThinkingEffort;
     reasoningEffort?: ReasoningEffort;
+    thinkingLevel?: GeminiThinkingLevel;
   },
 >(
   currentConfig: T | undefined,
@@ -260,6 +408,32 @@ export const updateProviderConfig = <
     return changed ? next : currentConfig;
   }
 
+  if (
+    providerType === PROVIDER_TYPE.GEMINI ||
+    providerType === PROVIDER_TYPE.VERTEX_AI
+  ) {
+    const next: T = { ...currentConfig };
+    let changed = false;
+
+    // thinkingLevel: drop it for models without a level option list, otherwise make sure it holds a
+    // level this model actually offers — coercing a stale one (an "off" carried over from 2.5 Flash
+    // Lite) and filling in the default when unset. Setting it rather than only coercing is what keeps
+    // the control honest: the dropdown falls back to the default for display, so leaving the config
+    // empty would show a level that never gets sent. Mirrors the handling above.
+    const levelOptions = getThinkingLevelOptions(params.model);
+    if (levelOptions.length === 0) {
+      if (next.thinkingLevel !== undefined) {
+        next.thinkingLevel = undefined;
+        changed = true;
+      }
+    } else if (!levelOptions.some((o) => o.value === next.thinkingLevel)) {
+      next.thinkingLevel = getDefaultThinkingLevel(params.model);
+      changed = true;
+    }
+
+    return changed ? next : currentConfig;
+  }
+
   return currentConfig;
 };
 
@@ -311,6 +485,66 @@ export const sanitizeConfigForRequest = (
     sanitized.topP != null
   ) {
     delete sanitized.topP;
+  }
+
+  // The request body is a flat spread of the config, and the backend deserializes it into
+  // langchain4j's ChatCompletionRequest, which ignores unknown top-level fields. A flat
+  // thinking_level is therefore silently dropped, so it has to be nested under
+  // custom_parameters — the only free-form slot the request actually captures. This holds for
+  // every caller: the playground proxy, experiment runs, and the optimizer, which all render the
+  // same Gemini config panel and reach the model through the same request shape.
+  const thinkingLevelOptions = getThinkingLevelOptions(model);
+
+  if (sanitized.thinkingLevel != null || thinkingLevelOptions.length > 0) {
+    // Fall back to the model's default when the config holds no level. The control displays that
+    // same default, so without this a prompt persisted before the level existed shows one value and
+    // sends none — the reconciler only fills the config in on a model change, and a stored prompt
+    // whose model is still valid is never reconciled at all.
+    // Both stale cases resolve the same way, to the model's default: a config with no level (persisted
+    // before the control existed) and a config holding a level this model does not offer (carried over
+    // from another model outside the reconciler). Either way the dropdown displays the default, so the
+    // request has to send it rather than nothing.
+    // A level already nested under custom_parameters counts as stored. Callers that persist the
+    // sanitized output and feed it back — the optimizer form reloads a saved run's `parameters`
+    // blob wholesale — have no flat thinkingLevel to offer, and substituting the model default
+    // there would silently reset the user's saved choice on every re-run.
+    const nested = (
+      (sanitized.custom_parameters as Record<string, unknown> | undefined)
+        ?.thinking as Record<string, unknown> | undefined
+    )?.level;
+    const stored = (sanitized.thinkingLevel ?? nested) as
+      | GeminiThinkingLevel
+      | undefined;
+    const level = (
+      stored != null && thinkingLevelOptions.some((o) => o.value === stored)
+        ? stored
+        : getDefaultThinkingLevel(model)
+    ) as GeminiThinkingLevel;
+
+    // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
+    // level, so leaving it on the payload can only be dead weight.
+    delete sanitized.thinkingLevel;
+
+    // "auto" means "send nothing and let the model decide", so it is deliberately not folded in —
+    // that absence IS the setting. `level` is already known to be one this model offers.
+    if (level !== "auto" && thinkingLevelOptions.length > 0) {
+      const customParameters =
+        (sanitized.custom_parameters as Record<string, unknown>) ?? {};
+      // Merge into any existing thinking block rather than replacing it — the backend also reads
+      // budget_tokens and include_thoughts from there, and only `level` is ours to set here.
+      const thinking =
+        (customParameters.thinking as Record<string, unknown>) ?? {};
+
+      sanitized.custom_parameters = {
+        ...customParameters,
+        // An explicit budget outranks the level server-side, so "off" has to clear it. Left in, the
+        // block would say "disabled" and "4096 tokens" at once and thinking would stay on.
+        thinking:
+          level === "off"
+            ? { ...omit(thinking, "budget_tokens"), level }
+            : { ...thinking, level },
+      };
+    }
   }
 
   return sanitized;
