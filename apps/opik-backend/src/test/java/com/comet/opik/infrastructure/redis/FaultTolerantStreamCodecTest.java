@@ -120,6 +120,35 @@ class FaultTolerantStreamCodecTest {
      * JSON codec, so it is only covered because the wrapper goes around the {@link org.redisson.codec.CompositeCodec}
      * rather than around its value codec. A throw here would wedge exactly like the payload path.
      */
+    /**
+     * Pins the {@link org.redisson.codec.CompositeCodec} argument order behaviourally, rather than
+     * leaving it as a bytecode claim in a javadoc that nothing checks.
+     * <p>
+     * Two reviewers have queried what {@code encodedBytes} actually measures, and the answer depends
+     * entirely on this: the two-arg constructor is {@code (mapKeyCodec, mapValueCodec)}, so LZ4 sits on
+     * the field-name path and payloads go through {@code JsonJacksonCodec} <em>uncompressed</em>. That
+     * makes {@code encodedBytes} a decoded-scale number for the value path and a compressed one for the
+     * key path. If anyone ever swaps those arguments -- which is the pre-existing fix this PR keeps
+     * deferring -- this test fails and the {@code encodedBytes} contract has to be revisited with it.
+     */
+    @Test
+    @DisplayName("map values are encoded as plain JSON and only field names are LZ4-framed")
+    void compositeCodecPutsLz4OnTheKeyPathNotTheValuePath() throws IOException {
+        var codec = RedisStreamCodec.JAVA.getCodec();
+
+        var encodedValue = codec.getMapValueEncoder().encode("a-trace-payload");
+        var encodedKey = codec.getMapKeyEncoder().encode("message");
+
+        // A JSON-encoded String starts with a quote and is byte-for-byte readable.
+        assertThat(encodedValue.toString(StandardCharsets.UTF_8)).isEqualTo("\"a-trace-payload\"");
+
+        // The field name is not: LZ4CodecV2 prefixes a 4-byte decompressed-length header, so the first
+        // bytes are a length rather than the text. Asserting it round-trips is what proves it is framed
+        // rather than plain, without pinning LZ4's internal layout.
+        assertThat(encodedKey.toString(StandardCharsets.UTF_8)).isNotEqualTo("message");
+        assertThat(codec.getMapKeyDecoder().decode(encodedKey, null)).isEqualTo("message");
+    }
+
     @Test
     @DisplayName("the shipped JAVA codec tolerates an undecodable field name too")
     void shippedJavaCodecToleratesUndecodableMapKey() throws IOException {

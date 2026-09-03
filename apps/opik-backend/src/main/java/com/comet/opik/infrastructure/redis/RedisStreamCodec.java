@@ -140,7 +140,14 @@ public enum RedisStreamCodec {
      * For this failure shape, yes, and it was measured rather than assumed. On a {@code -Xmx64m} fork,
      * three consecutive rounds of "oversized payload, then an ordinary message" each absorbed the OOM
      * and then decoded the ordinary message correctly, with free heap stable across rounds — no
-     * cumulative degradation. That holds because the array which failed to allocate was never
+     * cumulative degradation.
+     * <p>
+     * That last measurement and the one above it are the two claims here NOT pinned by a test, because
+     * both need a JVM small enough to exhaust and the surefire fork is not. What is pinned is the arm
+     * itself ({@code heapExhaustionDuringMaterializationIsAbsorbed} drives an OOM through a stub) and
+     * its boundary ({@code nonOomErrorStillPropagates}). To re-derive the heap behaviour, run any
+     * decode of a payload under {@code maxStringLength} but over the heap on a constrained fork —
+     * {@code mvn test -Dtest=<test> -DargLine="-Xmx64m"} — rather than trusting these paragraphs. That holds because the array which failed to allocate was never
      * allocated, so the failure consumed nothing, and the oversized buffer is unreferenced the moment
      * this method returns.
      * <p>
