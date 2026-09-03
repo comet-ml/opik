@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -371,6 +372,68 @@ class CostServiceTest {
                 "completion_tokens", 500);
 
         BigDecimal cost = CostService.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * A compact-dated name must price at exactly the rate of the base model it normalizes to,
+     * not merely at some non-zero rate -- that is what distinguishes a real price-table hit from
+     * an accidental one. Every case below was observed in production traffic routed through an
+     * enterprise gateway, which emits Anthropic ids in reversed family/version order with a
+     * compact date. Before the fix each of these resolved to DEFAULT_COST and reported $0.00.
+     */
+    @ParameterizedTest
+    @MethodSource("provideCompactDatedModelNamesWithBaseEquivalent")
+    void calculateCost_compactDateSuffixPricesSameAsBaseModel(String datedModelName, String baseModelName,
+            String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal datedCost = CostService.calculateCost(datedModelName, provider, usage, null);
+        BigDecimal baseCost = CostService.calculateCost(baseModelName, provider, usage, null);
+
+        assertThat(baseCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(datedCost).isEqualByComparingTo(baseCost);
+    }
+
+    private static Stream<Arguments> provideCompactDatedModelNamesWithBaseEquivalent() {
+        return Stream.of(
+                // Reversed family/version order reaches the price row through an `alias_of` entry,
+                // which is only reachable once the compact date is stripped.
+                Arguments.of("anthropic/claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.6-sonnet-20260217", "claude-sonnet-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.5-haiku-20251001", "claude-haiku-4-5", "anthropic"),
+                // Same path without the provider prefix.
+                Arguments.of("claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                // Canonical order, compact date, dot form: reaches the row via dot normalization.
+                Arguments.of("claude-opus-4.6-20260205", "claude-opus-4-6", "anthropic"));
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithCompactDateSuffix() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-20251217", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * The month/day ranges in the pattern keep an arbitrary 8-digit build or revision number from
+     * being mistaken for a date and silently collapsing a distinct model onto another model's row.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.2-99999999", "gpt-5.2-20251345", "gpt-5.2-12345678"})
+    void calculateCost_shouldNotStripNonDateEightDigitSuffix(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "openai", usage, null);
 
         assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
@@ -965,7 +1028,12 @@ class CostServiceTest {
                 Arguments.of("claude-sonnet-4.5", "anthropic"),
                 // 4. Provider prefix + date suffix: prefix stripped first, then date suffix removed
                 Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
-                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"));
+                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"),
+                // 5. Compact YYYYMMDD dates, the form Anthropic actually ships on every dated id.
+                Arguments.of("gpt-5.2-20251217", "openai"),
+                Arguments.of("claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("anthropic/claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("openai/gpt-5.2-20251217", "openai"));
     }
 
     /**
