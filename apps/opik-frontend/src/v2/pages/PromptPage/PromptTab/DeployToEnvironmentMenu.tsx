@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Check,
   CircleFadingArrowUp,
+  Loader2,
   Settings2,
   X,
 } from "lucide-react";
@@ -31,6 +32,8 @@ type DeployToEnvironmentMenuProps = {
   versionLabel: string;
   versions: PromptVersion[] | undefined;
   activeEnvironments: string[];
+  onOpenChange?: (open: boolean) => void;
+  isLoadingMore?: boolean;
 };
 
 const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
@@ -39,6 +42,8 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   versionLabel,
   versions,
   activeEnvironments,
+  onOpenChange,
+  isLoadingMore = false,
 }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -118,7 +123,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   if (!canEditPrompts) return null;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -167,6 +172,11 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
               </DropdownMenuItem>
             );
           })
+        )}
+        {isLoadingMore && (
+          <div className="flex justify-center py-2">
+            <Loader2 className="size-4 animate-spin text-light-slate" />
+          </div>
         )}
         {activeEnvironments.length > 0 && (
           <>

@@ -104,6 +104,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     fetchNextPage,
     isDiffMenuOpen,
     setIsDiffMenuOpen,
+    isDeployMenuOpen,
+    setIsDeployMenuOpen,
   } = usePromptVersionHistory(prompt);
 
   const activeStage = pickHighestStage(activeVersion?.tags);
@@ -377,6 +379,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                     versionLabel={activeVersionLabel}
                     versions={versions}
                     activeEnvironments={activeVersionEnvironments}
+                    onOpenChange={setIsDeployMenuOpen}
+                    isLoadingMore={isDeployMenuOpen && isFetchingNextPage}
                   />
 
                   <Separator orientation="vertical" className="mx-1 h-4" />

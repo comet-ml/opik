@@ -18,6 +18,7 @@ export default function usePromptVersionHistory(
   prompt?: PromptWithLatestVersion,
 ) {
   const [isDiffMenuOpen, setIsDiffMenuOpen] = useState(false);
+  const [isDeployMenuOpen, setIsDeployMenuOpen] = useState(false);
 
   const [activeVersionId, setActiveVersionId] = useQueryParam(
     "activeVersionId",
@@ -67,6 +68,23 @@ export default function usePromptVersionHistory(
   // correctly (fetched independently below), but the sidebar can't highlight
   // it or scroll it into view until its page is loaded — keep paging until
   // it's found (or there's nothing left to load) so the two stay in sync.
+  const isChasingDeepLink =
+    !!activeVersionId &&
+    !!versions &&
+    !versions.some((v) => v.id === activeVersionId);
+
+  // The Diff and Deploy menus each only offer whatever pages are already
+  // loaded — while either is open, keep paging until every version is
+  // available so they don't silently omit older, not-yet-loaded versions.
+  //
+  // All three reasons to keep paging are combined into one effect (rather
+  // than one per reason) so at most one `fetchNextPage()` call happens per
+  // render: with separate effects, two whose conditions both flip true in
+  // the same render (e.g. a deep-link chase while the Diff menu is opened)
+  // would both fire before either sees the other's in-flight fetch, and
+  // `fetchNextPage`'s default `cancelRefetch: true` would cancel the first
+  // request for a duplicate of the same page.
+  //
   // Must wait for `isFetchingVersions` (not just `isFetchingNextPage`) to go
   // idle: a background refetch of an already-loaded page (e.g. after a
   // version-create invalidation) reports `isFetchingNextPage: false` too,
@@ -79,9 +97,7 @@ export default function usePromptVersionHistory(
   // the failed request settles, hammering the backend forever.
   useEffect(() => {
     if (
-      activeVersionId &&
-      versions &&
-      !versions.some((v) => v.id === activeVersionId) &&
+      (isChasingDeepLink || isDiffMenuOpen || isDeployMenuOpen) &&
       hasNextPage &&
       !isFetchingVersions &&
       !isVersionsError
@@ -89,29 +105,9 @@ export default function usePromptVersionHistory(
       fetchNextPage();
     }
   }, [
-    activeVersionId,
-    versions,
-    hasNextPage,
-    isFetchingVersions,
-    isVersionsError,
-    fetchNextPage,
-  ]);
-
-  // The Diff menu's "Compare against" list only offers whatever pages are
-  // already loaded — while it's open, keep paging until every version is
-  // available so it doesn't silently omit older, not-yet-loaded versions.
-  // See the effect above for why `isVersionsError` is also required.
-  useEffect(() => {
-    if (
-      isDiffMenuOpen &&
-      hasNextPage &&
-      !isFetchingVersions &&
-      !isVersionsError
-    ) {
-      fetchNextPage();
-    }
-  }, [
+    isChasingDeepLink,
     isDiffMenuOpen,
+    isDeployMenuOpen,
     hasNextPage,
     isFetchingVersions,
     isVersionsError,
@@ -180,5 +176,7 @@ export default function usePromptVersionHistory(
     fetchNextPage,
     isDiffMenuOpen,
     setIsDiffMenuOpen,
+    isDeployMenuOpen,
+    setIsDeployMenuOpen,
   };
 }
