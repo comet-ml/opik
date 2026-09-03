@@ -25,6 +25,8 @@ export {
   type AutomationRuleRef,
   type AutomationRuleDetail,
   type AutomationRuleLogRef,
+  type LlmJudgeModelRef,
+  type DatasetSummaryRef,
   type TraceJsonSection,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,

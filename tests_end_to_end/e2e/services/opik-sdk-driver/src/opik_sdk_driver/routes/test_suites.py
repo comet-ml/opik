@@ -1,7 +1,7 @@
 import atexit
 
 import opik
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 
 from ..opik_factory import make_opik_client
 from ..schemas import (
@@ -62,16 +62,40 @@ def insert_test_suite_items(
     body: TestSuiteInsertItemsRequest,
     x_opik_api_key: str | None = Header(default=None),
 ) -> TestSuiteInsertItemsResponse:
-    """Insert items into an existing test suite by name (idempotent get-or-create).
+    """Insert items into an existing test suite by name.
 
     Resolves the suite within the caller's `project_name` scope; without that,
     same-named suites across projects could collide.
+
+    `body.resolve_via` picks the factory. It matters because the suite object's
+    local content-hash state — and therefore whether `insert` can recognise an
+    item the suite already holds — depends on how the object was built. Each
+    request constructs its own client, so no factory ever inherits hashes
+    another call happened to compute.
     """
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
-        suite = client.get_or_create_test_suite(
-            name=body.suite_name, project_name=body.project_name
-        )
+        if body.resolve_via == "list":
+            suites = client.get_test_suites(project_name=body.project_name)
+            matching = [s for s in suites if s.name == body.suite_name]
+            if len(matching) != 1:
+                # Loud rather than a silent get-or-create fallback: a caller
+                # asking for the listing path is testing that path, and quietly
+                # substituting another one would turn a real regression into a
+                # pass. 404 rather than 500 so the reason reaches the spec
+                # instead of FastAPI's opaque "Internal Server Error".
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"get_test_suites() returned {len(matching)} suites named "
+                        f"{body.suite_name!r} in project {body.project_name!r}; expected exactly 1"
+                    ),
+                )
+            suite = matching[0]
+        else:
+            suite = client.get_or_create_test_suite(
+                name=body.suite_name, project_name=body.project_name
+            )
         items = [item.model_dump(exclude_none=True) for item in body.items]
         suite.insert(items)
         suite_id = str(suite.id)

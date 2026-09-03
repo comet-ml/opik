@@ -211,6 +211,37 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * Open a rule's edit dialog through the row's kebab → Edit, and resolve once
+   * the dialog is on screen. The same trigger/menu-item pair as
+   * `deleteRuleByName`, scoped by the row first and then by accessible name
+   * (RuleRowActionsCell gives neither a data-testid).
+   */
+  async openEditRuleDialogByName(name: string): Promise<void> {
+    return test.step(`open the edit dialog for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.dialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Submit the add/edit dialog and wait for it to close.
+   *
+   * Deliberately touches nothing else: a caller that opened the dialog and
+   * changed nothing is exercising the "save an unedited rule" path, where the
+   * only thing under test is what the form serializes out of the values it
+   * hydrated in.
+   */
+  async submitRuleDialog(): Promise<void> {
+    return test.step('submit the rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
    * Flip a rule's enabled state through the row's kebab → Edit → "Enable rule"
    * switch → submit. Resolves once the dialog has closed and the row's Status
    * cell reflects the new state.
@@ -221,12 +252,7 @@ export class OnlineEvaluationPage {
    */
   async setRuleEnabledByName(name: string, enabled: boolean): Promise<void> {
     return test.step(`set rule "${name}" enabled=${enabled} via edit dialog`, async () => {
-      const row = this.ruleRow(name);
-      await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
-
-      await this.dialog.waitFor({ state: 'visible' });
+      await this.openEditRuleDialogByName(name);
       const toggle = this.enableRuleSwitch;
       await expect(toggle, 'edit dialog hydrates the switch from the persisted value').toBeChecked({
         checked: !enabled,
@@ -234,8 +260,7 @@ export class OnlineEvaluationPage {
       await toggle.click();
       await expect(toggle).toBeChecked({ checked: enabled });
 
-      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
-      await this.dialog.waitFor({ state: 'hidden' });
+      await this.submitRuleDialog();
 
       await expect(this.ruleStatusCell(name, enabled ? 'Enabled' : 'Disabled')).toBeVisible();
     });

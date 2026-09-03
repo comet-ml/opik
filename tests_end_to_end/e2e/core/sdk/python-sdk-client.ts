@@ -151,6 +151,15 @@ export interface PythonSdkClient {
       description?: string;
     }>;
     workspace?: string;
+    /**
+     * Which client factory the suite being inserted into is obtained from.
+     * `get_or_create` (the bridge's default) is what every other caller wants;
+     * `list` reaches the suite through `get_test_suites()`. The two build a
+     * suite object with different local content-hash state, and that state is
+     * what decides whether an insert of an item the suite already holds is
+     * deduplicated — so a spec covering dedup has to name the path it means.
+     */
+    resolve_via?: 'get_or_create' | 'list';
   }): Promise<{ suite_id: string; inserted: number }>;
   runTestSuite(args: {
     suite_name: string;

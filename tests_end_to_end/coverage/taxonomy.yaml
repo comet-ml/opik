@@ -506,8 +506,9 @@ areas:
       - datasets/dataset-version-counters.spec.ts
       - datasets/dataset-version-repeated-item-id.spec.ts
       - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-list-summary-columns.spec.ts
     capabilities:
-      list-datasets:          { covered: true,  tier: t1-smoke }
+      list-datasets:          { covered: true,  tier: t1-smoke, note: "t1 asserts the row renders; t2 adds the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version asserted per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages; and on screen, Item count plus the two recency columns populated on exactly the right rows" }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
       create-dataset-sdk:     { covered: true,  tier: t1-smoke }
       view-items:             { covered: true,  tier: t1-smoke }
@@ -542,8 +543,15 @@ areas:
     specs:
       - test-suites/test-suites-smoke.spec.ts
       - test-suites/test-suite-delete.spec.ts
+      - test-suites/test-suite-insert-dedup-listed-suite.spec.ts
     capabilities:
-      list-suites:           { covered: true,  tier: t1-smoke }
+      # The t2 spec drives `get_test_suites()`, the listing factory nothing else
+      # in the estate reaches, and asserts that a suite reached through it
+      # deduplicates an insert of an item it already holds. That behaviour has
+      # no key of its own here — this one names the listing, which is the path
+      # the spec exercises, not the dedup it asserts. Worth a dedicated
+      # capability if anyone extends this area.
+      list-suites:           { covered: true,  tier: t1-smoke, note: "t2 additionally reaches a suite through get_test_suites() and asserts insert() deduplicates an item the suite already holds, while a genuinely new item still lands" }
       create-suite-ui:       { covered: true,  tier: t1-smoke }
       create-suite-sdk:      { covered: true,  tier: t1-smoke }
       view-suite-items:      { covered: true,  tier: t1-smoke }
@@ -645,6 +653,7 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -656,7 +665,12 @@ areas:
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
-      edit-rule:               { covered: false }
+      # Scoped on purpose. The spec opens a rule's edit dialog and saves it with
+      # no field changed, asserting the model's custom_parameters survive the
+      # round-trip — the payload the form serializes AND the persisted blob.
+      # It does not drive any individual editor control, so editing a rule's
+      # prompt, model, variables or scope is still uncovered.
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "unedited save only: LLM-judge rule seeded over REST with model.custom_parameters, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key. Editing individual fields is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       # Deliberately still false. online-evaluation-python-metric-errors.spec.ts

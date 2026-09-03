@@ -1,6 +1,21 @@
-import type { Page, Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { DatasetItemsPage } from './dataset-items.page';
+
+/**
+ * Column ids on the Datasets list, as `DatasetListPage`'s `DEFAULT_COLUMNS`
+ * declares them. The DataTable stamps `data-cell-id="<rowId>_<columnId>"`, so
+ * these are how a cell is addressed by identity — column ORDER is
+ * user-configurable and persisted per workspace, which makes any positional
+ * selector (`td:nth-child(4)`) wrong for a different user on the same page.
+ */
+export type DatasetColumnId =
+  | 'name'
+  | 'description'
+  | 'dataset_items_count'
+  | 'most_recent_experiment_at'
+  | 'most_recent_optimization_at'
+  | 'last_updated_at';
 
 export class DatasetsPage {
   private projectId: string | null = null;
@@ -26,6 +41,75 @@ export class DatasetsPage {
     return this.page
       .locator('tbody tr[data-row-id]')
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
+  }
+
+  /**
+   * A single cell of a dataset's row, addressed by dataset id and column id
+   * rather than by position — `data-cell-id` is `<rowId>_<columnId>`, and the
+   * row id is the dataset id (`getRowId` on the page).
+   *
+   * Takes the id rather than the name because a caller reading a computed
+   * column already knows which dataset it seeded, and an id cannot be
+   * ambiguous the way a name-matching filter can.
+   */
+  datasetCell(datasetId: string, column: DatasetColumnId): Locator {
+    return this.page.locator(
+      `tbody tr[data-row-id="${datasetId}"] [data-cell-id="${datasetId}_${column}"]`,
+    );
+  }
+
+  /**
+   * The rendered text of one cell, trimmed.
+   *
+   * Asserts the locator resolved to exactly one element first: a duplicated
+   * row or a column rendered twice would otherwise be silently reduced to
+   * whichever matched first, and the test would report on a cell it never
+   * meant to read.
+   */
+  async datasetCellText(datasetId: string, column: DatasetColumnId): Promise<string> {
+    return test.step(`read the ${column} cell of dataset ${datasetId}`, async () => {
+      const cell = this.datasetCell(datasetId, column);
+      await expect(cell).toHaveCount(1);
+      return (await cell.innerText()).trim();
+    });
+  }
+
+  /** The Columns dropdown trigger in the list toolbar. */
+  get columnsButton(): Locator {
+    return this.page.getByTestId('columns-button');
+  }
+
+  /**
+   * Turn a column on or off through the Columns dropdown, by its visible label.
+   *
+   * Idempotent, and asserts the checkbox's starting state before clicking, so a
+   * regression that renders the menu out of sync with the table fails here
+   * rather than quietly toggling the column the wrong way.
+   *
+   * Each row is a Radix `CheckboxItem`, but `SortableMenuItem` spreads dnd-kit's
+   * sortable attributes over it, and those set `role="button"` — so the row is
+   * addressed as a button and its state read from the checkbox it wraps, not
+   * from a `menuitemcheckbox` role that never reaches the DOM. Neither carries
+   * a data-testid. `exact` matching is required because "Most recent
+   * experiment" and "Most recent optimization" share a prefix.
+   */
+  async setColumnEnabled(label: string, enabled: boolean): Promise<void> {
+    return test.step(`set column "${label}" enabled=${enabled}`, async () => {
+      await this.columnsButton.click();
+      const menu = this.page.getByRole('menu');
+      const item = menu.getByRole('button', { name: label, exact: true });
+      await expect(item).toHaveCount(1);
+      const checkbox = item.getByRole('checkbox');
+      if ((await checkbox.isChecked()) !== enabled) {
+        await item.click();
+      }
+      await expect(checkbox).toBeChecked({ checked: enabled });
+      // The menu keeps itself open on select (`onSelect` is prevented) so a
+      // caller can toggle several columns; close it explicitly rather than
+      // leaving an overlay across the table the next assertion has to read.
+      await this.page.keyboard.press('Escape');
+      await expect(item).toBeHidden();
+    });
   }
 
   async openDatasetByName(name: string): Promise<DatasetItemsPage> {

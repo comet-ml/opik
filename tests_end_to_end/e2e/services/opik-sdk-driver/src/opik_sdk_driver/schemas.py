@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -276,6 +276,14 @@ class TestSuiteInsertItemsRequest(BaseModel):
     project_name: str
     items: list[TestSuiteItemSeed]
     workspace: str | None = None
+    # How the suite object being inserted into is obtained. The two factories
+    # build a suite whose local content-hash state differs, and dedup is decided
+    # from that state, so which one a caller went through is part of the
+    # scenario rather than an implementation detail:
+    #   get_or_create - get_test_suite(), falling back to create (the default,
+    #                   and what every other route uses)
+    #   list          - get_test_suites(), selecting the suite by name
+    resolve_via: Literal["get_or_create", "list"] = "get_or_create"
 
 
 class TestSuiteInsertItemsResponse(BaseModel):

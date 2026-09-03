@@ -68,11 +68,40 @@ export interface RawApiResult {
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
+  /**
+   * The version's content hash. Nullable because the API's own shape makes it
+   * optional — a caller that needs it must assert it is there rather than
+   * compare an absent value to another absent value and call that agreement.
+   */
+  versionHash: string | null;
   itemsTotal: number;
   itemsAdded: number;
   itemsModified: number;
   itemsDeleted: number;
   isLatest: boolean;
+}
+
+/**
+ * The computed summary the datasets list attaches to each row.
+ *
+ * None of these values is stored on the dataset: the backend derives each from
+ * a separate lookup and zips them onto the row. That makes the failure
+ * mode a mis-attribution — a real number belonging to a different dataset —
+ * which renders as a perfectly plausible row rather than an error, so nothing
+ * here is defaulted. `null` appears only where the API genuinely answers null
+ * (a dataset with no version, no experiment or no optimization yet); an absent
+ * count throws in the mapper instead, because a `?? 0` would silently produce
+ * exactly the value an empty-dataset assertion expects.
+ */
+export interface DatasetSummaryRef {
+  id: string;
+  name: string;
+  datasetItemsCount: number;
+  experimentCount: number;
+  optimizationCount: number;
+  latestVersionHash: string | null;
+  mostRecentExperimentAt: string | null;
+  mostRecentOptimizationAt: string | null;
 }
 
 /** The windowed stats one row of the Projects table renders. */
@@ -157,6 +186,21 @@ export interface AutomationRuleDetail {
   samplingRate: number;
   /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
   triggerScope: string;
+}
+
+/**
+ * The `code.model` block of an `llm_as_judge` rule, exactly as REST stores it.
+ *
+ * `customParameters` is the free-form slot the provider config is carried in
+ * (`thinking`, and anything else a caller persisted alongside it). `null` is
+ * the API's own answer for "nothing set" and is kept distinct from `{}` here
+ * on purpose: a serializer that collapses one into the other is precisely what
+ * this shape is read back to catch.
+ */
+export interface LlmJudgeModelRef {
+  name: string;
+  temperature: number | null;
+  customParameters: Record<string, unknown> | null;
 }
 
 /** One line of a rule's user-facing log stream. */
@@ -280,6 +324,48 @@ export interface OptimizationRef {
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
+
+/**
+ * Map one dataset row — from the list or from a detail read, which answer the
+ * same shape — onto `DatasetSummaryRef`.
+ *
+ * Every count is required. `?? 0` is deliberately absent: the empty-dataset
+ * case is asserted to report zeros, so defaulting a missing count to 0 would
+ * make that assertion pass on a response that carried no count at all.
+ */
+function toDatasetSummary(row: unknown): DatasetSummaryRef {
+  const d = row as {
+    id?: string;
+    name?: string;
+    dataset_items_count?: number;
+    experiment_count?: number;
+    optimization_count?: number;
+    most_recent_experiment_at?: string | null;
+    most_recent_optimization_at?: string | null;
+    latest_version?: { version_hash?: string } | null;
+  };
+  const requireCount = (value: number | undefined, field: string): number => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      throw new Error(
+        `toDatasetSummary: dataset '${d.name ?? d.id}' returned no numeric ${field}`,
+      );
+    }
+    return value;
+  };
+  if (typeof d.id !== 'string' || typeof d.name !== 'string') {
+    throw new Error('toDatasetSummary: dataset row carried no id/name');
+  }
+  return {
+    id: d.id,
+    name: d.name,
+    datasetItemsCount: requireCount(d.dataset_items_count, 'dataset_items_count'),
+    experimentCount: requireCount(d.experiment_count, 'experiment_count'),
+    optimizationCount: requireCount(d.optimization_count, 'optimization_count'),
+    latestVersionHash: d.latest_version?.version_hash ?? null,
+    mostRecentExperimentAt: d.most_recent_experiment_at ?? null,
+    mostRecentOptimizationAt: d.most_recent_optimization_at ?? null,
+  };
+}
 
 /** One clause of the `sorting` query param the grids serialise. */
 export interface BackendSort {
@@ -783,6 +869,65 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       });
     },
 
+    /**
+     * One page of `GET /v1/private/datasets` with the computed summary each row
+     * carries — the exact read the Datasets list issues.
+     *
+     * Through `rawFetch` rather than the pinned SDK because the SDK's dataset
+     * shape does not surface `latest_version`, and the summary is the whole
+     * point of the read.
+     *
+     * `page`/`size` are exposed so a caller can prove the summary survives
+     * pagination: the counts are zipped onto the page's rows, so a rewrite that
+     * zips them in the wrong order is visible only when a page holds a subset.
+     */
+    async listDatasetSummaries(args: {
+      projectId: string;
+      page?: number;
+      size?: number;
+    }): Promise<{ total: number; rows: DatasetSummaryRef[] }> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+      });
+      const { status, message, json } = await rawFetch('GET', '/v1/private/datasets', {
+        query,
+      });
+      if (status !== 200) {
+        throw new Error(
+          `listDatasetSummaries: project ${args.projectId} answered ${status}: ${message}`,
+        );
+      }
+      const page = json as { total?: number; content?: unknown[] };
+      if (typeof page.total !== 'number') {
+        throw new Error('listDatasetSummaries: response carried no `total`');
+      }
+      return {
+        total: page.total,
+        rows: (page.content ?? []).map(toDatasetSummary),
+      };
+    },
+
+    /**
+     * The same computed summary as it appears on one dataset's own detail read.
+     *
+     * The list and the detail are different code paths over the same four
+     * lookups, so disagreeing is itself the bug: whichever of the two is wrong,
+     * a user reading a number off the list and then opening the dataset sees
+     * two different truths.
+     */
+    async getDatasetSummary(datasetId: string): Promise<DatasetSummaryRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getDatasetSummary: ${datasetId} answered ${status}: ${message}`);
+      }
+      return toDatasetSummary(json);
+    },
+
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
       const page = await opik.api.datasets.getDatasetItems(datasetId);
       const content = page.content ?? [];
@@ -801,6 +946,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const content = page.content ?? [];
       return content.map((v) => ({
         versionName: String(v.versionName ?? ''),
+        versionHash: v.versionHash ?? null,
         itemsTotal: Number(v.itemsTotal ?? 0),
         itemsAdded: Number(v.itemsAdded ?? 0),
         itemsModified: Number(v.itemsModified ?? 0),
@@ -1478,6 +1624,125 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
       }
       return id;
+    },
+
+    /**
+     * Create an `llm_as_judge` online-evaluation rule and return its id.
+     *
+     * Separate from `createAutomationRule` (which builds the
+     * `user_defined_metric_python` shape) because the two rule types carry
+     * completely different `code` blocks, and folding both into one signature
+     * would make every field optional — so a caller could build a rule the
+     * backend rejects and only find out at runtime.
+     *
+     * `customParameters` is passed through verbatim, including `null`: the
+     * whole point of a spec that round-trips this block is that the value the
+     * caller chose is the value that comes back, so nothing is defaulted here.
+     *
+     * Goes through `rawFetch` for the same two reasons `createAutomationRule`
+     * does: creation answers 201 with an empty body, so the id exists only in
+     * the `Location` header, and the id is parsed from there rather than
+     * recovered by a name lookup that could pick up an earlier run's leftovers.
+     */
+    async createLlmJudgeAutomationRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Provider model id as the picker stores it, e.g. `claude-haiku-4-5-20251001`. */
+      modelName: string;
+      temperature: number;
+      customParameters: Record<string, unknown> | null;
+      messages: Array<{ role: string; content: string }>;
+      /** Judge-prompt variable name -> extraction path (e.g. `output.answer`). */
+      variables: Record<string, string>;
+      schema: Array<{ name: string; type: string; description: string }>;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            code: {
+              model: {
+                name: args.modelName,
+                temperature: args.temperature,
+                custom_parameters: args.customParameters,
+              },
+              messages: args.messages.map((m) => ({
+                role: m.role,
+                content: m.content,
+              })),
+              variables: args.variables,
+              schema: args.schema,
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createLlmJudgeAutomationRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createLlmJudgeAutomationRule: 201 for '${args.name}' carried no usable Location ` +
+            `header (got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * The `code.model` block of an `llm_as_judge` rule.
+     *
+     * Throws rather than returning a partial shape when the rule is not an
+     * llm-judge or carries no model: a caller reading this is asserting on what
+     * the model block holds, and an `undefined` threaded into that assertion
+     * would read as "the value changed" when the truth is "the rule is not the
+     * one you think". `custom_parameters` is the one field allowed to be
+     * absent, and it is normalised to `null` — the API's own "nothing set".
+     */
+    async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeModel: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        type?: string;
+        code?: {
+          model?: {
+            name?: string;
+            temperature?: number;
+            custom_parameters?: Record<string, unknown> | null;
+          };
+        };
+      };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      const model = rule.code?.model;
+      if (!model || typeof model.name !== 'string') {
+        throw new Error(`getLlmJudgeModel: ${ruleId} returned no code.model.name`);
+      }
+      return {
+        name: model.name,
+        temperature: typeof model.temperature === 'number' ? model.temperature : null,
+        customParameters: model.custom_parameters ?? null,
+      };
     },
 
     /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
