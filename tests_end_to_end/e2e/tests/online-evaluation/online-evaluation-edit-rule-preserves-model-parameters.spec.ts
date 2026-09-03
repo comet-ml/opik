@@ -117,8 +117,25 @@ test.describe(
             (request) =>
               request.method() === 'PATCH' && isRuleUpdate(request.url(), ruleId),
           );
+          // The response, not just the dispatch. AddEditRuleDialog calls
+          // setOpen(false) outside the mutation's callbacks, so the dialog
+          // hides the moment the PATCH is sent — waiting for it to close is no
+          // barrier, and the persisted read below would otherwise be free to
+          // observe the pre-save blob and pass on a backend that dropped
+          // custom_parameters.
+          const answered = page.waitForResponse(
+            (response) =>
+              response.request().method() === 'PATCH' &&
+              isRuleUpdate(response.url(), ruleId),
+          );
           await onlineEval.submitRuleDialog();
-          return patched;
+          const request = await patched;
+          const response = await answered;
+          expect(
+            response.ok(),
+            `the unedited save was accepted (got ${response.status()})`,
+          ).toBe(true);
+          return request;
         });
 
         await test.step('The outbound PATCH still carries both custom_parameters keys', async () => {
