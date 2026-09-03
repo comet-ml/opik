@@ -58,8 +58,9 @@ test.describe('Alerts — smoke', { tag: ['@t1-smoke', '@area:alerts'] }, () => 
     'An alert created through the form lands on the list with its webhook destination',
     { tag: ['@cap:alerts.create-alert', '@cap:alerts.webhook-destination'] },
     async ({ project, uiAlertCleanup, testNamespace, backendClient, page }) => {
-      void uiAlertCleanup;
       const name = `${testNamespace}-alert-ui-created`;
+      // Declared before the create, so a failure mid-flow cannot skip cleanup.
+      uiAlertCleanup([name]);
       const webhookUrl = 'https://example.com/e2e-webhook-ui-created';
       const alerts = new AlertsPage(page);
 

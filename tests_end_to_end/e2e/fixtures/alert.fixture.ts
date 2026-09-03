@@ -60,12 +60,13 @@ export interface AlertFixtures {
    * Cleans up alerts a test creates through the UI, which have no id until the
    * form submits and the row renders.
    *
-   * Requesting the fixture is the whole API — alerts are found at teardown by
-   * the test's own namespace prefix rather than registered by the test. An
-   * id-registration call would be skipped by a failure between the create and
-   * the registration, leaking exactly the alert whose run went wrong.
+   * Discovers them at teardown by the names the test says it will use, so
+   * there is no registration call for a mid-test failure to skip. Names are
+   * matched exactly rather than by prefix: `testNamespace` truncates the test
+   * title to 40 characters, so two similarly-named tests can share a prefix,
+   * and a prefix delete would reach across them.
    */
-  uiAlertCleanup: void;
+  uiAlertCleanup: (names: string[]) => void;
 }
 
 /**
@@ -142,15 +143,17 @@ export const test = baseTest.extend<AlertFixtures>({
 
   uiAlertCleanup: [
     async ({ backendClient, testNamespace }, use, testInfo) => {
-      await use();
+      const expected = new Set<string>();
+      await use((names) => names.forEach((n) => expected.add(n)));
 
-      if (shouldLeaveArtifacts(testInfo)) return;
+      if (expected.size === 0 || shouldLeaveArtifacts(testInfo)) return;
 
-      // Deletes by prefix, so this also sweeps the fixture-seeded alerts —
-      // harmless, since `deleteAlertsBatch` is idempotent for ids already gone.
       try {
-        const leftover = await backendClient.listAlertsWithPrefix(`${testNamespace}-alert-`);
-        await backendClient.deleteAlertsBatch(leftover.map((a) => a.id));
+        // Prefix narrows the workspace-wide read; the exact-name filter is
+        // what decides deletion, so a shared prefix cannot widen it.
+        const found = await backendClient.listAlertsWithPrefix(testNamespace);
+        const doomed = found.filter((a) => expected.has(a.name)).map((a) => a.id);
+        await backendClient.deleteAlertsBatch(doomed);
       } catch (err) {
         console.warn('[alert fixture] UI-created alert cleanup warning:', err);
       }

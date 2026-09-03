@@ -113,17 +113,19 @@ export class AlertEditorPage {
   }
 
   /**
-   * Fails with an explicit message when an alert carries duplicate triggers of
-   * one event type — a shape only reachable by seeding through the API.
+   * Fails with an explicit message unless exactly one config block is present:
+   * none means the trigger was never added, several mean the alert was seeded
+   * through the API with a duplicate pair (the editor cannot make one).
    */
   private async assertSingleTriggerConfig(eventType: AlertEventType): Promise<void> {
     const count = await this.triggerConfig(eventType).count();
-    if (count > 1) {
-      throw new Error(
-        `alert has ${count} "${eventType}" triggers, so its config block is ambiguous. ` +
+    if (count === 1) return;
+    throw new Error(
+      count === 0
+        ? `no "${eventType}" trigger on this alert — add it before configuring it.`
+        : `alert has ${count} "${eventType}" triggers, so its config block is ambiguous. ` +
           'The editor cannot create duplicates; seed one trigger per event type.',
-      );
-    }
+    );
   }
 
   async fillName(name: string): Promise<void> {
