@@ -1,31 +1,27 @@
 import * as vscode from 'vscode';
 import { executeQuery } from './sqlite';
-import { getPendingUsage, updatePendingUsage } from '../state';
+import { getPendingUsage, getRequestLedger, updatePendingUsage } from '../state';
 import { PendingUsage, TurnUsage } from '../interface';
 import { debugLog } from '../utils';
+import {
+    canAttributePendingUsage,
+    mergePendingUsage,
+    shouldKeepPendingUsage,
+} from './usageQueue';
+import { isCursorComposerId } from './composerIdentity';
+import {
+    attributeUsageToPending,
+    PendingUsageAttribution,
+    UsageEventDisplay,
+} from './usageAttribution';
+import { appliedUsageEventOwners } from './usageLedger';
+
+export { attributeUsageToTurns } from './usageAttribution';
 
 const API_HOST = 'https://api2.cursor.sh';
 const SERVICE = 'aiserver.v1.DashboardService';
 
 const POLL_SCHEDULE_MS = [5000, 5000, 10000, 30000, 60000, 300000, 300000];
-
-// The usage event is stamped when the request completes, so it always falls
-// after its own user bubble and before the next one. A grace window wider than
-// the gap between two turns makes a later turn swallow an earlier turn's event.
-const CLOCK_GRACE_MS = 0;
-
-interface UsageEventDisplay {
-    timestamp: string;
-    model: string;
-    conversationId?: string;
-    chargedCents?: number;
-    tokenUsage?: {
-        inputTokens?: number;
-        outputTokens?: number;
-        cacheReadTokens?: number;
-        cacheWriteTokens?: number;
-    };
-}
 
 async function readAccessToken(stateDbPath: string): Promise<string | undefined> {
     const rows = await executeQuery(
@@ -104,6 +100,10 @@ async function fetchUsageByConversation(
  * were already counted.
  */
 async function readUserTurnStarts(stateDbPath: string, composerId: string): Promise<number[]> {
+    if (!isCursorComposerId(composerId)) {
+        debugLog('[usage] invalid Cursor composer id', composerId);
+        return [];
+    }
     const rows = await executeQuery(
         stateDbPath,
         `SELECT json_extract(value, '$.createdAt') AS createdAt FROM cursorDiskKV
@@ -118,79 +118,43 @@ async function readUserTurnStarts(stateDbPath: string, composerId: string): Prom
     return [...new Set(starts)].sort((a, b) => a - b);
 }
 
-export function attributeUsageToTurns(
-    turnStartsMs: number[],
-    events: UsageEventDisplay[]
-): Map<number, TurnUsage> {
-    const sorted = [...events].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-    const attributed = new Map<number, TurnUsage>();
-
-    for (const event of sorted) {
-        const at = Number(event.timestamp) + CLOCK_GRACE_MS;
-
-        let turn = -1;
-        for (let i = 0; i < turnStartsMs.length; i++) {
-            if (turnStartsMs[i] > at) {
-                break;
-            }
-            turn = i;
-        }
-        if (turn < 0) {
-            continue;
-        }
-
-        const accumulated = attributed.get(turn) ?? {
-            inputTokens: 0,
-            outputTokens: 0,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-            chargedCents: 0,
-            requestCount: 0,
-            models: [],
-        };
-
-        const usage = event.tokenUsage ?? {};
-        accumulated.inputTokens += usage.inputTokens ?? 0;
-        accumulated.outputTokens += usage.outputTokens ?? 0;
-        accumulated.cacheReadTokens += usage.cacheReadTokens ?? 0;
-        accumulated.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
-        accumulated.chargedCents += event.chargedCents ?? 0;
-        accumulated.requestCount += 1;
-        if (event.model && !accumulated.models.includes(event.model)) {
-            accumulated.models.push(event.model);
-        }
-        attributed.set(turn, accumulated);
-    }
-    return attributed;
-}
-
 export class UsageEnricher {
     private userId: number | undefined;
     private userIdToken: string | undefined;
+    private volatilePending = new Map<string, Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>>();
 
     constructor(
         private context: vscode.ExtensionContext,
-        private applyUsage: (pending: PendingUsage, usage: TurnUsage) => Promise<void>
+        private applyUsage: (
+            pending: PendingUsage,
+            usage: TurnUsage,
+            eventKeys: string[]
+        ) => Promise<void>
     ) {}
 
     isEnabled(): boolean {
         return vscode.workspace.getConfiguration().get<boolean>('opik.usageEnrichment.enabled', true);
     }
 
-    track(turns: Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>[]) {
+    async track(turns: Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>[]): Promise<void> {
         if (!this.isEnabled() || turns.length === 0) {
             return;
         }
-        const pending = getPendingUsage(this.context);
-        const known = new Set(pending.map(item => `${item.composerId}:${item.turnStartMs}`));
-
-        for (const turn of turns) {
-            if (known.has(`${turn.composerId}:${turn.turnStartMs}`)) {
-                continue;
+        const nextAttemptAt = Date.now() + POLL_SCHEDULE_MS[0];
+        const pending = mergePendingUsage(getPendingUsage(this.context), turns, nextAttemptAt);
+        try {
+            await updatePendingUsage(this.context, pending);
+            for (const turn of turns) {
+                this.volatilePending.delete(turn.usageKey);
             }
-            pending.push({ ...turn, attempt: 0, nextAttemptAt: Date.now() + POLL_SCHEDULE_MS[0] });
+        } catch (error) {
+            // Trace delivery has already succeeded. Keep the cost work in
+            // memory and retry persistence from tick() without re-uploading it.
+            for (const turn of turns) {
+                this.volatilePending.set(turn.usageKey, turn);
+            }
+            debugLog('[usage] failed to persist pending usage, will retry', String(error));
         }
-        updatePendingUsage(this.context, pending);
     }
 
     // Keyed by token so that switching Cursor accounts re-resolves instead of
@@ -218,9 +182,15 @@ export class UsageEnricher {
             return;
         }
 
-        const pending = getPendingUsage(this.context);
+        const pending = mergePendingUsage(
+            getPendingUsage(this.context),
+            [...this.volatilePending.values()],
+            Date.now()
+        );
         const now = Date.now();
-        const due = pending.filter(item => item.nextAttemptAt <= now);
+        const due = pending.filter(item =>
+            canAttributePendingUsage(item) && item.nextAttemptAt <= now
+        );
         if (due.length === 0) {
             return;
         }
@@ -251,53 +221,81 @@ export class UsageEnricher {
             for (const item of due) {
                 item.nextAttemptAt = now + 30000;
             }
-            updatePendingUsage(this.context, pending);
+            await updatePendingUsage(this.context, pending);
             return;
         }
 
         const startsCache = new Map<string, number[]>();
+        const attributionCache = new Map<string, PendingUsageAttribution>();
         const remaining: PendingUsage[] = [];
 
         for (const item of pending) {
+            if (!canAttributePendingUsage(item)) {
+                debugLog('[usage] quarantining ambiguous legacy pending record');
+                remaining.push(item);
+                continue;
+            }
             if (item.nextAttemptAt > now) {
                 remaining.push(item);
                 continue;
             }
 
-            let starts = startsCache.get(item.composerId);
-            if (!starts) {
-                starts = await readUserTurnStarts(stateDbPath, item.composerId);
-                startsCache.set(item.composerId, starts);
-            }
-
-            const index = starts.indexOf(item.turnStartMs);
-            const usage = index < 0
-                ? undefined
-                : attributeUsageToTurns(starts, byConversation.get(item.composerId) ?? []).get(index);
-
-            if (index < 0) {
-                debugLog('[usage] turn start not found in conversation', {
-                    composerId: item.composerId,
-                    turnStartMs: item.turnStartMs,
+            let attribution = attributionCache.get(item.composerId);
+            if (!attribution) {
+                let currentStarts = startsCache.get(item.composerId);
+                if (!currentStarts) {
+                    currentStarts = await readUserTurnStarts(stateDbPath, item.composerId);
+                    startsCache.set(item.composerId, currentStarts);
+                }
+                const composerPending = pending.filter(candidate =>
+                    canAttributePendingUsage(candidate) &&
+                    candidate.composerId === item.composerId
+                );
+                const starts = [...new Set([
+                    ...currentStarts,
+                    ...composerPending.flatMap(candidate =>
+                        candidate.turnStartsMs ?? [candidate.turnStartMs]
+                    ),
+                ])].sort((a, b) => a - b);
+                attribution = attributeUsageToPending(
+                    composerPending,
                     starts,
-                });
+                    byConversation.get(item.composerId) ?? [],
+                    appliedUsageEventOwners(getRequestLedger(this.context), item.composerId)
+                );
+                attributionCache.set(item.composerId, attribution);
             }
+
+            const usage = attribution.usageByKey.get(item.usageKey);
+            let applyFailed = false;
 
             if (usage) {
                 try {
-                    await this.applyUsage(item, usage);
+                    await this.applyUsage(
+                        item,
+                        usage,
+                        attribution.eventKeysByUsageKey.get(item.usageKey) ?? []
+                    );
                     continue;
                 } catch (error) {
+                    applyFailed = true;
                     debugLog('[usage] failed to patch span', String(error));
                 }
             }
 
-            item.attempt += 1;
-            if (item.attempt < POLL_SCHEDULE_MS.length) {
-                item.nextAttemptAt = now + POLL_SCHEDULE_MS[item.attempt];
-                remaining.push(item);
+            if (!shouldKeepPendingUsage(
+                applyFailed,
+                attribution.settledKeys.has(item.usageKey)
+            )) {
+                continue;
             }
+
+            item.attempt += 1;
+            const delayIndex = Math.min(item.attempt, POLL_SCHEDULE_MS.length - 1);
+            item.nextAttemptAt = now + POLL_SCHEDULE_MS[delayIndex];
+            remaining.push(item);
         }
-        updatePendingUsage(this.context, remaining);
+        await updatePendingUsage(this.context, remaining);
+        this.volatilePending.clear();
     }
 }
