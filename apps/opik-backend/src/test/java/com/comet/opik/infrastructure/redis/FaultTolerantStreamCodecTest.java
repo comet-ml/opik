@@ -107,10 +107,10 @@ class FaultTolerantStreamCodecTest {
     @DisplayName("the shipped JAVA codec tolerates an undecodable field name too")
     void shippedJavaCodecToleratesUndecodableMapKey() throws IOException {
         // The first four bytes are LZ4CodecV2's decompressed-length header, which its decoder reads and
-        // allocates. Kept explicit and small (well under MAX_LZ4_DECODED_LENGTH, see the boundary
-        // tests below) so this exercises the OUTER FaultTolerantCodec.tolerant() catching an ordinary
-        // decompression failure on a legitimately-sized declared length, distinct from
-        // mapKeyDecoderRejectsImplausibleDeclaredLength below, which never reaches a decoder at all.
+        // allocates. Kept small and plausible so this exercises an ordinary decompression failure on a
+        // legitimately-sized declared length -- the Exception arm -- as distinct from
+        // corruptedDeclaredLengthYieldsSentinel below, which covers the lengths that can reach the OOM
+        // arm instead.
         var notAnLz4Frame = Unpooled.wrappedBuffer(
                 new byte[]{0, 0, 0, 16, 'n', 'o', 't', '-', 'l', 'z', '4'});
 
@@ -120,23 +120,25 @@ class FaultTolerantStreamCodecTest {
     }
 
     /**
-     * The vulnerability this guards: {@code LZ4CodecV2$1.decode} reads its 4-byte declared length and
-     * immediately allocates a raw heap {@code byte[]} of that size -- {@code readInt()} then
-     * {@code newarray byte} -- building the decompressor and parsing the frame only afterwards
-     * (verified against the Redisson 4.7.0 bytecode on the classpath). A corrupted or truncated frame
-     * can therefore claim an arbitrary 31-bit length; left unguarded the resulting
-     * {@code OutOfMemoryError: Java heap space} is an {@link Error} the wrapper does not absorb,
-     * reproducing the OPIK-8164 wedge through a corrupted header instead of an oversized string.
+     * The reason the catch covers {@link OutOfMemoryError} and not {@link Exception} alone.
      * <p>
-     * 1,886,151,017 is the big-endian reading of {@code "plai"} -- the first four bytes of the
-     * free-text buffer an earlier revision of this file used, which is how the hazard was found. Both
-     * cases assert the length is rejected <em>before</em> any allocation is attempted, not merely that
-     * it happens not to OOM on this runner.
+     * {@code LZ4CodecV2$1.decode} allocates {@code newarray byte} of the declared length before it
+     * validates the frame, so a corrupted field-name header can claim any 31-bit length. Measured
+     * against the raw decoder, what that produces depends on the heap: negative lengths give
+     * {@code NegativeArraySizeException}, large-but-allocatable lengths allocate and then give
+     * {@code IOException}, and lengths beyond the heap give {@link OutOfMemoryError}. Only the last is
+     * an {@link Error}, and which row a length lands in moves with {@code -Xmx} -- 1.8 GiB is an
+     * {@code IOException} on a 9 GB heap and an {@link OutOfMemoryError} on a 1 GB container.
+     * <p>
+     * All three must yield the sentinel, because any of them escaping is the OPIK-8164 wedge reached
+     * through a corrupted length header. {@code Integer.MAX_VALUE} is the case that actually exercises
+     * the OOM arm on a large heap; the others exercise the Exception arm and are included so the
+     * behaviour is pinned as heap-independent rather than accidentally uniform.
      */
     @ParameterizedTest
-    @ValueSource(ints = {1_886_151_017, Integer.MAX_VALUE, -1, Integer.MIN_VALUE})
-    @DisplayName("an implausible declared length is rejected before LZ4CodecV2 ever allocates")
-    void mapKeyDecoderRejectsImplausibleDeclaredLength(int declaredLength) throws IOException {
+    @ValueSource(ints = {-1, Integer.MIN_VALUE, 1_886_151_017, Integer.MAX_VALUE})
+    @DisplayName("a corrupted LZ4 declared length yields the sentinel however it fails")
+    void corruptedDeclaredLengthYieldsSentinel(int declaredLength) throws IOException {
         var buf = Unpooled.buffer()
                 .writeInt(declaredLength)
                 .writeBytes("frame-body".getBytes(StandardCharsets.UTF_8));
@@ -144,39 +146,22 @@ class FaultTolerantStreamCodecTest {
         var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(buf, null);
 
         assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
-        assertThat(((UndecodableStreamMessage) decoded).cause())
-                .hasMessageContaining("sanity ceiling");
     }
 
     /**
-     * The boundary: a declared length exactly at the ceiling must NOT be rejected pre-allocation --
-     * it has to reach the real decoder, whatever happens to it after that. Distinguished from the
-     * over-ceiling cases by NOT carrying the "sanity ceiling" message.
+     * The boundary of what is absorbed. {@link OutOfMemoryError} is in; every other {@link Error} is
+     * not, so a {@link StackOverflowError} -- or an OOM from a legitimate multi-hundred-MB payload
+     * document rather than a corrupted length -- still propagates.
      */
     @Test
-    @DisplayName("a declared length exactly at the ceiling is not rejected pre-allocation")
-    void mapKeyDecoderDoesNotRejectDeclaredLengthAtTheCeiling() throws IOException {
-        var buf = Unpooled.buffer()
-                .writeInt(RedisStreamCodec.MAX_LZ4_DECODED_LENGTH)
-                .writeBytes("not a real lz4 frame body".getBytes(StandardCharsets.UTF_8));
+    @DisplayName("an Error other than OutOfMemoryError still propagates")
+    void nonOomErrorStillPropagates() {
+        Codec throwsError = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
+            throw new StackOverflowError("simulated");
+        }));
 
-        var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(buf, null);
-
-        assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
-        assertThat(((UndecodableStreamMessage) decoded).cause().getMessage())
-                .doesNotContain("sanity ceiling");
-    }
-
-    @Test
-    @DisplayName("a buffer too short to carry a length header is not rejected by this guard")
-    void mapKeyDecoderSkipsTheBoundCheckOnATooShortBuffer() throws IOException {
-        var buf = Unpooled.wrappedBuffer(new byte[]{1, 2});
-
-        var decoded = RedisStreamCodec.JAVA.getCodec().getMapKeyDecoder().decode(buf, null);
-
-        assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
-        assertThat(((UndecodableStreamMessage) decoded).cause().getMessage())
-                .doesNotContain("sanity ceiling");
+        assertThatThrownBy(() -> throwsError.getMapValueDecoder().decode(json("{}"), null))
+                .isInstanceOf(StackOverflowError.class);
     }
 
     /**
@@ -201,19 +186,20 @@ class FaultTolerantStreamCodecTest {
     }
 
     /**
-     * The boundary of the no-throw contract. An {@link Error} is deliberately not absorbed: an
-     * OutOfMemoryError while Jackson materializes a multi-megabyte String is the plausible one on this
-     * path, and a JVM in that state should not have its failure filed as a routine per-message drop.
+     * The OOM arm, driven directly rather than through LZ4's allocation, so it is pinned independently
+     * of any heap size. See {@code corruptedDeclaredLengthYieldsSentinel} for why it is absorbed.
      */
     @Test
-    @DisplayName("an Error still propagates -- only Exception is absorbed")
-    void errorStillPropagates() {
-        Codec throwsError = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
+    @DisplayName("an OutOfMemoryError from a decoder is absorbed into the sentinel")
+    void outOfMemoryErrorIsAbsorbed() throws IOException {
+        Codec throwsOom = RedisStreamCodec.faultTolerant(new StubCodec((b, state) -> {
             throw new OutOfMemoryError("simulated");
         }));
 
-        assertThatThrownBy(() -> throwsError.getMapValueDecoder().decode(json("{}"), null))
-                .isInstanceOf(OutOfMemoryError.class);
+        var decoded = throwsOom.getMapValueDecoder().decode(json("{}"), null);
+
+        assertThat(decoded).isInstanceOf(UndecodableStreamMessage.class);
+        assertThat(((UndecodableStreamMessage) decoded).cause()).isInstanceOf(OutOfMemoryError.class);
     }
 
     /** Minimal codec whose every decoder is the supplied one, for driving the wrapper directly. */

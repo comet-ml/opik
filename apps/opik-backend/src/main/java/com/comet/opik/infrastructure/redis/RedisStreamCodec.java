@@ -25,8 +25,8 @@ import java.util.function.Supplier;
 @AllArgsConstructor
 @Getter
 public enum RedisStreamCodec {
-    JAVA(Constants.JAVA, Suppliers.memoize(() -> faultTolerant(new CompositeCodec(
-            lengthBoundedLz4Codec(new LZ4CodecV2()), new JsonJacksonCodec(buildStreamMapper()))))),
+    JAVA(Constants.JAVA, Suppliers.memoize(() -> faultTolerant(new CompositeCodec(new LZ4CodecV2(),
+            new JsonJacksonCodec(buildStreamMapper()))))),
     JSON(Constants.JSON, () -> StringCodec.INSTANCE);
 
     /**
@@ -68,124 +68,6 @@ public enum RedisStreamCodec {
     }
 
     /**
-     * Ceiling on a declared LZ4-decompressed length, checked before {@link LZ4CodecV2} allocates for it.
-     * <p>
-     * {@code LZ4CodecV2$1.decode} reads a 4-byte declared length straight off the wire and immediately
-     * allocates a raw heap {@code byte[]} of exactly that size, with no bound of its own. Verified
-     * against the Redisson 4.7.0 bytecode actually on the classpath ({@code redisson.version} in
-     * {@code pom.xml}):
-     *
-     * <pre>
-     *   1: invokevirtual ByteBuf.readInt:()I          // declared length, straight off the wire
-     *   6: newarray      byte                         // byte[declaredLength], UNBOUNDED
-     *  24: new           BlockLZ4CompressorInputStream // decompressor built AFTER the allocation
-     *  44: invokevirtual DataInputStream.readFully     // frame parsing only starts here
-     * </pre>
-     *
-     * The ordering is the whole problem: nothing validates the frame before the array exists, so a
-     * corrupted or truncated frame can claim any 31-bit length. Because it is a heap array the failure
-     * is {@code OutOfMemoryError: Java heap space} specifically -- not a Netty direct-memory error,
-     * which this path cannot produce. Either way it is an {@link Error}, which
-     * {@link FaultTolerantCodec} deliberately does not absorb (an OOM from a legitimate
-     * multi-hundred-MB document is meant to propagate), so left unguarded this reproduces the
-     * OPIK-8164 wedge through a corrupted length header instead of an oversized string: the throw
-     * lands before any {@code StreamMessageId} exists, so the entry can never be acked, retried or
-     * removed.
-     * <p>
-     * Note the sibling {@code LZ4Codec$1} (V1, unused here) allocates via
-     * {@code ByteBufAllocator.DEFAULT.buffer(int)} instead. Same unbounded-length flaw, different
-     * failure mode -- worth not confusing the two when re-checking this against a future version.
-     * <p>
-     * On this codec {@code LZ4CodecV2} sits on the map-KEY (field-name) path -- see the
-     * {@link CompositeCodec} arguments above -- and every stream field name in this codebase is the
-     * seven-character constant {@code "message"} (e.g. {@code OnlineScoringConfig.PAYLOAD_FIELD}). 4 KB
-     * is generous by three orders of magnitude, not a tight fit to today's constant: rejecting above it
-     * costs nothing, because no legitimate field name will ever approach it. The bound is applied to
-     * both decoder accessors rather than the field-name one alone, hence the codec-scoped name.
-     */
-    @VisibleForTesting
-    static final int MAX_LZ4_DECODED_LENGTH = 4096;
-
-    private static Codec lengthBoundedLz4Codec(LZ4CodecV2 lz4) {
-        return new LengthBoundedLz4Codec(lz4);
-    }
-
-    /**
-     * Rejects an implausible declared length before {@code LZ4CodecV2} ever allocates for it. See
-     * {@link #MAX_LZ4_DECODED_LENGTH} for the vulnerability and why the bound is safe.
-     * <p>
-     * Deliberately narrow rather than folded into {@link FaultTolerantCodec}'s generic wrapper: this
-     * class assumes a specific wire layout (a 4-byte declared-length header), which only holds for
-     * {@link LZ4CodecV2}. {@link FaultTolerantCodec} stays codec-agnostic on purpose -- its own javadoc
-     * says as much -- so a peek this specific does not belong inside it.
-     * <p>
-     * Both {@code getMapKeyDecoder} and {@code getValueDecoder} are bounded, not just the one this
-     * codec's wiring exercises ({@code getMapKeyDecoder}, which {@code BaseCodec} falls through to
-     * {@code getValueDecoder} for): {@link LZ4CodecV2} could be composed as a value codec elsewhere,
-     * and the same allocation is reachable through either accessor.
-     */
-    @RequiredArgsConstructor
-    private static final class LengthBoundedLz4Codec implements Codec {
-
-        private final LZ4CodecV2 delegate;
-
-        private static Decoder<Object> bounded(Decoder<Object> decoder) {
-            return (buf, state) -> {
-                if (buf.readableBytes() >= Integer.BYTES) {
-                    int declaredLength = buf.getInt(buf.readerIndex());
-                    if (declaredLength < 0 || declaredLength > MAX_LZ4_DECODED_LENGTH) {
-                        int encodedBytes = buf.readableBytes();
-                        buf.skipBytes(encodedBytes);
-                        return UndecodableStreamMessage.builder()
-                                .encodedBytes(encodedBytes)
-                                .cause(new IllegalStateException(
-                                        "LZ4 frame declares a %d-byte decompressed length, over the %d-byte "
-                                                + "sanity ceiling for an LZ4 frame"
-                                                        .formatted(declaredLength, MAX_LZ4_DECODED_LENGTH)))
-                                .build();
-                    }
-                }
-                return decoder.decode(buf, state);
-            };
-        }
-
-        @Override
-        public Decoder<Object> getMapValueDecoder() {
-            return delegate.getMapValueDecoder();
-        }
-
-        @Override
-        public Encoder getMapValueEncoder() {
-            return delegate.getMapValueEncoder();
-        }
-
-        @Override
-        public Decoder<Object> getMapKeyDecoder() {
-            return bounded(delegate.getMapKeyDecoder());
-        }
-
-        @Override
-        public Encoder getMapKeyEncoder() {
-            return delegate.getMapKeyEncoder();
-        }
-
-        @Override
-        public Decoder<Object> getValueDecoder() {
-            return bounded(delegate.getValueDecoder());
-        }
-
-        @Override
-        public Encoder getValueEncoder() {
-            return delegate.getValueEncoder();
-        }
-
-        @Override
-        public ClassLoader getClassLoader() {
-            return delegate.getClassLoader();
-        }
-    }
-
-    /**
      * Delegates encoding untouched; every decoder is wrapped so no decode path can throw.
      * <p>
      * All three are wrapped deliberately, because each is a distinct wire path and a throw on any of
@@ -208,10 +90,40 @@ public enum RedisStreamCodec {
      * general wrapper, not a JAVA-specific one, and a three-arg rewiring would otherwise silently
      * reopen the hole.</li>
      * </ul>
-     * The catch is {@link Exception}, not {@link Throwable}: an {@link Error} — an
-     * {@link OutOfMemoryError} while Jackson materializes a multi-megabyte String is the plausible one
-     * here — still propagates, because a JVM in that state should not have its failure recorded as a
-     * routine per-message drop.
+     * The catch covers {@link Exception} plus {@link OutOfMemoryError}, and nothing else. The OOM arm is
+     * not defensive garnish — it closes a real hole. {@code LZ4CodecV2$1.decode} reads a 4-byte declared
+     * decompressed length off the wire and immediately does {@code newarray byte} of exactly that size,
+     * building the decompressor and validating the frame only afterwards (Redisson 4.7.0 bytecode:
+     * {@code readInt} at 1, {@code newarray} at 6, {@code BlockLZ4CompressorInputStream} at 24,
+     * {@code readFully} at 44). A corrupted field-name frame can therefore claim any 31-bit length. What
+     * that produces depends on the heap, which is why it cannot be left to {@link Exception} alone:
+     *
+     * <table border="1">
+     * <caption>Raw {@code LZ4CodecV2} outcome by declared length, measured on a 9 GB heap</caption>
+     * <tr><th>Declared length</th><th>Outcome</th></tr>
+     * <tr><td>negative</td><td>{@code NegativeArraySizeException} — an Exception</td></tr>
+     * <tr><td>large but allocatable</td><td>allocates, then {@code IOException} — an Exception</td></tr>
+     * <tr><td>beyond the heap</td><td>{@link OutOfMemoryError} — an Error</td></tr>
+     * </table>
+     *
+     * Only the last row needs the OOM arm, and which row a given length lands in moves with
+     * {@code -Xmx}: 1.8 GiB is an {@code IOException} on a 9 GB heap and an {@link OutOfMemoryError} on a
+     * 1 GB container. Absorbing it makes the behaviour heap-independent. Without it that row is the
+     * OPIK-8164 wedge again, reached through a corrupted length header instead of an oversized string.
+     * <p>
+     * Two honest limits on this. The failing array is unreferenced the moment we return, so the JVM
+     * recovers — but an allocation large enough to fail can starve a <em>different</em> thread, which
+     * then throws where nothing catches it; and a length the heap can satisfy is still allocated in full
+     * before it fails. Bounding the declared length before the allocation would fix both, and an earlier
+     * revision of this class did exactly that. It was removed because the ceiling was an undocumented
+     * number: nothing in Redis or Redisson constrains a stream field name, so any bound rests on the
+     * local observation that every field name in this codebase is the constant {@code "message"} — an
+     * assumption that silently discards data the day someone picks a longer one. A pre-check belongs
+     * with the {@link CompositeCodec} argument-order fix, which removes LZ4 from the field-name path and
+     * dissolves this hazard rather than bounding it.
+     * <p>
+     * No other {@link Error} is absorbed: an {@link OutOfMemoryError} from a legitimate
+     * multi-hundred-MB payload document, or a {@link StackOverflowError}, still propagates.
      */
     @RequiredArgsConstructor
     private static final class FaultTolerantCodec implements Codec {
@@ -223,7 +135,7 @@ public enum RedisStreamCodec {
                 int encodedBytes = buf.readableBytes();
                 try {
                     return decoder.decode(buf, state);
-                } catch (Exception decodeFailure) {
+                } catch (Exception | OutOfMemoryError decodeFailure) {
                     // Belt-and-braces: Redisson hands us a bounded readSlice and never inspects its
                     // reader index afterwards, so this is not required for framing. Drained anyway so
                     // the wrapper stays correct if it is ever handed an unsliced buffer.
