@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
@@ -22,7 +24,10 @@ import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamReadGroupArgs;
+import org.redisson.client.codec.Codec;
+import org.redisson.codec.CompositeCodec;
 import org.redisson.codec.JsonJacksonCodec;
+import org.redisson.codec.LZ4CodecV2;
 import org.redisson.config.Config;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -87,6 +92,99 @@ class BaseRedisSubscriberTest {
     @AfterEach
     void tearDown() {
         subscribers.forEach(BaseRedisSubscriber::stop);
+    }
+
+    /**
+     * The OPIK-8164 mechanism end to end, on real Redis, with a real decode failure.
+     * <p>
+     * Every other drop test in this PR either injects a pre-built {@code UndecodableStreamMessage} into
+     * a mocked {@code readGroup}, or exercises the decoder in isolation. Neither reproduces the thing
+     * that actually happened: the payload is written successfully, because Jackson has no
+     * serialization-side limit, and then breaches {@code maxStringLength} on the way back out — inside
+     * Redisson's {@code CommandDecoder}, below {@code BaseRedisSubscriber}, which pre-PR is exactly why
+     * the entry could never be acked and the stream wedged permanently.
+     * <p>
+     * A small {@code maxStringLength} stands in for production's 100 MB so the asymmetry is reproduced
+     * at a few hundred bytes instead of tens of megabytes. The write path is unbounded either way, so
+     * the mechanism is identical.
+     * <p>
+     * Worth knowing what this run exposed about timing, because the retry timers are compressed here
+     * and are not in production. Retirement is driven by the delivery count, which only advances when
+     * {@code XAUTOCLAIM} redelivers the entry after {@code pendingMessageDuration}. At the shipped
+     * online-scoring values ({@code pendingMessageDuration: 10m}, {@code maxRetries: 3}) an undecodable
+     * entry therefore stays in the stream for roughly 30 minutes, being re-read and re-decoded on each
+     * cycle, before it is removed. The wedge is bounded rather than eliminated — and for a payload of
+     * production size, each cycle re-attempts a large materialization. That is the cost of not deleting
+     * on first delivery; it is the right trade while a newer pod might still decode the entry, but it
+     * is not free.
+     */
+    @Nested
+    class UndecodablePayloadTests {
+
+        private static final int SMALL_STRING_LIMIT = 512;
+
+        private TestStreamConfiguration smallLimitConfig;
+        private RStreamReactive<String, String> smallLimitStream;
+
+        /** The JAVA codec's shape, but with a string limit small enough to breach cheaply. */
+        private Codec smallLimitCodec() {
+            var mapper = JsonUtils.getMapper().copy();
+            mapper.getFactory().setStreamReadConstraints(
+                    StreamReadConstraints.builder().maxStringLength(SMALL_STRING_LIMIT).build());
+            return RedisStreamCodec.faultTolerant(
+                    new CompositeCodec(new LZ4CodecV2(), new JsonJacksonCodec(mapper)));
+        }
+
+        @BeforeEach
+        void setUp() {
+            smallLimitConfig = TestStreamConfiguration.create().toBuilder()
+                    .codec(smallLimitCodec())
+                    // Retirement is driven by the delivery count, which only rises when XAUTOCLAIM
+                    // redelivers the entry after pendingMessageDuration. The class default is 2 minutes
+                    // and maxRetries 3, so an undecodable entry would sit in the stream for ~6 minutes.
+                    // Compressed here to keep the test quick; see the class javadoc for what this means
+                    // at the shipped values.
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(500))
+                    .claimIntervalRatio(2)
+                    .maxRetries(2)
+                    .build();
+            smallLimitStream = redissonClient.getStream(
+                    smallLimitConfig.getStreamName(), smallLimitConfig.getCodec());
+            smallLimitStream.delete().block();
+        }
+
+        @Test
+        void shouldDrainAnEntryThatOnlyFailsOnRead() {
+            var subscriber = trackSubscriber(
+                    TestRedisSubscriber.createSubscriber(smallLimitConfig, redissonClient));
+            var oversized = "a".repeat(SMALL_STRING_LIMIT + 1);
+            var healthy = "well-within-limits";
+
+            // Start first: the consumer group is created at '$', so it only sees entries added after
+            // start(). Publishing beforehand leaves them permanently undelivered and proves nothing.
+            subscriber.start();
+
+            // Writes fine: Jackson constrains reads, not writes. This is the asymmetry behind OPIK-8164.
+            smallLimitStream.add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, oversized)).block();
+            smallLimitStream.add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, healthy)).block();
+            assertThat(smallLimitStream.size().block()).isEqualTo(2);
+
+            // The healthy entry behind it still gets through -- pre-PR it was stranded in the same batch.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(1));
+
+            // The undecodable entry is NOT gone yet: it is retryable, so it stays pending for another
+            // consumer rather than being deleted on sight.
+            assertThat(smallLimitStream.size().block()).isEqualTo(1);
+
+            // And it does eventually leave, once the delivery count reaches maxRetries -- bounded, not
+            // permanent. This is the half that distinguishes this fix from the pre-PR wedge.
+            await().atMost(AWAIT_TIMEOUT_SECONDS * 10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(smallLimitStream.size().block()).isZero());
+
+            // It never reached processEvent: the sentinel is intercepted in processMessage.
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
     }
 
     @Nested

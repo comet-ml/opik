@@ -63,7 +63,7 @@ public enum RedisStreamCodec {
      * directions: a pod on either build writes what the other can read.
      */
     @VisibleForTesting
-    static Codec faultTolerant(Codec delegate) {
+    public static Codec faultTolerant(Codec delegate) {
         return new FaultTolerantCodec(delegate);
     }
 
