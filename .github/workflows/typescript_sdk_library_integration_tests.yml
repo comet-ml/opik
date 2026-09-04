@@ -63,7 +63,7 @@ jobs:
         run: echo "::warning::ANTHROPIC_API_KEY is not set - live LLM tests will be skipped (deterministic tests still run)."
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit
 
       - name: Run tests
         run: npm test

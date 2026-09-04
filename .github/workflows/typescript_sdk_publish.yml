@@ -53,7 +53,9 @@ concurrency:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # npm's per-request fetch-timeout is 300s; a 5-minute job cannot outlast one
+    # stalled request. Matches typescript_sdk_integration_publish.yml.
+    timeout-minutes: 15
     permissions:
       # `contents: write` — the release path commits the version bump and pushes it.
       # `id-token: write` — mints the OIDC token npm trusted publishing exchanges for
