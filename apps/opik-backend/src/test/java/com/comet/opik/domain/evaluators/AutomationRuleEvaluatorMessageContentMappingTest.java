@@ -32,7 +32,10 @@ class AutomationRuleEvaluatorMessageContentMappingTest {
             "[null]", // null element — reached convertToMessageContent and NPE'd
             "[{}]", // object with no discriminator, which the renderer's switch dereferences
             "[{\"foo\": \"bar\"}]", // e.g. few-shot examples pasted as JSON
-            "[{\"type\": \"text\", \"text\": \"ok\"}, {}]" // one good part is not enough
+            "[{\"type\": \"text\", \"text\": \"ok\"}, {}]", // one good part is not enough
+            "[]", // an empty array is no content at all; the renderer cannot build a message from it
+            "[]\n\nNow evaluate {{input}}",
+            "[{\"type\": \"text\", \"text\": \"Example\"}]\n\nNow evaluate {{input}}" // array then prose
     })
     void plainContentThatLooksLikeAnArrayReadsBackAsAString(String content) {
         var message = MAPPER.map(stored(content));

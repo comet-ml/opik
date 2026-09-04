@@ -14,6 +14,7 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
@@ -287,21 +288,27 @@ interface AutomationModelEvaluatorMapper {
 
         List<?> rawList;
         try {
-            // Deserialize as raw list first to handle potential LinkedHashMap issue
-            rawList = JsonUtils.getMapper().readValue(
-                    contentString,
-                    JsonUtils.getMapper().getTypeFactory().constructCollectionType(
+            // Deserialize as raw list first to handle potential LinkedHashMap issue.
+            // FAIL_ON_TRAILING_TOKENS because the shared mapper does not set it: readValue otherwise
+            // stops at the first complete array and drops the rest, so a prompt that opens with an
+            // example array and continues in prose would keep the example and lose the instruction.
+            rawList = JsonUtils.getMapper()
+                    .readerFor(JsonUtils.getMapper().getTypeFactory().constructCollectionType(
                             List.class,
-                            Object.class));
+                            Object.class))
+                    .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .readValue(contentString);
         } catch (JsonProcessingException e) {
             // Prose that happens to open with '[' — the ordinary case, not a failure.
             return Optional.empty();
         }
 
-        if (!rawList.stream().allMatch(AutomationModelEvaluatorMapper::isContentPart)) {
-            // JSON, but not content parts: a null element, or an object carrying no supported
-            // discriminator. Admitting one would hand the renderer a part with a null type, which
-            // its switch dereferences.
+        // allMatch is vacuously true on an empty list, and a message with no parts is not something
+        // the renderer can build: langchain4j rejects a UserMessage with no contents. Empty is prose.
+        if (rawList.isEmpty() || !rawList.stream().allMatch(AutomationModelEvaluatorMapper::isContentPart)) {
+            // JSON, but not content parts: a null element, or an object carrying no discriminator.
+            // Admitting one would hand the renderer a part with a null type, which its switch
+            // dereferences.
             return Optional.empty();
         }
 
@@ -327,10 +334,8 @@ interface AutomationModelEvaluatorMapper {
      * render; losing the shape on the way out is the worse failure.
      */
     private static boolean isContentPart(Object element) {
-        if (element instanceof LlmAsJudgeMessageContent content) {
-            return content.type() != null;
-        }
-
+        // Deserialized as List<Object>, so Jackson only ever hands us Map / String / Number /
+        // Boolean / List / null — never an LlmAsJudgeMessageContent.
         return element instanceof Map<?, ?> map && map.get("type") instanceof String;
     }
 
