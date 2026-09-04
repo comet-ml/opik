@@ -2465,6 +2465,17 @@ class OpenTelemetryMapperTest {
             assertThat(malformedJson.output().isTextual()).isTrue();
             assertThat(malformedJson.output().asText()).isEqualTo("{invalid");
 
+            var blankJson = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("input.mime_type", "application/json"),
+                    str("input.value", ""),
+                    str("output.mime_type", "application/json"),
+                    str("output.value", "   ")));
+            assertThat(blankJson.input().isTextual()).isTrue();
+            assertThat(blankJson.input().asText()).isEmpty();
+            assertThat(blankJson.output().isTextual()).isTrue();
+            assertThat(blankJson.output().asText()).isEqualTo("   ");
+
             var scalarWithStructure = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     str("output.mime_type", "application/json"),
@@ -2648,13 +2659,67 @@ class OpenTelemetryMapperTest {
                     str("llm.invocation_parameters", "{broken"),
                     str("llm.function_call", "{also-broken"),
                     str("llm.prompt_template.variables", "{still-broken"),
-                    str("llm.tools.0.tool.json_schema", "{schema-broken")));
-            assertThat(malformedJsonStrings.input().path("invocation_parameters").asText()).isEqualTo("{broken");
-            assertThat(malformedJsonStrings.input().path("prompt_template").path("variables").asText())
+                    str("llm.tools.0.tool.json_schema", "{schema-broken"),
+                    str("llm.output_messages.0.message.function_call_arguments_json", "{arguments-broken")));
+            assertThat(malformedJsonStrings.input()).isNull();
+            assertThat(malformedJsonStrings.output()).isNull();
+            assertThat(malformedJsonStrings.metadata().path("llm.invocation_parameters").asText())
+                    .isEqualTo("{broken");
+            assertThat(malformedJsonStrings.metadata().path("llm.function_call").asText())
+                    .isEqualTo("{also-broken");
+            assertThat(malformedJsonStrings.metadata().path("llm.prompt_template.variables").asText())
                     .isEqualTo("{still-broken");
-            assertThat(malformedJsonStrings.input().path("tools").get(0).path("json_schema").asText())
+            assertThat(malformedJsonStrings.metadata().path("llm.tools.0.tool.json_schema").asText())
                     .isEqualTo("{schema-broken");
-            assertThat(malformedJsonStrings.output().path("function_call").asText()).isEqualTo("{also-broken");
+            assertThat(malformedJsonStrings.metadata()
+                    .path("llm.output_messages.0.message.function_call_arguments_json").asText())
+                    .isEqualTo("{arguments-broken");
+
+            var trailingJsonTokens = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("input.mime_type", "application/json"),
+                    str("input.value", "{\"request\":true} {}"),
+                    str("output.mime_type", "application/json"),
+                    str("output.value", "[1,2] false"),
+                    str("llm.invocation_parameters", "{\"temperature\":0.2} {}"),
+                    str("llm.function_call", "{\"name\":\"weather\"} []"),
+                    str("llm.prompt_template.variables", "{\"city\":\"Paris\"} true"),
+                    str("llm.tools.0.tool.json_schema", "{\"type\":\"object\"} null"),
+                    str("llm.output_messages.0.message.function_call_arguments_json", "{\"city\":\"Paris\"} 7")));
+            assertThat(trailingJsonTokens.input().asText()).isEqualTo("{\"request\":true} {}");
+            assertThat(trailingJsonTokens.output().asText()).isEqualTo("[1,2] false");
+            assertThat(trailingJsonTokens.metadata().path("llm.invocation_parameters").asText())
+                    .isEqualTo("{\"temperature\":0.2} {}");
+            assertThat(trailingJsonTokens.metadata().path("llm.function_call").asText())
+                    .isEqualTo("{\"name\":\"weather\"} []");
+            assertThat(trailingJsonTokens.metadata().path("llm.prompt_template.variables").asText())
+                    .isEqualTo("{\"city\":\"Paris\"} true");
+            assertThat(trailingJsonTokens.metadata().path("llm.tools.0.tool.json_schema").asText())
+                    .isEqualTo("{\"type\":\"object\"} null");
+            assertThat(trailingJsonTokens.metadata()
+                    .path("llm.output_messages.0.message.function_call_arguments_json").asText())
+                    .isEqualTo("{\"city\":\"Paris\"} 7");
+        }
+
+        @Test
+        void parsesToolSpanSchemaAndPreservesInvalidJsonAttributesInMetadata() {
+            var valid = enrich(List.of(
+                    str("openinference.span.kind", "TOOL"),
+                    str("tool.json_schema", "{\"type\":\"object\",\"required\":[\"question\"]}")));
+
+            assertThat(valid.input()).isNull();
+            assertThat(valid.metadata().path("tool.json_schema").path("type").asText()).isEqualTo("object");
+            assertThat(valid.metadata().path("tool.json_schema").path("required").get(0).asText())
+                    .isEqualTo("question");
+
+            var invalid = enrich(List.of(
+                    str("openinference.span.kind", "TOOL"),
+                    str("tool.json_schema", "{broken"),
+                    str("metadata", "   ")));
+
+            assertThat(invalid.input()).isNull();
+            assertThat(invalid.metadata().path("tool.json_schema").asText()).isEqualTo("{broken");
+            assertThat(invalid.metadata().path("metadata").asText()).isEqualTo("   ");
         }
 
         @Test

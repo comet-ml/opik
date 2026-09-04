@@ -20,6 +20,7 @@ export type LLMMessageFormat =
 export type LLMMessagePrettifyConfig = {
   fieldType?: "input" | "output";
   formatHint?: LLMMessageFormat;
+  formatHintIsAuthoritative?: boolean;
 };
 
 // Detection result

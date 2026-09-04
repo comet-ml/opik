@@ -31,6 +31,7 @@ import { JsonNode } from "@/types/shared";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { hasOpenInferenceHint } from "@/lib/openinference";
 
 const MAX_EXPORT_ITEMS = 15000;
 const MESSAGES_KEYS = ["input", "output", "first_message", "last_message"];
@@ -119,13 +120,21 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       if (!traces?.length) return [];
 
       return traces.map((trace: Trace) => {
+        const openInferenceHint = hasOpenInferenceHint(
+          trace.metadata,
+          trace.input,
+          trace.output,
+        );
         const baseData: ExportTraceData = {
           id: trace.id,
-          input: prettifyMessage(trace.input, { type: "input" })
-            .message as JsonNode,
+          input: prettifyMessage(trace.input, {
+            type: "input",
+            openInferenceHint,
+          }).message as JsonNode,
           output: prettifyMessage(trace.output, {
             type: "output",
             openInferenceInput: trace.input,
+            openInferenceHint,
           }).message as JsonNode,
           metadata: trace.metadata ?? {},
         };
