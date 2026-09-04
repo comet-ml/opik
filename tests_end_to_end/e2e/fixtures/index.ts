@@ -4,6 +4,7 @@ export type {
   UnreachableProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
+  GeminiProviderKeyRef,
 } from './provider-key.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type {
