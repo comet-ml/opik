@@ -21,6 +21,7 @@ import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.Config;
 import org.redisson.config.SentinelServersConfig;
 
+import java.net.URI;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -116,11 +117,39 @@ public class RedisConfig {
      * extra sentinels. Duplicates are dropped while preserving the declaration order.
      */
     private Set<String> resolveSentinelAddresses(RedisUrl redisUrl) {
-        var sentinelScheme = SSL_SCHEME.equals(redisUrl.scheme()) ? SSL_SCHEME : "redis";
+        var sentinelScheme = redisUrl.scheme();
+        Preconditions.checkArgument(
+                "redis".equals(sentinelScheme) || SSL_SCHEME.equals(sentinelScheme),
+                "singleNodeUrl must use the redis or rediss scheme when sentinel.enabled is true");
         var addresses = new LinkedHashSet<String>();
-        addresses.add("%s://%s:%d".formatted(sentinelScheme, redisUrl.host(), redisUrl.port()));
-        addresses.addAll(sentinel.getNodes());
+        addresses.add(redisUrl.address());
+        for (var address : sentinel.getNodes()) {
+            var addressUri = parseSentinelAddress(address);
+            Preconditions.checkArgument(
+                    sentinelScheme.equals(addressUri.getScheme()),
+                    "sentinel.nodes entries must use the same scheme as singleNodeUrl");
+            addresses.add(address);
+        }
         return addresses;
+    }
+
+    private static URI parseSentinelAddress(String address) {
+        final URI uri;
+        try {
+            uri = URI.create(address);
+        } catch (IllegalArgumentException ignored) {
+            throw new IllegalArgumentException("sentinel.nodes entries must be valid Redis URLs");
+        }
+
+        var scheme = uri.getScheme();
+        Preconditions.checkArgument(
+                "redis".equals(scheme) || SSL_SCHEME.equals(scheme),
+                "sentinel.nodes entries must use the redis or rediss scheme");
+        Preconditions.checkArgument(StringUtils.isNotBlank(uri.getHost())
+                && uri.getPort() > 0
+                && uri.getPort() <= 65_535,
+                "sentinel.nodes entries must include a valid host and port");
+        return uri;
     }
 
     /**

@@ -83,12 +83,57 @@ class RedisConfigTest {
         }
 
         @Test
-        @DisplayName("Should derive the sentinel scheme from the url scheme")
-        void shouldDeriveSentinelSchemeFromUrlScheme() {
-            var config = newSentinelConfig("rediss://sentinel.host:26379/0").build();
+        @DisplayName("Should preserve the rediss scheme for all sentinel addresses")
+        void shouldPreserveRedissSchemeForAllSentinelAddresses() {
+            var redisConfig = newSentinelConfig("rediss://sentinel-1:26379/0");
+            redisConfig.getSentinel().setNodes("rediss://sentinel-2:26379");
+            var config = redisConfig.build();
 
             assertThat(config.useSentinelServers().getSentinelAddresses())
-                    .containsExactly("rediss://sentinel.host:26379");
+                    .containsExactly("rediss://sentinel-1:26379", "rediss://sentinel-2:26379");
+        }
+
+        @Test
+        @DisplayName("Should reject unsupported schemes when sentinel is enabled")
+        void shouldRejectUnsupportedSchemesWhenSentinelIsEnabled() {
+            var redisConfig = newSentinelConfig("http://sentinel-1:26379/0");
+
+            assertThatThrownBy(redisConfig::build)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("singleNodeUrl must use the redis or rediss scheme");
+        }
+
+        @Test
+        @DisplayName("Should reject mixed sentinel schemes")
+        void shouldRejectMixedSentinelSchemes() {
+            var redisConfig = newSentinelConfig("rediss://sentinel-1:26379/0");
+            redisConfig.getSentinel().setNodes("rediss://sentinel-2:26379,redis://sentinel-3:26379");
+
+            assertThatThrownBy(redisConfig::build)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("must use the same scheme as singleNodeUrl");
+        }
+
+        @Test
+        @DisplayName("Should reject malformed extra sentinel addresses")
+        void shouldRejectMalformedExtraSentinelAddresses() {
+            var redisConfig = newSentinelConfig("redis://sentinel-1:26379/0");
+            redisConfig.getSentinel().setNodes("redis://sentinel-2:26379,redis://bad host:26379");
+
+            assertThatThrownBy(redisConfig::build)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("sentinel.nodes entries must be valid Redis URLs");
+        }
+
+        @Test
+        @DisplayName("Should reject extra sentinel addresses without a port")
+        void shouldRejectExtraSentinelAddressesWithoutPort() {
+            var redisConfig = newSentinelConfig("redis://sentinel-1:26379/0");
+            redisConfig.getSentinel().setNodes("redis://sentinel-2");
+
+            assertThatThrownBy(redisConfig::build)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("must include a valid host and port");
         }
 
         @Test
