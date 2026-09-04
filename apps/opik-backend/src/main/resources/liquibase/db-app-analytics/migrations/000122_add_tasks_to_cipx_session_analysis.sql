@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andriid:000121_add_tasks_to_cipx_session_analysis
+--changeset andriid:000122_add_tasks_to_cipx_session_analysis
 --comment: Task tiling and chapter summaries for the cost API session analysis
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}'
