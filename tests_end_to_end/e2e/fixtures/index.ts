@@ -1,6 +1,7 @@
 export { test, expect } from './alert.fixture';
 export type {
   OauthProviderSeed,
+  UnreachableProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';

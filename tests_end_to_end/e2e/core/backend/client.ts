@@ -1546,6 +1546,74 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return id;
     },
 
+    /**
+     * Create a THREAD-scope LLM-as-judge rule and return its id.
+     *
+     * A sibling of `createAutomationRule` rather than a `type` flag on it: the
+     * two rule shapes share no `code` field at all — a python rule carries
+     * `metric` + `arguments`, an LLM judge carries `model` + `messages` +
+     * `schema` — so one builder would take a union it could not check.
+     *
+     * Raw REST for the same two reasons: creation answers 201 with an empty
+     * body, so the id exists only in the `Location` header that the pinned
+     * SDK's `void` return discards, and reading the id back by name would
+     * silently pick up a rule an earlier run left under the same namespace.
+     */
+    async createTraceThreadLlmAsJudgeRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Fully-qualified model id, e.g. `custom-llm/<providerName>/<modelName>`. */
+      model: string;
+      /** Score name the judge's output schema declares, and the score it would write. */
+      scoreName: string;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'trace_thread_llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            code: {
+              model: { name: args.model, temperature: 0 },
+              // `{{context}}` is the thread scorer's own variable for the
+              // rendered conversation — the judge has to reference it or the
+              // rule would be evaluating an empty prompt.
+              messages: [
+                {
+                  role: 'USER',
+                  content: `Rate this conversation from 0 to 1: {{context}}`,
+                },
+              ],
+              schema: [
+                { name: args.scoreName, type: 'DOUBLE', description: 'thread score' },
+              ],
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createTraceThreadLlmAsJudgeRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createTraceThreadLlmAsJudgeRule: 201 for '${args.name}' carried no usable Location ` +
+            `header (got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
     /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
     async getAutomationRule(ruleId: string): Promise<AutomationRuleDetail> {
       const { status, message, json } = await rawFetch(
@@ -1647,6 +1715,25 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           status: t.status ? String(t.status) : null,
         })),
       };
+    },
+
+    /**
+     * Close threads in a SINGLE `PUT /v1/private/traces/threads/close`.
+     *
+     * The batch shape is the point, not a convenience: closing several threads
+     * in one call is what makes a thread-scope rule fan one stream message out
+     * over several thread ids, which is the only way to observe how sibling
+     * evaluations of one message interact. Closing them one at a time would
+     * produce one message each and never exercise that path.
+     *
+     * The alternative trigger is the thread-inactivity timeout, which is
+     * minutes of wall clock and not a shape a test should wait on.
+     */
+    async closeThreads(args: { projectName: string; threadIds: string[] }): Promise<void> {
+      await opik.api.traces.closeTraceThread({
+        projectName: args.projectName,
+        threadIds: args.threadIds,
+      });
     },
 
     /**
