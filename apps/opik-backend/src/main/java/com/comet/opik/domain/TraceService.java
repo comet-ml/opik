@@ -66,6 +66,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -90,6 +91,8 @@ public interface TraceService {
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
     Mono<Void> delete(Set<UUID> ids, UUID projectId);
+
+    Mono<Void> deleteByProjectId(@NonNull UUID projectId);
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
@@ -620,6 +623,32 @@ class TraceServiceImpl implements TraceService {
                         return Mono.empty();
                     });
         });
+    }
+
+    /**
+     * Deletes every trace of the project. The trace ids are streamed from ClickHouse and deleted in batches of
+     * {@value ANALYTICS_DELETE_BATCH_SIZE} so a large project never materializes its full id list in memory. Each
+     * batch flows through the regular {@code (project_id, trace_id)} delete path, so the TracesDeleted cascade
+     * (spans, feedback scores, comments, attachments) and the deletion-events bridge capture run exactly as for
+     * user-initiated trace deletes.
+     */
+    @Override
+    @WithSpan
+    public Mono<Void> deleteByProjectId(@NonNull UUID projectId) {
+        log.info("Deleting traces by project id '{}'", projectId);
+
+        return template.nonTransaction(connection -> dao.getTraceIdsByProjectId(projectId, connection)
+                .buffer(ANALYTICS_DELETE_BATCH_SIZE)
+                .concatMap(traceIds -> {
+                    log.info("Found '{}' traces for project id, proceeding with deletion", traceIds.size());
+
+                    var pairs = traceIds.stream().map(id -> Pair.of(projectId, id))
+                            .collect(Collectors.toUnmodifiableSet());
+                    return delete(pairs, connection);
+                })
+                .switchIfEmpty(Mono.fromRunnable(
+                        () -> log.info("No traces found for project id, skipping deletion")))
+                .then());
     }
 
     @Override
