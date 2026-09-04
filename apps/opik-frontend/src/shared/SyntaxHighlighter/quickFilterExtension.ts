@@ -26,6 +26,10 @@ import {
 export type QuickFilterCodeConfig = {
   canFilter: (path: string) => boolean;
   onFilter: (path: string, value: string) => void;
+  // The click can move the table to another view, so the caller names the
+  // action up front instead of letting the user discover it afterwards.
+  hintText: string;
+  appliedText: string;
 };
 
 const FILTER_ICON = renderToStaticMarkup(
@@ -36,8 +40,6 @@ const CHECK_ICON = renderToStaticMarkup(
   createElement(Check, { size: 12, strokeWidth: 2.5 }),
 );
 
-const TOOLTIP_TEXT = "Filter by this attribute";
-const TOOLTIP_APPLIED_TEXT = "Filter applied";
 // How long the "Filter applied" confirmation stays up before reverting.
 const APPLIED_VISIBLE_MS = 1500;
 
@@ -52,7 +54,10 @@ class QuickFilterTooltip {
   private readonly text: HTMLElement;
   private appliedTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor() {
+  constructor(
+    private readonly hintText: string,
+    private readonly appliedText: string,
+  ) {
     this.el = document.createElement("div");
     // Mirrors the app's default shadcn TooltipContent; tokens are theme-aware.
     Object.assign(this.el.style, {
@@ -85,7 +90,7 @@ class QuickFilterTooltip {
     });
 
     this.text = document.createElement("span");
-    this.text.textContent = TOOLTIP_TEXT;
+    this.text.textContent = this.hintText;
 
     this.el.append(this.icon, this.text);
     document.body.appendChild(this.el);
@@ -112,14 +117,14 @@ class QuickFilterTooltip {
   showHint(anchor: HTMLElement) {
     this.clearTimer();
     this.icon.style.display = "none";
-    this.text.textContent = TOOLTIP_TEXT;
+    this.text.textContent = this.hintText;
     this.el.style.display = "flex";
     this.position(anchor);
   }
 
   showApplied(anchor: HTMLElement) {
     this.icon.style.display = "inline-flex";
-    this.text.textContent = TOOLTIP_APPLIED_TEXT;
+    this.text.textContent = this.appliedText;
     this.el.style.display = "flex";
     this.position(anchor);
     // Auto-dismiss on a timer, independent of the triggering widget's DOM
@@ -132,7 +137,7 @@ class QuickFilterTooltip {
     this.clearTimer();
     this.el.style.display = "none";
     this.icon.style.display = "none";
-    this.text.textContent = TOOLTIP_TEXT;
+    this.text.textContent = this.hintText;
   }
 
   destroy() {
@@ -189,6 +194,7 @@ class QuickFilterWidget extends WidgetType {
     readonly path: string,
     readonly value: string,
     readonly onFilter: QuickFilterCodeConfig["onFilter"],
+    readonly label: string,
   ) {
     super();
   }
@@ -198,7 +204,10 @@ class QuickFilterWidget extends WidgetType {
       other.path === this.path &&
       other.value === this.value &&
       other.from === this.from &&
-      other.to === this.to
+      other.to === this.to &&
+      // The label names the destination view, which changes while the document
+      // can stay byte-identical (a span often repeats its trace's metadata).
+      other.label === this.label
     );
   }
 
@@ -207,7 +216,7 @@ class QuickFilterWidget extends WidgetType {
     button.className = "cm-quick-filter-add";
     button.setAttribute("role", "button");
     button.setAttribute("tabindex", "0");
-    button.setAttribute("aria-label", "Filter by this attribute");
+    button.setAttribute("aria-label", this.label);
     button.innerHTML = FILTER_ICON;
 
     const activate = (event: Event) => {
@@ -285,6 +294,8 @@ export const createQuickFilterExtension = (
   mode: QuickFilterMode,
   config: QuickFilterCodeConfig,
 ): Extension => {
+  const { hintText, appliedText } = config;
+
   const build = (view: EditorView): DecorationSet => {
     const doc = view.state.doc.toString();
     const tree = syntaxTree(view.state);
@@ -307,6 +318,7 @@ export const createQuickFilterExtension = (
               target.path,
               target.value,
               config.onFilter,
+              hintText,
             ),
             // Negative side keeps the filter icon directly after the value and
             // before the fold control, so the order stays consistent whether
@@ -327,7 +339,7 @@ export const createQuickFilterExtension = (
 
       constructor(view: EditorView) {
         this.view = view;
-        this.tooltip = new QuickFilterTooltip();
+        this.tooltip = new QuickFilterTooltip(hintText, appliedText);
         quickFilterTooltips.set(view, this.tooltip);
         this.decorations = build(view);
       }
