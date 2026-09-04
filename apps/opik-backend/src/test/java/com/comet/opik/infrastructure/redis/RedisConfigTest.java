@@ -12,8 +12,13 @@ import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -285,28 +290,34 @@ class RedisConfigTest {
                     .containsExactlyInAnyOrder("connectTimeout", "timeout", "scanInterval");
         }
 
-        @Test
-        @DisplayName("Should reject Sentinel duration overflow during direct builds")
-        void shouldRejectSentinelDurationOverflowDuringDirectBuilds() {
+        @ParameterizedTest(name = "Should reject {0} overflow during direct builds")
+        @MethodSource("sentinelDurationSetters")
+        void shouldRejectSentinelDurationOverflowDuringDirectBuilds(
+                String propertyName, Consumer<RedisConfig.SentinelConfig> setOversizedDuration) {
+            var redisConfig = newSentinelConfig("redis://localhost:26379/0");
+            setOversizedDuration.accept(redisConfig.getSentinel());
+
+            assertThatThrownBy(redisConfig::build)
+                    .as("overflow for %s", propertyName)
+                    .isInstanceOf(ArithmeticException.class)
+                    .hasMessage("integer overflow");
+        }
+
+        private static Stream<Arguments> sentinelDurationSetters() {
             var oversizedDuration = Duration.milliseconds((long) Integer.MAX_VALUE + 1);
 
-            var connectTimeoutConfig = newSentinelConfig("redis://localhost:26379/0");
-            connectTimeoutConfig.getSentinel().setConnectTimeout(oversizedDuration);
-            assertThatThrownBy(connectTimeoutConfig::build)
-                    .isInstanceOf(ArithmeticException.class)
-                    .hasMessage("integer overflow");
-
-            var timeoutConfig = newSentinelConfig("redis://localhost:26379/0");
-            timeoutConfig.getSentinel().setTimeout(oversizedDuration);
-            assertThatThrownBy(timeoutConfig::build)
-                    .isInstanceOf(ArithmeticException.class)
-                    .hasMessage("integer overflow");
-
-            var scanIntervalConfig = newSentinelConfig("redis://localhost:26379/0");
-            scanIntervalConfig.getSentinel().setScanInterval(oversizedDuration);
-            assertThatThrownBy(scanIntervalConfig::build)
-                    .isInstanceOf(ArithmeticException.class)
-                    .hasMessage("integer overflow");
+            return Stream.of(
+                    Arguments.of(
+                            "connectTimeout",
+                            (Consumer<RedisConfig.SentinelConfig>) sentinel -> sentinel
+                                    .setConnectTimeout(oversizedDuration)),
+                    Arguments.of(
+                            "timeout",
+                            (Consumer<RedisConfig.SentinelConfig>) sentinel -> sentinel.setTimeout(oversizedDuration)),
+                    Arguments.of(
+                            "scanInterval",
+                            (Consumer<RedisConfig.SentinelConfig>) sentinel -> sentinel
+                                    .setScanInterval(oversizedDuration)));
         }
     }
 
