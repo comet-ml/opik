@@ -462,22 +462,22 @@ def _stream_all_items(dataset, **stream_kwargs):
     return [item for chunk in chunks for item in chunk]
 
 
-def test_stream_items__small_dataset__returns_same_items_as_get_items(
+def test_stream_items__small_dataset__returns_inserted_items_with_their_ids(
     opik_client: opik.Opik, dataset_name: str
 ):
-    """stream_items is the fast path for the same data get_items returns."""
+    """Items come back as the inserted data plus an id, and get_items -- which
+    is built on this method -- flattens to exactly the same list."""
     dataset = opik_client.create_dataset(
         dataset_name, description="E2E stream_items dataset", project_name=PROJECT_NAME
     )
-    dataset.insert(
-        [
-            {
-                "input": {"question": f"question {i}"},
-                "expected_output": {"output": f"answer {i}"},
-            }
-            for i in range(5)
-        ]
-    )
+    inserted = [
+        {
+            "input": {"question": f"question {i}"},
+            "expected_output": {"output": f"answer {i}"},
+        }
+        for i in range(5)
+    ]
+    dataset.insert(inserted)
 
     success = synchronization.until(
         lambda: len(_stream_all_items(dataset)) == 5,
@@ -486,11 +486,13 @@ def test_stream_items__small_dataset__returns_same_items_as_get_items(
     assert success, "Inserted items did not become readable in time"
 
     streamed = _stream_all_items(dataset)
-    expected = dataset.get_items()
 
-    assert sorted(streamed, key=lambda item: item["id"]) == sorted(
-        expected, key=lambda item: item["id"]
+    content = [{k: v for k, v in item.items() if k != "id"} for item in streamed]
+    assert sorted(content, key=lambda item: item["input"]["question"]) == inserted, (
+        "Items must carry the inserted data verbatim"
     )
+    assert all(item["id"] for item in streamed)
+    assert streamed == dataset.get_items()
 
 
 def test_stream_items__many_items_and_threads__reads_every_item_exactly_once(

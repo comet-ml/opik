@@ -22,7 +22,7 @@ DELETE_TRACE_BATCH_SIZE = 1000
 DATASET_STREAM_BATCH_SIZE = 2000
 
 DATASET_ITEMS_READ_CHUNK_SIZE = 1000
-DATASET_ITEMS_READ_NUM_THREADS = 8
+DATASET_ITEMS_READ_NUM_THREADS = 4
 # Ceiling on dataset read threads. The SDK's httpx client pools 100
 # connections, so a caller passing an arbitrarily large num_threads would
 # otherwise queue pages behind the pool instead of speeding anything up.

@@ -145,13 +145,13 @@ class DatasetExportOperations(abc.ABC):
         Returns:
             A list of dictionaries representing the dataset items.
         """
-        dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
-            for item in self.__internal_api__stream_items_as_dataclasses__(
-                nb_samples=nb_samples, filter_string=filter_string
+        return [
+            item
+            for chunk in self.stream_items(
+                filter_string=filter_string, nb_samples=nb_samples
             )
+            for item in chunk
         ]
-        return dataset_items_as_dicts
 
     def stream_items(
         self,
@@ -163,22 +163,20 @@ class DatasetExportOperations(abc.ABC):
         """
         Read dataset items in chunks, fetching the chunks concurrently.
 
-        The fast counterpart to :meth:`get_items`: chunks are fetched in
-        parallel and are handed back as raw dictionaries without going through
-        the typed REST layer, which is what makes it noticeably faster on large
-        datasets. Prefer it when reading tens of thousands of items or more, or
-        whenever you want to start processing before the whole dataset has been
-        downloaded.
+        The chunked counterpart to :meth:`get_items`, which is itself built on
+        this method: chunks are fetched in parallel and are handed back as
+        plain dictionaries without going through the typed REST layer. Prefer
+        it over :meth:`get_items` when you want to start processing before the
+        whole dataset has been downloaded, or when the dataset is too large to
+        hold in memory all at once.
 
-        Each item is its stored data plus its ``id``. Unlike :meth:`get_items`,
-        data keys that happen to collide with internal item fields (``source``,
-        ``description``, ``trace_id``, ``span_id``) are preserved; only ``id``
-        is always the item's real id.
+        Items have exactly the shape :meth:`get_items` returns: the item's
+        data plus its ``id``.
 
         Args:
             chunk_size: Number of items per chunk. Defaults to 1000.
             num_threads: Number of chunks fetched concurrently. Must be a
-                positive integer, defaults to 8; pass ``1`` to fetch
+                positive integer, defaults to 4; pass ``1`` to fetch
                 sequentially. Capped at
                 ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
             filter_string: Optional OQL filter string to filter dataset items.
@@ -198,6 +196,11 @@ class DatasetExportOperations(abc.ABC):
         Example:
             >>> for chunk in dataset.stream_items(chunk_size=2000, num_threads=8):
             ...     process(chunk)
+
+        Note:
+            ``nb_samples`` items are read starting from the beginning of the
+            dataset, so the same call reads the same items whatever the thread
+            count.
         """
         if isinstance(chunk_size, bool) or not isinstance(chunk_size, int):
             raise ValueError("chunk_size must be a positive integer")
@@ -499,6 +502,11 @@ class Dataset(DatasetExportOperations):
         # Backend may already hold items we haven't seen; lazy-sync on first
         # insert so content-hash dedup still works without paying a sync now.
         dataset_.__internal_api__hashes_synced__ = False
+        # The response already carries the id, so seed the cached_property
+        # rather than paying a get-dataset-by-name round trip the first time
+        # something (a read, an item delete) needs it.
+        if dataset_fern.id is not None:
+            dataset_.__dict__["id"] = dataset_fern.id
         return dataset_
 
     @functools.cached_property

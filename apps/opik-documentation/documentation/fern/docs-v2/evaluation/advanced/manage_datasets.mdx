@@ -417,13 +417,12 @@ You can download a dataset from Opik using the `get_dataset` method:
 
 ### Downloading large datasets
 
-`get_items()` downloads every item and converts each one into a typed object before it returns.
-On datasets of tens of thousands of items or more, that conversion — not the network — is what
-dominates the wait.
+`get_items()` returns the whole dataset as a single list, so the call does not return until every
+item has been downloaded and the full result is held in memory.
 
-`stream_items()` is the fast path for those cases: it fetches pages concurrently and yields them
-as chunks of plain dictionaries, so you can start processing before the whole dataset has been
-downloaded.
+`stream_items()` reads the same items in chunks instead, yielding each chunk as soon as it
+arrives. Use it when you want to start processing before the download finishes, or when the
+dataset is too large to hold in memory all at once:
 
 ```python title="Python" language="python"
 from opik import Opik
@@ -432,12 +431,18 @@ client = Opik()
 dataset = client.get_dataset(name="My dataset")
 
 for chunk in dataset.stream_items(chunk_size=1000, num_threads=8):
-    process(chunk)  # chunk is a list of dicts, each item's data plus its `id`
+    process(chunk)  # chunk is a list of dicts, exactly as get_items() returns them
 ```
 
 It accepts the same `filter_string` as `get_items()`, and `nb_samples` to stop after a given
 number of items. Chunks arrive in dataset order; only the last one may be shorter than
 `chunk_size`.
+
+<Note>
+  Both methods fetch pages concurrently — `get_items()` is built on `stream_items()` — so raising
+  `num_threads` speeds up either read. The default of 4 is a safe starting point; 8 is usually
+  worth trying on datasets of tens of thousands of items.
+</Note>
 
 ## Filtering datasets programmatically
 

@@ -3,10 +3,11 @@
 import json
 import threading
 from typing import Any, Dict, List, Optional
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
+from opik.api_objects.dataset import rest_operations
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.core.api_error import ApiError
 
@@ -192,6 +193,35 @@ def test_stream_items__data_with_id_key__real_item_id_wins():
     assert chunks == [[{"id": "real-id", "q": "?"}]]
 
 
+def test_stream_items__data_shadowing_item_fields__dropped_and_warned_once():
+    """Same contract as the typed read path: shadowing keys cannot survive."""
+    endpoint = FakeItemsEndpoint(
+        [
+            {
+                "id": f"real-{i}",
+                "source": "sdk",
+                "data": {"source": "SHADOW", "description": "SHADOW", "q": f"?{i}"},
+            }
+            for i in range(3)
+        ]
+    )
+    dataset = _build_dataset(endpoint)
+
+    with patch.object(rest_operations.LOGGER, "warning") as mock_warn:
+        chunks = list(dataset.stream_items())
+
+    assert chunks == [
+        [
+            {"id": "real-0", "q": "?0"},
+            {"id": "real-1", "q": "?1"},
+            {"id": "real-2", "q": "?2"},
+        ]
+    ]
+    mock_warn.assert_called_once_with(
+        rest_operations.SHADOWED_KEYS_WARNING, ["description", "source"]
+    )
+
+
 def test_stream_items__filter_string__sent_as_serialized_filter_expressions():
     endpoint = FakeItemsEndpoint(_rest_items(1))
     dataset = _build_dataset(endpoint)
@@ -271,3 +301,80 @@ def test_stream_items__invalid_arguments__raises_before_any_request():
         dataset.stream_items(num_threads=0)
 
     assert endpoint.calls == []
+
+
+def test_get_items__reads_through_the_parallel_paginated_endpoint():
+    """get_items() is a thin wrapper over the chunked reader, not the
+    cursor-chained typed stream it used to call."""
+    endpoint = FakeItemsEndpoint(_rest_items(2500))
+    dataset = _build_dataset(endpoint)
+
+    items = dataset.get_items()
+
+    assert len(items) == 2500
+    assert [item["id"] for item in items] == [f"item-{i}" for i in range(2500)]
+    # Default chunk_size, so 2500 items is 3 pages of the paginated endpoint.
+    assert sorted(endpoint.requested_pages) == [1, 2, 3]
+    assert all(
+        call["path"] == f"v1/private/datasets/{DATASET_ID}/items"
+        for call in endpoint.calls
+    )
+
+
+def test_get_items__same_items_as_stream_items():
+    endpoint = FakeItemsEndpoint(_rest_items(30))
+    dataset = _build_dataset(endpoint)
+
+    from_get_items = dataset.get_items()
+    streamed = [item for chunk in dataset.stream_items(chunk_size=7) for item in chunk]
+
+    assert from_get_items == streamed
+
+
+def test_get_items__data_shadowing_item_fields__keys_dropped_as_before():
+    endpoint = FakeItemsEndpoint(
+        [
+            {
+                "id": "real-id",
+                "source": "sdk",
+                "data": {"id": "SHADOW", "trace_id": "SHADOW", "q": "?"},
+            }
+        ]
+    )
+    dataset = _build_dataset(endpoint)
+
+    assert dataset.get_items() == [{"id": "real-id", "q": "?"}]
+
+
+def test_get_items__nb_samples__limits_items_and_pages():
+    endpoint = FakeItemsEndpoint(_rest_items(5000))
+    dataset = _build_dataset(endpoint)
+
+    items = dataset.get_items(nb_samples=1200)
+
+    assert len(items) == 1200
+    assert sorted(endpoint.requested_pages) == [1, 2]
+
+
+def test_get_items__filter_string__forwarded_to_the_endpoint():
+    endpoint = FakeItemsEndpoint(_rest_items(1))
+    dataset = _build_dataset(endpoint)
+
+    dataset.get_items(filter_string='data.category = "test"')
+
+    assert json.loads(endpoint.calls[0]["params"]["filters"]) == [
+        {
+            "field": "data",
+            "key": "category",
+            "operator": "=",
+            "type": "map",
+            "value": "test",
+        }
+    ]
+
+
+def test_get_items__empty_dataset__returns_empty_list():
+    endpoint = FakeItemsEndpoint([])
+    dataset = _build_dataset(endpoint)
+
+    assert dataset.get_items() == []

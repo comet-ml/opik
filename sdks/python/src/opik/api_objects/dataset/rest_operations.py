@@ -24,6 +24,13 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
+# Data keys that collide with a DatasetItem field cannot survive being unpacked
+# into one, so both read paths drop them and say so once per read.
+SHADOWED_KEYS_WARNING = (
+    "Dataset item data contains keys that shadow DatasetItem fields and will be ignored: %s. "
+    "Rename these keys in your dataset to preserve them."
+)
+
 
 def stream_dataset_items(
     rest_client: OpikApi,
@@ -125,11 +132,7 @@ def stream_dataset_items(
             )
             if conflicting and not _conflicting_keys_warned:
                 _conflicting_keys_warned = True
-                LOGGER.warning(
-                    "Dataset item data contains keys that shadow DatasetItem fields and will be ignored: %s. "
-                    "Rename these keys in your dataset to preserve them.",
-                    sorted(conflicting),
-                )
+                LOGGER.warning(SHADOWED_KEYS_WARNING, sorted(conflicting))
             extra_data = {
                 k: v
                 for k, v in item.data.items()
@@ -187,9 +190,12 @@ def stream_dataset_item_chunks(
         dataset_version: Optional dataset version hash to read a specific version.
 
     Yields:
-        Lists of raw item dictionaries, in dataset order.
+        Lists of item dictionaries, in dataset order, each holding the item's
+        data plus its id -- the shape :meth:`Dataset.get_items` returns.
     """
-    return parallel_items_reader.stream_item_chunks(
+    # Not a generator, so a malformed filter string is rejected on the call
+    # rather than on the first chunk the caller pulls.
+    raw_chunks = parallel_items_reader.stream_item_chunks(
         rest_client=rest_client,
         dataset_id=dataset_id,
         chunk_size=chunk_size,
@@ -198,6 +204,41 @@ def stream_dataset_item_chunks(
         filters=_serialize_dataset_item_filters(filter_string),
         dataset_version=dataset_version,
     )
+
+    return _to_item_dict_chunks(raw_chunks)
+
+
+def _to_item_dict_chunks(
+    raw_chunks: Iterator[List[Dict[str, Any]]],
+) -> Iterator[List[Dict[str, Any]]]:
+    """Project raw REST items into the dicts the read APIs hand to users.
+
+    Mirrors what unpacking a REST item into a ``DatasetItem`` and reading its
+    content back does: the item's real id wins, and data keys shadowing a
+    DatasetItem field are dropped. The warn-once state deliberately spans the
+    whole read rather than a single chunk.
+    """
+    shadowed_keys_warned = False
+    reserved_keys = dataset_item.DatasetItem.model_fields.keys()
+
+    for raw_chunk in raw_chunks:
+        chunk = []
+        for raw_item in raw_chunk:
+            data: Dict[str, Any] = raw_item.get("data") or {}
+
+            shadowed = data.keys() & reserved_keys
+            if shadowed and not shadowed_keys_warned:
+                shadowed_keys_warned = True
+                LOGGER.warning(SHADOWED_KEYS_WARNING, sorted(shadowed))
+
+            chunk.append(
+                {
+                    "id": raw_item.get("id"),
+                    **{k: v for k, v in data.items() if k not in reserved_keys},
+                }
+            )
+
+        yield chunk
 
 
 def _serialize_dataset_item_filters(filter_string: Optional[str]) -> Optional[str]:
@@ -271,6 +312,10 @@ def get_datasets(
                 rest_client=rest_client,
                 dataset_items_count=dataset_fern.dataset_items_count,
             )
+            # Seed the id from the listing so reads don't re-resolve each
+            # dataset by name.
+            if dataset_fern.id is not None:
+                dataset_.__dict__["id"] = dataset_fern.id
 
             if sync_items:
                 dataset_.__internal_api__sync_hashes__()

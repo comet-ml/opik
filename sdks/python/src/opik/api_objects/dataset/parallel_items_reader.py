@@ -51,8 +51,8 @@ def stream_item_chunks(
             the current state.
 
     Yields:
-        Lists of raw item dicts, in page order. The last chunk may be shorter
-        than ``chunk_size``; empty chunks are never yielded.
+        Lists of raw REST item dicts, in page order. The last chunk may be
+        shorter than ``chunk_size``; empty chunks are never yielded.
     """
     items_yielded = 0
 
@@ -172,12 +172,5 @@ def _build_page_fetcher(
 
 
 def _page_items(page: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Flatten a page's items into ``data`` dicts carrying their item id.
-
-    The stored ``data`` is returned untouched apart from ``id``, which always
-    holds the item's real id even when the data itself has an ``id`` key.
-    """
-    return [
-        {**(item.get("data") or {}), "id": item.get("id")}
-        for item in (page.get("content") or [])
-    ]
+    content: List[Dict[str, Any]] = page.get("content") or []
+    return content
