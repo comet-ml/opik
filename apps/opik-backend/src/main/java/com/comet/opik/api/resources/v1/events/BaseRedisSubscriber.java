@@ -467,8 +467,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * {@code 0-0} end-of-pass reply into. Matching on the constants would therefore never fire, and the
      * scan would run off the end of the PEL and stay there instead of wrapping.
      */
-    // Package-private for unit tests.
-    static StreamMessageId nextCursor(StreamMessageId nextId) {
+    private static StreamMessageId nextCursor(StreamMessageId nextId) {
         if (nextId == null || (nextId.getId0() == 0 && nextId.getId1() == 0)) {
             return StreamMessageId.MIN;
         }

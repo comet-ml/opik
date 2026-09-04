@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
@@ -338,7 +339,7 @@ public class ChatCompletionService {
      * textbook retry case. An unrecognised status is treated as retryable, matching
      * {@code BaseRedisSubscriber}'s own "unknown defaults to retryable for safety" stance.
      */
-    // Package-private for unit tests.
+    @VisibleForTesting
     static boolean isPermanentFailure(int status) {
         return familyOf(status) == Response.Status.Family.CLIENT_ERROR
                 && !TRANSIENT_CLIENT_ERRORS.contains(status);
