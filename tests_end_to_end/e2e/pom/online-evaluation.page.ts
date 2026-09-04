@@ -241,10 +241,222 @@ export class OnlineEvaluationPage {
     });
   }
 
+  /**
+   * Open a rule's edit dialog through the row's kebab → Edit.
+   *
+   * `setRuleEnabledByName` drives the same two clicks inline; it is left as it
+   * is rather than rewired through this method, so that a spec added later
+   * cannot change how the enable/disable spec behaves.
+   */
+  async openEditRuleDialog(name: string): Promise<void> {
+    return test.step(`open the edit dialog for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.dialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Submit the add/edit dialog and wait for it to close. */
+  async submitRuleDialog(): Promise<void> {
+    return test.step('submit the rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * Pick the LLM-judge model, scoped to the picker group of the provider that
+   * offers it.
+   *
+   * The group scope is not optional: Gemini and Vertex AI publish the SAME
+   * display labels ("Gemini 3.5 Flash Lite" is both `gemini-3.5-flash-lite`
+   * and `vertex_ai/gemini-3.5-flash-lite`), so on a workspace with both
+   * providers configured an unscoped lookup matches two options and taking
+   * `.first()` would silently test whichever the picker happened to render
+   * first. Both the group and the option are asserted to resolve to exactly
+   * one element.
+   */
+  async selectLLMJudgeModel(providerGroupLabel: string, modelDisplayName: string): Promise<void> {
+    return test.step(`select model "${providerGroupLabel} / ${modelDisplayName}"`, async () => {
+      const modelCombobox = this.llmJudgeModelCombobox;
+      const listbox = this.page.getByRole('listbox');
+
+      // The option list remounts when the model/provider-key queries resolve,
+      // so the trigger can swallow a click that arrives mid-render.
+      await expect(async () => {
+        await modelCombobox.click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+
+      // Groups are labelled by the provider; the label text is exact, while an
+      // option's text is not, so `has: getByText(exact)` cannot match a model
+      // row by accident.
+      const group = listbox
+        .getByRole('group')
+        .filter({ has: this.page.getByText(providerGroupLabel, { exact: true }) });
+      await expect(group, `exactly one "${providerGroupLabel}" provider group`).toHaveCount(1);
+
+      const option = group.getByRole('option', { name: modelDisplayName, exact: true });
+      await expect(
+        option,
+        `exactly one "${modelDisplayName}" under "${providerGroupLabel}"`,
+      ).toHaveCount(1);
+      await option.click();
+
+      await expect(modelCombobox).toContainText(modelDisplayName);
+    });
+  }
+
+  /**
+   * The LLM-judge model picker's trigger.
+   *
+   * Matched on the placeholder OR on the selected value's shape ("<provider>
+   * <model>"), because the trigger's text is the only thing distinguishing it
+   * from the dialog's other comboboxes (template, message roles) and it
+   * changes once a model is chosen.
+   */
+  private get llmJudgeModelCombobox(): Locator {
+    return this.dialog
+      .getByRole('combobox')
+      .filter({ hasText: /Select an LLM model|Gemini|Vertex AI|OpenAI|Anthropic|Claude|GPT/i });
+  }
+
+  /**
+   * The gear that opens the model-parameters popover (`PromptModelConfigs`).
+   *
+   * Selected on its icon because it is an icon-only button with no accessible
+   * name and no `data-testid` — its "Model parameters" string lives in a
+   * tooltip, which contributes nothing to the accessible name. A
+   * `data-testid` on the trigger is the right fix and belongs in the FE;
+   * `openModelParameters` asserts the locator resolves to exactly one element
+   * so that this selector fails loudly rather than opening some other popover
+   * if another icon button appears in the dialog.
+   */
+  private get modelParametersTrigger(): Locator {
+    return this.dialog.locator('button:has(svg.lucide-settings2)');
+  }
+
+  /** The popover the gear opens. Portalled, so it is NOT inside `dialog`. */
+  private get modelParametersMenu(): Locator {
+    return this.page.getByRole('menu');
+  }
+
+  /** Open the model-parameters popover next to the LLM-judge model picker. */
+  async openModelParameters(): Promise<void> {
+    return test.step('open the model-parameters popover', async () => {
+      await expect(
+        this.modelParametersTrigger,
+        'exactly one model-parameters gear in the rule dialog',
+      ).toHaveCount(1);
+      await this.modelParametersTrigger.click();
+      await this.modelParametersMenu.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Close the model-parameters popover.
+   *
+   * Escape is pressed until the popover is gone rather than once: if a select
+   * inside it is still open, the first Escape closes that select and leaves
+   * the popover up. Retrying on the observed state beats guessing how many
+   * presses the current sub-state needs.
+   */
+  async closeModelParameters(): Promise<void> {
+    return test.step('close the model-parameters popover', async () => {
+      await expect(async () => {
+        await this.page.keyboard.press('Escape');
+        await expect(this.modelParametersMenu).toBeHidden({ timeout: 1_000 });
+      }).toPass({ timeout: 10_000 });
+    });
+  }
+
+  /**
+   * The "Thinking level" select inside the model-parameters popover. Rendered
+   * only for Gemini/Vertex models that expose a level (`GeminiModelConfigs`).
+   */
+  get thinkingLevelSelect(): Locator {
+    return this.modelParametersMenu.getByRole('combobox', { name: 'Thinking level' });
+  }
+
+  /** The level the popover currently shows, e.g. `None`. */
+  async readThinkingLevel(): Promise<string> {
+    return test.step('read the thinking level', async () => {
+      await expect(this.thinkingLevelSelect).toHaveCount(1);
+      return ((await this.thinkingLevelSelect.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * Every level this model offers, in the order the control lists them.
+   *
+   * The list is the assertion for a model's *available* levels — which levels
+   * a model may be set to is as much a part of this control's contract as the
+   * one it preselects.
+   */
+  async listThinkingLevels(): Promise<string[]> {
+    return test.step('list the offered thinking levels', async () => {
+      await this.thinkingLevelSelect.click();
+      const options = this.page.getByRole('listbox').getByRole('option');
+      const labels = (await options.allTextContents()).map((t) => t.trim());
+      // Dismiss the select without choosing, so reading the options cannot
+      // change the value the caller is about to assert on.
+      await this.page.keyboard.press('Escape');
+      await expect(this.page.getByRole('listbox')).toBeHidden();
+      return labels;
+    });
+  }
+
+  /** Choose a thinking level by its displayed label. */
+  async setThinkingLevel(label: string): Promise<void> {
+    return test.step(`set thinking level to "${label}"`, async () => {
+      await this.thinkingLevelSelect.click();
+      await this.page.getByRole('listbox').getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingLevelSelect).toHaveText(label);
+    });
+  }
+
   /** The destructive confirm dialog raised by the row's Delete action. */
   get deleteRuleConfirmDialog(): Locator {
     return this.page.getByRole('dialog').filter({
       has: this.page.getByRole('heading', { name: 'Delete evaluation rule' }),
+    });
+  }
+
+  /**
+   * Fill the name / template / model of an LLM-as-judge rule and STOP, leaving
+   * the dialog open for a caller that has to inspect or change the model
+   * parameters before submitting.
+   *
+   * The canned template ships its own prompt, variable mapping and score
+   * definition, and the default `output` mapping submits fine — the mapping
+   * override in `fillAndSubmitCreateRuleDialogLLMJudge` exists to make the
+   * judge see a bare string, which only matters to a rule that will actually
+   * score traces.
+   */
+  async fillLLMJudgeRuleBasics(fields: {
+    name: string;
+    template: CreateRuleDialogLLMJudgeFields['template'];
+    /** Provider group label in the model picker, e.g. `Gemini`. */
+    providerGroupLabel: string;
+    modelDisplayName: string;
+  }): Promise<void> {
+    return test.step(`fill LLM-judge rule "${fields.name}"`, async () => {
+      const d = this.dialog;
+      await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
+
+      // Template first — selecting it rebuilds the prompt + variable mapping
+      // section, which would wipe out anything set before it.
+      const promptCombobox = d.getByRole('combobox').filter({
+        hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|AnswerRelevance|Structured Output Compliance|Meaning Match)$/,
+      });
+      await promptCombobox.click();
+      await this.page.getByRole('option', { name: fields.template, exact: true }).click();
+
+      await this.selectLLMJudgeModel(fields.providerGroupLabel, fields.modelDisplayName);
     });
   }
 
