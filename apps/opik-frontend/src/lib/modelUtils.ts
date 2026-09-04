@@ -526,6 +526,9 @@ export const sanitizeConfigForRequest = (
     // sanitized output and feed it back — the optimizer form reloads a saved run's `parameters`
     // blob wholesale — have no flat thinkingLevel to offer, and substituting the model default
     // there would silently reset the user's saved choice on every re-run.
+    // A nested level the model still offers is a real past choice and is honoured — including on the
+    // Flash Lite models, where an explicitly saved "minimal" keeps thinking on. Only the *default*
+    // changed to "none"; a level someone chose is not overridden.
     const nested = (
       (sanitized.custom_parameters as Record<string, unknown> | undefined)
         ?.thinking as Record<string, unknown> | undefined
@@ -543,9 +546,24 @@ export const sanitizeConfigForRequest = (
     // level, so leaving it on the payload can only be dead weight.
     delete sanitized.thinkingLevel;
 
-    // "auto" and "none" both mean "send no thinkingConfig" — that absence IS the setting. They differ
-    // only in what they promise the user: auto lets a thinking model pick its own budget, none keeps a
-    // non-thinking model as it ships. `level` is already known to be one this model offers.
+    // "none" is an explicit "do not think": it has to remove any persisted thinking block, not merely
+    // decline to add one, or a level saved earlier keeps being sent and the model keeps thinking.
+    if (level === "none") {
+      const rest = omit(
+        (sanitized.custom_parameters ?? {}) as Record<string, unknown>,
+        "thinking",
+      );
+
+      if (Object.keys(rest).length > 0) {
+        sanitized.custom_parameters = rest;
+      } else {
+        delete sanitized.custom_parameters;
+      }
+    }
+
+    // "auto" also sends no thinkingConfig, but it is a weaker statement — "let the model decide" —
+    // so it leaves a persisted block alone rather than deleting fields the form cannot represent.
+    // `level` is already known to be one this model offers.
     if (
       level !== "auto" &&
       level !== "none" &&

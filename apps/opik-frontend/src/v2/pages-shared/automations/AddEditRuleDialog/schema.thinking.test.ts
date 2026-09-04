@@ -99,6 +99,21 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
+  // "none" removes a persisted block; "auto" (above) leaves one alone.
+  it("clears a persisted thinking block when the level is none", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: {
+          thinking: { level: "minimal" },
+          unrelated: "keep",
+        },
+      }),
+    );
+
+    expect(object.model.custom_parameters).toEqual({ unrelated: "keep" });
+  });
+
   // "off" is the exception: a persisted budget would outrank it server-side and leave thinking on.
   it("clears a persisted budget when the level is off", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(

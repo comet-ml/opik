@@ -869,6 +869,39 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     }
   });
 
+  // "none" must REMOVE a persisted block, not merely decline to add one, or the level saved before
+  // this change keeps being sent and the model keeps thinking.
+  it("clears a persisted thinking block when none is selected", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: {
+          thinking: { level: "minimal" },
+          unrelated: "keep",
+        },
+      }).custom_parameters,
+    ).toEqual({ unrelated: "keep" });
+  });
+
+  it("drops custom_parameters entirely when none leaves it empty", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: { thinking: { level: "minimal" } },
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  // auto is the weaker "let the model decide" and must not delete fields the form cannot represent.
+  it("leaves a persisted thinking block alone for auto", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: { thinking: { budget_tokens: 4096 } },
+      }).custom_parameters,
+    ).toEqual({ thinking: { budget_tokens: 4096 } });
+  });
+
   it("sends no thinking block for an explicit none", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
