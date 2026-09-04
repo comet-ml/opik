@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
@@ -2585,9 +2586,9 @@ class OpenTelemetryMapperTest {
                         .containsEntry("total_tokens", 28)
                         .containsEntry("cache_read_input_tokens", 4)
                         .containsEntry("cache_creation_input_tokens", 2)
-                        .containsEntry("input_audio_tokens", 3)
+                        .containsEntry("prompt_tokens_details.audio_tokens", 3)
                         .containsEntry("reasoning_tokens", 5)
-                        .containsEntry("output_audio_tokens", 1);
+                        .containsEntry("completion_tokens_details.audio_tokens", 1);
                 assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.0125");
                 assertThat(span.metadata().path("thread_id").asText()).isEqualTo("explicit-thread");
                 assertThat(span.metadata().path("custom").asText()).isEqualTo("kept");
@@ -2609,6 +2610,46 @@ class OpenTelemetryMapperTest {
                     str("llm.system", "mistral_ai"),
                     str("llm.model_name", "mistral-small")));
             assertThat(aliasedProvider.provider()).isEqualTo("mistral");
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "anthropic, claude-haiku-4-5, original_usage.input_tokens, 0.000405",
+                "aws, anthropic.claude-3-5-haiku-20241022-v1:0, original_usage.inputTokens, 0.000324",
+                "anthropic_vertexai, vertex_ai/claude-haiku-4-5, original_usage.input_tokens, 0.000405"
+        })
+        void calculatesCacheCostWithoutCountingCachedPromptTokensTwice(
+                String provider, String model, String exclusiveInputKey, String expectedCost) {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.provider", provider),
+                    str("llm.model_name", model),
+                    integer("llm.token_count.prompt", 1000),
+                    integer("llm.token_count.completion", 20),
+                    integer("llm.token_count.prompt_details.cache_read", 800),
+                    integer("llm.token_count.prompt_details.cache_write", 100)));
+
+            assertThat(span.usage()).containsEntry("prompt_tokens", 1000)
+                    .containsEntry("total_tokens", 1020)
+                    .containsEntry(exclusiveInputKey, 100);
+            assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
+                    .isEqualByComparingTo(expectedCost);
+        }
+
+        @Test
+        void calculatesAudioCostAtAudioRates() {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.provider", "openai"),
+                    str("llm.model_name", "gpt-4o-audio-preview"),
+                    integer("llm.token_count.prompt", 1000),
+                    integer("llm.token_count.completion", 500),
+                    integer("llm.token_count.prompt_details.audio", 300),
+                    integer("llm.token_count.completion_details.audio", 200)));
+
+            // 700 text input + 300 audio input + 300 text output + 200 audio output.
+            assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
+                    .isEqualByComparingTo("0.03275");
         }
 
         @ParameterizedTest

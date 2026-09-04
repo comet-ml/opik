@@ -539,6 +539,24 @@ describe("prettifyMessage", () => {
     });
   });
 
+  it.each([0, false])("preserves raw OpenInference scalar %j", (message) => {
+    expect(
+      prettifyMessage(message, { type: "output", openInferenceHint: true }),
+    ).toEqual({ message: String(message), prettified: true });
+  });
+
+  it("prettifies marked messages without a role", () => {
+    expect(
+      prettifyMessage(
+        { messages: [{ content: "Role-less answer" }] },
+        {
+          type: "output",
+          openInferenceHint: true,
+        },
+      ),
+    ).toEqual({ message: "Role-less answer", prettified: true });
+  });
+
   it("prettifies canonical OpenInference output messages", () => {
     const result = prettifyMessage(
       {

@@ -335,6 +335,22 @@ public class OpenTelemetryMapper {
         model = resolved.model();
         provider = resolved.provider();
 
+        if (openInference != null && usage.containsKey("prompt_tokens")) {
+            // OpenInference prompt totals include cache reads/writes. Preserve those totals for
+            // display, but provide the exclusive input count expected by these providers' pricing.
+            String exclusiveInputKey = switch (provider) {
+                case "anthropic", "anthropic_vertexai" -> "original_usage.input_tokens";
+                case "bedrock", "bedrock_converse" -> "original_usage.inputTokens";
+                case null, default -> null;
+            };
+            if (exclusiveInputKey != null) {
+                long uncachedTokens = (long) usage.get("prompt_tokens")
+                        - usage.getOrDefault("cache_read_input_tokens", 0)
+                        - usage.getOrDefault("cache_creation_input_tokens", 0);
+                usage.put(exclusiveInputKey, (int) Math.max(0, uncachedTokens));
+            }
+        }
+
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
         if ("invoke_agent".equals(metadata.path("gen_ai.operation.name").asText(null))) {
