@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.oauth;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
 import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
@@ -17,12 +18,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Optional;
-import java.util.UUID;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +41,7 @@ class OAuthValidateTokenResourceTest {
             + RandomStringUtils.secure().nextAlphanumeric(24);
 
     private static final McpOAuthService mcpOAuthService = mock(McpOAuthService.class);
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .setMapper(JsonUtils.getMapper())
@@ -92,12 +93,8 @@ class OAuthValidateTokenResourceTest {
     @ValueSource(strings = {"Bearer ", "bearer ", "BEARER "})
     @DisplayName("accepts a valid token and returns the validated identity, case-insensitively on the scheme")
     void acceptsValidToken(String schemePrefix) {
-        var validated = ValidatedToken.builder()
-                .userName(RandomStringUtils.secure().nextAlphanumeric(10))
-                .workspaceId(UUID.randomUUID().toString())
-                .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
-                .resource("http://localhost/api/v1/mcp/%s".formatted(RandomStringUtils.secure().nextAlphanumeric(8)))
-                .expiresAt(Instant.now().plus(Duration.ofHours(1)).truncatedTo(ChronoUnit.MILLIS))
+        var validated = factory.manufacturePojo(ValidatedToken.class).toBuilder()
+                .expiresAt(Instant.now().plus(Duration.ofHours(1)))
                 .build();
         when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.of(validated));
 
@@ -112,13 +109,8 @@ class OAuthValidateTokenResourceTest {
     void reportsExpiresAtOnTheWire() {
         // opik-mcp caches a "valid" answer until this instant (OPIK-8252); an
         // epoch number or a camelCase key would silently fall back to its TTL.
-        var expiresAt = Instant.parse("2026-09-04T10:15:30.123Z");
-        var validated = ValidatedToken.builder()
-                .userName(RandomStringUtils.secure().nextAlphanumeric(10))
-                .workspaceId(UUID.randomUUID().toString())
-                .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
-                .resource("http://localhost/api/v1/mcp")
-                .expiresAt(expiresAt)
+        var validated = factory.manufacturePojo(ValidatedToken.class).toBuilder()
+                .expiresAt(Instant.parse("2026-09-04T10:15:30.123Z"))
                 .build();
         when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.of(validated));
 
