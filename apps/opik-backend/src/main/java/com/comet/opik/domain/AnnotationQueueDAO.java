@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueInfo;
+import com.comet.opik.api.AnnotationQueueItem;
+import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueReviewer;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
@@ -59,9 +61,11 @@ public interface AnnotationQueueDAO {
 
     Mono<Long> deleteBatch(Set<UUID> ids);
 
-    Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
+    Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId, AnnotationQueueItemSource source);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
+
+    Flux<AnnotationQueueItem> findItemsByIds(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
     Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, String entityType,
             UUID queueId,
@@ -162,6 +166,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 item_id,
                 project_id,
                 workspace_id,
+                source,
                 created_by,
                 last_updated_by
             )
@@ -172,8 +177,34 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         :item_id<item.index>,
                         :project_id,
                         :workspace_id,
+                        :source,
                         :user_name,
                         :user_name
+                    )
+                    <if(item.hasNext)>,<endif>
+                }>
+            """;
+
+    /**
+     * Companion insert to {@link #BATCH_ITEMS_INSERT}: records that these items were once in this queue,
+     * so automation never adds them here again. Written for manual adds too — a trace a human already
+     * queued must not be re-added by a later automation run — which is why the invariant lives in the DAO
+     * rather than in the automation runner.
+     */
+    public static final String BATCH_ITEM_HISTORY_INSERT = """
+            INSERT INTO annotation_queue_item_history (
+                queue_id,
+                item_id,
+                project_id,
+                workspace_id
+            )
+            VALUES
+                <items:{item |
+                    (
+                        :queue_id,
+                        :item_id<item.index>,
+                        :project_id,
+                        :workspace_id
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -191,6 +222,28 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             DELETE FROM annotation_queues
             WHERE workspace_id = :workspace_id
             AND id IN :ids
+            """;
+
+    // History rows outlive item removal by design, but not queue deletion — a stale row would keep
+    // excluding items from a queue id that no longer exists, and grow unbounded.
+    private static final String DELETE_ITEM_HISTORY_BY_QUEUE_IDS = """
+            DELETE FROM annotation_queue_item_history
+            WHERE workspace_id = :workspace_id
+            AND queue_id IN :ids
+            """;
+
+    // Lookup, not a listing: the caller renders the queue-items table from the traces/threads API with
+    // its own sort and filters, so it asks for exactly the ids currently on screen. Paginating here would
+    // produce pages that cannot be aligned with that table's pages.
+    private static final String SELECT_ITEMS_BY_IDS = """
+            SELECT item_id, source
+            FROM annotation_queue_items
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND queue_id = :queue_id
+            AND item_id IN :item_ids
+            ORDER BY item_id DESC, last_updated_at DESC
+            LIMIT 1 BY item_id
             """;
 
     private static final String COUNT_DISTINCT_COMMENT_AUTHORS = """
@@ -227,6 +280,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             SELECT
                 id,
                 project_id,
+                scope,
                 annotators_per_item
             FROM annotation_queues
             WHERE workspace_id = :workspace_id
@@ -482,6 +536,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> AnnotationQueueInfo.builder()
                         .id(row.get("id", UUID.class))
                         .projectId(row.get("project_id", UUID.class))
+                        .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                         .annotatorsPerItem(Optional.ofNullable(row.get("annotators_per_item", Integer.class))
                                 .orElse(DEFAULT_MIN_ANNOTATORS_PER_ITEM))
                         .build()))
@@ -496,15 +551,64 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
-    public Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds, @NonNull UUID projectId) {
+    public Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds, @NonNull UUID projectId,
+            @NonNull AnnotationQueueItemSource source) {
         if (itemIds.isEmpty()) {
             return Mono.just(0L);
         }
 
+        // Items first, ledger second, on purpose. If the ledger insert fails afterwards, a later
+        // automation run may re-add an item that is already there — a no-op the ReplacingMergeTree
+        // collapses. Ledger-first would risk the opposite: a row excluding an item that never landed,
+        // silently making that trace ineligible for this queue forever.
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> createItems(queueId, itemIds, projectId, connection))
-                .flatMap(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
+                .flatMap(connection -> Flux.from(createItems(queueId, itemIds, projectId, source, connection))
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .flatMap(added -> Flux.from(recordItemHistory(queueId, itemIds, projectId, connection))
+                                .flatMap(Result::getRowsUpdated)
+                                .then()
+                                .thenReturn(added)));
+    }
+
+    @Override
+    public Flux<AnnotationQueueItem> findItemsByIds(@NonNull UUID queueId, @NonNull UUID projectId,
+            @NonNull Set<UUID> itemIds) {
+        if (itemIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_ITEMS_BY_IDS)
+                            .bind("project_id", projectId.toString())
+                            .bind("queue_id", queueId.toString())
+                            .bind("item_ids", itemIds.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> AnnotationQueueItem.builder()
+                        .id(UUID.fromString(row.get("item_id", String.class)))
+                        .source(AnnotationQueueItemSource.fromString(row.get("source", String.class)))
+                        .build()));
+    }
+
+    private Publisher<? extends Result> recordItemHistory(UUID queueId, Set<UUID> itemIds, UUID projectId,
+            Connection connection) {
+        var queryItems = getQueryItemPlaceHolder(itemIds.size());
+        var template = TemplateUtils.newST(BATCH_ITEM_HISTORY_INSERT).add("items", queryItems);
+
+        var statement = connection.createStatement(template.render());
+        statement.bind("queue_id", queueId.toString())
+                .bind("project_id", projectId.toString());
+
+        int index = 0;
+        for (UUID itemId : itemIds) {
+            statement.bind("item_id" + index, itemId.toString());
+            index++;
+        }
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
 
     @Override
@@ -535,14 +639,27 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(DELETE_BATCH)
-                            .bind("ids", ids.toArray(UUID[]::new));
+                .flatMap(connection -> Flux.from(deleteQueues(ids, connection))
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .flatMap(deleted -> Flux.from(deleteItemHistory(ids, connection))
+                                .flatMap(Result::getRowsUpdated)
+                                .then()
+                                .thenReturn(deleted)));
+    }
 
-                    return makeMonoContextAware(bindWorkspaceIdToMono(statement));
-                })
-                .flatMap(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
+    private Publisher<? extends Result> deleteQueues(Set<UUID> ids, Connection connection) {
+        var statement = connection.createStatement(DELETE_BATCH)
+                .bind("ids", ids.toArray(UUID[]::new));
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+    }
+
+    private Publisher<? extends Result> deleteItemHistory(Set<UUID> ids, Connection connection) {
+        var statement = connection.createStatement(DELETE_ITEM_HISTORY_BY_QUEUE_IDS)
+                .bind("ids", ids.toArray(UUID[]::new));
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {
@@ -600,13 +717,14 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private Publisher<? extends Result> createItems(UUID queueId, Set<UUID> itemIds, UUID projectId,
-            Connection connection) {
+            AnnotationQueueItemSource source, Connection connection) {
         var queryItems = getQueryItemPlaceHolder(itemIds.size());
         var template = TemplateUtils.newST(BATCH_ITEMS_INSERT).add("items", queryItems);
 
         var statement = connection.createStatement(template.render());
         statement.bind("queue_id", queueId.toString())
-                .bind("project_id", projectId.toString());
+                .bind("project_id", projectId.toString())
+                .bind("source", source.getValue());
 
         int index = 0;
         for (UUID itemId : itemIds) {
