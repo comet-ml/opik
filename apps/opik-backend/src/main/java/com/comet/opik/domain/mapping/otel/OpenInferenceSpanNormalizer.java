@@ -405,13 +405,13 @@ public final class OpenInferenceSpanNormalizer {
                 resolvedProvider = "bedrock";
             }
             if (!inputMessages.isEmpty()) {
-                ArrayNode messages = buildMessages(inputMessages, false);
+                ArrayNode messages = buildMessages(inputMessages);
                 if (!messages.isEmpty()) {
                     input.set("messages", messages);
                 }
             }
             if (!outputMessages.isEmpty()) {
-                ArrayNode messages = buildMessages(outputMessages, true);
+                ArrayNode messages = buildMessages(outputMessages);
                 if (!messages.isEmpty()) {
                     output.set("messages", messages);
                 }
@@ -459,16 +459,10 @@ public final class OpenInferenceSpanNormalizer {
                     sessionId);
         }
 
-        private ArrayNode buildMessages(TreeMap<Integer, MessageBuilder> messages, boolean outputSide) {
+        private ArrayNode buildMessages(TreeMap<Integer, MessageBuilder> messages) {
             ArrayNode result = JsonUtils.createArrayNode();
             messages.values().forEach(messageBuilder -> {
                 ObjectNode message = messageBuilder.build();
-                JsonNode legacyFunctionCall = message.remove("function_call");
-                if (outputSide && functionCall == null && legacyFunctionCall != null) {
-                    functionCall = legacyFunctionCall;
-                } else if (legacyFunctionCall != null) {
-                    message.set("function_call", legacyFunctionCall);
-                }
                 if (!message.isEmpty()) {
                     result.add(message);
                 }
