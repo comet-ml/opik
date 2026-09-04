@@ -144,7 +144,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -181,6 +180,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZE
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItem;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.ignoredFieldsPlus;
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -216,8 +218,6 @@ class DatasetsResourceTest {
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "traceMetadata"};
-    public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId", "runSummariesByExperiment"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "projectName", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
@@ -4862,9 +4862,7 @@ class DatasetsResourceTest {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
-        assertThat(actualEntity).usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                .isEqualTo(expectedDatasetItem);
+        assertDatasetItem(actualEntity, expectedDatasetItem);
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
@@ -6594,11 +6592,8 @@ class DatasetsResourceTest {
 
     private void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
 
-        List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
-        ignoredFields.add("data");
-
         assertThat(actualItems)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFields.toArray(String[]::new))
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFieldsPlus("data"))
                 .isEqualTo(expectedItems);
 
         assertThat(actualItems).hasSize(expectedItems.size());
@@ -9068,9 +9063,7 @@ class DatasetsResourceTest {
 
             // Compare the whole DatasetItem objects, in order - not just their ids - so the assertion proves
             // the bound key actually drives the ordering. Volatile/derived fields are ignored per suite convention.
-            assertThat(actualItems)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyElementsOf(expectedItems);
+            assertDatasetItemsInOrder(actualItems, expectedItems);
         }
 
         private List<DatasetItem> fetchDatasetItems(UUID datasetId, String experimentIdsParam, String sortField,
