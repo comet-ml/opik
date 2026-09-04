@@ -27,36 +27,19 @@ import java.util.function.BiFunction;
 public class CostService {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
-    private static final Map<String, String> PROVIDERS_MAPPING = Map.ofEntries(
-            Map.entry("openai", "openai"),
+    // Alias table: maps litellm_provider values to the canonical provider name used as the
+    // price-map key. Only entries where the names genuinely differ are needed; providers whose
+    // litellm_provider value already equals the canonical name are handled automatically by the
+    // identity fallback in buildRuntimeKey / buildModelPrice (any provider present in the price
+    // file is priced; only the aliases below need explicit entries).
+    private static final Map<String, String> PROVIDER_ALIASES = Map.ofEntries(
             Map.entry("vertex_ai-language-models", "google_vertexai"),
             Map.entry("gemini", "google_ai"),
-            Map.entry("anthropic", "anthropic"),
             Map.entry("vertex_ai-anthropic_models", "anthropic_vertexai"),
-            Map.entry("bedrock", "bedrock"),
             Map.entry("bedrock_converse", "bedrock"),
-            Map.entry("groq", "groq"),
-            Map.entry("jina_ai", "jina_ai"),
-            Map.entry("elastic", "elastic"),
             Map.entry("microsoft", "azure"),
-            Map.entry("azure", "azure"),
-            Map.entry("mistral", "mistral"),
-            Map.entry("xai", "xai"),
-            Map.entry("deepseek", "deepseek"),
-            Map.entry("perplexity", "perplexity"),
-            Map.entry("fireworks_ai", "fireworks_ai"),
-            Map.entry("moonshot", "moonshot"),
             Map.entry("moonshotai", "moonshot"),
-            Map.entry("ai21", "ai21"),
-            Map.entry("morph", "morph"),
-            Map.entry("inception", "inception"),
-            Map.entry("meta", "meta"),
-            Map.entry("zai", "zai"),
-            Map.entry("z-ai", "zai"),
-            Map.entry("sambanova", "sambanova"),
-            Map.entry("nebius", "nebius"),
-            Map.entry("snowflake", "snowflake"),
-            Map.entry("deepinfra", "deepinfra"));
+            Map.entry("z-ai", "zai"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
@@ -241,15 +224,18 @@ public class CostService {
         int prefixSlash = originalModelName.indexOf('/');
         if (prefixSlash > 0) {
             String modelPrefix = originalModelName.substring(0, prefixSlash);
-            String canonicalFromPrefix = PROVIDERS_MAPPING.get(modelPrefix);
-            if (canonicalFromPrefix != null && !canonicalFromPrefix.equalsIgnoreCase(provider)) {
-                String prefixKey = createModelProviderKey(modelName, canonicalFromPrefix);
-                ModelPrice prefixMatch = modelProviderPrices.get(prefixKey);
-                if (prefixMatch != null) {
-                    log.debug(
-                            "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
-                            originalModelName, provider, canonicalFromPrefix);
-                    return prefixMatch;
+            String canonicalFromPrefix = PROVIDER_ALIASES.getOrDefault(modelPrefix, modelPrefix);
+            if (!canonicalFromPrefix.equalsIgnoreCase(provider)) {
+                for (String candidate : new String[]{modelName, normalizedModelName, baseOriginalModelName,
+                        baseNormalizedModelName, baseOriginalVersionName, baseNormalizedVersionName}) {
+                    ModelPrice prefixMatch = modelProviderPrices
+                            .get(createModelProviderKey(candidate, canonicalFromPrefix));
+                    if (prefixMatch != null) {
+                        log.debug(
+                                "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
+                                originalModelName, provider, canonicalFromPrefix);
+                        return prefixMatch;
+                    }
                 }
             }
         }
@@ -406,7 +392,7 @@ public class CostService {
     private static void applyDirectOverride(Map<String, ModelPrice> prices, String modelName, ModelCostData override) {
         String runtimeKey = buildRuntimeKey(modelName, override);
         if (runtimeKey == null) {
-            log.warn("Override entry '{}' has unknown provider '{}'; skipping",
+            log.warn("Override entry '{}' skipped: provider '{}' is blank or resolves to a legacy Bedrock path",
                     modelName, override.litellmProvider());
             return;
         }
@@ -418,15 +404,17 @@ public class CostService {
 
     /**
      * Computes the runtime key {@code <parsedModel>/<canonicalProvider>} for a price-map entry.
-     * Returns null if the provider isn't in {@link #PROVIDERS_MAPPING} or the entry is invalid
-     * for the resolved provider (e.g. legacy Bedrock paths).
+     * Returns null only if the entry is invalid for the resolved provider (e.g. legacy Bedrock paths)
+     * or the provider string is blank. Any non-blank litellm_provider is accepted: aliases in
+     * {@link #PROVIDER_ALIASES} are remapped; all others use the provider value as-is so new
+     * providers in the price file are priced automatically without requiring a code change.
      */
     private static String buildRuntimeKey(String modelName, ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        String canonical = PROVIDERS_MAPPING.get(provider);
-        if (canonical == null) {
+        if (provider.isBlank()) {
             return null;
         }
+        String canonical = PROVIDER_ALIASES.getOrDefault(provider, provider);
         if (!isValidModelProvider(modelName, canonical)) {
             return null;
         }
@@ -435,10 +423,9 @@ public class CostService {
 
     private static ModelPrice buildModelPrice(ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        if (!PROVIDERS_MAPPING.containsKey(provider)) {
+        if (provider.isBlank()) {
             return null;
         }
-
         BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
         BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)

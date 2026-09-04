@@ -503,10 +503,11 @@ class CostServiceTest {
     }
 
     /**
-     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
-     * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
-     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
-     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     * Mistral cost tracking: the identity fallback in {@code buildRuntimeKey} / {@code buildModelPrice}
+     * loads any provider present in the price file without an explicit {@code PROVIDER_ALIASES} entry,
+     * so the entire set of upstream LiteLLM {@code litellm_provider: "mistral"} rows is now loaded at
+     * startup. This locks in both the upstream-sourced rows and the two override-only rows
+     * (Medium 3.5, Small 4).
      */
     @ParameterizedTest
     @MethodSource("provideMistralModels")
@@ -538,7 +539,7 @@ class CostServiceTest {
 
     /**
      * Overrides file: `litellm_provider: "microsoft"` is remapped to canonical `azure` via
-     * PROVIDERS_MAPPING. A span emitted with provider=`azure` and the model name must hit
+     * PROVIDER_ALIASES. A span emitted with provider=`azure` and the model name must hit
      * the override row for `azure/multilingual-e5-large`.
      */
     @Test
@@ -894,7 +895,7 @@ class CostServiceTest {
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
      * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
-     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDER_ALIASES}, the
      * provider-prefix fallback returns null and the aggregator-routed request resolves to
      * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
      * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
@@ -969,17 +970,14 @@ class CostServiceTest {
     }
 
     /**
-     * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
-     * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
-     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
-     * {@link CostService#PROVIDERS_MAPPING}, so {@code buildModelPrice} dropped every one of
-     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
-     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * Five vendors OpenRouter resells: {@code ai21}, {@code morph}, {@code inception}, {@code meta},
+     * and {@code zai} all carry non-zero-cost rows in {@code model_prices_and_context_window.json}.
+     * The identity fallback in {@code buildRuntimeKey} / {@code buildModelPrice} loads them
+     * automatically without explicit {@link CostService#PROVIDER_ALIASES} entries.
      * <p>
-     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
-     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
-     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
-     * The other four spell both the same way, so one entry each.
+     * {@code z-ai} still needs an explicit alias ({@code z-ai} to {@code zai}) because OpenRouter
+     * uses {@code z-ai} as the model-name prefix while the price file's {@code litellm_provider}
+     * is {@code zai}. The other four spell both the same way, so the identity fallback is enough.
      * <p>
      * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
      * models below publish a {@code cache_read_input_token_cost}, but none of these providers is
@@ -1012,6 +1010,10 @@ class CostServiceTest {
                 Arguments.of("ai21/jamba-mini-1.7", "openrouter", "0.00028"),
                 // OpenRouter namespaces Z.ai as z-ai/, the price file as zai/.
                 Arguments.of("z-ai/glm-4.5", "openrouter", "0.00104"),
+                // Date-suffixed variant: prefix fallback must also try date-stripped name.
+                Arguments.of("z-ai/glm-4.5-2025-12-17", "openrouter", "0.00104"),
+                // Version-suffixed variant: primary lookup misses, z-ai canonicalizes to zai, :0 stripped.
+                Arguments.of("z-ai/glm-4.5:0", "openrouter", "0.00104"),
                 Arguments.of("z-ai/glm-5", "openrouter", "0.00164"),
                 Arguments.of("morph/morph-v3-fast", "openrouter", "0.00104"),
                 Arguments.of("morph/morph-v3-large", "openrouter", "0.00128"),
@@ -1061,5 +1063,20 @@ class CostServiceTest {
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
+    }
+
+    /**
+     * Providers present in the price file but previously absent from PROVIDER_ALIASES were silently
+     * dropped, resulting in zero cost. With the identity-fallback change, any non-blank litellm_provider
+     * is priced automatically if its models appear in the file.
+     */
+    @Test
+    void calculateCostForPreviouslyUnregisteredProvider() {
+        // together_ai is in model_prices_and_context_window.json but was never in the old allowlist.
+        // together-ai-21.1b-41b: input_cost_per_token=8e-7, output_cost_per_token=8e-7
+        // Expected: (100 * 8e-7) + (50 * 8e-7) = 0.00012
+        var usage = Map.of("prompt_tokens", 100, "completion_tokens", 50);
+        BigDecimal cost = CostService.calculateCost("together-ai-21.1b-41b", "together_ai", usage, null);
+        assertThat(cost).isNotNull().isEqualByComparingTo(new BigDecimal("0.00012"));
     }
 }
