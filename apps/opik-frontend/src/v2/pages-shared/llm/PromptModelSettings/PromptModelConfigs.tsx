@@ -122,7 +122,15 @@ const PromptModelConfigs = ({
     <DropdownMenu>
       <TooltipWrapper content="Model parameters">
         <DropdownMenuTrigger asChild>
-          <Button variant={variant} size={size} disabled={disabled}>
+          {/* Icon-only, so it has no accessible name to address it by — the
+              "Model parameters" string lives in the tooltip, which does not
+              contribute one. Test-only hook; nothing reads it at runtime. */}
+          <Button
+            variant={variant}
+            size={size}
+            disabled={disabled}
+            data-testid="model-parameters-trigger"
+          >
             <Settings2 />
           </Button>
         </DropdownMenuTrigger>

@@ -314,30 +314,34 @@ export class OnlineEvaluationPage {
   /**
    * The LLM-judge model picker's trigger.
    *
-   * Matched on the placeholder OR on the selected value's shape ("<provider>
-   * <model>"), because the trigger's text is the only thing distinguishing it
-   * from the dialog's other comboboxes (template, message roles) and it
-   * changes once a model is chosen.
+   * Scoped by the `select-a-llm-model` test id that `PromptModelSelect` already
+   * puts on its value span, rather than by the trigger's text: the text is what
+   * distinguishes this combobox from the dialog's others (template, message
+   * roles), but it changes once a model is chosen, so matching it means
+   * enumerating provider names — which silently stops matching the day a
+   * provider outside that list is picked.
    */
   private get llmJudgeModelCombobox(): Locator {
     return this.dialog
       .getByRole('combobox')
-      .filter({ hasText: /Select an LLM model|Gemini|Vertex AI|OpenAI|Anthropic|Claude|GPT/i });
+      .filter({ has: this.page.getByTestId('select-a-llm-model') });
   }
 
   /**
    * The gear that opens the model-parameters popover (`PromptModelConfigs`).
    *
-   * Selected on its icon because it is an icon-only button with no accessible
-   * name and no `data-testid` — its "Model parameters" string lives in a
-   * tooltip, which contributes nothing to the accessible name. A
-   * `data-testid` on the trigger is the right fix and belongs in the FE;
-   * `openModelParameters` asserts the locator resolves to exactly one element
-   * so that this selector fails loudly rather than opening some other popover
-   * if another icon button appears in the dialog.
+   * It is an icon-only button with no accessible name — its "Model parameters"
+   * string lives in a tooltip, which contributes nothing to the accessible
+   * name — so it carries a `data-testid` added alongside this POM. Addressing
+   * it by its lucide icon class instead would tie the suite to an internal
+   * class name that a lucide version bump renames without warning.
+   *
+   * `openModelParameters` asserts the locator resolves to exactly one element,
+   * so it fails loudly rather than opening some other popover if a second
+   * config trigger ever appears in the dialog.
    */
   private get modelParametersTrigger(): Locator {
-    return this.dialog.locator('button:has(svg.lucide-settings2)');
+    return this.dialog.getByTestId('model-parameters-trigger');
   }
 
   /** The popover the gear opens. Portalled, so it is NOT inside `dialog`. */

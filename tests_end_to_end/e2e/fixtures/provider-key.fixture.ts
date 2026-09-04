@@ -119,6 +119,13 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
     // Because the resource is workspace-global and unnamespaced, specs using
     // this fixture must not run concurrently with each other — see the serial
     // mode on online-evaluation-thinking-level.spec.ts.
+    //
+    // The other writer of this same key is playground-providers.spec.ts, which
+    // self-provisions Gemini through the AI Providers UI and then wants a real
+    // completion from it. The two do not collide today because that spec is
+    // @provider-sanity, which runs on its own cadence rather than in the tier
+    // ladder — but running both at once would let it adopt this dummy key and
+    // fail on auth. Keep them in separate runs.
     let createdId: string | null = null;
     if (!(await findProviderKeyByProvider('gemini'))) {
       createdId = await createProviderKey({ provider: 'gemini', api_key: DUMMY_GEMINI_API_KEY });
