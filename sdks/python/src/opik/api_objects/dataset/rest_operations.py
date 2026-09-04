@@ -13,7 +13,7 @@ import opik.exceptions as exceptions
 from opik.message_processing import streamer
 from opik.rest_client_configurator import retry_decorator
 from opik.api_objects import opik_query_language, rest_stream_parser
-from . import dataset, dataset_item, execution_policy
+from . import dataset, dataset_item, execution_policy, parallel_items_reader
 from .. import experiment, constants, rest_helpers
 from ..experiment import experiments_client
 from ...rest_api.core.api_error import ApiError
@@ -62,12 +62,7 @@ def stream_dataset_items(
     )
     _conflicting_keys_warned = False
 
-    filters: Optional[str] = None
-    if filter_string:
-        oql = opik_query_language.OpikQueryLanguage.for_dataset_items(filter_string)
-        filter_expressions = oql.get_filter_expressions()
-        if filter_expressions:
-            filters = json.dumps(filter_expressions)
+    filters = _serialize_dataset_item_filters(filter_string)
 
     while should_retrieve_more_items:
 
@@ -168,6 +163,54 @@ def stream_dataset_items(
             "The following dataset items were not found in the dataset: %s",
             dataset_items_ids_left,
         )
+
+
+def stream_dataset_item_chunks(
+    rest_client: OpikApi,
+    dataset_id: str,
+    chunk_size: int,
+    num_threads: int,
+    nb_samples: Optional[int] = None,
+    filter_string: Optional[str] = None,
+    dataset_version: Optional[str] = None,
+) -> Iterator[List[Dict[str, Any]]]:
+    """
+    Read dataset items as chunks of raw dictionaries, fetching chunks in parallel.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_id: Id of the dataset to read items from.
+        chunk_size: Number of items per chunk.
+        num_threads: Number of chunks fetched concurrently.
+        nb_samples: Maximum number of items to retrieve. If None, all items are read.
+        filter_string: Optional OQL filter string to filter dataset items.
+        dataset_version: Optional dataset version hash to read a specific version.
+
+    Yields:
+        Lists of raw item dictionaries, in dataset order.
+    """
+    return parallel_items_reader.stream_item_chunks(
+        rest_client=rest_client,
+        dataset_id=dataset_id,
+        chunk_size=chunk_size,
+        num_threads=num_threads,
+        max_items=nb_samples,
+        filters=_serialize_dataset_item_filters(filter_string),
+        dataset_version=dataset_version,
+    )
+
+
+def _serialize_dataset_item_filters(filter_string: Optional[str]) -> Optional[str]:
+    """Turn an OQL filter string into the JSON the items endpoints expect."""
+    if not filter_string:
+        return None
+
+    oql = opik_query_language.OpikQueryLanguage.for_dataset_items(filter_string)
+    filter_expressions = oql.get_filter_expressions()
+    if not filter_expressions:
+        return None
+
+    return json.dumps(filter_expressions)
 
 
 def find_version_by_name(

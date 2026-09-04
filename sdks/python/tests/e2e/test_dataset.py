@@ -445,3 +445,181 @@ def test_dataset_items_count__returns_correct_count_after_insert(
         max_try_seconds=30,
     )
     assert success, f"Expected dataset_items_count=3, got {dataset.dataset_items_count}"
+
+
+def _stream_all_items(dataset, **stream_kwargs):
+    """Flatten stream_items() into a single list, asserting chunk sizes."""
+    chunk_size = stream_kwargs.get("chunk_size", 1000)
+    chunks = list(dataset.stream_items(**stream_kwargs))
+
+    for chunk in chunks[:-1]:
+        assert len(chunk) == chunk_size, (
+            "Only the last chunk may be shorter than chunk_size"
+        )
+    for chunk in chunks:
+        assert len(chunk) > 0, "Empty chunks must never be yielded"
+
+    return [item for chunk in chunks for item in chunk]
+
+
+def test_stream_items__small_dataset__returns_same_items_as_get_items(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """stream_items is the fast path for the same data get_items returns."""
+    dataset = opik_client.create_dataset(
+        dataset_name, description="E2E stream_items dataset", project_name=PROJECT_NAME
+    )
+    dataset.insert(
+        [
+            {
+                "input": {"question": f"question {i}"},
+                "expected_output": {"output": f"answer {i}"},
+            }
+            for i in range(5)
+        ]
+    )
+
+    success = synchronization.until(
+        lambda: len(_stream_all_items(dataset)) == 5,
+        max_try_seconds=30,
+    )
+    assert success, "Inserted items did not become readable in time"
+
+    streamed = _stream_all_items(dataset)
+    expected = dataset.get_items()
+
+    assert sorted(streamed, key=lambda item: item["id"]) == sorted(
+        expected, key=lambda item: item["id"]
+    )
+
+
+def test_stream_items__many_items_and_threads__reads_every_item_exactly_once(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """The threaded, multi-chunk read must not drop, duplicate or reorder items.
+
+    10k items at a 1000-item chunk size is 10 pages, so 8 workers really do fan
+    out. Timing is logged rather than asserted: CI runs a single backend
+    container, so it is backend-bound and understates the speedup.
+    """
+    N_ITEMS = 10_000
+    CHUNK_SIZE = 1_000
+
+    dataset = opik_client.create_dataset(
+        dataset_name,
+        description="E2E stream_items parallel dataset",
+        project_name=PROJECT_NAME,
+    )
+    dataset.insert(
+        [{"input": {"question": f"question {i}"}} for i in range(N_ITEMS)],
+        num_threads=8,
+    )
+
+    success = synchronization.until(
+        lambda: len(_stream_all_items(dataset, chunk_size=CHUNK_SIZE)) == N_ITEMS,
+        max_try_seconds=120,
+    )
+    assert success, "Inserted items did not become readable in time"
+
+    start = time.perf_counter()
+    items = _stream_all_items(dataset, chunk_size=CHUNK_SIZE, num_threads=8)
+    elapsed = time.perf_counter() - start
+    LOGGER.info(
+        "stream_items read %d items in %.2fs (%.0f rows/s)",
+        len(items),
+        elapsed,
+        len(items) / elapsed if elapsed else 0,
+    )
+
+    assert len(items) == N_ITEMS
+    assert len({item["id"] for item in items}) == N_ITEMS
+    assert {item["input"]["question"] for item in items} == {
+        f"question {i}" for i in range(N_ITEMS)
+    }
+
+    # Same content whatever the thread count, and the order is the backend's
+    # page order either way.
+    sequential_items = _stream_all_items(dataset, chunk_size=CHUNK_SIZE, num_threads=1)
+    assert [item["id"] for item in sequential_items] == [item["id"] for item in items]
+
+
+def test_stream_items__nb_samples__stops_after_requested_number_of_items(
+    opik_client: opik.Opik, dataset_name: str
+):
+    dataset = opik_client.create_dataset(
+        dataset_name,
+        description="E2E stream_items nb_samples dataset",
+        project_name=PROJECT_NAME,
+    )
+    dataset.insert([{"input": {"question": f"question {i}"}} for i in range(50)])
+
+    success = synchronization.until(
+        lambda: len(_stream_all_items(dataset)) == 50,
+        max_try_seconds=30,
+    )
+    assert success, "Inserted items did not become readable in time"
+
+    items = _stream_all_items(dataset, chunk_size=10, num_threads=4, nb_samples=25)
+
+    assert len(items) == 25
+    assert len({item["id"] for item in items}) == 25
+
+
+def test_stream_items__filter_string__returns_only_matching_items(
+    opik_client: opik.Opik, dataset_name: str
+):
+    dataset = opik_client.create_dataset(
+        dataset_name,
+        description="E2E stream_items filter dataset",
+        project_name=PROJECT_NAME,
+    )
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "category": "geo",
+            },
+            {"input": {"question": "What is 2 + 2?"}, "category": "math"},
+            {
+                "input": {"question": "What is the capital of Poland?"},
+                "category": "geo",
+            },
+        ]
+    )
+
+    success = synchronization.until(
+        lambda: len(_stream_all_items(dataset)) == 3,
+        max_try_seconds=30,
+    )
+    assert success, "Inserted items did not become readable in time"
+
+    items = _stream_all_items(dataset, filter_string='data.category = "geo"')
+
+    assert len(items) == 2
+    assert {item["input"]["question"] for item in items} == {
+        "What is the capital of France?",
+        "What is the capital of Poland?",
+    }
+
+
+def test_stream_items__dataset_version__reads_that_version_snapshot(
+    opik_client: opik.Opik, dataset_name: str
+):
+    dataset = opik_client.create_dataset(
+        dataset_name,
+        description="E2E stream_items version dataset",
+        project_name=PROJECT_NAME,
+    )
+
+    dataset.insert([{"input": {"question": "What is the capital of France?"}}])
+    _wait_for_version(dataset, "v1")
+
+    dataset.insert([{"input": {"question": "What is the capital of Germany?"}}])
+    _wait_for_version(dataset, "v2")
+
+    v1_items = _stream_all_items(dataset.get_version_view("v1"))
+    v2_items = _stream_all_items(dataset.get_version_view("v2"))
+
+    assert len(v1_items) == 1
+    assert v1_items[0]["input"] == {"question": "What is the capital of France?"}
+    assert len(v2_items) == 2

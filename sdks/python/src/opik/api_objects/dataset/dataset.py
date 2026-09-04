@@ -73,6 +73,28 @@ class DatasetExportOperations(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Stream dataset items as chunks of raw dictionaries.
+
+        Args:
+            chunk_size: Number of items per chunk.
+            num_threads: Number of chunks fetched concurrently.
+            nb_samples: Maximum number of items to retrieve.
+            filter_string: Optional OQL filter string to filter dataset items.
+
+        Yields:
+            Lists of dictionaries representing the dataset items.
+        """
+        raise NotImplementedError
+
     def to_pandas(self) -> "pd.DataFrame":
         """
         Convert the dataset items to a pandas DataFrame.
@@ -130,6 +152,74 @@ class DatasetExportOperations(abc.ABC):
             )
         ]
         return dataset_items_as_dicts
+
+    def stream_items(
+        self,
+        chunk_size: int = constants.DATASET_ITEMS_READ_CHUNK_SIZE,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
+        filter_string: Optional[str] = None,
+        nb_samples: Optional[int] = None,
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Read dataset items in chunks, fetching the chunks concurrently.
+
+        The fast counterpart to :meth:`get_items`: chunks are fetched in
+        parallel and are handed back as raw dictionaries without going through
+        the typed REST layer, which is what makes it noticeably faster on large
+        datasets. Prefer it when reading tens of thousands of items or more, or
+        whenever you want to start processing before the whole dataset has been
+        downloaded.
+
+        Each item is its stored data plus its ``id``. Unlike :meth:`get_items`,
+        data keys that happen to collide with internal item fields (``source``,
+        ``description``, ``trace_id``, ``span_id``) are preserved; only ``id``
+        is always the item's real id.
+
+        Args:
+            chunk_size: Number of items per chunk. Defaults to 1000.
+            num_threads: Number of chunks fetched concurrently. Must be a
+                positive integer, defaults to 8; pass ``1`` to fetch
+                sequentially. Capped at
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Accepts the same expressions as :meth:`get_items`.
+            nb_samples: Maximum number of items to read. If not set, the whole
+                dataset is read.
+
+        Yields:
+            Lists of dictionaries representing the dataset items, in dataset
+            order. The last chunk may be shorter than ``chunk_size``; empty
+            chunks are never yielded.
+
+        Raises:
+            ValueError: If ``chunk_size`` or ``num_threads`` is not a positive
+                integer, or ``nb_samples`` is not a positive integer.
+
+        Example:
+            >>> for chunk in dataset.stream_items(chunk_size=2000, num_threads=8):
+            ...     process(chunk)
+        """
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int):
+            raise ValueError("chunk_size must be a positive integer")
+        if chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer")
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+        if nb_samples is not None and (
+            isinstance(nb_samples, bool)
+            or not isinstance(nb_samples, int)
+            or nb_samples < 1
+        ):
+            raise ValueError("nb_samples must be a positive integer")
+
+        return self.__internal_api__stream_item_chunks__(
+            chunk_size=chunk_size,
+            num_threads=min(num_threads, constants.DATASET_ITEMS_READ_MAX_THREADS),
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+        )
 
     @abc.abstractmethod
     def get_version_info(
@@ -279,6 +369,24 @@ class DatasetVersion(DatasetExportOperations):
             nb_samples=nb_samples,
             batch_size=batch_size,
             dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
+            dataset_version=self._version_info.version_hash,
+        )
+
+    @override
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        return rest_operations.stream_dataset_item_chunks(
+            rest_client=self._rest_client,
+            dataset_id=self._dataset_id,
+            chunk_size=chunk_size,
+            num_threads=num_threads,
+            nb_samples=nb_samples,
             filter_string=filter_string,
             dataset_version=self._version_info.version_hash,
         )
@@ -969,6 +1077,24 @@ class Dataset(DatasetExportOperations):
             nb_samples=nb_samples,
             batch_size=batch_size,
             dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
+            dataset_version=None,
+        )
+
+    @override
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        return rest_operations.stream_dataset_item_chunks(
+            rest_client=self._rest_client,
+            dataset_id=self.id,
+            chunk_size=chunk_size,
+            num_threads=num_threads,
+            nb_samples=nb_samples,
             filter_string=filter_string,
             dataset_version=None,
         )
