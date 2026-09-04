@@ -4,7 +4,6 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
@@ -19,6 +18,7 @@ import com.comet.opik.domain.evaluation.EvaluatedThread;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -35,7 +35,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
@@ -70,6 +69,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
+    private final OnlineScorePublisher onlineScorePublisher;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -85,7 +85,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull AgenticScoringService agenticScoringService,
             @NonNull SpanService spanService,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
-            @NonNull AttachmentService attachmentService) {
+            @NonNull AttachmentService attachmentService,
+            @NonNull OnlineScorePublisher onlineScorePublisher) {
         super(config, redisson, feedbackScoreService, traceService, spanService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -97,6 +98,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
         this.attachmentService = attachmentService;
+        this.onlineScorePublisher = onlineScorePublisher;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
@@ -112,25 +114,14 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         log.info("Message received with projectId: '{}', ruleId: '{}', threadIds: '{}' for workspace '{}'",
                 message.projectId(), message.ruleId(), message.threadIds(), message.workspaceId());
 
-        return Flux.fromIterable(message.threadIds())
-                // Score each thread id independently: a single thread's failure must not stop scoring the
-                // sibling thread ids. Per-thread errors are materialized (onErrorResume) so the flatMap
-                // completes for every thread; the batch's first failure is then re-surfaced below. This keeps
-                // the failure on the Mono error path handled by BaseRedisSubscriber.processMessage's
-                // onErrorResume — classified as a processing error, following the normal retryable/
-                // non-retryable path — instead of leaking into the enclosing onErrorContinue via Flux.flatMap
-                // (which would drop the element and count it as an "unexpected" error).
-                .flatMap(threadId -> processThreadScores(message, threadId)
-                        .then(Mono.<Throwable>empty())
-                        .onErrorResume(Mono::just))
-                .collectList()
-                .flatMap(errors -> errors.isEmpty() ? Mono.<Void>empty() : Mono.error(errors.getFirst()))
-                .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName())
-                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .doOnSuccess(unused -> log.info(
-                        "Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
-                        message.projectId(), message.ruleId(), message.workspaceId()))
+        // The success log sits inside the scoring callback: a migrated entry completes this chain without
+        // scoring anything, so a doOnSuccess out here would claim work that never happened.
+        return migrateOrScoreThreadIds(message, message.threadIds(), onlineScorePublisher,
+                threadId -> message.toBuilder().threadIds(List.of(threadId)).build(),
+                threadId -> processThreadScores(message, threadId)
+                        .doOnSuccess(unused -> log.info(
+                                "Processed trace thread '{}' for projectId '{}', ruleId '{}' for workspace '{}'",
+                                threadId, message.projectId(), message.ruleId(), message.workspaceId())))
                 .doOnError(error -> log.error(
                         "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}'",
                         message.projectId(), message.ruleId(), message.workspaceId(), error))

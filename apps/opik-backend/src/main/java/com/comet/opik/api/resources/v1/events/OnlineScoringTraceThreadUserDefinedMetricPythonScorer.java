@@ -4,7 +4,6 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -12,6 +11,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -26,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
@@ -62,6 +61,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final AgenticScoringService agenticScoringService;
+    private final OnlineScorePublisher onlineScorePublisher;
 
     @Inject
     public OnlineScoringTraceThreadUserDefinedMetricPythonScorer(
@@ -75,7 +75,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull SpanService spanService,
-            @NonNull AgenticScoringService agenticScoringService) {
+            @NonNull AgenticScoringService agenticScoringService,
+            @NonNull OnlineScorePublisher onlineScorePublisher) {
         super(config, redisson, feedbackScoreService, traceService, spanService,
                 TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
@@ -85,6 +86,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.agenticScoringService = agenticScoringService;
+        this.onlineScorePublisher = onlineScorePublisher;
         this.userFacingLogger = UserFacingLoggingFactory
                 .getLogger(OnlineScoringTraceThreadUserDefinedMetricPythonScorer.class);
     }
@@ -104,25 +106,14 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         log.info("Message received with projectId '{}', ruleId '{}' for workspace '{}'",
                 message.projectId(), message.ruleId(), message.workspaceId());
 
-        return Flux.fromIterable(message.threadIds())
-                // Score each thread id independently: a single thread's failure must not stop scoring the
-                // sibling thread ids. Per-thread errors are materialized (onErrorResume) so the flatMap
-                // completes for every thread; the batch's first failure is then re-surfaced below. This keeps
-                // the failure on the Mono error path handled by BaseRedisSubscriber.processMessage's
-                // onErrorResume — classified as a processing error, following the normal retryable/
-                // non-retryable path — instead of leaking into the enclosing onErrorContinue via Flux.flatMap
-                // (which would drop the element and count it as an "unexpected" error).
-                .flatMap(threadId -> processThreadScores(message, threadId)
-                        .then(Mono.<Throwable>empty())
-                        .onErrorResume(Mono::just))
-                .collectList()
-                .flatMap(errors -> errors.isEmpty() ? Mono.<Void>empty() : Mono.error(errors.getFirst()))
-                .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName())
-                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .doOnSuccess(unused -> log.info(
-                        "Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
-                        message.projectId(), message.ruleId(), message.workspaceId()))
+        // The success log sits inside the scoring callback: a migrated entry completes this chain without
+        // scoring anything, so a doOnSuccess out here would claim work that never happened.
+        return migrateOrScoreThreadIds(message, message.threadIds(), onlineScorePublisher,
+                threadId -> message.toBuilder().threadIds(List.of(threadId)).build(),
+                threadId -> processThreadScores(message, threadId)
+                        .doOnSuccess(unused -> log.info(
+                                "Processed trace thread '{}' for projectId '{}', ruleId '{}' for workspace '{}'",
+                                threadId, message.projectId(), message.ruleId(), message.workspaceId())))
                 .doOnError(error -> log.error(
                         "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}'",
                         message.projectId(), message.ruleId(), message.workspaceId(), error))

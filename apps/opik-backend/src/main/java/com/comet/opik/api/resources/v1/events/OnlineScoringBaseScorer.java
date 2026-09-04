@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.filter.Operator;
@@ -12,6 +13,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -31,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -251,5 +254,45 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                             .concatWith(Flux
                                     .defer(() -> retrieveFullThreadContext(threadId, lastReceivedIdRef, projectId)));
                 }));
+    }
+
+    /**
+     * Routes a trace-thread entry down one of two branches: an entry carrying several thread ids was
+     * written by an older build and is <b>migrated</b> — republished as one entry per id, never scored —
+     * while the single-id entries this build writes are <b>scored</b> normally. Completion therefore does
+     * not mean "scored", so per-outcome logging belongs inside {@code scoreThread} or in the migrate
+     * branch, never on the returned Mono.
+     *
+     * <p>Migrating rather than scoring avoids needing a rule for reducing N per-thread outcomes into the
+     * one verdict a stream entry gets, which must mis-serve somebody when a permanent failure and a
+     * retryable one land together. Each replacement entry gets its own retry budget instead.
+     *
+     * <p>The ack is implicit: this returns the republish, so a failure leaves the entry unacked and it
+     * redelivers. If the republish succeeds but the ack fails, the entry splits twice and some threads are
+     * scored twice — tolerable because {@code feedback_scores} is a {@code ReplacingMergeTree} versioned on
+     * {@code last_updated_at}, so the second score overwrites rather than duplicating.
+     *
+     * <p>The migrate branch is a temporary shim, deletable once no pre-split entry can be in flight.
+     */
+    protected Mono<Void> migrateOrScoreThreadIds(@NonNull M message, @NonNull List<String> threadIds,
+            @NonNull OnlineScorePublisher publisher, @NonNull Function<String, M> singleThreadIdCopy,
+            @NonNull Function<String, Mono<Void>> scoreThread) {
+        if (threadIds.size() > 1) {
+            // Logged on success, and worded so it can never be mistaken for a scoring log.
+            return publisher.enqueueMessage(threadIds.stream().map(singleThreadIdCopy).toList(), type)
+                    .doOnSuccess(unused -> log.info(
+                            "Migrated '{}' legacy thread ids to single-id entries for workspace '{}'; "
+                                    + "no scoring performed for this entry",
+                            threadIds.size(), message.workspaceId()));
+        }
+        // @NotEmpty says this cannot happen; if it does, no retry would help, so let it be acked away.
+        if (threadIds.isEmpty()) {
+            log.warn("Discarding trace-thread entry with no thread ids for workspace '{}'", message.workspaceId());
+            return Mono.empty();
+        }
+        return scoreThread.apply(threadIds.getFirst())
+                .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.USER_NAME, message.userName())
+                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE));
     }
 }
