@@ -107,12 +107,17 @@ def _locate_score_entries(entries: list) -> list[int] | None:
     digits after `"score":`; returns the one or two indices covering them,
     or None when the key cannot be found in the reconstructed text (the
     caller then falls back to the legacy fixed offset).
+
+    Uses the LAST match so duplicate `"score"` keys resolve the same way
+    json.loads does — to the final one, which is also what the no-logprob
+    text path reads via `dict_content["score"]`.
     """
     token_texts = [str(_to_dict(entry).get("token", "")) for entry in entries]
     full_text = "".join(token_texts)
-    match = _SCORE_KEY_RE.search(full_text)
-    if match is None:
+    matches = list(_SCORE_KEY_RE.finditer(full_text))
+    if not matches:
         return None
+    match = matches[-1]
     start, end = match.start(1), match.end(1)
     offsets = []
     position = 0

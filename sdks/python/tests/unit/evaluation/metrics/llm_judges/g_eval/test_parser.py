@@ -144,3 +144,67 @@ def test_single_digit_score_at_position_three_unchanged():
         log_probs_supported=True,
     )
     assert 0.60 < result.value < 0.65
+
+
+def test_duplicate_score_keys_last_wins_like_the_text_path():
+    # json.loads (and therefore the no-logprob text path) resolves
+    # duplicate "score" keys to the LAST one. The token-stream locator
+    # must mirror that: a first-occurrence scan scores from the first,
+    # stale key instead.
+    entries = [
+        _entry('{\"', -0.01),
+        _entry("score", -0.01),
+        _entry('\":', -0.01),
+        _entry(" ", -0.01),
+        _entry("9", -0.5, top=[{"token": "9", "logprob": -0.01}, {"token": "5", "logprob": -3.00}]),
+        _entry(",", -0.01),
+        _entry(" ", -0.01),
+        _entry("\"score", -0.01),
+        _entry('\":', -0.01),
+        _entry(" ", -0.01),
+        _entry("7", -0.1, top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.00}]),
+        _entry(",", -0.01),
+        _entry(" ", -0.01),
+        _entry("\"", -0.01),
+        _entry("reason", -0.01),
+        _entry('\":', -0.01),
+        _entry(" ", -0.01),
+        _entry("\"ok\"", -0.01),
+        _entry("}", -0.01),
+    ]
+    content = '{"score": 9, "score": 7, "reason": "ok"}'
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert 0.55 < result.value < 0.68, f"scored from the stale key: {result.value}"
+
+
+def test_escaped_quote_echo_is_not_a_matchable_key():
+    # Control: a rubric quote inside the reason has escaped quotes, so
+    # the literal "score": n there can never match the key regex -- the
+    # locator stays on the real key. Guards against a looser rewrite
+    # that would scan bare text.
+    entries = [
+        _entry('{\"', -0.01),
+        _entry("reason", -0.01),
+        _entry('\":', -0.01),
+        _entry(' "the rubric said \\"', -0.01),
+        _entry("score", -0.01),
+        _entry('\\": ', -0.01),
+        _entry("9", -0.5, top=[{"token": "9", "logprob": -0.01}, {"token": "5", "logprob": -3.00}]),
+        _entry(" here\", ", -0.01),
+        _entry("\"score", -0.01),
+        _entry('\":', -0.01),
+        _entry(" ", -0.01),
+        _entry("7", -0.1, top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.00}]),
+        _entry("}", -0.01),
+    ]
+    content = '{"reason": "the rubric said \\"score\\": 9 here", "score": 7}'
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert 0.55 < result.value < 0.68, f"unexpected value {result.value}"
