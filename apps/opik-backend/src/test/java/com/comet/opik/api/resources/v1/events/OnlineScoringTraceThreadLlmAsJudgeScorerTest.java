@@ -37,6 +37,7 @@ import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -110,6 +111,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private OnlineEvaluationRecorder onlineEvaluationRecorder;
     @Mock
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
+    @Mock
+    private com.comet.opik.domain.evaluators.OnlineScorePublisher onlineScorePublisher;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private AgenticScoringService agenticScoringService;
@@ -168,7 +171,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 agenticScoringService,
                 spanService,
                 onlineEvaluationRecorder,
-                attachmentService);
+                attachmentService,
+                onlineScorePublisher);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -503,7 +507,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     class ScoringTests {
 
         // Real evaluator code so prepareThreadLlmRequest renders against a valid schema.
-        private static final String EVALUATOR_JSON = """
+        static final String EVALUATOR_JSON = """
                 {
                   "model": { "name": "gpt-4o", "temperature": 0.3 },
                   "messages": [
@@ -518,7 +522,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 """;
 
         // Matches the schema above; toFeedbackScores parses this into two FeedbackScoreBatchItem entries.
-        private static final String LLM_RESPONSE = """
+        static final String LLM_RESPONSE = """
                 {
                   "Relevance":   { "score": 4,   "reason": "on-topic" },
                   "Conciseness": { "score": 3.5, "reason": "could be tighter" }
@@ -781,6 +785,184 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                     eq(loggedMessage));
             verify(aiProxyService, never()).scoreTrace(any(), any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+    }
+
+    /**
+     * OPIK-8262 split-on-read. This build writes one thread id per entry, so the ordinary path scores a
+     * single id and {@link BaseRedisSubscriber}'s per-entry ack retires exactly that thread's work. An
+     * entry carrying several ids was written by the PREVIOUS build; rather than score it under a second
+     * set of semantics (which would need a rule for reducing N outcomes into one verdict, and would have
+     * to mis-serve somebody when a permanent and a retryable failure land together), it is republished as
+     * N single-id entries and the original is acked away.
+     */
+    @Nested
+    @DisplayName("Split-on-read migration of legacy multi-id entries")
+    class SplitOnReadTests {
+
+        @Test
+        @DisplayName("A multi-id entry is republished one id per entry and never scored")
+        void multiIdEntryIsSplitAndNotScored() {
+            var otherThreadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var message = sampleMessage().toBuilder()
+                    .threadIds(List.of(threadId, otherThreadId))
+                    .build();
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            List<TraceThreadToScoreLlmAsJudge> republished = captor.getValue();
+            assertThat(republished)
+                    .as("one replacement entry per thread id")
+                    .hasSize(2);
+            assertThat(republished).allSatisfy(entry -> assertThat(entry.threadIds()).hasSize(1));
+            assertThat(republished.stream().map(entry -> entry.threadIds().getFirst()).toList())
+                    .containsExactlyInAnyOrder(threadId, otherThreadId);
+            assertThat(republished).allSatisfy(entry -> {
+                assertThat(entry.ruleId()).isEqualTo(message.ruleId());
+                assertThat(entry.projectId()).isEqualTo(message.projectId());
+                assertThat(entry.workspaceId()).isEqualTo(message.workspaceId());
+                assertThat(entry.userName()).isEqualTo(message.userName());
+                assertThat(entry.code()).isEqualTo(message.code());
+            });
+
+            // Migrated, not scored: nothing in the scoring chain is touched for the original entry.
+            verify(traceService, never()).search(anyInt(), any(TraceSearchCriteria.class));
+            verify(traceThreadService, never()).getThreadModelId(any(), any());
+            verify(aiProxyService, never()).scoreTrace(any(), any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+
+        /**
+         * The ack is implicit — the base subscriber acks on a successful {@code score()}. So "not acked"
+         * is expressed as "score() errors", which is what makes the entry redeliver and the split retry.
+         */
+        @Test
+        @DisplayName("A failed republish fails the entry, so it is not acked and the split is retried")
+        void failedRepublishIsNotAcked() {
+            var otherThreadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var message = sampleMessage().toBuilder()
+                    .threadIds(List.of(threadId, otherThreadId))
+                    .build();
+            var republishFailure = new IllegalStateException("redis unavailable");
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.error(republishFailure));
+
+            assertThatThrownBy(() -> scorer.score(message).block())
+                    .as("acking a split that never landed would lose every thread id in the entry")
+                    .isSameAs(republishFailure);
+
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+
+        @Test
+        @DisplayName("A single-id entry scores normally and republishes nothing")
+        void singleIdEntryIsScoredNotSplit() {
+            var code = JsonUtils.readValue(ScoringTests.EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubSingleThreadHappyPath(trace, project, rule, code);
+
+            scorer.score(message).block();
+
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        /**
+         * The migration path must not claim work it did not do. Before this was fixed the caller hung a
+         * {@code doOnSuccess} logging "Processed trace threads ..." off the whole chain, which completes on
+         * the migrate branch too — so a legacy entry that scored nothing logged as if it had. Diagnostics
+         * that misrepresent what happened are what made the originating incident take days to read, so the
+         * two outcomes are asserted to be distinguishable in a log search.
+         */
+        @Test
+        @DisplayName("Migrating a legacy entry never logs the scoring-success line")
+        void migrationDoesNotLogScoringSuccess() {
+            var scorerLogger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                    .getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
+            var baseLogger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                    .getLogger(OnlineScoringBaseScorer.class);
+            var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+            appender.start();
+            scorerLogger.addAppender(appender);
+            baseLogger.addAppender(appender);
+            try {
+                var otherThreadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+                var message = sampleMessage().toBuilder()
+                        .threadIds(List.of(threadId, otherThreadId))
+                        .build();
+                when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
+                scorer.score(message).block();
+
+                var logged = appender.list.stream()
+                        .map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+                        .toList();
+                assertThat(logged)
+                        .as("nothing was scored, so no log may say it was")
+                        .noneMatch(line -> line.startsWith("Processed trace thread"));
+                assertThat(logged)
+                        .as("the migration needs its own greppable line, distinct from any scoring log")
+                        .anyMatch(line -> line.contains("Migrated '2' legacy thread ids to single-id entries"));
+            } finally {
+                scorerLogger.detachAppender(appender);
+                baseLogger.detachAppender(appender);
+                appender.stop();
+            }
+        }
+
+        @Test
+        @DisplayName("Scoring a single-id entry does log the scoring-success line")
+        void scoringLogsScoringSuccess() {
+            var scorerLogger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                    .getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
+            var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+            appender.start();
+            scorerLogger.addAppender(appender);
+            try {
+                var code = JsonUtils.readValue(ScoringTests.EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+                var message = sampleMessage().toBuilder().code(code).build();
+                var trace = sampleTrace();
+                var project = Project.builder().id(projectId).name("test-project").build();
+                var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+                stubSingleThreadHappyPath(trace, project, rule, code);
+
+                scorer.score(message).block();
+
+                assertThat(appender.list.stream()
+                        .map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage).toList())
+                        .as("the scoring path is the one that may claim it scored")
+                        .anyMatch(line -> line.startsWith("Processed trace thread")
+                                && line.contains(threadId));
+            } finally {
+                scorerLogger.detachAppender(appender);
+                appender.stop();
+            }
+        }
+
+        private void stubSingleThreadHappyPath(Trace trace, Project project,
+                AutomationRuleEvaluatorTraceThreadLlmAsJudge rule, TraceThreadLlmAsJudgeCode code) {
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId)).thenReturn(rule);
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-4o")).thenReturn(new ToolCallingStrategy());
+            when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
+                    .thenReturn(ChatResponse.builder()
+                            .aiMessage(AiMessage.aiMessage(ScoringTests.LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            Mockito.lenient().when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.just(0L));
+            Mockito.lenient().when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.empty());
+            Mockito.lenient()
+                    .when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(false));
         }
     }
 

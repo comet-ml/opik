@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +21,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceThreadOnlineScorerPublisher {
+
+    private static final int THREAD_ID_LOG_SAMPLE = 10;
 
     private final @NonNull OnlineScorePublisher onlineScorePublisher;
 
@@ -49,18 +52,27 @@ class TraceThreadOnlineScorerPublisher {
                         Set<String> threadIds = ruleIdToThreadIds.getValue();
 
                         log.info(
-                                "Enqueuing threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds, ruleId, projectId, workspaceId);
+                                "Enqueuing '{}' stream entries, one per trace thread '{}' for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
+                                threadIds.size(), sampleOf(threadIds), ruleId, projectId, workspaceId);
 
                         // Composed into the deferContextual chain so the enqueue inherits this workspace context.
                         return onlineScorePublisher.enqueueThreadMessage(List.copyOf(threadIds), ruleId, projectId,
                                 workspaceId, userName)
                                 .doOnSuccess(unused -> log.info(
-                                        "Enqueued threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                        threadIds, ruleId, projectId, workspaceId));
+                                        "Enqueued '{}' stream entries, one per trace thread '{}' for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
+                                        threadIds.size(), sampleOf(threadIds), ruleId, projectId, workspaceId));
                     })
                     .then();
         });
+    }
+
+    /** Bounded so an arbitrarily large close batch can't dump its whole id list into the logs. */
+    private static String sampleOf(Collection<String> threadIds) {
+        if (threadIds.size() <= THREAD_ID_LOG_SAMPLE) {
+            return threadIds.toString();
+        }
+        return "%s (and %d more)".formatted(
+                threadIds.stream().limit(THREAD_ID_LOG_SAMPLE).toList(), threadIds.size() - THREAD_ID_LOG_SAMPLE);
     }
 
     private boolean isSampled(Map.Entry<UUID, Boolean> entry) {

@@ -29,6 +29,7 @@ import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,6 +97,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
     @Mock
     private SpanService spanService;
+    @Mock
+    private com.comet.opik.domain.evaluators.OnlineScorePublisher onlineScorePublisher;
 
     private OnlineScoringTraceThreadUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -146,7 +149,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 projectService,
                 automationRuleEvaluatorService,
                 spanService,
-                agenticScoringService);
+                agenticScoringService,
+                onlineScorePublisher);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -498,6 +502,135 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     eq(ruleName),
                     eq(loggedMessage));
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+    }
+
+    /**
+     * OPIK-8262 split-on-read, mirrored from {@code OnlineScoringTraceThreadLlmAsJudgeScorerTest}. Both
+     * trace-thread scorers now share {@code OnlineScoringBaseScorer.migrateOrScoreThreadIds}, and a shared
+     * migration path tested through only one of them is exactly the drift risk that made sharing it the
+     * right call — the Python scorer supplies its own message-copy and scoring callbacks, so those are
+     * what these cases pin.
+     */
+    @Nested
+    @DisplayName("Split-on-read migration of legacy multi-id entries")
+    class SplitOnReadTests {
+
+        @Test
+        @DisplayName("A multi-id entry is republished one id per entry and never scored")
+        void multiIdEntryIsSplitAndNotScored() {
+            var otherThreadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var message = sampleMessage().toBuilder()
+                    .threadIds(List.of(threadId, otherThreadId))
+                    .build();
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON));
+            List<TraceThreadToScoreUserDefinedMetricPython> republished = captor.getValue();
+            assertThat(republished).hasSize(2);
+            assertThat(republished).allSatisfy(entry -> assertThat(entry.threadIds()).hasSize(1));
+            assertThat(republished.stream().map(entry -> entry.threadIds().getFirst()).toList())
+                    .containsExactlyInAnyOrder(threadId, otherThreadId);
+            // The Python scorer's own copy callback must preserve the metric code verbatim -- the migration
+            // does no rule lookup, so a dropped field here would silently change what gets evaluated.
+            assertThat(republished).allSatisfy(entry -> {
+                assertThat(entry.ruleId()).isEqualTo(message.ruleId());
+                assertThat(entry.projectId()).isEqualTo(message.projectId());
+                assertThat(entry.workspaceId()).isEqualTo(message.workspaceId());
+                assertThat(entry.userName()).isEqualTo(message.userName());
+                assertThat(entry.code()).isEqualTo(message.code());
+            });
+
+            verify(traceService, never()).search(anyInt(), any(TraceSearchCriteria.class));
+            verify(traceThreadService, never()).getThreadModelId(any(), any());
+            verify(pythonEvaluatorService, never()).evaluateThread(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+
+        /** Ack is implicit, so "not acked" is expressed as "score() errors" -- see the base-class javadoc. */
+        @Test
+        @DisplayName("A failed republish fails the entry, so it is not acked and the split is retried")
+        void failedRepublishIsNotAcked() {
+            var otherThreadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var message = sampleMessage().toBuilder()
+                    .threadIds(List.of(threadId, otherThreadId))
+                    .build();
+            var republishFailure = new IllegalStateException("redis unavailable");
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.error(republishFailure));
+
+            assertThatThrownBy(() -> scorer.score(message).block()).isSameAs(republishFailure);
+
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+
+        @Test
+        @DisplayName("A single-id entry scores normally and republishes nothing")
+        void singleIdEntryIsScoredNotSplit() {
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("test_score").value(BigDecimal.valueOf(0.95)).reason("ok").build();
+            stubMinimalPythonHappyPath(trace, project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+
+            scorer.score(message).block();
+
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
+        @DisplayName("Migrating a legacy entry never logs the scoring-success line")
+        void migrationDoesNotLogScoringSuccess() {
+            var scorerLogger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                    .getLogger(OnlineScoringTraceThreadUserDefinedMetricPythonScorer.class);
+            var baseLogger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                    .getLogger(OnlineScoringBaseScorer.class);
+            var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+            appender.start();
+            scorerLogger.addAppender(appender);
+            baseLogger.addAppender(appender);
+            try {
+                var otherThreadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+                var message = sampleMessage().toBuilder()
+                        .threadIds(List.of(threadId, otherThreadId))
+                        .build();
+                when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
+                scorer.score(message).block();
+
+                var logged = appender.list.stream()
+                        .map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+                        .toList();
+                assertThat(logged)
+                        .as("nothing was scored, so no log may say it was")
+                        .noneMatch(line -> line.startsWith("Processed trace thread"));
+                assertThat(logged)
+                        .anyMatch(line -> line.contains("Migrated '2' legacy thread ids to single-id entries"));
+            } finally {
+                scorerLogger.detachAppender(appender);
+                baseLogger.detachAppender(appender);
+                appender.stop();
+            }
+        }
+
+        private void stubMinimalPythonHappyPath(Trace trace, Project project) {
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+            lenient().when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(0L));
+            lenient().when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.empty());
         }
     }
 
