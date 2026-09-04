@@ -1062,4 +1062,35 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code hyperbolic}, {@code baseten}, {@code lambda_ai}, {@code nscale} and
+     * {@code oci} as canonical providers so that their token-priced entries in
+     * {@code model_prices_and_context_window.json} are no longer silently dropped at load time. Each
+     * case exercises a representative token-priced model routed through
+     * {@link SpanCostCalculator#textGenerationCost}. Image or duration-priced models under these
+     * providers use pricing shapes this calculator does not cover and stay out of scope here.
+     */
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideOpenAICompatibleProviderCases")
+    void calculateCostHandlesOpenAICompatibleProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideOpenAICompatibleProviderCases() {
+        return Stream.of(
+                // hyperbolic/Qwen/QwQ-32B: input 2e-07, output 2e-07 -> 1000*2e-07 + 200*2e-07 = 0.00024
+                Arguments.of("hyperbolic", "hyperbolic/Qwen/QwQ-32B", "0.00024"),
+                // baseten/zai-org/GLM-5: input 9.5e-07, output 3.15e-06 -> 1000*9.5e-07 + 200*3.15e-06 = 0.00158
+                Arguments.of("baseten", "baseten/zai-org/GLM-5", "0.00158"),
+                // lambda_ai/lfm-7b: input 2.5e-08, output 4e-08 -> 1000*2.5e-08 + 200*4e-08 = 0.000033
+                Arguments.of("lambda_ai", "lambda_ai/lfm-7b", "0.000033"),
+                // nscale/Qwen/QwQ-32B: input 1.8e-07, output 2e-07 -> 1000*1.8e-07 + 200*2e-07 = 0.00022
+                Arguments.of("nscale", "nscale/Qwen/QwQ-32B", "0.00022"),
+                // oci/xai.grok-3: input 3e-06, output 1.5e-05 -> 1000*3e-06 + 200*1.5e-05 = 0.006
+                Arguments.of("oci", "oci/xai.grok-3", "0.006"));
+    }
 }
