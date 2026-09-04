@@ -8,6 +8,7 @@ import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.infrastructure.redaction.RedactionGuard;
 import com.google.common.base.Throwables;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -70,6 +71,10 @@ public class AnalyticsQueriesResource {
         if (!serviceToggles.isOllieEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
+
+        // The caller chooses the projection, so rewriting the result is not enforceable: a value returned
+        // through base64() or substring() matches no rule written against the plain text.
+        RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

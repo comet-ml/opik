@@ -23,6 +23,7 @@ permissions:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   HF_HUB_ENABLE_PROGRESS_BARS: "0"
   HF_HUB_DISABLE_TELEMETRY: "1"
   OPIK_URL_OVERRIDE: http://localhost:8080
@@ -86,7 +87,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v9.0.0
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Run latest Opik server
           env:
@@ -112,7 +113,7 @@ jobs:
             ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
@@ -120,7 +121,7 @@ jobs:
               hf-datasets-
 
         - name: Cache LiteLLM cache
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.litellm_cache
             key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
@@ -176,10 +177,10 @@ jobs:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v9.0.0
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}

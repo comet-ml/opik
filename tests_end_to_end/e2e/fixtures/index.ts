@@ -1,5 +1,15 @@
-export { test, expect } from './filterable-traces.fixture';
+export { test, expect } from './alert.fixture';
+export type {
+  OauthProviderSeed,
+  ProviderKeysFixture,
+  ProviderKeyFixtures,
+} from './provider-key.fixture';
 export type { ProjectFixtures } from './project.fixture';
+export type {
+  BystanderExperimentRef,
+  BystanderTestSuiteRef,
+  BystanderFixtures,
+} from './bystander.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
   ArtifactSource,
@@ -50,4 +60,57 @@ export type {
   FilterableTraceRef,
   FilterableTracesFixtures,
 } from './filterable-traces.fixture';
+export type {
+  OptimizationRunRef,
+  OptimizationTrialRef,
+  OptimizationRunFixtures,
+} from './optimization-run.fixture';
+export type {
+  AgedExperimentRef,
+  AgedExperimentFixtures,
+} from './aged-experiment.fixture';
+export type {
+  EvaluatedThreadRef,
+  EvaluatedThreadTurnRef,
+  ThreadEvaluationRunRef,
+  EvaluatedThreadFixtures,
+} from './evaluated-thread.fixture';
+export type {
+  JsonOutputExperimentRef,
+  JsonOutputExperimentFixtures,
+  JsonSortKey,
+  JsonSortPrefix,
+} from './json-output-experiment.fixture';
+export {
+  JSON_SORT_KEYS,
+  JSON_SORT_PREFIXES,
+  LABEL_COLUMN,
+} from './json-output-experiment.fixture';
+export type { GroupedDatasetRef, GroupedDatasetFixtures } from './grouped-dataset.fixture';
+export { GROUP_COLUMN, TARGET_GROUP } from './grouped-dataset.fixture';
+export type {
+  TokenUsageSpanSeed,
+  TokenUsageSpansRef,
+  TokenUsageSpansFixtures,
+} from './token-usage-spans.fixture';
+export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  ProjectMetricDaySeed,
+  ProjectMetricSpansRef,
+  ProjectMetricSpansFixtures,
+} from './project-metric-spans.fixture';
+export type {
+  AttachedFileSeed,
+  TraceAttachmentsRef,
+  TraceAttachmentsFixtures,
+} from './trace-attachments.fixture';
+export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type { IdAgedTraceRef, IdAgedTracesFixtures } from './id-aged-traces.fixture';
+export type {
+  AlertSeed,
+  AlertRef,
+  AlertEventType,
+  AlertFixtures,
+} from './alert.fixture';
+export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
 export type { ProjectRef } from '../core/backend';

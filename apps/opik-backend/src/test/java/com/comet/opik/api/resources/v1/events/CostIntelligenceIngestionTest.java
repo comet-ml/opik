@@ -10,12 +10,15 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.CipxTokenUtils;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -43,11 +46,18 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -83,8 +93,15 @@ class CostIntelligenceIngestionTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
+                .jdbcUrl(MYSQL.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(REDIS.getRedisURI())
+                .customConfigs(List.of(
+                        new CustomConfig("cipxTokenValidation.enabled", "true"),
+                        new CustomConfig("cipxTokenValidation.url", wireMock.runtimeInfo().getHttpBaseUrl())))
+                .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -348,6 +365,45 @@ class CostIntelligenceIngestionTest {
             });
         }
 
+        @Test
+        @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
+        void slashCommandAndIdentityContextLanes() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(slashCommandCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                // raw idx 1 (identity_context/identity_context) is dropped at ingestion;
+                // the two remaining blocks must not fall to 'unattributed' (OPIK-8065).
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(2);
+
+                var slashCommand = rows.getFirst();
+                assertThat(slashCommand.blockIdx()).isEqualTo(0);
+                assertThat(slashCommand.category()).isEqualTo("slash_command");
+                assertThat(slashCommand.lane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.bdLane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.label()).isEqualTo("commit-helper");
+                assertThat(slashCommand.isDefinition()).isEqualTo(0);
+
+                // identity_context whose parent is another category: framing carved out of
+                // that parent — kept, and folded under static_overhead like the other riders.
+                // blockIdx 2, not 1: the dropped row still consumes its raw index.
+                var identityContext = rows.getLast();
+                assertThat(identityContext.blockIdx()).isEqualTo(2);
+                assertThat(identityContext.category()).isEqualTo("identity_context");
+                assertThat(identityContext.lane()).isEqualTo("static_overhead");
+                assertThat(identityContext.bdLane()).isEqualTo("static_overhead");
+                assertThat(identityContext.label()).isEqualTo("identity_context");
+                assertThat(identityContext.isDefinition()).isEqualTo(0);
+            });
+        }
+
         @DisplayName("write blocks inherit the span's cache TTL (1h vs 5m)")
         @ParameterizedTest
         @CsvSource({
@@ -410,6 +466,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().repository()).isEqualTo("git@github.com:acme/repo.git");
                 assertThat(row.get().sessionId()).isEqualTo("cc-session-abc");
                 assertThat(row.get().harness()).isEqualTo("codex");
+                // An API-key caller carries no device, and device_id is never read from metadata.
+                assertThat(row.get().deviceId()).isEmpty();
                 assertThat(row.get().schemaVersion()).isEqualTo(3);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxTrace.startTime().toEpochMilli());
@@ -436,6 +494,40 @@ class CostIntelligenceIngestionTest {
             });
 
             assertThat(getCipxIdentity(plainTrace.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("CIPX-authenticated trace persists the validator-provided device id")
+        void cipxAuthenticatedTracePersistsValidatorDeviceId() {
+            var ws = newWorkspace();
+            String token = CipxTokenUtils.ACCESS_PREFIX + UUID.randomUUID();
+            String deviceId = UUID.randomUUID().toString();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            wireMock.server().stubFor(post(urlPathEqualTo("/v1/internal/cipx-device-tokens/validate"))
+                    .withRequestBody(matchingJsonPath("$.token", equalTo(token)))
+                    .willReturn(okJson(JsonUtils.writeValueAsString(Map.of(
+                            "user_name", email,
+                            "workspace_id", ws.workspaceId(),
+                            "workspace_name", ws.workspaceName(),
+                            "device_id", deviceId)))));
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName("cipx-" + UUID.randomUUID())
+                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "git@github.com:acme/repo.git",
+                            "codex", 3))
+                    .build();
+
+            traceResourceClient.createTrace(trace, token, "ignored-for-device-token-auth");
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().deviceId()).isEqualTo(deviceId);
+            });
+            wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/internal/cipx-device-tokens/validate"))
+                    .withRequestBody(matchingJsonPath("$.token", equalTo(token))));
         }
 
         @Test
@@ -621,6 +713,31 @@ class CostIntelligenceIngestionTest {
                         .formatted(model, cacheRead));
     }
 
+    private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"slash_command","side":"input","cache_status":"read","parent_category":"user_prompts","chars":150,"tool_name":"","tool_server":"","tool_use_id":"","resource":"commit-helper","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"user_prompts","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
     private static JsonNode traceCipxMetadata(String userUuid, String email, String displayName, String repository,
             String harness, int schemaVersion) {
         return JsonUtils.getJsonNodeFromString("""
@@ -748,7 +865,8 @@ class CostIntelligenceIngestionTest {
                 SELECT
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, device_id,
+                    schema_version,
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted
@@ -769,6 +887,7 @@ class CostIntelligenceIngestionTest {
                             .repository(row.get("repository", String.class))
                             .sessionId(row.get("session_id", String.class))
                             .harness(row.get("harness", String.class))
+                            .deviceId(row.get("device_id", String.class))
                             .schemaVersion(row.get("schema_version", Integer.class))
                             .billingMode(row.get("billing_mode", String.class))
                             .plan(row.get("plan", String.class))
@@ -826,7 +945,8 @@ class CostIntelligenceIngestionTest {
 
     @Builder
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
-            String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
+            String userDisplayName, String repository, String sessionId, String harness, String deviceId,
+            Integer schemaVersion,
             String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
             String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,

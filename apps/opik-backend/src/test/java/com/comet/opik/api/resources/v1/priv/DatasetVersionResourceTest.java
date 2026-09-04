@@ -51,12 +51,17 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceEnrichmentOptions;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.Statement;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -72,12 +77,14 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +97,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -152,9 +160,11 @@ class DatasetVersionResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
+    private ExperimentAggregatesService experimentAggregatesService;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.mySqlTemplate = mySqlTemplate;
 
@@ -166,6 +176,8 @@ class DatasetVersionResourceTest {
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
         spanResourceClient = new SpanResourceClient(client, baseURI);
+        experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
+        clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
     }
 
     @AfterAll
@@ -1256,7 +1268,7 @@ class DatasetVersionResourceTest {
 
             var addedItemId = v2Items.stream()
                     .filter(item -> !v1ItemIds.contains(item.datasetItemId()))
-                    .map(DatasetItem::datasetItemId)
+                    .map(DatasetItem::id)
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Added item not found in v2"));
 
@@ -1654,6 +1666,10 @@ class DatasetVersionResourceTest {
             assertThat(latestVersion.id()).isEqualTo(version1.id()); // Same version ID
             assertThat(latestVersion.versionName()).isEqualTo("v1");
             assertThat(latestVersion.itemsTotal()).isEqualTo(4); // 5 - 1 = 4
+            // A delete moves total and deleted only; the added/modified counters from v1 stay put.
+            assertThat(latestVersion.itemsDeleted()).isEqualTo(1);
+            assertThat(latestVersion.itemsAdded()).isEqualTo(version1.itemsAdded());
+            assertThat(latestVersion.itemsModified()).isEqualTo(version1.itemsModified());
 
             // Verify only 4 items remain in the latest version
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
@@ -3510,6 +3526,107 @@ class DatasetVersionResourceTest {
                             datasetItems.get(0).id());
         }
 
+        static Stream<Arguments> sortByJsonKeyThroughPushTopLimit() {
+            // namespace, JSON key (with special characters), direction, expected item-index order
+            return Stream.of(
+                    Arguments.of("output", "score's", Direction.ASC, List.of(0, 1, 2)),
+                    Arguments.of("output", "score's", Direction.DESC, List.of(2, 1, 0)),
+                    Arguments.of("input", "in\"put", Direction.ASC, List.of(0, 1, 2)),
+                    Arguments.of("input", "in\"put", Direction.DESC, List.of(2, 1, 0)),
+                    Arguments.of("metadata", "me\\ta", Direction.ASC, List.of(0, 1, 2)),
+                    Arguments.of("metadata", "me\\ta", Direction.DESC, List.of(2, 1, 0)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("should sort versioned experiment items by a JSON key (output/input/metadata) through the push-top-limit path")
+        void sortByJsonKeyThroughPushTopLimit(String namespace, String jsonKey, Direction direction,
+                List<Integer> expectedIndexOrder) {
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            int count = 3;
+            createDatasetItems(datasetId, count);
+
+            var version = getLatestVersion(datasetId);
+            var datasetItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var projectName = UUID.randomUUID().toString();
+
+            // One trial per dataset item; each trace carries a distinct value under the requested key (which
+            // contains special characters) in the requested namespace. Sorting by <namespace>.<key> routes
+            // through the push-top-limit path, whose JSON expression binds the key as a parameter
+            // (JSONExtractRaw(argMax(...), :param)).
+            var traceIds = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        var value = JsonUtils.valueToTree(Map.of(jsonKey, (i + 1) * 10));
+                        var builder = factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName);
+                        switch (namespace) {
+                            case "output" -> builder.output(value);
+                            case "input" -> builder.input(value);
+                            case "metadata" -> builder.metadata(value);
+                            default -> throw new IllegalStateException("Unexpected namespace: " + namespace);
+                        }
+                        var trace = builder.build();
+                        traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                        return trace.id();
+                    })
+                    .toList();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version.id())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            IntStream.range(0, count).forEach(i -> {
+                var item = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experimentId)
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traceIds.get(i))
+                        .build();
+                experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE);
+            });
+
+            // Materialize experiment_item_aggregates so the query takes the push-top-limit branch
+            // (applyPushTopLimit requires hasAggregated && !hasRaw); otherwise it falls back to the raw
+            // path with an ordinary OFFSET and the push-top-limit CTE would go untested.
+            experimentAggregatesService.populateAggregations(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                    .block();
+
+            // Baseline fetch (no sorting) captures the full objects as returned; the assertion only tests order.
+            var baseline = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, null, API_KEY, TEST_WORKSPACE).content();
+            assertThat(baseline).hasSize(count);
+
+            Map<UUID, DatasetItem> baselineById = baseline.stream()
+                    .collect(Collectors.toMap(DatasetItem::id, item -> item));
+            List<DatasetItem> expected = expectedIndexOrder.stream()
+                    .map(i -> baselineById.get(datasetItems.get(i).id()))
+                    .toList();
+
+            var sorting = List.of(SortingField.builder().field(namespace + "." + jsonKey).direction(direction).build());
+            var sorted = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, sorting, API_KEY, TEST_WORKSPACE);
+
+            // Compare the whole DatasetItem objects, in order - not just their ids.
+            assertThat(sorted.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expected);
+
+            // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
+            // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
+            var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(pageTwo.total()).isEqualTo(count);
+            assertThat(pageTwo.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactly(expected.get(count - 1));
+        }
+
         @Test
         @DisplayName("Success: PUT /items without query param returns 204 (backward compatibility)")
         void putItems_whenRespondWithLatestVersionNotSet_thenReturnsNoContent() {
@@ -3674,6 +3791,125 @@ class DatasetVersionResourceTest {
     class BatchVersioningTests {
 
         @Test
+        @DisplayName("Success: Duplicate stable id in the version-creating batch counts once (OPIK-7891)")
+        void putItems__whenCreatingBatchRepeatsStableId__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // The SDK's parallel upload sends every batch under one batch_group_id. The batch that
+            // arrives first CREATES the version, and that path derives itemsTotal from insertItems.
+            // That used to return items.size() -- the raw list length, deliberately not a DB row count
+            // (ClickHouse async inserts report 0 before commit) -- so a stable id repeated inside the
+            // first batch was counted twice while ClickHouse collapsed it to one row. It now counts
+            // distinct dataset_item_ids, which is what this test pins.
+            var duplicatedId = TestIdGeneratorFactory.create().generateId();
+            var distinctId = TestIdGeneratorFactory.create().generateId();
+
+            var distinctItem = DatasetItem.builder()
+                    .id(distinctId)
+                    .datasetItemId(distinctId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"third\"")))
+                    .build();
+
+            var items = List.of(
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                            .build(),
+                    distinctItem);
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(UUID.randomUUID())
+                    .items(items)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version = getLatestVersion(datasetId);
+            var stored = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Which revision of the repeated id survives is deliberately NOT asserted: every row in a
+            // batch is written with the same now64(9), and the read dedupes with
+            // `ORDER BY dataset_item_id DESC, last_updated_at DESC LIMIT 1 BY dataset_item_id` -- no
+            // tie-breaker, so either payload may win. Pinning "second" would be asserting an accident.
+            // What is guaranteed, and what the fix is about: exactly one row per distinct id, and a
+            // counter that agrees with it.
+            assertThat(stored).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(duplicatedId, distinctId);
+            assertThat(stored)
+                    .filteredOn(item -> distinctId.equals(item.id()))
+                    .singleElement()
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .isEqualTo(distinctItem);
+
+            // items_total must agree with what is actually stored.
+            assertThat(version.itemsTotal()).isEqualTo(stored.size());
+        }
+
+        @Test
+        @DisplayName("Success: Duplicate stable id across batches in one group counts once (OPIK-7891)")
+        void putItems__whenDuplicateStableIdSpansBatchesInGroup__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batchGroupId = UUID.randomUUID();
+
+            // Mirrors the SDK's parallel upload: several batches under one batch_group_id fold into
+            // one version. The first batch creates it, later batches append. A stable id present in
+            // both must contribute exactly one item to the total.
+            var sharedId = TestIdGeneratorFactory.create().generateId();
+            var otherId = TestIdGeneratorFactory.create().generateId();
+
+            var otherItem = DatasetItem.builder()
+                    .id(otherId)
+                    .datasetItemId(otherId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"other\"")))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(batchGroupId)
+                    .items(List.of(
+                            DatasetItem.builder()
+                                    .id(sharedId)
+                                    .source(DatasetItemSource.SDK)
+                                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                                    .build(),
+                            otherItem))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            // The second batch re-sends the shared id with new content, so it is an update:
+            // one row, holding the later revision.
+            var updatedShared = DatasetItem.builder()
+                    .id(sharedId)
+                    .datasetItemId(sharedId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"updated\"")))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(batchGroupId)
+                    .items(List.of(updatedShared))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version = getLatestVersion(datasetId);
+            var stored = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            assertThat(stored)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyInAnyOrder(updatedShared, otherItem);
+            assertThat(version.itemsTotal()).isEqualTo(stored.size());
+        }
+
+        @Test
         @DisplayName("Success: Multiple INSERT batches with same batch_group_id create single version")
         void putItems_whenSameBatchId_thenSingleVersion() {
             // Given - Create dataset
@@ -3716,6 +3952,9 @@ class DatasetVersionResourceTest {
             var version = getLatestVersion(datasetId);
             assertThat(version.itemsTotal()).isEqualTo(6);
             assertThat(version.itemsAdded()).isEqualTo(6);
+            // Appends of brand-new items move total and added only; nothing here is an update or a delete.
+            assertThat(version.itemsModified()).isZero();
+            assertThat(version.itemsDeleted()).isZero();
             assertThat(version.versionName()).isEqualTo("v1");
 
             // Verify items can be fetched
@@ -5326,6 +5565,214 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
+    @DisplayName("Atomic version count updates (OPIK-7707):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AtomicVersionCountUpdates {
+
+        private int incrementCounts(UUID versionId, int total, int added, int modified, int deleted) {
+            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(versionId, total, added, modified, deleted, WORKSPACE_ID, USER));
+        }
+
+        private void awaitBarrier(CyclicBarrier barrier) {
+            try {
+                barrier.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            } catch (BrokenBarrierException | TimeoutException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: single-batch append accumulates the full counter triple")
+        void insertItems__whenAppendingToExistingVersion__thenCountersAccumulate() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var seed = getLatestVersion(datasetId);
+            assertThat(seed.itemsTotal()).isEqualTo(3);
+            assertThat(seed.itemsAdded()).isEqualTo(3);
+            assertThat(seed.itemsModified()).isZero();
+
+            // 2 brand-new items plus a re-send of an existing one: only the new items move itemsTotal.
+            var existingItem = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, seed.versionHash(), API_KEY, TEST_WORKSPACE).content().getFirst();
+            var items = new ArrayList<>(generateDatasetItems(2));
+            items.add(existingItem);
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated.id()).isEqualTo(seed.id());
+            assertThat(updated.itemsTotal()).isEqualTo(5); // 3 + 2 new (the update doesn't count)
+            assertThat(updated.itemsAdded()).isEqualTo(5);
+            assertThat(updated.itemsModified()).isEqualTo(1);
+            assertThat(updated.itemsDeleted()).isZero();
+        }
+
+        @Test
+        @DisplayName("Success: concurrent increments are exact without the per-dataset lock")
+        void incrementCounts__whenConcurrentWritersBypassTheLock__thenCountersAreExact() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Hit the DAO directly so withDatasetVersionLock is out of the picture entirely: this is what
+            // proves the arithmetic itself is atomic rather than merely serialized by the lock. The old
+            // read-modify-write would lose updates here.
+            int writers = 8;
+            int incrementsPerWriter = 25;
+
+            ExecutorService executor = Executors.newFixedThreadPool(writers);
+            CyclicBarrier barrier = new CyclicBarrier(writers);
+            try {
+                IntStream.range(0, writers)
+                        .mapToObj(i -> CompletableFuture.runAsync(() -> {
+                            awaitBarrier(barrier);
+                            for (int n = 0; n < incrementsPerWriter; n++) {
+                                incrementCounts(versionId, 1, 1, 2, 0);
+                            }
+                        }, executor))
+                        .toList()
+                        .forEach(CompletableFuture::join);
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            int expectedIncrements = writers * incrementsPerWriter;
+            var version = getLatestVersion(datasetId);
+            assertThat(version.itemsTotal()).isEqualTo(1 + expectedIncrements);
+            assertThat(version.itemsAdded()).isEqualTo(1 + expectedIncrements);
+            assertThat(version.itemsModified()).isEqualTo(2 * expectedIncrements);
+        }
+
+        @Test
+        @DisplayName("Success: NULL counters are treated as zero rather than staying NULL")
+        void incrementCounts__whenCountersAreNull__thenTreatedAsZero() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // The counter columns are `INT DEFAULT 0` -- nullable, since DEFAULT only applies when the
+            // column is omitted on INSERT. A bare `col + :delta` would leave NULL as NULL, which then
+            // unboxes to an NPE on the Integer-typed record. The absolute update this replaced happened
+            // to repair a NULL by overwriting it, so the increment has to COALESCE explicitly.
+            int nulled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = NULL, items_added = NULL, items_modified = NULL, items_deleted = NULL
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(nulled).isOne();
+
+            assertThat(incrementCounts(versionId, 3, 3, 1, 0)).isOne();
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded,
+                            DatasetVersion::itemsModified, DatasetVersion::itemsDeleted)
+                    .containsExactly(3, 3, 1, 0);
+        }
+
+        @Test
+        @DisplayName("Success: increment against an unknown version affects no rows")
+        void incrementCounts__whenVersionDoesNotExist__thenNoRowsAffected() {
+            assertThat(incrementCounts(UUID.randomUUID(), 1, 1, 0, 0)).isZero();
+        }
+
+        @Test
+        @DisplayName("Success: increment scoped to another workspace affects no rows")
+        void incrementCounts__whenVersionBelongsToAnotherWorkspace__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            var seed = getLatestVersion(datasetId);
+
+            // Real version id, wrong workspace: the workspace predicate must keep the update from matching, which is
+            // what lets both count-update helpers detect a missing/foreign version from the affected-row count alone.
+            int updated = mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(seed.id(), 1, 1, 0, 0, UUID.randomUUID().toString(), USER));
+
+            assertThat(updated).isZero();
+            assertThat(getLatestVersion(datasetId).itemsTotal()).isEqualTo(seed.itemsTotal());
+        }
+
+        @Test
+        @DisplayName("Success: a version left at the not-migrated sentinel is never incremented")
+        void incrementCounts__whenVersionHoldsNotMigratedSentinel__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Liquibase 000046 leaves pre-versioning datasets at items_total = -1 until the backfill runs, and
+            // findVersionsNeedingItemsTotalMigration selects on exactly that value. Adding a delta would both
+            // corrupt the counter and hide the row from the backfill forever, so the increment must skip it.
+            int sentinelled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(sentinelled).isOne();
+
+            assertThat(incrementCounts(versionId, 5, 5, 0, 0)).isZero();
+
+            // Still exactly the sentinel: untouched, so the backfill will still find it.
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
+        }
+
+        @Test
+        @DisplayName("Error: insert whose version is left at the sentinel surfaces 404, not a silent success")
+        void insertItems__whenCountUpdateMatchesNoRow__thenNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Reaching the `updated == 0` guard through the public API needs a version that still resolves as
+            // "latest" (so the insert appends rather than minting a new version) but that the count UPDATE
+            // refuses to match. The not-migrated sentinel is exactly that state: an un-backfilled version being
+            // written to before the migration job has reached it.
+            mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+
+            try (var response = datasetResourceClient.callCreateDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(1))
+                    .build(), TEST_WORKSPACE, API_KEY)) {
+
+                // Surfacing this beats the alternatives: silently dropping the counter update, or corrupting the
+                // sentinel so the backfill never reconciles the row.
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
+        }
+    }
+
+    @Nested
     @DisplayName("Lightweight version-id lookups (DAO):")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class LightweightVersionIdLookups {
@@ -5662,5 +6109,509 @@ class DatasetVersionResourceTest {
             assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total()).isEqualTo(2L);
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
         }
+
+        @Test
+        @DisplayName("Concurrent appends sharing a stable id: itemsTotal matches the rows actually stored")
+        void concurrentAppendsSharingStableId__thenItemsTotalMatchesStoredRows() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Establish the group version and get a server-issued stable id to re-send. Seeding first
+            // means every racing batch below takes the unlocked append branch.
+            UUID sharedBatchGroupId = UUID.randomUUID();
+            var seedBatch = buildBatch(datasetId, sharedBatchGroupId, 1, "seed");
+            try (var response = datasetResourceClient.callCreateDatasetItems(seedBatch, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            var seeded = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+            UUID sharedItemId = seeded.stream()
+                    .filter(item -> "seed-input-0".equals(item.data().get("input").asText()))
+                    .map(DatasetItem::id)
+                    .findFirst()
+                    .orElseThrow();
+
+            long rowsBefore = latestItemCount(datasetId);
+
+            // Every writer re-sends the SAME stable id (the documented upsert key). This is the SDK-retry shape the
+            // reviewer flagged: with the append unlocked, each batch can classify the id as new
+            // (countExistingItemIds sees the pre-existing row, but concurrent siblings do not see each
+            // other) and each increments items_total, while ReplacingMergeTree keeps a single row.
+            int writers = 6;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemBatch.builder()
+                            .datasetId(datasetId)
+                            .batchGroupId(sharedBatchGroupId)
+                            .items(List.of(DatasetItem.builder()
+                                    .id(sharedItemId)
+                                    .source(DatasetItemSource.MANUAL)
+                                    .traceId(null)
+                                    .spanId(null)
+                                    .data(Map.of(
+                                            "input", JsonUtils.getJsonNodeFromString("\"retry-input\""),
+                                            "output", JsonUtils.getJsonNodeFromString("\"retry-output-" + i + "\"")))
+                                    .build()))
+                            .build())
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+            assertThat(statuses).allMatch(status -> status == 204);
+
+            // Re-sending an existing id is an update, not an insert, so the row count must not move.
+            long rowsAfter = latestItemCount(datasetId);
+            assertThat(rowsAfter).isEqualTo(rowsBefore);
+
+            // The stored rows are ground truth: itemsTotal on the group's version must agree with them.
+            DatasetVersion groupVersion = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content().stream()
+                    .max(Comparator.comparing(DatasetVersion::createdAt))
+                    .orElseThrow();
+            assertThat(groupVersion.itemsTotal()).isEqualTo((int) rowsAfter);
+        }
     }
+
+    @Nested
+    @DisplayName("Page reads bounded by page size (OPIK-8109):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BoundedPageReads {
+
+        /**
+         * Sorts ahead of any generated id under {@code ORDER BY dataset_item_id DESC}, so a backdated item
+         * wrongly admitted by phase 1 necessarily consumes the first slot of the requested page.
+         */
+        private static final String BACKDATED_ITEM_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+
+        /** Item-level vs snapshot-row metadata for the alias-binding fixture; every pair differs. */
+        private static final String DIVERGENT_ITEM_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+        private static final String DIVERGENT_ROW_ID = "11111111-1111-1111-1111-111111111111";
+        private static final String ITEM_LEVEL_USER = "item-level-user";
+        private static final String ROW_LEVEL_USER = "row-level-user";
+        private static final String ITEM_LEVEL_TIME = "2020-01-01 00:00:00";
+        private static final String ROW_LEVEL_TIME = "2039-01-01 00:00:00";
+
+        private void createTaggedItems(UUID datasetId, int count, String tag) {
+            var items = IntStream.range(0, count)
+                    .mapToObj(i -> DatasetItem.builder()
+                            .id(null)
+                            .source(DatasetItemSource.MANUAL)
+                            .data(Map.of(
+                                    "tag", JsonUtils.readTree("\"" + tag + "\""),
+                                    "input", JsonUtils.readTree("\"row-" + i + "\"")))
+                            .build())
+                    .toList();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build(), TEST_WORKSPACE, API_KEY);
+        }
+
+        /**
+         * Adds a second, newer physical row for every item in a version, with {@code data['tag']} rewritten.
+         * <p>
+         * The engine's deduplication key is {@code (workspace_id, dataset_id, dataset_version_id, id)}, so two
+         * rows sharing a {@code dataset_item_id} but holding different physical {@code id}s are never collapsed
+         * by a merge. That is exactly why the read deduplicates with {@code LIMIT 1 BY dataset_item_id} rather
+         * than by {@code id}, and it is the only state in which the two-phase read's filter handling is
+         * observable: with the filter applied only when resolving the page's ids, the superseding row is what
+         * gets returned.
+         */
+        private void addSupersedingRow(UUID datasetId, UUID versionId, String newTag) {
+            String sql = """
+                    INSERT INTO dataset_item_versions
+                        (id, dataset_item_id, dataset_id, dataset_version_id, data, source,
+                         item_created_at, item_last_updated_at, item_created_by, item_last_updated_by,
+                         created_at, last_updated_at, created_by, last_updated_by, workspace_id)
+                    SELECT
+                        toString(generateUUIDv4()),
+                        dataset_item_id,
+                        dataset_id,
+                        dataset_version_id,
+                        mapUpdate(data, map('tag', :new_tag)),
+                        source,
+                        item_created_at,
+                        item_last_updated_at + toIntervalSecond(60),
+                        item_created_by,
+                        item_last_updated_by,
+                        created_at,
+                        last_updated_at + toIntervalSecond(60),
+                        created_by,
+                        last_updated_by,
+                        workspace_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :dataset_id
+                    AND dataset_version_id = :version_id
+                    """;
+
+            clickHouseTemplate.nonTransaction(connection -> {
+                Statement statement = connection.createStatement(sql)
+                        .bind("new_tag", "\"" + newTag + "\"")
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .bind("workspace_id", WORKSPACE_ID);
+
+                return Mono.from(statement.execute());
+            }).block();
+        }
+
+        @Test
+        @DisplayName("Filtered page never returns a row that fails the filter, even when a newer row supersedes it")
+        void filteredPage__whenSupersedingRowFailsTheFilter__thenItIsNotReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 3, "keep");
+            var version = getLatestVersion(datasetId);
+
+            // Two rows per item now: the original tagged "keep", and a newer one tagged "superseded".
+            addSupersedingRow(datasetId, version.id(), "superseded");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "keep");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content())
+                    .as("""
+                            Filters are applied before deduplication, so a filtered page only ever contains rows \
+                            that match. If phase 2 of the two-phase read omits the filters, the id is selected \
+                            from the matching older row but resolved to the newer one, and the caller receives \
+                            rows it filtered out.""")
+                    .allSatisfy(item -> assertThat(item.data().get("tag").asText())
+                            .contains("keep")
+                            .doesNotContain("superseded"));
+        }
+
+        @Test
+        @DisplayName("Pages are ordered by id descending and disjoint across the whole version")
+        void pages__areOrderedAndDisjoint() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 25);
+
+            var seen = new ArrayList<UUID>();
+            for (int page = 1; page <= 3; page++) {
+                var content = datasetResourceClient.getDatasetItems(
+                        datasetId, page, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+                assertThat(content)
+                        .as("page %d must be ordered by id descending, matching the query's leading sort key",
+                                page)
+                        .isSortedAccordingTo(
+                                Comparator.comparing((DatasetItem item) -> item.id().toString()).reversed());
+
+                content.forEach(item -> seen.add(item.id()));
+            }
+
+            assertThat(seen)
+                    .as("paging through the version must visit every item exactly once")
+                    .hasSize(25)
+                    .doesNotHaveDuplicates();
+        }
+
+        /**
+         * Inserts one extra item into a version whose authoring time is backdated while its snapshot row is
+         * written now, so {@code item_created_at} and the physical {@code created_at} diverge by years.
+         * <p>
+         * Versioning produces this naturally: a snapshot taken today carries rows whose {@code created_at} is
+         * today while the items themselves were authored earlier, so on a long-lived dataset the two clocks
+         * can diverge by days. That divergence is what makes alias binding observable: a {@code created_at}
+         * filter selects different items depending on whether it binds to the item's time or the row's.
+         */
+        private void addBackdatedItem(UUID datasetId, UUID versionId, String tag) {
+            String sql = """
+                    INSERT INTO dataset_item_versions
+                        (id, dataset_item_id, dataset_id, dataset_version_id, data, source,
+                         item_created_at, item_last_updated_at, item_created_by, item_last_updated_by,
+                         created_at, last_updated_at, created_by, last_updated_by, workspace_id)
+                    SELECT
+                        toString(generateUUIDv4()),
+                        :backdated_item_id,
+                        :dataset_id,
+                        :version_id,
+                        map('tag', :tag),
+                        'sdk',
+                        toDateTime64('2020-01-01 00:00:00', 9, 'UTC'),
+                        toDateTime64('2020-01-01 00:00:00', 9, 'UTC'),
+                        '', '',
+                        now64(9), now64(9),
+                        '', '',
+                        :workspace_id
+                    """;
+
+            clickHouseTemplate.nonTransaction(connection -> {
+                Statement statement = connection.createStatement(sql)
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .bind("backdated_item_id", BACKDATED_ITEM_ID)
+                        .bind("tag", "\"" + tag + "\"")
+                        .bind("workspace_id", WORKSPACE_ID);
+
+                return Mono.from(statement.execute());
+            }).block();
+        }
+
+        @Test
+        @DisplayName("A created_at filter binds to the item's authoring time, not the snapshot row's")
+        void createdAtFilter__bindsToItemAuthoringTime__notTheSnapshotRow() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 3, "recent");
+            var version = getLatestVersion(datasetId);
+
+            // One extra item authored in 2020 but snapshotted into this version just now.
+            addBackdatedItem(datasetId, version.id(), "backdated");
+
+            // Cutoff sits between the two: after the backdated item's authoring time, before its row time.
+            var filter = new DatasetItemFilter(DatasetItemField.CREATED_AT, Operator.GREATER_THAN, null,
+                    "2021-01-01T00:00:00Z");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("size", 3, "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            var tags = page.content().stream()
+                    .map(item -> item.data().get("tag").asText())
+                    .toList();
+
+            assertThat(tags)
+                    .as("no returned row may fail the filter")
+                    .noneMatch(tag -> tag.contains("backdated"));
+
+            assertThat(tags)
+                    .as("""
+                            The filter must bind to item_created_at, which the projection aliases. If phase 1 \
+                            omits that alias the predicate binds to the snapshot row's physical created_at, so \
+                            phase 1 admits the backdated item and spends the first slot of the page on it. \
+                            Phase 2 re-filters correctly and drops it, leaving a SHORT page: two rows where \
+                            three matching items exist. That silent truncation, not a wrong row, is the \
+                            user-visible symptom.""")
+                    .hasSize(3)
+                    .allMatch(tag -> tag.contains("recent"));
+        }
+
+        /**
+         * Every field whose filter predicate is emitted as a bare column name that also exists physically on
+         * {@code dataset_item_versions}. ClickHouse binds {@code WHERE} to the {@code SELECT} alias, so each of
+         * these must resolve to the item-level column, never to the snapshot row's own column.
+         */
+        private Stream<Arguments> aliasedFilterFields() {
+            return Stream.of(
+                    Arguments.of(DatasetItemField.ID, Operator.EQUAL, DIVERGENT_ITEM_ID, true,
+                            "id binds to dataset_item_id"),
+                    Arguments.of(DatasetItemField.ID, Operator.EQUAL, DIVERGENT_ROW_ID, false,
+                            "id must not bind to the physical row id"),
+                    Arguments.of(DatasetItemField.CREATED_AT, Operator.LESS_THAN, "2030-01-01T00:00:00Z", true,
+                            "created_at binds to item_created_at"),
+                    Arguments.of(DatasetItemField.CREATED_AT, Operator.GREATER_THAN, "2030-01-01T00:00:00Z", false,
+                            "created_at must not bind to the row's created_at"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_AT, Operator.LESS_THAN, "2030-01-01T00:00:00Z", true,
+                            "last_updated_at binds to item_last_updated_at"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_AT, Operator.GREATER_THAN, "2030-01-01T00:00:00Z",
+                            false, "last_updated_at must not bind to the row's last_updated_at"),
+                    Arguments.of(DatasetItemField.CREATED_BY, Operator.EQUAL, ITEM_LEVEL_USER, true,
+                            "created_by binds to item_created_by"),
+                    Arguments.of(DatasetItemField.CREATED_BY, Operator.EQUAL, ROW_LEVEL_USER, false,
+                            "created_by must not bind to the row's created_by"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_BY, Operator.EQUAL, ITEM_LEVEL_USER, true,
+                            "last_updated_by binds to item_last_updated_by"),
+                    Arguments.of(DatasetItemField.LAST_UPDATED_BY, Operator.EQUAL, ROW_LEVEL_USER, false,
+                            "last_updated_by must not bind to the row's last_updated_by"));
+        }
+
+        /**
+         * Adds one item whose item-level metadata differs from its snapshot row's metadata in every aliased
+         * column, so a filter that binds to the wrong side is always observable.
+         */
+        private void addItemWithDivergentRowMetadata(UUID datasetId, UUID versionId) {
+            String sql = """
+                    INSERT INTO dataset_item_versions
+                        (id, dataset_item_id, dataset_id, dataset_version_id, data, source,
+                         item_created_at, item_last_updated_at, item_created_by, item_last_updated_by,
+                         created_at, last_updated_at, created_by, last_updated_by, workspace_id)
+                    SELECT
+                        :row_id, :item_id, :dataset_id, :version_id,
+                        map('tag', '"divergent"'), 'sdk',
+                        toDateTime64(:item_time, 9, 'UTC'), toDateTime64(:item_time, 9, 'UTC'),
+                        :item_user, :item_user,
+                        toDateTime64(:row_time, 9, 'UTC'), toDateTime64(:row_time, 9, 'UTC'),
+                        :row_user, :row_user,
+                        :workspace_id
+                    """;
+
+            clickHouseTemplate.nonTransaction(connection -> {
+                Statement statement = connection.createStatement(sql)
+                        .bind("row_id", DIVERGENT_ROW_ID)
+                        .bind("item_id", DIVERGENT_ITEM_ID)
+                        .bind("dataset_id", datasetId.toString())
+                        .bind("version_id", versionId.toString())
+                        .bind("item_time", ITEM_LEVEL_TIME)
+                        .bind("row_time", ROW_LEVEL_TIME)
+                        .bind("item_user", ITEM_LEVEL_USER)
+                        .bind("row_user", ROW_LEVEL_USER)
+                        .bind("workspace_id", WORKSPACE_ID);
+
+                return Mono.from(statement.execute());
+            }).block();
+        }
+
+        @ParameterizedTest(name = "{4}")
+        @MethodSource("aliasedFilterFields")
+        @DisplayName("Filters bind to item-level columns, not the snapshot row's")
+        void filters__bindToItemLevelColumns(DatasetItemField field, Operator operator, String value,
+                boolean expectPresent, String scenario) {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 2, "recent");
+            var version = getLatestVersion(datasetId);
+            addItemWithDivergentRowMetadata(datasetId, version.id());
+
+            var filter = new DatasetItemFilter(field, operator, null, value);
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("size", 20, "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            var ids = page.content().stream().map(item -> item.id().toString()).toList();
+
+            if (expectPresent) {
+                assertThat(ids).as(scenario).contains(DIVERGENT_ITEM_ID);
+            } else {
+                assertThat(ids).as(scenario).doesNotContain(DIVERGENT_ITEM_ID);
+            }
+
+            assertThat((long) page.content().size())
+                    .as("""
+                            %s: the page's total must be computed with the same filter semantics as its rows. \
+                            The count query resolves the same bare column names, so if it lacks the item-level \
+                            aliases the endpoint reports a total the rows cannot account for -- measured on \
+                            a total the returned rows could not account for.""".formatted(scenario))
+                    .isEqualTo(page.total());
+        }
+
+        @Test
+        @DisplayName("Cursor pagination walks the whole version exactly once, in descending id order")
+        void cursorPagination__visitsEveryItemOnce() {
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 30);
+
+            var seen = new ArrayList<UUID>();
+            UUID cursor = null;
+            for (int guard = 0; guard < 10; guard++) {
+                var request = DatasetItemStreamRequest.builder()
+                        .datasetName(datasetName)
+                        .lastRetrievedId(cursor)
+                        .steamLimit(7)
+                        .build();
+
+                var batch = datasetResourceClient.streamDatasetItems(request, API_KEY, TEST_WORKSPACE);
+                if (batch.isEmpty()) {
+                    break;
+                }
+                assertThat(batch)
+                        .as("each cursor batch must be ordered by id descending")
+                        .isSortedAccordingTo(
+                                Comparator.comparing((DatasetItem item) -> item.id().toString()).reversed());
+                batch.forEach(item -> seen.add(item.id()));
+                cursor = batch.getLast().id();
+            }
+
+            assertThat(seen)
+                    .as("cursor pagination must not skip or repeat items across batches")
+                    .hasSize(30)
+                    .doesNotHaveDuplicates();
+        }
+
+        @Test
+        @DisplayName("Filtered pages are disjoint and cover exactly the matching items")
+        void filteredPages__areDisjointAndComplete() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 12, "keep");
+            createTaggedItems(datasetId, 8, "drop");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "keep");
+            var seen = new ArrayList<UUID>();
+            for (int page = 1; page <= 3; page++) {
+                var content = datasetResourceClient.getDatasetItems(
+                        datasetId,
+                        Map.of("page", page, "size", 5,
+                                "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                        API_KEY, TEST_WORKSPACE).content();
+                content.forEach(item -> seen.add(item.id()));
+            }
+
+            assertThat(seen)
+                    .as("paging a filtered result must visit each matching item exactly once")
+                    .hasSize(12)
+                    .doesNotHaveDuplicates();
+        }
+
+        @Test
+        @DisplayName("A filter matching nothing returns an empty page, not the unfiltered one")
+        void filterMatchingNothing__returnsEmptyPage() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 5, "keep");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "no-such-tag");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(page.content()).isEmpty();
+            assertThat(page.total()).isZero();
+        }
+
+        @Test
+        @DisplayName("An offset past the end returns an empty page")
+        void offsetPastTheEnd__returnsEmptyPage() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId, 100, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE);
+
+            assertThat(page.content()).isEmpty();
+            assertThat(page.total()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("truncate=true combined with a filter still returns the matching page")
+        void truncateWithFilter__returnsMatchingPage() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createTaggedItems(datasetId, 6, "keep");
+            createTaggedItems(datasetId, 4, "drop");
+
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "tag", "keep");
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("size", 10, "truncate", true,
+                            "filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(page.content()).hasSize(6);
+            assertThat(page.content())
+                    .allSatisfy(item -> assertThat(item.data().get("tag").asText()).contains("keep"));
+        }
+
+        @Test
+        @DisplayName("truncate=true returns the page, since truncation runs over the page not the version")
+        void truncatedPage__isReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            var page = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("page", 1, "size", 3, "truncate", true),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(page.content()).hasSize(3);
+            assertThat(page.total()).isEqualTo(5);
+        }
+    }
+
 }

@@ -61,7 +61,6 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private final Logger userFacingLogger;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
-    private final SpanService spanService;
     private final AgenticScoringService agenticScoringService;
 
     @Inject
@@ -77,14 +76,14 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull SpanService spanService,
             @NonNull AgenticScoringService agenticScoringService) {
-        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+        super(config, redisson, feedbackScoreService, traceService, spanService,
+                TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
-        this.spanService = spanService;
         this.agenticScoringService = agenticScoringService;
         this.userFacingLogger = UserFacingLoggingFactory
                 .getLogger(OnlineScoringTraceThreadUserDefinedMetricPythonScorer.class);
@@ -216,19 +215,19 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         // cap. This Python path has no inline-vs-tools routing, so a thread over the cap degrades to the
         // unenriched {role, content} context instead of being buffered in full. When enriched, spans nest
         // under each trace's assistant ChatMessage via fromTraceToThreadEnriched so the user's Python
-        // score(...) sees the full call tree. Toggle off → size 0 (no query) → unenriched, unchanged.
+        // score(...) sees the full call tree.
         var traceIds = traces.stream().map(Trace::id).collect(Collectors.toSet());
         var maxPreloadBytes = agenticToolsMaxPreloadBytes();
-        var spansSizeMono = serviceTogglesConfig.isAgenticToolsEnabled()
-                ? spanService.getSpansSizeByTraceIds(traceIds)
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                .put(RequestContext.USER_NAME, message.userName()))
-                : Mono.just(0L);
+        // Sizing is advisory, not a prerequisite — see spansSizeOrUnavailable. Degrading keeps the
+        // evaluation alive with the unenriched context.
+        var spansSizeMono = spansSizeOrUnavailable(traceIds, message.workspaceId(), message.userName(),
+                threadId);
         return spansSizeMono
                 .flatMap(sizeBytes -> {
-                    var enrich = serviceTogglesConfig.isAgenticToolsEnabled() && sizeBytes <= maxPreloadBytes;
-                    if (serviceTogglesConfig.isAgenticToolsEnabled() && !enrich) {
+                    // Without a size we can't tell a small thread from one that would blow the heap, so
+                    // an unavailable aggregate skips enrichment rather than risking the bulk fetch.
+                    var enrich = sizeBytes != SPAN_SIZE_UNAVAILABLE && sizeBytes <= maxPreloadBytes;
+                    if (sizeBytes > maxPreloadBytes) {
                         try (var logContext = wrapWithMdc(mdc)) {
                             userFacingLogger.warn("""
                                     Thread span size estimate exceeds the enrichment cap; scoring with the \
@@ -273,8 +272,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
             Project project = projectService.get(message.projectId(), message.workspaceId());
 
-            // Always use the enriched helper — when `spans` is empty (toggle off, see
-            // scoreThread), it emits the legacy [{role, content}, ...] shape via
+            // Always use the enriched helper — when `spans` is empty (thread over the enrichment
+            // cap, see scoreThread), it emits the legacy [{role, content}, ...] shape via
             // @JsonInclude(NON_NULL) on ChatMessage.spans. When non-empty, the assistant
             // entry for each trace carries the nested span tree.
             List<ChatMessage> context;

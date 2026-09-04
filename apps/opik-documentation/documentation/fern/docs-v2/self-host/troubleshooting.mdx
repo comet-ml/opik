@@ -79,6 +79,76 @@ You should see a row with the macro name and value.
 
 After restarting ClickHouse, retry the backend deployment or migration. The backend should automatically retry after ClickHouse is ready.
 
+### Backend Not Ready: `clickhouse-traces-topology`
+
+#### Problem Description
+
+The backend refuses readiness and the `clickhouse-traces-topology` health check reports unhealthy with a message about `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`.
+
+**This check failing is intentional, not a bug.** It means the `tracesDistributedWrapEnabled` setting disagrees with the actual shape of the `traces` table in ClickHouse. Trace deletion cannot work in that state, so the backend takes itself out of rotation at startup instead of accepting traffic and failing on the first delete.
+
+**Symptoms:**
+
+- Readiness probe (`/health-check?name=all&type=ready`) returns `503`; pods never become Ready
+- `GET /health-check?name=clickhouse-traces-topology` reports `"healthy": false`
+- Backend logs: `A critical dependency is now unhealthy: name=clickhouse-traces-topology, type=READY`
+
+#### Cause
+
+`tracesDistributedWrapEnabled` tells the backend where to send trace deletions. It has to match the table:
+
+| Setting | Required `traces` engine |
+| --- | --- |
+| `false` (the default) | `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` |
+| `true` | `Distributed`, with a `traces_local` table present |
+
+A default self-hosted or open-source install has the setting `false` and a `ReplicatedMergeTree` `traces` table, so this check passes and there is nothing to do. It only fails if the setting was turned on, or if the table was converted to a `Distributed` wrapper without turning it on.
+
+#### Resolution
+
+Read the health check message — it names both the setting and the engine it actually found. Then make the two agree.
+
+Check what the table really is. Substitute `<database_name>` with your `ANALYTICS_DB_DATABASE_NAME` — `opik` is only the default, and querying the wrong database returns no rows, which looks like the tables are missing:
+
+```sql
+SELECT name, engine FROM system.tables
+WHERE database = '<database_name>' AND name IN ('traces', 'traces_local');
+```
+
+<Callout intent="info">
+  `system.tables` is node-local, and so is the health check: both answer for the **one replica that served the query**. The backend reaches ClickHouse through a load-balanced service, so if the failure is intermittent — some probes healthy, some not, pods flapping rather than all staying unready — the replicas disagree with each other and the flag is not what is wrong. Confirm with the cluster-wide form below, and fix the lagging replica rather than the flag.
+</Callout>
+
+```sql
+-- Same lookup, every replica. Compare down each table separately: one table's engine must be
+-- the same on every host. The two tables are expected to differ from each other: after the
+-- wrap `traces` is `Distributed` and `traces_local` is a `(Replicated)MergeTree`, which is the
+-- healthy shape, not a mismatch.
+SELECT name, hostName() AS host, engine
+FROM clusterAllReplicas('{cluster}', system.tables)
+WHERE database = '<database_name>' AND name IN ('traces', 'traces_local')
+ORDER BY name, host;
+```
+
+Substitute `{cluster}` here as well — your cluster macro, from `SELECT * FROM system.macros`; on a single-node install drop the `clusterAllReplicas(...)` wrapper instead. If a **single table's** engine differs between hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
+
+Then set the flag to match:
+
+- `traces` is a `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` → set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled: false` (Helm) or `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=false` (Docker Compose or plain environment), then restart the backend.
+- `traces` is `Distributed` and `traces_local` exists → set the same key to `true` and restart.
+
+<Callout intent="warning">
+  **On Helm, an explicit env entry wins over the chart value.** The chart derives `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` from `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` **only when that key is not already set under `component.backend.env`** — an explicit entry there takes precedence. So if you change the top-level value, restart, and the check still reports the old expectation, you have a stale override: update or remove the `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` entry under `component.backend.env`. Confirm what the backend actually receives with `kubectl get configmap <release-name>-backend -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED}'`.
+</Callout>
+
+The check re-evaluates on every probe, so readiness returns on its own once the two sides agree — no further action beyond the restart that picks up the new setting.
+
+<Callout intent="warning">
+  Do not work around this by removing the check. The setting is the source of truth for where deletions are routed, and the check only reports what it observes — leaving the two mismatched means every trace deletion fails (`Code: 36` / `Code: 48` one way, `Code: 60` the other).
+</Callout>
+
+If `traces` does not exist at all, the check says so instead: the analytics migrations have not run. See the migration sections above.
+
 ### Fresh Multi-Replica Install Migration Failures
 
 #### Problem Description
@@ -125,6 +195,160 @@ Single-replica installs and upgrades of already-migrated multi-replica clusters 
 <Callout intent="warning">
 If a fresh multi-replica attempt was torn down, the dropped tables can leave orphaned `/clickhouse/tables/...` ZooKeeper paths that cause `REPLICA_ALREADY_EXISTS` on a retry. Since a fresh install has no data to preserve, recovery only needs those orphaned paths cleared before re-running — the full replica-restore rebuild in [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss) is for recovering existing data and isn't needed here.
 </Callout>
+
+### Lost Liquibase Changelog with an Intact Schema
+
+#### Problem Description
+
+The `opik` tables are all present and the application data is intact, but the Liquibase changelog table (`default.DATABASECHANGELOG`) is empty or missing rows. A newly started `opik-backend` replica then treats every migration as pending and replays it against tables that already exist, failing with errors such as:
+
+```
+Code: 15. DB::Exception: Cannot add column `created_by`: column with this name already exists. (DUPLICATE_COLUMN)
+```
+
+**Symptoms:**
+
+- Existing deployment with real data; the schema looks complete
+- New replicas or rolling updates fail with `Init:CrashLoopBackOff` while already-running replicas keep serving
+- Migration errors say an object **already exists**, rather than that one is missing
+- `SELECT count() FROM default.DATABASECHANGELOG` returns 0, or far fewer rows than there are migration files
+
+#### Cause
+
+This usually follows a recovery that restored the data but not the bookkeeping — for example a volume delete/recreate where the `opik.*` tables were restored from backup while the `default` database holding the changelog was not.
+
+Liquibase decides what to run purely from the changelog table. With no rows, it concludes nothing has ever been applied and starts from the first changeset. Replaying migrations against a schema that already has them is not safe: early changesets add columns that are already present, and later ones convert tables to `ReplicatedMergeTree` and move partitions between them. Migrations cannot be edited to make a replay safe — once released, a changeset is immutable, because changing it alters its checksum and every already-migrated deployment would then refuse to start.
+
+The fix is therefore to repair the ledger, not to re-run the migrations.
+
+#### Resolution
+
+Re-baseline the changelog: record the pending changesets as applied **without executing them**. Opik ships a script for this in the backend image.
+
+<Callout intent="warning">
+Only do this when the schema genuinely matches the changelog. Re-baselining asserts "everything up to here is already applied" — if a migration truly has not run, it is marked as done and never will, leaving the schema permanently behind a ledger that claims otherwise.
+
+"Matches the changelog" means more than the tables existing. Before continuing, confirm all of the following:
+
+- The image version you are running against is the one the schema was migrated to. Re-baselining with a **newer** jar marks that version's extra migrations as applied without running them.
+- Every changeset in the pending list corresponds to an object that already exists — spot-check the most recent few, not just the first.
+- For ClickHouse (`dbAnalytics`, the default) on a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale. `system.replicas` only reflects the node you are connected to, so query it cluster-wide:
+
+  ```sql
+  -- Any replica that cannot accept writes is not settled.
+  SELECT hostName() AS host, database, table, is_readonly, absolute_delay
+  FROM clusterAllReplicas('{cluster}', system.replicas)
+  WHERE database = '<database_name>' AND is_readonly;
+
+  -- A stuck queue entry means replication is not merely behind, it is failing.
+  SELECT hostName() AS host, database, table, type, num_tries, last_exception
+  FROM clusterAllReplicas('{cluster}', system.replication_queue)
+  WHERE database = '<database_name>' AND num_tries > 10;
+  ```
+
+  Substitute `{cluster}` (your cluster macro) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper and query `system.replicas` directly. **Both queries should return no rows.** A nonzero `absolute_delay` on its own is normal replication lag and is not a reason to stop — what matters is that no replica is read-only and no queue entry is failing repeatedly.
+
+- For MySQL (`--database db`) there is no replication view to check — confirm instead that the tables and columns named by the pending changesets already exist, and that the deployment has not been upgraded past the schema you are recovering.
+
+If any of these is uncertain, stop and restore the changelog from a backup of the same version instead. `--yes` skips the prompt, not these checks — only use it in a runbook that has already performed them.
+
+For ClickHouse the script enforces the coarse version of this itself: it counts the tables in the analytics database and refuses when the schema is plainly not built (an empty or nearly empty database against a full pending list), including under `--yes`. That catches the worst case — re-baselining a database that has no schema at all — but it cannot judge the finer conditions above, such as a stale replica or a newer jar. Treat it as a backstop, not a substitute for the checklist.
+</Callout>
+
+<Steps>
+  <Step>
+    Get a shell in an `opik-backend` container, in its working directory (`/opt/opik`).
+
+    If a replica is still running (the usual case — existing pods keep serving while only *new* ones fail), exec into it. If **every** replica is in `CrashLoopBackOff`, there is nothing to exec into; start a one-shot container from the same image instead, so the jar matches the deployed schema version.
+
+    On Kubernetes:
+
+    ```bash
+    NS=<your namespace>
+
+    # Take the image from the failing deployment rather than using a floating tag —
+    # the recovery must run against the version the schema was migrated to.
+    IMAGE=$(kubectl get deploy opik-backend -n "$NS" \
+      -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+    # --image is required by kubectl even though the override also sets it, so both
+    # read from $IMAGE to keep them from drifting apart.
+    kubectl run opik-rebaseline --rm -it --restart=Never -n "$NS" \
+      --image="$IMAGE" \
+      --overrides="$(cat <<JSON
+    {"spec":{"containers":[{"name":"opik-rebaseline","image":"$IMAGE","command":["bash"],"stdin":true,"tty":true,
+      "envFrom":[{"secretRef":{"name":"<your opik-backend secret>"}},{"configMapRef":{"name":"<your opik-backend configmap>"}}]}]}}
+    JSON
+    )"
+    ```
+
+    On Docker Compose:
+
+    ```bash
+    docker compose run --rm --entrypoint bash opik-backend
+    ```
+
+    On Compose the service already pins its image, so no extra step is needed there.
+
+    <Callout intent="warning">
+      `envFrom` carries environment variables but not files. If your deployment terminates TLS to
+      MySQL or ClickHouse — anything setting `MYSQL_TRUSTSTORE_URL` / `MYSQL_CLIENTSTORE_URL`, or
+      relying on the chart's `ca-cert-injection` init container — the one-shot pod will start
+      without those certificates and fail to connect before it reaches the re-baseline. Copy the
+      relevant `volumes`, `volumeMounts` and init container from the live spec
+      (`kubectl get deploy opik-backend -n "$NS" -o yaml`) into the overrides as well. Exec'ing
+      into a surviving replica avoids this entirely, so prefer it whenever one is available.
+    </Callout>
+  </Step>
+  <Step>
+    Review what would change, without writing anything:
+
+    ```bash
+    ./rebaseline_db_changelog.sh --dry-run
+    ```
+
+    This prints the pending changesets. Confirm they correspond to schema objects that already exist in the database.
+  </Step>
+  <Step>
+    Re-baseline the analytics changelog:
+
+    ```bash
+    ./rebaseline_db_changelog.sh
+    ```
+
+    The script shows the pending list again, asks for confirmation, records the changesets as applied, and re-runs the status check so you can see the ledger is now clean. Only changelog rows are written — no DDL runs and no data is touched.
+  </Step>
+  <Step>
+    Restart the failing replicas. They now skip the recorded changesets instead of replaying them.
+  </Step>
+</Steps>
+
+Pass `--yes` to skip the confirmation prompt in an automated runbook; the schema check still runs and still aborts.
+
+`--database db` re-baselines the MySQL (state) changelog instead of the ClickHouse (analytics) one. There is no MySQL client in the backend image, so the schema check cannot run there and the script refuses unless you add `--force-unverified`, which asserts you have confirmed the schema yourself. The same flag overrides every one of the ClickHouse checks: a probe that could not reach the server, and a probe that reports an implausibly low table count against a schema you have confirmed is at head. Reach for it only after working through the checklist above — it turns a refusal back into the silent-bricking path.
+
+The same applies to `--config`. The re-baseline connects through the config file you pass, while the schema check reads the `ANALYTICS_DB_MIGRATIONS_*` environment variables — these describe the same database only for the packaged `config.yml`, which resolves from exactly those variables. With any other config the check could verify a different database than the one being written, so the script refuses unless you add `--force-unverified`.
+
+None of these refusals apply to `--dry-run`, which reports without writing and so needs no verification: it prints the pending changesets and exits, on either database, and never contacts ClickHouse for a table count. That is what makes the inspection step above workable on MySQL, where the schema cannot be verified at all.
+
+If you prefer to run the underlying commands directly, these are the Dropwizard migration commands the script drives:
+
+```bash
+java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics status --verbose config.yml
+java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics fast-forward --all config.yml
+```
+
+<Callout intent="warning">
+  The second command is an **unguarded write**. Run on its own it performs the re-baseline with none of the script's safeguards: no schema check (so it will happily mark every migration applied against an empty database), no confirmation prompt, no re-check that the pending set did not move while you were reading it, and no verification afterwards that the ledger is actually clean and the schema untouched. Prefer the script; reach for these only when you cannot run it, and work through the checklist above first.
+</Callout>
+
+<Callout intent="info">
+`fast-forward --all` is Liquibase's `changelogSync` — it marks every pending changeset as applied without running it. Restoring the changelog from a backup of a **same-version** deployment also works, but the re-baseline avoids needing one, and avoids the risk of importing a ledger from a different schema version.
+</Callout>
+
+#### Prevention
+
+Include the `default` database in ClickHouse backups, not just `opik`. The changelog table is small but a restore without it leaves the deployment unable to start new replicas.
 
 ### ClickHouse Zookeeper Metadata Loss
 
@@ -470,6 +694,10 @@ To avoid Zookeeper metadata loss issues:
 4. **Persistent Storage**: Use persistent volumes for Zookeeper to prevent data loss during pod restarts.
 
 5. **Replica Validation**: Regularly check replica status with the diagnostic queries above.
+
+6. **Check the Changelog Before Upgrades**: Review the [self-host changelog](/self-host/changelog) for breaking and critical changes before you upgrade your deployment.
+
+7. **Back Up the Liquibase Ledger**: Include ClickHouse's `default` database in backups alongside `opik`. It holds Liquibase's `DATABASECHANGELOG` table — the migration ledger, unrelated to the [self-host changelog](/self-host/changelog) page above; restoring data without it leaves the deployment unable to start new replicas. See [Lost Liquibase Changelog with an Intact Schema](#lost-liquibase-changelog-with-an-intact-schema).
 
 ## Getting Help
 

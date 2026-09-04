@@ -28,17 +28,27 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the next packet from the server before giving up
+#                             (SETTINGS receive_timeout). Default 1800, against ClickHouse's own 300. It bounds the GAP
+#                             between packets, not total query time: a window compare running well past 300s does not
+#                             trip it, while the post-mismatch confirm-keys re-check can — so under the stock default the
+#                             first mismatching week aborts the whole run. The cost of a generous value is that a
+#                             genuinely dead connection takes that long to surface; for a read-only, resumable compare,
+#                             losing a long run to a transient stall is the worse failure.
 #   --old-table NAME    old-schema table (Nullable, nanosecond). Default traces. After the EXCHANGE: traces_pre_cutover_backup.
 #   --new-table NAME    new-schema table (sentinels, microsecond). Default traces_local_v2. After the EXCHANGE: traces.
 #                       After a stage B/C ROLLBACK the defaults do not apply at all — traces_local_v2 no longer exists, so a
 #                       bare run dies with "Unknown table ... traces_local_v2". The old-schema side is the restored original
 #                       (`traces`) and the new-schema side is the parked successor: pass
-#                       `--old-table traces --new-table traces_post_rollback_backup`, and expect the CURRENT week to
-#                       legitimately mismatch by the post-cutover writes the rollback discarded — bound it with --to-week N
-#                       (see README "Verifying after a rollback").
+#                       `--old-table traces --new-table traces_post_rollback_backup`, and expect the cutover window's
+#                       week to legitimately mismatch by the post-cutover writes the rollback discarded — stop below it,
+#                       using the offset rollback.sh prints (see README "Verifying after a rollback").
 #   --sample-mod N      compare a deterministic 1/N id sample (same ids on both sides). Default 1 (every row).
-#   --from-week N       start at week offset N (0-based from the anchor Monday). Default 0.
-#   --to-week M         stop after week offset M (inclusive). Default: last week with data.
+#   --from-week N       start at week offset N (0-based from the anchor Monday). Default 0. An OFFSET, not a date.
+#   --to-week M         stop after week offset M (inclusive). Default: last week with data. Also an OFFSET — a YYYYMMDD
+#                       partition name is rejected rather than walked as millions of empty windows.
+#                       'last-sealed' stops before the current calendar week: a convenience when the compare runs in the
+#                       same week as whatever it means to exclude, otherwise pass the offset explicitly.
 #   --weeks-stride S    compare every S-th week (S>1 samples partitions for a quick pass). Default 1.
 #   --drill-down        on a mismatched week, also print up to 100 keys that differ or exist on one side only.
 
@@ -57,6 +67,7 @@ FROM_WEEK=0
 TO_WEEK=""
 WEEKS_STRIDE=1              # 1 = every week; S skips to every S-th weekly partition for a quick, pruned pass
 DRILL_DOWN=0
+RECEIVE_TIMEOUT=1800        # seconds tolerated between server packets, not total query time. See --receive-timeout.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -68,6 +79,7 @@ while [[ $# -gt 0 ]]; do
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
         --weeks-stride) WEEKS_STRIDE="${2:?"$1 requires a value"}"; shift 2 ;;
         --drill-down) DRILL_DOWN=1; shift ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -85,11 +97,20 @@ done
 [[ "$SAMPLE_MOD" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --sample-mod must be a positive integer." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
-[[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+[[ -z "$TO_WEEK" || "$TO_WEEK" == last-sealed || "$TO_WEEK" =~ ^[0-9]+$ ]] \
+    || { echo "ERROR: --to-week must be a non-negative integer or 'last-sealed'." >&2; exit 2; }
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
+# One place for the connection and client-side options, so the four call sites below cannot drift — in particular so
+# --receive-timeout applies to the confirm-keys re-check and the drill-down, not only to the window compare.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --receive_timeout="$RECEIVE_TIMEOUT")
+
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --query "$1"
 }
 
 log() {
@@ -113,19 +134,19 @@ render_block() {
 
 # Verdict TSV row for one window: src_rows dst_rows src_checksum dst_checksum ok
 compare_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block compare "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block compare "$1" "$2")"
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block drill-down "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block drill-down "$1" "$2")"
 }
 
 # Count of keys in one window that GENUINELY differ, re-checked on the sorting key so FINAL cannot hide a
 # version (see the confirm-keys block for why a created_at window can surface a superseded row on one side
 # only). 0 means the window's difference is a superseded-version artifact, not a data difference.
 confirm_keys_window() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block confirm-keys "$1" "$2")"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block confirm-keys "$1" "$2")"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"
@@ -147,6 +168,30 @@ ANCHOR="$(ch "SELECT toString(toMonday(min(created_at))) FROM $OLD_TABLE")"
 HORIZON="$(ch "SELECT toString(addWeeks(toMonday(max(created_at)), 1)) FROM $OLD_TABLE")"
 LAST_WEEK="$(ch "SELECT dateDiff('week', toDate('$ANCHOR'), toDate('$HORIZON')) - 1")"
 [[ -n "$TO_WEEK" ]] || TO_WEEK="$LAST_WEEK"
+# Every week past the last one with data is empty by construction, so a larger --to-week only walks empty windows. This
+# also catches the realistic mix-up: a weekly PARTITION name passes the integer test and would otherwise walk millions of
+# empty windows with no error and no result. The anchor comes from created_at above, so far-future id_at values never
+# inflate a legitimate offset however far ahead they sit — only what the caller typed can be out of range.
+if [[ "$TO_WEEK" =~ ^[0-9]+$ ]] && (( TO_WEEK > LAST_WEEK )); then
+    echo "ERROR: --to-week $TO_WEEK is past the last week with data (offset $LAST_WEEK). These bounds are 0-based week" >&2
+    echo "       OFFSETS from the anchor Monday ($ANCHOR), not dates — if that was a YYYYMMDD partition name, pass an" >&2
+    echo "       offset instead, or 'last-sealed' for the last complete week, or omit the bound to cover every week." >&2
+    exit 2
+fi
+# 'last-sealed' excludes the current CALENDAR week — the only one that can still change — and not merely the newest week
+# holding data: on a quiet table max(created_at) may already sit in a sealed week, and excluding that one would leave the
+# newest populated week uncompared. Capped at LAST_WEEK so a quiet table still verifies everything it holds. now('UTC')
+# matches created_at's own timezone, so the boundary agrees with the anchor even where the server timezone is not UTC.
+if [[ "$TO_WEEK" == last-sealed ]]; then
+    CURRENT_WEEK="$(ch "SELECT dateDiff('week', toDate('$ANCHOR'), toDate(toMonday(now('UTC'))))")"
+    TO_WEEK=$(( LAST_WEEK < CURRENT_WEEK - 1 ? LAST_WEEK : CURRENT_WEEK - 1 ))
+    (( TO_WEEK >= FROM_WEEK )) || {
+        echo "ERROR: --to-week last-sealed resolved to week $TO_WEEK, which is before --from-week $FROM_WEEK: all of" >&2
+        echo "       '$OLD_TABLE' sits in the current (unsealed) week, so there is no sealed week to compare. Verify" >&2
+        echo "       once a week has closed, or pass an explicit --to-week to include the current one." >&2
+        exit 2
+    }
+fi
 
 log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE | sample 1/$SAMPLE_MOD"
 
@@ -196,10 +241,17 @@ if [[ "$mismatches" != "0" ]]; then
     log "FAILED: $mismatches of $checked windows mismatched." >&2
     exit 1
 fi
+if [[ "$checked" == "0" ]]; then
+    # An empty range compared nothing, so "all windows match" would be vacuously true — the one answer a fidelity gate
+    # must never give. Fail instead: reaching here means the bounds excluded every week, not that the data agrees.
+    log "FAILED: no window was compared — weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE selects nothing." >&2
+    log "        Nothing was verified, so this is NOT a pass. Widen the range (--from-week/--to-week)." >&2
+    exit 1
+fi
 if [[ "$artifacts" != "0" ]]; then
-    log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
+    log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
     log "        artifact only — a key written more than once lands its stale version in an earlier created_at week on"
     log "        one side. Live data is identical on both sides; nothing to fix (see the confirm-keys block)."
 else
-    log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD)."
+    log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD)."
 fi

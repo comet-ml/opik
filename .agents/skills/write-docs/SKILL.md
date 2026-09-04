@@ -5,20 +5,13 @@ description: Authoring Fern MDX documentation pages for the Opik docs site, plus
 
 # Write Docs
 
-The Opik docs site is built with [Fern](https://buildwithfern.com/) from MDX sources under `apps/opik-documentation/documentation/fern/`. Two content surfaces coexist:
-
-- `fern/docs/` — **v1** (the established surface, source of style truth)
-- `fern/docs-v2/` — **latest** (where new pages go)
-
-New pages should land in `docs-v2/`. v1 is the reference for writing style and component usage because it is far richer.
+The Opik docs site is built with [Fern](https://buildwithfern.com/) from MDX sources under `apps/opik-documentation/documentation/fern/`. There is one content surface: `fern/docs-v2/`. The old v1 surface (`fern/docs/`) was removed; every v1 URL now redirects to its Opik 2 equivalent through the `redirects:` list in `fern/docs.yml`.
 
 ## Where new pages live
 
 - Create the file at `apps/opik-documentation/documentation/fern/docs-v2/<section>/<page-name>.mdx`.
-- Register it in `fern/versions/latest.yml` under the right `section:` block.
-- Only touch `fern/versions/v1.yml` if the page must also ship in the v1 build (rare).
-- **Do not edit** `fern/docs.yml` when adding a page — that file is the global site config (tabs, redirects), not per-version routing.
-- Routing is not implied by folder layout. Always check the version YAML.
+- Register it in `fern/docs.yml` under the right `section:` block in `navigation:`.
+- Routing is not implied by folder layout. Always check `navigation:` in `fern/docs.yml`.
 
 ## Frontmatter template
 
@@ -38,7 +31,7 @@ og:site_name: Opik Documentation
 
 ## Style and voice
 
-Pull examples from v1 pages when unsure — `fern/docs/tracing/log_traces.mdx`, `fern/docs/tracing/concepts.mdx`, and `fern/docs/quickstart.mdx` are good anchors.
+Pull examples from existing pages when unsure — `fern/docs-v2/tracing/advanced/log_traces.mdx`, `fern/docs-v2/tracing/concepts.mdx`, and `fern/docs-v2/quickstart.mdx` are good anchors.
 
 - **Person:** "you" and imperative voice. Professional but approachable.
 - **Opening:** one or two intro sentences before the first `##` heading. No inline H1.
@@ -90,7 +83,7 @@ For quickstarts, installs, and any sequential procedure. `title` on each `<Step>
   <Step title="Run the integration">
     Once the skill is installed, you can add tracing using the following prompt:
     ```
-    Instrument my agent with Opik using the /instrument command.
+    Instrument my agent with Opik using the /opik-instrument command.
     ```
   </Step>
 </Steps>
@@ -177,32 +170,34 @@ Pick by intent, not aesthetics:
 
 ## Cross-links
 
-Absolute, slug-based paths only. No relative paths (`../foo`).
+Root-relative, slug-based paths only (`/section/page`).
+
+- **Never** link internal docs pages with full `https://www.comet.com/docs/opik/...` URLs. Full URLs bypass the Fern preview build, and they 404 in the link checker when the target page ships in the same PR. Use the root-relative slug path instead.
+- No file-relative paths (`../foo`) either.
+- Build the path from `navigation:` in `fern/docs.yml`, including every nested `section:` slug. Example: the "Manage datasets" page sits inside an `advanced` section, so the path is `/evaluation/advanced/manage_datasets`, not `/evaluation/manage_datasets`.
 
 ```mdx
 [Python SDK](/reference/python-sdk/overview)
-[Log traces](/tracing/log_traces)
+[Log traces](/tracing/advanced/log_traces)
 [Integrations overview](/integrations/overview)
 ```
 
 In-page anchors use the heading slug: `[Concepts](#concepts)`.
 
-## Routing: adding a page to `latest.yml`
+## Routing: adding a page to `docs.yml`
 
-Add a page entry under the correct `section:` (keep the YAML at 2-space indent):
+Add a page entry under the correct `section:` in `navigation:` (keep the YAML at 2-space indent):
 
 ```yaml
 - page: Page Title
-  path: ../docs-v2/section/page-name.mdx
+  path: ./docs-v2/section/page-name.mdx
   slug: page-name
 ```
-
-If the page also needs to ship in v1, mirror the entry in `fern/versions/v1.yml`. Leave `fern/docs.yml` alone.
 
 ## File naming
 
 - Kebab-case for new files: `getting-started.mdx`, `log-traces.mdx`.
-- When editing an existing section that uses snake_case (common in v1), match neighbors rather than renaming. Renames require redirect entries in `docs.yml`.
+- When editing an existing section that uses snake_case, match neighbors rather than renaming. Renames require redirect entries in `docs.yml`.
 
 ## Local verification
 
@@ -220,11 +215,11 @@ Open the rendered page and confirm:
 
 ## Changelog routing
 
-Pick the changelog target by scope — do not default everything to the root `CHANGELOG.md`.
+Pick the changelog target by scope — do not default everything to one surface.
 
-- `CHANGELOG.md` (repo root) — self-hosted deployment changelog. Breaking, critical, or security-impacting changes only.
-- `apps/opik-documentation/documentation/fern/docs/changelog/*.mdx` — general product release notes shown at `/docs/opik/changelog`. One dated `.mdx` per entry.
-- `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` — Agent Optimizer version updates (e.g. `sdks/opik_optimizer` releases like `3.1.0`).
+- `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` — self-hosted deployment changelog shown at `/docs/opik/self-host/changelog`. Breaking, critical, or security-impacting changes only. (The former repo-root `CHANGELOG.md` was removed; its content lives on this page now.)
+- `apps/opik-documentation/documentation/fern/docs-v2/changelog/*.mdx` — general product release notes shown at `/docs/opik/changelog`. One dated `.mdx` per entry.
+- `apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/changelog.mdx` — Agent Optimizer version updates (e.g. `sdks/opik_optimizer` releases like `3.1.0`).
 - Liquibase `changelog.xml` files are migration manifests, not user-facing release notes. Do not put prose there.
 - When unsure, confirm the surface from `fern/docs.yml` before editing.
 
@@ -258,16 +253,33 @@ Keep it user-facing: avoid implementation detail unless it affects how someone u
 
 ## PR description template
 
-```markdown
-## Summary
-- What this PR does (bullet points)
+Use the repository template at `.github/pull_request_template.md` — read the FULL file before drafting (the required sections continue past the first screen). CI (`.github/workflows/pr-lint.yml`) fails any PR whose description is missing one of these exact headings:
 
-## Test Plan
-- How to verify it works
+- `## Details`
+- `## Change checklist`
+- `## Issues`
+- `## Testing`
+- `## Documentation`
 
-## Related Issues
-- Resolves #123
-```
+Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
+
+A section that does not apply gets `N/A` — never delete a heading.
+
+### `## Details` — style
+
+Write what changes for a user. A reviewer reads the diff for the code; this section tells them what is different when they use the product.
+
+- **Short.** Most PRs need 3–10 bullets. If it runs longer, the section is doing the diff's job — cut it.
+- **Bullets, not prose paragraphs.** One behavior per bullet. Nest one level for sub-cases.
+- **Authoritative.** State what happens: "The run is scored once." Not "This should now mean that the run will be scored once."
+- **No fluff.** No motivation paragraph, no "this PR …", no approach summary, no benefits list, no restating the diff.
+- **Observable behavior first.** What the UI shows, what the API returns, what gets scored, stored or logged. Name a class, method or file only when the behavior makes no sense without it.
+
+Pick the shape that fits the change — do not force one:
+
+- **Before / After bullet lists** when a behavior changed and the contrast is the point.
+- **A flat bullet list** for a new capability, where there is no "before".
+- **One or two lines** when users cannot see the change (refactor, dependency bump) — say what is unchanged and what improved, then stop.
 
 ## Internationalized READMEs
 
@@ -279,18 +291,14 @@ Keep it user-facing: avoid implementation detail unless it affects how someone u
 ## Forbidden and discouraged
 
 - No real API keys, tokens, or workspace IDs in examples — always placeholders.
-- Do not edit `fern/docs/cookbook/*.mdx` by hand. Those files are regenerated from `docs/cookbook/*.ipynb` by `update_cookbooks.sh`.
 - Do not put new images outside `fern/img/`. `static/img/` is legacy-only and cannot be deleted because of external integrations.
-- Do not infer URL paths from folder layout — always consult the version YAML.
+- Do not infer URL paths from folder layout — always consult `navigation:` in `fern/docs.yml`.
 - Do not add an inline `# H1` inside the body — the frontmatter `title` already provides it.
 
 ## Key files
 
-- `apps/opik-documentation/documentation/fern/versions/latest.yml` — routing for the latest version (edit when adding pages).
-- `apps/opik-documentation/documentation/fern/versions/v1.yml` — routing for v1 (edit only if the page ships in v1 too).
-- `apps/opik-documentation/documentation/fern/docs.yml` — global site config (tabs, redirects). Treat as read-only for page adds.
+- `apps/opik-documentation/documentation/fern/docs.yml` — site config: tabs, `navigation:` routing, and `redirects:`. Edit `navigation:` when adding pages.
 - `apps/opik-documentation/documentation/fern/docs-v2/` — target directory for new pages.
 - `apps/opik-documentation/documentation/fern/img/` — image storage.
-- `apps/opik-documentation/documentation/update_cookbooks.sh` — regenerates cookbook MDX from notebooks.
 - `apps/opik-documentation/AGENTS.md` — docs-module contribution rules.
 - `.github/release-drafter.yml` — release notes template.

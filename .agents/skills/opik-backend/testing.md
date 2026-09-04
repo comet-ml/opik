@@ -284,6 +284,31 @@ assertThat(actual)
 `containsExactly` asserts size and content together — `hasSize` plus per-index checks does not,
 and lets an extra element through.
 
+`hasSize` **on its own** is weaker still: it asserts a count and nothing about identity, so any
+bug that preserves the count passes. This bites hardest on de-duplication, merge, and upsert
+tests, where the count is exactly the thing a bug is most likely to keep right:
+
+```java
+// ❌ BAD - passes if the wrong revision survived, or if the duplicate was kept
+// and the distinct row dropped. Both keep the size at 2.
+assertThat(stored).hasSize(2);
+assertThat(version.itemsTotal()).isEqualTo(stored.size());
+
+// ✅ GOOD - names the rows that must survive, so a wrong-winner bug fails
+assertThat(stored)
+    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+    .containsExactlyInAnyOrder(winningDuplicate, distinctItem);
+assertThat(version.itemsTotal()).isEqualTo(stored.size());
+```
+
+Asserting a derived counter against `stored.size()` is good — it ties the counter to reality
+rather than to a literal — but it is only as strong as the assertion on `stored` itself. Pin the
+contents first, then tie the counter to them.
+
+Reuse the shared ignore-field constants (`IGNORED_FIELDS_DATA_ITEM` and friends) rather than
+declaring a local list: they already encode which server-generated fields are not part of the
+contract, and a local copy silently drifts from them.
+
 These `containsExactly*` variants compare elements with the element type's own `equals`, which is
 what you want for exact-valued models. When the elements carry `BigDecimal` or `double`, the same
 exception that justifies a comparator on a single object applies per element — otherwise a

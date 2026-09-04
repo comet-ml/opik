@@ -4,6 +4,8 @@ import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
+import com.comet.opik.infrastructure.redis.UndecodablePayloadException;
+import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -111,6 +113,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongHistogram messageProcessingTime;
     private final LongHistogram messageQueueDelay;
     private final LongCounter messageProcessingErrors;
+    private final LongCounter undecodableMessages;
     private final LongCounter backpressureDropCounter;
     private final LongCounter claimErrors;
     private final LongHistogram claimTime;
@@ -160,6 +163,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.messageProcessingErrors = meter
                 .counterBuilder("%s_%s_processing_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Errors when processing messages")
+                .build();
+        this.undecodableMessages = meter
+                .counterBuilder("%s_%s_undecodable_messages_total".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Stream entries whose payload could not be decoded, counted at detection. "
+                        + "Deliberately not a drop count: the failure is retryable, so one entry is counted once "
+                        + "per delivery until maxRetries retires it, and a pod that decodes it on a later claim "
+                        + "never contributes a drop at all. Alert on a sustained increase, which means entries are "
+                        + "cycling; the removal itself is logged by handleMaxRetriesReached.")
                 .build();
         this.backpressureDropCounter = meter
                 .counterBuilder("%s_%s_backpressure_drops_total".formatted(metricNamespace, metricsBaseName))
@@ -472,9 +483,74 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
+        // A payload the codec could not decode. It arrives as a sentinel rather than an exception
+        // precisely so this point is reachable at all -- the throw used to happen inside Redisson, below
+        // here and before any messageId existed, which is why such an entry could never be acked or
+        // removed and wedged the stream permanently (OPIK-8164). Healthy entries claimed in the same
+        // batch are no longer stranded by it. Retire it through maxRetries rather than deleting it now:
+        // see UndecodablePayloadException for why first-delivery deletion would discard recoverable data.
+        if (message instanceof UndecodableStreamMessage undecodable) {
+            recordUndecodable(messageId, undecodable.cause(), null);
+            // Warn, not error: on its own this is one delivery of one entry, and the retryable path may
+            // still decode it on another pod. handleMaxRetriesReached logs at error when it is finally
+            // removed, which is the event worth waking someone for.
+            log.warn("Undecodable message: messageId '{}', stream '{}', encodedBytes '{}'",
+                    messageId, config.getStreamName(), undecodable.encodedBytes(), undecodable.cause());
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    // Retryable on purpose: "this pod cannot decode it" is not "nobody can". maxRetries
+                    // bounds the cycling, so it still terminates. See UndecodablePayloadException.
+                    .error(new UndecodablePayloadException(
+                            "Undecodable stream field of %d encoded bytes".formatted(undecodable.encodedBytes()),
+                            undecodable.cause()))
+                    .context(MessageContext.UNKNOWN)
+                    .build());
+        }
+        // Nothing under the expected field. Two different causes hide behind the same symptom, and they
+        // deserve opposite treatment, so tell them apart by looking for a sentinel among the KEYS:
+        //   - the field name itself failed to decode (LZ4/Kryo on this codec), so the lookup missed. That
+        //     can be version skew between pods, so it is retryable -- and the key sentinel carries the
+        //     cause, which would otherwise be lost entirely since nothing else inspects key objects.
+        //   - the entry genuinely carries no such field. No pod can invent it, so retrying only delays
+        //     the inevitable; keep the pre-existing non-retryable, remove-on-first-delivery behaviour
+        //     (it used to arrive as a NullPointerException out of processEvent).
+        if (message == null) {
+            var keyFailure = undecodableKeyCause(entry.getValue());
+            if (keyFailure != null) {
+                recordUndecodable(messageId, keyFailure, "undecodable_field_name");
+                log.warn("Message field name could not be decoded, payload unreachable: messageId '{}', "
+                        + "stream '{}'", messageId, config.getStreamName(), keyFailure);
+                return Mono.just(ProcessingResult.builder()
+                        .messageId(messageId)
+                        .status(MessageStatus.FAILURE)
+                        .error(new UndecodablePayloadException(
+                                "Field name could not be decoded, no payload under '%s'"
+                                        .formatted(payloadField),
+                                keyFailure))
+                        .context(MessageContext.UNKNOWN)
+                        .build());
+            }
+            // Deliberately NOT on *_undecodable_messages_total: nothing failed to decode here, and
+            // mixing a deterministic malformed entry into that counter would make a decoder alert fire
+            // on it. messageProcessingErrors already counts it via postProcessFailureMessages.
+            recordQueueDelay(messageId);
+            log.warn("Message has no payload under field '{}': messageId '{}', stream '{}'",
+                    payloadField, messageId, config.getStreamName());
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    // IllegalStateException is non-retryable: removed on first delivery, as before.
+                    .error(new IllegalStateException(
+                            "No payload under field '%s'".formatted(payloadField)))
+                    .context(MessageContext.UNKNOWN)
+                    .build());
+        }
         var startMillis = System.currentTimeMillis();
         // Resolve the workspace/user once: the processing-time histogram is tagged with it for every
-        // message (success or failure), and the failure path reuses it for error attribution.
+        // message that reaches processEvent (success or failure), and the failure path reuses it for
+        // error attribution. The undecodable and no-payload branches above return before this -- they
+        // have no decoded message to attribute -- and record queue delay themselves.
         var context = messageContext(message);
         var workspaceAttributes = Attributes.of(
                 ErrorMetricsResolver.WORKSPACE_ID_KEY, context.workspaceId(),
@@ -495,10 +571,55 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis, workspaceAttributes);
-                    extractTimeFromMessageId(messageId)
-                            .ifPresent(messageMillis -> messageQueueDelay
-                                    .record(System.currentTimeMillis() - messageMillis));
+                    recordQueueDelay(messageId);
                 });
+    }
+
+    /**
+     * Counts an entry that could not be decoded and keeps it visible in the queue-delay histogram.
+     * <p>
+     * The histogram matters more here than on the success path: a retryable undecodable entry is
+     * delivered up to {@code maxRetries} times, and its growing age is the signal that shows an entry
+     * cycling in a growing PEL. Returning early without recording it would hide exactly the entries
+     * worth noticing.
+     *
+     * @param cause     the decode failure, or {@code null} when there was simply no payload field
+     * @param errorType overrides the {@code error_type} label; {@code null} derives it from {@code cause}
+     */
+    private void recordUndecodable(StreamMessageId messageId, Throwable cause, String errorType) {
+        undecodableMessages.add(1, Attributes.of(
+                ErrorMetricsResolver.ERROR_TYPE_KEY,
+                errorType != null ? errorType : ErrorMetricsResolver.errorType(cause),
+                ErrorMetricsResolver.STREAM_KEY, config.getStreamName()));
+        recordQueueDelay(messageId);
+    }
+
+    /**
+     * Keeps an entry that returns early visible in the queue-delay histogram. Its growing age is the
+     * signal that shows an entry cycling in a growing PEL, so the paths most worth noticing must not be
+     * the ones that skip it.
+     */
+    private void recordQueueDelay(StreamMessageId messageId) {
+        extractTimeFromMessageId(messageId)
+                .ifPresent(messageMillis -> messageQueueDelay.record(System.currentTimeMillis() - messageMillis));
+    }
+
+    /**
+     * The decode failure behind an entry's field name, if the map-key decoder produced a sentinel.
+     * <p>
+     * Reached by inspecting the key objects, which nothing else does: a sentinel key cannot match
+     * {@code payloadField}, so without this the cause would be discarded and a field-name failure would
+     * be indistinguishable from an entry that never carried the field.
+     */
+    private static Throwable undecodableKeyCause(Map<?, ?> valueMap) {
+        if (valueMap == null) {
+            return null;
+        }
+        return valueMap.keySet().stream()
+                .filter(UndecodableStreamMessage.class::isInstance)
+                .map(key -> ((UndecodableStreamMessage) key).cause())
+                .findFirst()
+                .orElse(null);
     }
 
     private Mono<List<ProcessingResult>> postProcessSuccessMessages(List<ProcessingResult> processingResults) {
@@ -608,8 +729,22 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Exception handling: see {@link #isRetryableException(Throwable)} for the full non-retryable classification.
      * Non-retryable exceptions are immediately removed from the stream.
      * All other exceptions are retried up to {@code maxRetries} times before being removed.
+     * <p>
+     * {@code message} is never {@code null}. An entry with nothing under the configured payload field,
+     * or one whose field name itself failed to decode, is retired in {@link #processMessage} before
+     * this method is ever called (OPIK-8192) — implementations do not need to guard against it, and
+     * previously did not consistently: {@link com.comet.opik.api.resources.v1.events.OnlineScoringBaseScorer}
+     * dereferences {@code message} unconditionally on the first line of its own {@code processEvent},
+     * which a null used to reach as a live NullPointerException on {@code main}.
+     * <p>
+     * Deliberately <em>not</em> annotated {@code @NonNull}. Lombok injects its check at the start of a
+     * method body, and an abstract method has none, so the annotation would generate nothing here;
+     * parameter annotations are not inherited either, so it would give the implementations nothing.
+     * The invariant is established at exactly one place — the guards in {@link #processMessage} — and
+     * this contract is where it is recorded. Annotating the overrides instead would only add a check
+     * for a condition the caller already excludes.
      *
-     * @param message a Redis message
+     * @param message a Redis message, guaranteed non-null by {@link #processMessage}
      */
     protected abstract Mono<Void> processEvent(M message);
 

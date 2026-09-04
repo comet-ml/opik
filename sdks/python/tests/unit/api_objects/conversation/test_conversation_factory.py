@@ -85,3 +85,75 @@ def test_create_conversation_from_traces(traces, expected_discussion):
         traces, input_transform, output_transform
     )
     assert discussion.as_json_list() == expected_discussion
+
+
+@pytest.mark.parametrize(
+    "traces,expected_discussion",
+    [
+        (  # context is attached to the assistant message of the same trace
+            [
+                TracePublic(
+                    input={"x": "test input"},
+                    output={"output": "test output"},
+                    metadata={"retrieved_docs": ["doc 1", "doc 2"]},
+                    start_time=datetime.datetime.now(),
+                )
+            ],
+            [
+                {"role": "user", "content": "test input"},
+                {
+                    "role": "assistant",
+                    "content": "test output",
+                    "context": ["doc 1", "doc 2"],
+                },
+            ],
+        ),
+        (  # traces without context are not affected
+            [
+                TracePublic(
+                    input={"x": "test input"},
+                    output={"output": "test output"},
+                    metadata={},
+                    start_time=datetime.datetime.now(),
+                )
+            ],
+            [
+                {"role": "user", "content": "test input"},
+                {"role": "assistant", "content": "test output"},
+            ],
+        ),
+        (  # context is dropped when the trace produced no assistant message
+            [
+                TracePublic(
+                    input={"x": "test input"},
+                    output={"result": "test output"},  # wrong output
+                    metadata={"retrieved_docs": ["doc 1"]},
+                    start_time=datetime.datetime.now(),
+                )
+            ],
+            [
+                {"role": "user", "content": "test input"},
+            ],
+        ),
+    ],
+)
+def test_create_conversation_from_traces__with_context_transform(
+    traces, expected_discussion
+):
+    def input_transform(input):
+        if "x" not in input:
+            return None
+        return input["x"]
+
+    def output_transform(output):
+        if "output" not in output:
+            return None
+        return output["output"]
+
+    def context_transform(trace):
+        return trace.metadata.get("retrieved_docs")
+
+    discussion = conversation_factory.create_conversation_from_traces(
+        traces, input_transform, output_transform, context_transform
+    )
+    assert discussion.as_json_list() == expected_discussion

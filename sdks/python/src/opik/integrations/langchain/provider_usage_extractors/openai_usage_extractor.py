@@ -52,7 +52,10 @@ class OpenAIUsageExtractor(
         provider = self.PROVIDER
 
         # Check base URL to detect custom providers
-        if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
+        invocation_params = (run_dict.get("extra") or {}).get("invocation_params")
+        if isinstance(invocation_params, dict) and (
+            base_url := invocation_params.get("base_url")
+        ):
             if base_url.host != "api.openai.com":
                 provider = base_url.host
 
@@ -108,17 +111,21 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     model = None
 
     # Get model from metadata
-    if metadata := run_dict["extra"].get("metadata"):
+    metadata = (run_dict.get("extra") or {}).get("metadata")
+    if isinstance(metadata, dict):
         model = metadata.get("ls_model_name")
 
     # Try to detect model+version more precise way if possible
     # .invoke() mode
-    if llm_output := run_dict["outputs"].get("llm_output"):
+    outputs = run_dict.get("outputs") or {}
+    if llm_output := outputs.get("llm_output"):
         model = llm_output.get("model_name", model)
     # streaming mode
-    elif generation_info := run_dict["outputs"]["generations"][-1][-1][
-        "generation_info"
-    ]:
-        model = generation_info.get("model_name", model)
+    elif generations := outputs.get("generations"):
+        last_generation = generations[-1][-1] if generations[-1] else None
+        if last_generation is not None:
+            generation_info = last_generation.get("generation_info")
+            if generation_info:
+                model = generation_info.get("model_name", model)
 
     return model

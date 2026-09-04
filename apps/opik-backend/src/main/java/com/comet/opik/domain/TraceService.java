@@ -150,6 +150,7 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(project -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+                    String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     // Strip attachments from the trace with the generated ID and project ID
@@ -163,7 +164,7 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName,
-                                                workspaceName));
+                                                workspaceName, cipxDeviceId));
                                     }));
                 }));
     }
@@ -205,6 +206,7 @@ class TraceServiceImpl implements TraceService {
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+                    String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
@@ -222,7 +224,7 @@ class TraceServiceImpl implements TraceService {
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName,
-                                                workspaceName));
+                                                workspaceName, cipxDeviceId));
                                     }));
                 }));
     }
@@ -354,7 +356,8 @@ class TraceServiceImpl implements TraceService {
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
-                                                ctx.get(RequestContext.USER_NAME)))))))
+                                                ctx.get(RequestContext.USER_NAME),
+                                                ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "")))))))
                         .then()));
     }
 
@@ -368,6 +371,7 @@ class TraceServiceImpl implements TraceService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+            String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
             return dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids()))
                     .flatMap(traceToProjectMap -> {
                         var projectIds = Set.copyOf(traceToProjectMap.values());
@@ -378,7 +382,7 @@ class TraceServiceImpl implements TraceService {
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
                                             userName, batchUpdate.update(), workspaceName, traceToProjectMap));
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
-                                            batchUpdate.update(), workspaceId, userName));
+                                            batchUpdate.update(), workspaceId, userName, cipxDeviceId));
                                 });
                     });
         });
@@ -533,9 +537,12 @@ class TraceServiceImpl implements TraceService {
      * Resolves every owning project for each id: a bounded fast pass, then an unbounded pass over only the ids the
      * bounded one leaves unresolved. Returns id -> owning projects; ids absent from the result have no live row.
      * <p>
-     * The bounded pass's {@code toMonday(id_at)} window can miss a row whose {@code id_at} is not monotonic in its id
-     * (e.g. a wrapped timestamp, OPIK-7456), so the unbounded pass re-resolves the miss set - the bounded query is
-     * never a delete's sole resolver. The resolver-query javadocs cover how each pass prunes.
+     * The bounded pass's week window can miss a row whose week {@link com.comet.opik.utils.WeeklyPartitions#of}
+     * cannot derive exactly — an id at or past the end of {@code DateTime64}'s range, where {@code id_at} saturates
+     * to {@code 2299-12-31} whatever the real week — so the unbounded pass re-resolves the miss set and the bounded
+     * query is never a delete's sole resolver. A far-future timestamp short of that ceiling is no longer such a case:
+     * since OPIK-7456 both sides of the window are Date32 and the fast pass resolves it. The resolver-query javadocs
+     * cover how each pass prunes.
      */
     private Mono<Map<UUID, Set<UUID>>> resolveOwningProjects(Set<UUID> ids) {
         return dao.getAllProjectIdsByTraceIdsBounded(ids)
