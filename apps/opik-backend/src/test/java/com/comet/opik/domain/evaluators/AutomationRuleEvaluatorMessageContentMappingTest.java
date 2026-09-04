@@ -75,12 +75,16 @@ class AutomationRuleEvaluatorMessageContentMappingTest {
      * the next save stores what it reads back.
      */
     @Test
-    void contentPartWithAnUnknownTypeIsStillContentParts() {
+    void contentArrayWithAnUnknownTypeIsPreserved() {
         var message = MAPPER.map(stored("[{\"type\": \"pdf_url\", \"pdf_url\": {\"url\": \"https://x/a.pdf\"}}]"));
 
         assertThat(message.content()).isNull();
-        assertThat(message.contentArray()).hasSize(1);
-        assertThat(message.contentArray().getFirst().type()).isEqualTo("pdf_url");
+        // The discriminator survives, but the payload does not: LlmAsJudgeMessageContent has a field per
+        // known type and no overflow, so convertToMessageContent has nowhere to put pdf_url. Asserted in
+        // full rather than by type alone so the loss is visible here instead of being discovered later —
+        // carrying unknown payloads through needs a model change, not a mapper change.
+        assertThat(message.contentArray()).containsExactly(
+                LlmAsJudgeMessageContent.builder().type("pdf_url").build());
     }
 
     @Test
