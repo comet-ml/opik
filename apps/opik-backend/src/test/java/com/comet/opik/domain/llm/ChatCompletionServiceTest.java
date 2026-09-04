@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -39,7 +38,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -629,245 +627,35 @@ class ChatCompletionServiceTest {
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
-        /**
-         * The statuses the retryability split treats as permanent, spelled out as a literal. The
-         * parameterised cases below partition the shared rows with this instead of asking
-         * {@code isPermanentFailure} where each row belongs — a test that derives its expectation from
-         * the classifier under test cannot fail when the classifier is wrong.
-         */
-        private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 403, 404, 413, 422);
-
-        /** The shared rows whose status is permanent, so their scoreTrace case needs no branch. */
-        private static Stream<Arguments> permanentProviderStatuses() {
-            return providerStatusProvider().filter(row -> PERMANENT_STATUSES.contains(row.get()[2]));
-        }
-
-        /** The complement, kept separate for the same reason. */
-        private static Stream<Arguments> transientProviderStatuses() {
-            return providerStatusProvider().filter(row -> !PERMANENT_STATUSES.contains(row.get()[2]));
-        }
-
-        /**
-         * OPIK-8240. The redaction-limit incident: Uber's gateway rejects an oversized scoring request with
-         * a plain-text 400 that getLlmProviderError cannot parse (no JSON envelope, so no '{' for
-         * extractErrorJson to find). scoreTrace used to answer every unparsed provider error with a blanket
-         * 500, which lands outside BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS - so a request that could
-         * never succeed was replayed maxRetries times, once per pendingMessageDuration, before being
-         * dropped.
-         *
-         * <p>The status now comes off the HttpException in the cause chain (findProviderHttpStatus) rather
-         * than the unparseable body, and a permanent 4xx becomes a ClientErrorException so the subscriber
-         * retires it on the first delivery.
-         */
-        @ParameterizedTest(name = "scoreTrace: permanent {0} -> non-retryable ClientErrorException")
-        @CsvSource({
-                "400, Bad Request",
-                "401, Unauthorized",
-                "403, Forbidden",
-                "404, Not Found",
-                "413, Payload Too Large",
-                "422, Unprocessable Entity",
-        })
-        @DisplayName("A permanent provider 4xx becomes non-retryable, so the evaluation is dropped not replayed")
-        void scoreTrace__whenPermanentClientError__thenNonRetryable(int status, String label) {
-            // Plain-text body, exactly like the real gateway rejection - unparseable, so the status has to
-            // come from the HttpException itself.
-            var providerFailure = new InvalidRequestException(
-                    "error, status code: %d, status: , message: %s".formatted(status, label),
-                    new HttpException(status, label));
-
-            var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
-
-            assertNonRetryable(thrown, status);
-        }
-
-        /**
-         * The other half of the split, and the reason family-level classification was not enough: 408, 425
-         * and 429 are client-error-family by numbering but transient in meaning. Dropping them on the first
-         * failure - which any blanket "4xx is non-retryable" rule would do - would discard an evaluation
-         * over a rate limit that clears in seconds.
-         */
-        @ParameterizedTest(name = "scoreTrace: transient {0} -> stays retryable")
-        @CsvSource({
-                "408, Request Timeout",
-                "425, Too Early",
-                "429, Too Many Requests",
-                "500, Internal Server Error",
-                "502, Bad Gateway",
-                "503, Service Unavailable",
-        })
-        @DisplayName("A transient status stays retryable, so maxRetries is still honoured")
-        void scoreTrace__whenTransientStatus__thenStaysRetryable(int status, String label) {
-            var thrown = whenScoreTraceFails(new RuntimeException(new HttpException(status, label)),
-                    Optional.empty());
-
-            assertRetryable(thrown);
-        }
-
-        /**
-         * The parseable branch, which reaches the same split by a different route: no HttpException in the
-         * chain, so the status is the one getLlmProviderError read off the body. Both directions are
-         * covered here and below, because a parseable 429 used to become a ClientErrorException via
-         * failHandlingLLMProviderError -- dropped on first delivery, the very thing the split prevents --
-         * while a parseable 400 has to keep being dropped.
-         */
-        @ParameterizedTest(name = "scoreTrace: parseable permanent {0} -> non-retryable")
-        @CsvSource({"400", "401", "403"})
-        @DisplayName("A parseable permanent provider error is retired on the first delivery")
-        void scoreTrace__whenParseablePermanentProviderError__thenNonRetryable(int mappedStatus) {
-            var thrown = whenScoreTraceFails(new RuntimeException("no HTTP status in this chain"),
-                    Optional.of(new ErrorMessage(mappedStatus, "provider body says " + mappedStatus)));
-
-            assertNonRetryable(thrown, mappedStatus);
-        }
-
-        @ParameterizedTest(name = "scoreTrace: parseable transient {0} -> stays retryable")
-        @CsvSource({"408", "429", "500", "503"})
-        @DisplayName("A parseable transient provider error is still replayed")
-        void scoreTrace__whenParseableTransientProviderError__thenRetryable(int mappedStatus) {
-            var thrown = whenScoreTraceFails(new RuntimeException("no HTTP status in this chain"),
-                    Optional.of(new ErrorMessage(mappedStatus, "provider body says " + mappedStatus)));
-
-            assertRetryable(thrown);
-        }
-
-        /**
-         * Regression for the precedence bug caught in review of OPIK-8240.
-         *
-         * <p>The provider mappers synthesize a status when they cannot read one off the body:
-         * {@code CustomLlmErrorMessage} defaults to 400, {@code OpenAiErrorMessage} to 500. If a synthetic
-         * value outranks the code the provider actually put on the wire, retryability is decided from a
-         * number nobody sent. This is the damaging direction: a transient provider outage hidden behind
-         * CustomLlm's synthetic 400 would be classified permanent and dropped on its first delivery.
-         */
-        @ParameterizedTest(name = "transient wire {0} behind synthetic {1} -> stays retryable")
-        @CsvSource({
-                "503, 400",
-                "429, 400",
-        })
-        @DisplayName("A transient status on the wire outranks a synthetic permanent mapper fallback")
-        void scoreTrace__whenTransientWireStatusBehindSyntheticPermanent__thenStaysRetryable(
-                int wireStatus, int syntheticStatus) {
-            var providerFailure = new RuntimeException(new HttpException(wireStatus, "upstream said " + wireStatus));
-
-            var thrown = whenScoreTraceFails(providerFailure,
-                    Optional.of(new ErrorMessage(syntheticStatus, "synthetic mapper fallback")));
-
-            assertRetryable(thrown);
-        }
-
-        /** The harmless direction of the same precedence rule, kept so the rule is pinned both ways. */
-        @ParameterizedTest(name = "permanent wire {0} behind synthetic {1} -> stays non-retryable")
-        @CsvSource({
-                "400, 500",
-                "403, 500",
-        })
-        @DisplayName("A permanent status on the wire outranks a synthetic transient mapper fallback")
-        void scoreTrace__whenPermanentWireStatusBehindSyntheticTransient__thenStaysNonRetryable(
-                int wireStatus, int syntheticStatus) {
-            var providerFailure = new RuntimeException(new HttpException(wireStatus, "upstream said " + wireStatus));
-
-            var thrown = whenScoreTraceFails(providerFailure,
-                    Optional.of(new ErrorMessage(syntheticStatus, "synthetic mapper fallback")));
-
-            assertNonRetryable(thrown, wireStatus);
-        }
-
-        @ParameterizedTest(name = "isPermanentFailure({0}) -> {1}")
-        @CsvSource({
-                // Client-error family, minus the transient carve-outs.
-                "400, true",
-                "401, true",
-                "403, true",
-                "499, true",
-                // Transient client errors: "not now", not "not ever".
-                "408, false",
-                "425, false",
-                "429, false",
-                // Server errors are the textbook retry case.
-                "500, false",
-                "503, false",
-                // Outside the error families entirely - unknown defaults to retryable.
-                "200, false",
-                "302, false",
-        })
-        @DisplayName("isPermanentFailure: the split itself, including the family boundary")
-        void isPermanentFailure__classifiesTheStatus(int status, boolean expectedPermanent) {
-            assertThat(ChatCompletionService.isPermanentFailure(status)).isEqualTo(expectedPermanent);
-        }
-
-        /**
-         * The shared production-shaped rows, run through scoreTrace. Split into a permanent and a transient
-         * case rather than one case that branches: scoreTrace has no JAX-RS caller, so the thrown TYPE is
-         * read for retryability rather than as an HTTP status, and each category deserves an assertion that
-         * says which one it belongs to. Before OPIK-8240 this path answered every failure with a blanket
-         * 500, which kept transient 408/429 retryable (correct) but also replayed permanent 400/401
-         * failures that could never succeed (the redaction-limit incident).
-         */
-        @ParameterizedTest(name = "scoreTrace: when {0}, then non-retryable {2}")
-        @MethodSource("permanentProviderStatuses")
-        @DisplayName("Online scoring drops a permanent provider status instead of replaying it")
-        void scoreTrace__whenPermanentProviderErrorUnparsed__thenNonRetryable(
+        @ParameterizedTest(name = "scoreTrace: when {0}, then stay a retryable 500")
+        @MethodSource("providerStatusProvider")
+        @DisplayName("Online scoring deliberately keeps the blanket 500, so the subscriber still retries")
+        void scoreTrace__whenProviderErrorUnparsed__thenStayRetryable(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
-            var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
-
-            assertThat(thrown).hasMessageContaining(expectedMessagePart);
-            assertNonRetryable(thrown, expectedStatus);
-        }
-
-        /** {@code expectedStatus} is unused on purpose: every retryable failure is flattened to 500. */
-        @ParameterizedTest(name = "scoreTrace: when {0}, then retryable")
-        @MethodSource("transientProviderStatuses")
-        @DisplayName("Online scoring keeps a transient provider status retryable, honouring maxRetries")
-        void scoreTrace__whenTransientProviderErrorUnparsed__thenRetryable(
-                String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
-            var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
-
-            assertThat(thrown).hasMessageContaining(expectedMessagePart);
-            assertRetryable(thrown);
-        }
-
-        /** Drives scoreTrace to failure and returns what it threw. */
-        private Throwable whenScoreTraceFails(RuntimeException providerFailure,
-                Optional<ErrorMessage> mappedProviderError) {
-            var chatRequest = ChatRequest.builder()
-                    .messages(UserMessage.from(podamFactory.manufacturePojo(String.class)))
-                    .build();
+            // Given — scoreTrace has no JAX-RS caller: the three OnlineScoring*LlmAsJudgeScorer subscribers are the
+            // only callers, so a recovered status would reach no HTTP client. It would, however, reach
+            // BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS, which lists ClientErrorException — so a recovered 429 or
+            // 408 (both RetriableException upstream) would be acked and dropped instead of retried up to
+            // onlineScoring.maxRetries. Whatever the provider reported, this path must stay a 500.
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
-            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var workspaceId = "test-workspace-id";
 
             when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.getLlmProviderError(any())).thenReturn(mappedProviderError);
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
 
-            return catchThrowable(
+            // When
+            var thrown = catchThrowable(
                     () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
-        }
 
-        /**
-         * ClientErrorException is what BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS matches on: the entry is
-         * acked and removed on the first delivery. The status is carried through so the caller-visible
-         * verdict stays the provider's own.
-         */
-        private void assertNonRetryable(Throwable thrown, int expectedStatus) {
+            // Then — InternalServerErrorException is absent from NON_RETRYABLE_EXCEPTIONS, which is what keeps the
+            // evaluation retryable; expectedStatus is deliberately unused here
             assertThat(thrown)
-                    .as("status %d can never succeed on retry, so it must be non-retryable", expectedStatus)
-                    .isInstanceOf(ClientErrorException.class)
-                    .isNotInstanceOf(InternalServerErrorException.class);
-            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
-        }
-
-        /**
-         * Everything else lands outside NON_RETRYABLE_EXCEPTIONS and is replayed up to
-         * onlineScoring.maxRetries. Flattened to 500 deliberately: no HTTP caller reads this status, and
-         * recovering a 429 or 408 verbatim would put the failure back in the non-retryable family.
-         */
-        private void assertRetryable(Throwable thrown) {
-            assertThat(thrown)
-                    .as("a status that may clear on retry must stay outside NON_RETRYABLE_EXCEPTIONS")
                     .isInstanceOf(InternalServerErrorException.class)
-                    .isNotInstanceOf(ClientErrorException.class);
+                    .isNotInstanceOf(ClientErrorException.class)
+                    .hasMessageContaining(expectedMessagePart);
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
         }
 

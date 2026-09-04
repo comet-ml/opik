@@ -164,9 +164,8 @@ public enum RedisStreamCodec {
      * a cause, and keep consuming — masking it. The recovery measured above is single-threaded and
      * proves the decode path, not a loaded service; an allocation large enough to fail can still starve
      * a different thread, which throws where nothing catches it. The counter to that is a size guard at
-     * publish time. No such guard ships today -- #8060 applied the codec's stream-read limits but added
-     * no publisher-side size check -- so this residual risk is open rather than delegated. It is not
-     * something this codec can address on read.
+     * publish time, which is what {@code onlineScoring.dropOversizedPayloads} does, not anything this
+     * codec can do on read.
      * <p>
      * No other {@link Error} is absorbed — a {@link StackOverflowError} still propagates.
      */
