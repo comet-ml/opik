@@ -293,8 +293,10 @@ interface AutomationModelEvaluatorMapper {
             return Optional.of(rawList.stream()
                     .map(this::convertToMessageContent)
                     .toList());
-        } catch (JsonProcessingException | RuntimeException e) {
-            // Valid JSON that isn't content parts lands here too, via convertToMessageContent.
+        } catch (JsonProcessingException | IllegalStateException | ClassCastException e) {
+            // Valid JSON that isn't content parts lands here too, via convertToMessageContent:
+            // IllegalStateException for an element that is not an object, ClassCastException for
+            // an object whose fields are not strings. Anything else is a real bug — let it throw.
             return Optional.empty();
         }
     }
