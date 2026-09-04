@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -627,16 +628,196 @@ class ChatCompletionServiceTest {
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
-        @ParameterizedTest(name = "scoreTrace: when {0}, then stay a retryable 500")
+        /**
+         * OPIK-8240. The redaction-limit incident: Uber's gateway rejects an oversized scoring request with
+         * a plain-text 400 that getLlmProviderError cannot parse (no JSON envelope, so no '{' for
+         * extractErrorJson to find). scoreTrace used to answer every unparsed provider error with a blanket
+         * 500, which lands outside BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS - so a request that could
+         * never succeed was replayed maxRetries times, once per pendingMessageDuration, before being
+         * dropped.
+         *
+         * <p>The status now comes off the HttpException in the cause chain (findProviderHttpStatus) rather
+         * than the unparseable body, and a permanent 4xx becomes a ClientErrorException so the subscriber
+         * retires it on the first delivery.
+         */
+        @ParameterizedTest(name = "scoreTrace: permanent {0} -> non-retryable ClientErrorException")
+        @CsvSource({
+                "400, Bad Request",
+                "401, Unauthorized",
+                "403, Forbidden",
+                "404, Not Found",
+                "413, Payload Too Large",
+                "422, Unprocessable Entity",
+        })
+        @DisplayName("A permanent provider 4xx becomes non-retryable, so the evaluation is dropped not replayed")
+        void scoreTrace__whenPermanentClientError__thenNonRetryable(int status, String label) {
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+            var workspaceId = "test-workspace-id";
+            // Plain-text body, exactly like the real gateway rejection - unparseable, so the status has to
+            // come from the HttpException itself.
+            var providerFailure = new InvalidRequestException(
+                    "error, status code: %d, status: , message: %s".formatted(status, label),
+                    new HttpException(status, label));
+
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
+
+            // ClientErrorException is what BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS matches on.
+            assertThat(thrown)
+                    .isInstanceOf(ClientErrorException.class)
+                    .isNotInstanceOf(InternalServerErrorException.class);
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(status);
+        }
+
+        /**
+         * The other half of the split, and the reason family-level classification was not enough: 408, 425
+         * and 429 are client-error-family by numbering but transient in meaning. Dropping them on the first
+         * failure - which any blanket "4xx is non-retryable" rule would do - would discard an evaluation
+         * over a rate limit that clears in seconds.
+         */
+        @ParameterizedTest(name = "scoreTrace: transient {0} -> stays retryable")
+        @CsvSource({
+                "408, Request Timeout",
+                "425, Too Early",
+                "429, Too Many Requests",
+                "500, Internal Server Error",
+                "502, Bad Gateway",
+                "503, Service Unavailable",
+        })
+        @DisplayName("A transient status stays retryable, so maxRetries is still honoured")
+        void scoreTrace__whenTransientStatus__thenStaysRetryable(int status, String label) {
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+            var workspaceId = "test-workspace-id";
+            var providerFailure = new RuntimeException(new HttpException(status, label));
+
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
+
+            assertThat(thrown)
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .isNotInstanceOf(ClientErrorException.class);
+        }
+
+        @Test
+        @DisplayName("A parseable provider error is classified the same way, not just the unparseable path")
+        void scoreTrace__whenParseableProviderError__thenSplitByStatusToo() {
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+            var workspaceId = "test-workspace-id";
+            var providerFailure = new RuntimeException("provider said no");
+
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            // A parseable 429 used to reach failHandlingLLMProviderError and become a ClientErrorException,
+            // i.e. dropped on the first delivery - the same over-eager drop the split exists to prevent,
+            // just reached through the parseable branch instead.
+            when(llmProviderService.getLlmProviderError(any()))
+                    .thenReturn(Optional.of(new ErrorMessage(429, "rate limited")));
+
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
+
+            assertThat(thrown)
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .isNotInstanceOf(ClientErrorException.class);
+        }
+
+        /**
+         * Regression for the precedence bug caught in review of OPIK-8240.
+         *
+         * <p>The provider mappers synthesize a status when they cannot read one off the body:
+         * {@code CustomLlmErrorMessage} defaults to 400, {@code OpenAiErrorMessage} to 500. If a synthetic
+         * value outranks the code the provider actually put on the wire, retryability is decided from a
+         * number nobody sent. The 503-behind-a-synthetic-400 row is the damaging direction: a transient
+         * provider outage would be classified permanent and dropped on its first delivery.
+         */
+        @ParameterizedTest(name = "wire {0} behind synthetic {1} -> classified on {0}")
+        @CsvSource({
+                // Real transient status hidden behind CustomLlm's synthetic 400. Must stay retryable.
+                "503, 400",
+                "429, 400",
+                // Real permanent status hidden behind OpenAi's synthetic 500. Must stay non-retryable.
+                "400, 500",
+                "403, 500",
+        })
+        @DisplayName("The status on the wire outranks a synthetic mapper fallback")
+        void scoreTrace__whenMapperFallbackConflictsWithWireStatus__thenWireStatusWins(
+                int wireStatus, int syntheticStatus) {
+            var providerFailure = new RuntimeException(new HttpException(wireStatus, "upstream said " + wireStatus));
+
+            var thrown = whenScoreTraceFails(providerFailure,
+                    Optional.of(new ErrorMessage(syntheticStatus, "synthetic mapper fallback")));
+
+            assertRetryability(thrown, wireStatus);
+        }
+
+        @Test
+        @DisplayName("The mapper status is still used when the chain carries no HTTP status at all")
+        void scoreTrace__whenNoWireStatus__thenFallsBackToTheMapper() {
+            // No HttpException anywhere, so there is nothing to outrank -- the mapped code is all we have.
+            var thrown = whenScoreTraceFails(new RuntimeException("no HTTP status in this chain"),
+                    Optional.of(new ErrorMessage(403, "forbidden per provider body")));
+
+            assertRetryability(thrown, 403);
+        }
+
+        @Test
+        @DisplayName("isPermanentFailure: the split itself, including the family boundary")
+        void isPermanentFailureSplitsTheFamilyCorrectly() {
+            // Permanent: client-error family, minus the transient carve-outs.
+            assertThat(ChatCompletionService.isPermanentFailure(400)).isTrue();
+            assertThat(ChatCompletionService.isPermanentFailure(401)).isTrue();
+            assertThat(ChatCompletionService.isPermanentFailure(403)).isTrue();
+            assertThat(ChatCompletionService.isPermanentFailure(499)).isTrue();
+            // Transient client errors: "not now", not "not ever".
+            assertThat(ChatCompletionService.isPermanentFailure(408)).isFalse();
+            assertThat(ChatCompletionService.isPermanentFailure(425)).isFalse();
+            assertThat(ChatCompletionService.isPermanentFailure(429)).isFalse();
+            // Server errors are the textbook retry case.
+            assertThat(ChatCompletionService.isPermanentFailure(500)).isFalse();
+            assertThat(ChatCompletionService.isPermanentFailure(503)).isFalse();
+            // Outside the error families entirely - unknown defaults to retryable.
+            assertThat(ChatCompletionService.isPermanentFailure(200)).isFalse();
+            assertThat(ChatCompletionService.isPermanentFailure(302)).isFalse();
+        }
+
+        @ParameterizedTest(name = "scoreTrace: when {0}, then retryability follows the status")
         @MethodSource("providerStatusProvider")
-        @DisplayName("Online scoring deliberately keeps the blanket 500, so the subscriber still retries")
-        void scoreTrace__whenProviderErrorUnparsed__thenStayRetryable(
+        @DisplayName("Online scoring splits the provider status by retryability rather than by family")
+        void scoreTrace__whenProviderErrorUnparsed__thenRetryabilityFollowsStatus(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
-            // Given — scoreTrace has no JAX-RS caller: the three OnlineScoring*LlmAsJudgeScorer subscribers are the
-            // only callers, so a recovered status would reach no HTTP client. It would, however, reach
-            // BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS, which lists ClientErrorException — so a recovered 429 or
-            // 408 (both RetriableException upstream) would be acked and dropped instead of retried up to
-            // onlineScoring.maxRetries. Whatever the provider reported, this path must stay a 500.
+            // scoreTrace has no JAX-RS caller: the OnlineScoring*LlmAsJudgeScorer subscribers are the only
+            // ones, so the thrown TYPE is read for retryability, not as an HTTP status.
+            // BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS matches ClientErrorException, so the type chosen
+            // here decides whether the evaluation is dropped on first delivery or replayed up to
+            // onlineScoring.maxRetries. Before OPIK-8240 this path answered every failure with a blanket
+            // 500, which kept transient 408/429 retryable (correct) but also replayed permanent 400/401
+            // failures that could never succeed (the redaction-limit incident).
+            //
+            // Assertions are delegated to a single helper rather than branched inline, so both categories
+            // run one unconditional flow and a failure names the category it belongs to.
+            var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
+
+            assertThat(thrown).hasMessageContaining(expectedMessagePart);
+            assertRetryability(thrown, expectedStatus);
+        }
+
+        /** Drives scoreTrace to failure and returns what it threw. */
+        private Throwable whenScoreTraceFails(RuntimeException providerFailure,
+                Optional<ErrorMessage> mappedProviderError) {
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
             var workspaceId = "test-workspace-id";
@@ -644,19 +825,31 @@ class ChatCompletionServiceTest {
             when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(mappedProviderError);
 
-            // When
-            var thrown = catchThrowable(
+            return catchThrowable(
                     () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
+        }
 
-            // Then — InternalServerErrorException is absent from NON_RETRYABLE_EXCEPTIONS, which is what keeps the
-            // evaluation retryable; expectedStatus is deliberately unused here
-            assertThat(thrown)
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .isNotInstanceOf(ClientErrorException.class)
-                    .hasMessageContaining(expectedMessagePart);
-            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
+        /**
+         * Asserts the thrown type against what {@code BaseRedisSubscriber} does with it: ClientErrorException
+         * is in NON_RETRYABLE_EXCEPTIONS (ack and remove on first delivery), anything else is replayed.
+         */
+        private void assertRetryability(Throwable thrown, int status) {
+            if (ChatCompletionService.isPermanentFailure(status)) {
+                assertThat(thrown)
+                        .as("status %d can never succeed on retry, so it must be non-retryable", status)
+                        .isInstanceOf(ClientErrorException.class)
+                        .isNotInstanceOf(InternalServerErrorException.class);
+                assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(status);
+            } else {
+                assertThat(thrown)
+                        .as("status %d may clear on retry, so it must stay outside NON_RETRYABLE_EXCEPTIONS",
+                                status)
+                        .isInstanceOf(InternalServerErrorException.class)
+                        .isNotInstanceOf(ClientErrorException.class);
+                assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
+            }
         }
 
         @ParameterizedTest(name = "streaming: when {0}, then stream status {2}")

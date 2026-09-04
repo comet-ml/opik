@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
@@ -154,6 +155,43 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      * scoring chain (feedback-score persistence reads it). Per-message throughput and error metrics are
      * attributed automatically by {@link BaseRedisSubscriber} from {@link #messageContext(Object)}.
      */
+    /**
+     * Folds two sibling failures into the one that should represent the batch, for use as a
+     * {@link reactor.core.publisher.Flux#reduce(java.util.function.BiFunction) reduce} accumulator.
+     *
+     * <p><b>Retryable wins.</b> A message fans out over many thread ids but travels as a single stream
+     * entry, so the one error re-emitted for it decides the fate of every sibling: a
+     * {@code ClientErrorException} tells {@code BaseRedisSubscriber} to ack and remove, taking any
+     * retryable sibling down with it, unretried. Picking arbitrarily -- {@code errors.getFirst()}, i.e.
+     * whichever the {@code flatMap} happened to emit first -- made that a race. It was harmless while
+     * every provider failure was a blanket 500 and the choice could not change retryability; it stopped
+     * being harmless once OPIK-8240 split permanent from transient.
+     *
+     * <p>The asymmetry is deliberate. Preferring retryable costs a bounded replay of the permanent
+     * sibling ({@code maxRetries} caps it, and it is dropped for good on the final attempt). Preferring
+     * non-retryable costs recoverable work, silently and permanently. Only one of those is recoverable,
+     * so the tie goes to retrying.
+     *
+     * <p>Folded pairwise rather than collected into a list first: fan-out is not chunked at either call
+     * site (a manual evaluation passes every resolved thread id, the streaming path every thread that
+     * closed in the window), so a provider outage across a large fan-out would otherwise hold every
+     * sibling {@code Throwable} and its cause chain in memory at once, only to discard all but one. This
+     * keeps a single accumulator. The trade is that the count of failed siblings is no longer available
+     * to report -- nothing reports it today.
+     *
+     * <p>Order-stable: the first retryable failure wins, and if none is retryable the first failure wins.
+     *
+     * @param chosen the incumbent, i.e. the representative so far
+     * @param candidate the next sibling failure
+     * @return whichever should represent the batch
+     */
+    // Package-private for unit tests.
+    static Throwable preferRetryable(@NonNull Throwable chosen, @NonNull Throwable candidate) {
+        boolean chosenIsPermanent = chosen instanceof ClientErrorException;
+        boolean candidateIsRetryable = !(candidate instanceof ClientErrorException);
+        return chosenIsPermanent && candidateIsRetryable ? candidate : chosen;
+    }
+
     @Override
     protected final Mono<Void> processEvent(M message) {
         var workspaceName = StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId());
