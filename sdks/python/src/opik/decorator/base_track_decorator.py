@@ -92,6 +92,10 @@ class BaseTrackDecorator(abc.ABC):
             project_name: The name of the project to log data.
             create_duplicate_root_span: Whether to create a root span duplicating the root trace data.
             source: The source of the trace.
+            entrypoint: Whether the decorated function is an entrypoint. Entrypoints
+                are shown separately in the Opik UI.
+            environment: The environment in which the trace was created, e.g. 'production'
+                or 'development'. Defaults to the configured environment when not set.
 
         Returns:
             Callable: The decorated function(if used without parentheses)
