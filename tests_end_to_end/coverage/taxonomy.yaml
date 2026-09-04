@@ -266,6 +266,7 @@ areas:
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
+      messages-tab:           { covered: false, note: "MessagesTab — conditional on input/output parsing as LLM messages (detectLLMMessages); is the default tab when shown" }
       agent-graph-tab:        { covered: false }
       prompts-tab:            { covered: false, note: "PromptsTab — conditional on opik_prompts metadata + canViewPrompts, like agent-graph-tab" }
       attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
