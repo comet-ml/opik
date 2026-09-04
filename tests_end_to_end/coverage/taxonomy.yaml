@@ -661,11 +661,23 @@ areas:
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
-      # Scoped: the edit dialog is opened, its hydrated prompt asserted byte-exact,
-      # and submitted unchanged so the save round trip is real. Editing a FIELD
-      # through the dialog (renaming, changing the model, rewriting the prompt) is
-      # still uncovered.
-      edit-rule:               { covered: true,  tier: t2-cuj, note: "dialog hydration + no-op re-save preserve a judge prompt byte-for-byte, in both the plain-string and content_array shapes; editing a field through the dialog is not covered" }
+      # Scoped, and the two halves are not equally scoped:
+      #   - plain-string prompt: the edit dialog IS opened, its hydrated prompt
+      #     asserted byte-exact, and submitted unchanged, so the UI save round
+      #     trip is real.
+      #   - content_array prompt: API-level only. The dialog renders no image
+      #     part, so the url/detail that a regression would drop are not
+      #     observable in the UI; that half is a read-then-write over REST and
+      #     no dialog gesture is made.
+      # Editing a FIELD through the dialog (renaming, changing the model,
+      # rewriting the prompt) is still uncovered either way.
+      #
+      # OPEN, needs a human call: the content_array test asserts judge-message
+      # content-SHAPE preservation, which no capability in this area names. It
+      # rides on edit-rule for want of a better key. Either add a capability for
+      # it or drop that tag and leave the behaviour honestly uncovered — do not
+      # let it sit here as a silent widening of edit-rule.
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       # Deliberately still false. online-evaluation-python-metric-errors.spec.ts

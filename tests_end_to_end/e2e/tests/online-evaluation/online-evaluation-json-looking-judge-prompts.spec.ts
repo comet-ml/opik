@@ -73,10 +73,17 @@ test.describe('Online Evaluation — judge prompts that look like JSON', { tag: 
     automationRulesCleanup,
   }) => {
     const controlName = `${testNamespace}-control`;
-    const seededNames = [
-      controlName,
-      ...JSON_LOOKING_PROMPTS.map((p) => `${testNamespace}-${p.label}`),
+    // Carried as name+why rather than name alone so a missing row names the
+    // mapper branch it came from: "row for …-empty-object missing" is a bug
+    // report, "row missing" is a starting point for one.
+    const seededRules: Array<{ name: string; why: string }> = [
+      { name: controlName, why: 'ordinary prose — the collateral-damage control' },
+      ...JSON_LOOKING_PROMPTS.map((p) => ({
+        name: `${testNamespace}-${p.label}`,
+        why: p.why,
+      })),
     ];
+    const seededNames = seededRules.map((r) => r.name);
 
     await test.step(
       `Seed a prose control rule plus ${JSON_LOOKING_PROMPTS.length} bracket-opening ones`,
@@ -152,8 +159,8 @@ test.describe('Online Evaluation — judge prompts that look like JSON', { tag: 
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
 
-      for (const name of seededNames) {
-        await expect(onlineEval.ruleRow(name), `row for ${name}`).toHaveCount(1);
+      for (const { name, why } of seededRules) {
+        await expect(onlineEval.ruleRow(name), `row for ${name} — ${why}`).toHaveCount(1);
       }
       await expect(
         onlineEval.ruleRows,
