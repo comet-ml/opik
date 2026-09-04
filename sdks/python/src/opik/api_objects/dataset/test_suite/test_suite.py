@@ -682,7 +682,7 @@ class TestSuite:
         for item in items:
             if "id" not in item:
                 raise opik_exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    "Missing id for test suite item to update: %s", item
+                    f"Missing id for test suite item to update: {item}"
                 )
 
         self.insert(items, deduplication=deduplication)
