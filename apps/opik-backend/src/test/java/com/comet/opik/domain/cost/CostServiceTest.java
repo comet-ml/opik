@@ -1062,4 +1062,32 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code gmi}, {@code gradient_ai} and {@code libertai} as canonical providers
+     * so that their token-priced entries in {@code model_prices_and_context_window.json} are no longer
+     * silently dropped at load time. Each case exercises a representative token-priced model routed
+     * through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideGatewayProviderCases")
+    void calculateCostHandlesGatewayProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGatewayProviderCases() {
+        return Stream.of(
+                // gmi/anthropic/claude-opus-4.5: input 5e-06, output 2.5e-05
+                // 1000*5e-06 + 200*2.5e-05 = 0.01
+                Arguments.of("gmi", "gmi/anthropic/claude-opus-4.5", "0.01"),
+                // gradient_ai/anthropic-claude-3-opus: input 1.5e-05, output 7.5e-05
+                // 1000*1.5e-05 + 200*7.5e-05 = 0.03
+                Arguments.of("gradient_ai", "gradient_ai/anthropic-claude-3-opus", "0.03"),
+                // libertai/hermes-3-8b-tee: input 1.5e-07, output 6e-07
+                // 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("libertai", "libertai/hermes-3-8b-tee", "0.00027"));
+    }
 }
