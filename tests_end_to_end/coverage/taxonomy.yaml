@@ -648,18 +648,36 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
+      - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
-      list-rules:              { covered: false }
+      list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
-      edit-rule:               { covered: false }
+      # Scoped, and the two halves are not equally scoped:
+      #   - plain-string prompt: the edit dialog IS opened, its hydrated prompt
+      #     asserted byte-exact, and submitted unchanged, so the UI save round
+      #     trip is real.
+      #   - content_array prompt: API-level only. The dialog renders no image
+      #     part, so the url/detail that a regression would drop are not
+      #     observable in the UI; that half is a read-then-write over REST and
+      #     no dialog gesture is made.
+      # Editing a FIELD through the dialog (renaming, changing the model,
+      # rewriting the prompt) is still uncovered either way.
+      #
+      # OPEN, needs a human call: the content_array test asserts judge-message
+      # content-SHAPE preservation, which no capability in this area names. It
+      # rides on edit-rule for want of a better key. Either add a capability for
+      # it or drop that tag and leave the behaviour honestly uncovered — do not
+      # let it sit here as a silent widening of edit-rule.
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       # Deliberately still false. online-evaluation-python-metric-errors.spec.ts

@@ -188,6 +188,61 @@ export interface AutomationRuleLogRef {
 }
 
 /**
+ * One content part of a structured (multimodal) judge message.
+ *
+ * Only the fields the specs assert on are modelled; `video_url` / `audio_url`
+ * exist on the wire too and are left off deliberately rather than typed and
+ * ignored.
+ */
+export interface JudgeMessageContentPartRef {
+  type: string;
+  text: string | null;
+  imageUrl: { url: string; detail: string | null } | null;
+}
+
+/**
+ * One judge message exactly as `GET /automations/evaluators/{id}` returns it.
+ *
+ * `content` and `contentArray` are the API's own two mutually-exclusive shapes
+ * (`LlmAsJudgeMessage`), and telling them apart is the whole point of the specs
+ * that use this: prose must come back as `content`, a genuine multimodal array
+ * must come back as `contentArray`. They are therefore kept as the nullable
+ * union the server sends rather than collapsed into one "text" field, which
+ * would erase the distinction under test.
+ */
+export interface JudgeMessageRef {
+  role: string;
+  content: string | null;
+  contentArray: JudgeMessageContentPartRef[] | null;
+}
+
+/** One judge message as the create endpoint accepts it — set exactly one of the two. */
+export interface JudgeMessageWrite {
+  role: 'SYSTEM' | 'USER';
+  content?: string;
+  contentArray?: Array<{
+    type: string;
+    text?: string;
+    image_url?: { url: string; detail?: string };
+  }>;
+}
+
+/**
+ * One page of `GET /automations/evaluators/`, status included rather than thrown.
+ *
+ * The listing answering 200 at all is the assertion in
+ * `online-evaluation-json-looking-judge-prompts.spec.ts` — the regression it
+ * guards turned the whole page into a 500 — so the status has to be a value the
+ * spec can compare, not an exception the client raises on its way out.
+ */
+export interface AutomationRuleEvaluatorPageRef {
+  status: number;
+  /** Server-reported total for the query, not the length of this page. */
+  total: number;
+  names: string[];
+}
+
+/**
  * A trace `input`/`output`/`metadata` payload as the REST API accepts it.
  *
  * The endpoint stores a bare `JsonNode`, so a scalar, an array and an object
@@ -1544,6 +1599,228 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
       }
       return id;
+    },
+
+    /**
+     * Create an LLM-as-judge rule and return its id.
+     *
+     * Separate from `createAutomationRule` (which only builds
+     * `user_defined_metric_python` rules) because the judge shape is what these
+     * specs are about: the message `content` / `content_array` split, which the
+     * python shape has no equivalent of.
+     *
+     * `rawFetch` again, for the same two reasons as the python creator: the
+     * pinned SDK has no `trigger_scope`, and creation answers 201 with an empty
+     * body so the id only exists in the `Location` header.
+     *
+     * No provider key is required — the backend validates neither the model name
+     * nor its availability at create time, so a rule can be seeded on a
+     * workspace with no LLM provider configured. It simply never scores, which
+     * is what the listing / read-back specs want.
+     */
+    async createLlmJudgeRule(args: {
+      projectId: string;
+      name: string;
+      messages: JudgeMessageWrite[];
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate?: number;
+      /** Provider model identifier, e.g. `gpt-4o`. */
+      model?: string;
+      /** `score()` variable name -> extraction path (e.g. `output.output`). */
+      variables?: Record<string, string>;
+      /**
+       * Name of the single output-schema entry. Deliberately NOT defaulted to
+       * the rule name: rule names carry the run namespace and can approach the
+       * 150-char column bound, while a score name is a short human label, and
+       * the edit dialog renders it as one.
+       */
+      scoreName?: string;
+      enabled?: boolean;
+    }): Promise<string> {
+      const scoreName = args.scoreName ?? 'Accuracy';
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate ?? 1,
+            enabled: args.enabled ?? true,
+            code: {
+              model: { name: args.model ?? 'gpt-4o', temperature: 0 },
+              messages: args.messages.map((m) => ({
+                role: m.role,
+                ...(m.content === undefined ? {} : { content: m.content }),
+                ...(m.contentArray === undefined ? {} : { content_array: m.contentArray }),
+              })),
+              variables: args.variables ?? { output: 'output.output' },
+              schema: [
+                {
+                  name: scoreName,
+                  type: 'INTEGER',
+                  description: 'Score assigned by the judge.',
+                },
+              ],
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createLlmJudgeRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createLlmJudgeRule: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * One page of the evaluators listing, reporting the HTTP status rather than
+     * throwing on it.
+     *
+     * `projectId` omitted issues the workspace-wide listing — the same read the
+     * online-scoring sampler's `findAll()` performs, and the one that a single
+     * unreadable rule used to take down for every project at once.
+     *
+     * `size` defaults to 100 rather than the endpoint's own 10: a spec that
+     * seeds n rules and then reads a silently-truncated first page would assert
+     * against a subset without noticing.
+     */
+    async findAutomationRuleEvaluatorsPage(
+      opts: { projectId?: string; page?: number; size?: number } = {},
+    ): Promise<AutomationRuleEvaluatorPageRef> {
+      const query = new URLSearchParams();
+      if (opts.projectId) query.set('project_id', opts.projectId);
+      query.set('page', String(opts.page ?? 1));
+      query.set('size', String(opts.size ?? 100));
+
+      const { status, json } = await rawFetch(
+        'GET',
+        '/v1/private/automations/evaluators/',
+        { query },
+      );
+      // A non-200 is a legitimate result here, not an error to translate: the
+      // caller asserts on it. Only the shape of a 200 is trusted.
+      if (status !== 200) return { status, total: 0, names: [] };
+
+      const page = json as { total?: number; content?: Array<{ name?: string }> };
+      const content = page.content ?? [];
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `findAutomationRuleEvaluatorsPage: 200 response carried no 'total' — ` +
+            `cannot assert the listing is complete.`,
+        );
+      }
+      return {
+        status,
+        total: page.total,
+        names: content.map((r) => String(r.name ?? '')),
+      };
+    },
+
+    /**
+     * The judge messages of one rule, as the read-back mapper produces them.
+     *
+     * This is the surface OPIK-8250 broke: the mapper infers the stored shape
+     * from the content string, so a prose prompt that happens to open with `[`
+     * has to come back as `content`, and a genuine multimodal array has to come
+     * back as `contentArray`. Both fields are surfaced verbatim so a spec can
+     * assert which one the server chose.
+     */
+    async getLlmJudgeMessages(ruleId: string): Promise<JudgeMessageRef[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeMessages: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as { code?: { messages?: unknown } };
+      const messages = rule.code?.messages;
+      if (!Array.isArray(messages)) {
+        throw new Error(
+          `getLlmJudgeMessages: ${ruleId} returned no code.messages — not a judge rule?`,
+        );
+      }
+      return messages.map((raw) => {
+        const m = raw as {
+          role?: string;
+          content?: string | null;
+          content_array?: Array<{
+            type?: string;
+            text?: string | null;
+            image_url?: { url?: string; detail?: string | null } | null;
+          }> | null;
+        };
+        return {
+          role: String(m.role ?? ''),
+          content: m.content ?? null,
+          contentArray:
+            m.content_array?.map((part) => ({
+              type: String(part.type ?? ''),
+              text: part.text ?? null,
+              imageUrl: part.image_url
+                ? { url: String(part.image_url.url ?? ''), detail: part.image_url.detail ?? null }
+                : null,
+            })) ?? null,
+        };
+      });
+    },
+
+    /**
+     * Read a rule and write back exactly what was read — the edit dialog's own
+     * save shape, with nothing edited.
+     *
+     * This is the round trip that turned OPIK-8250's read bug into permanent
+     * data loss: a truncated read fed straight back into a save persisted the
+     * truncation, so the prompt the user typed was gone even after the read was
+     * fixed. Echoing the server's own `code` verbatim is the point — building a
+     * fresh payload here would test this client's serializer instead.
+     */
+    async resaveAutomationRuleFromReadBack(ruleId: string, projectId: string): Promise<void> {
+      const read = await rawFetch('GET', `/v1/private/automations/evaluators/${ruleId}`);
+      if (read.status !== 200) {
+        throw new Error(
+          `resaveAutomationRuleFromReadBack: GET ${ruleId} answered ${read.status}: ${read.message}`,
+        );
+      }
+      const rule = read.json as {
+        type?: string;
+        name?: string;
+        sampling_rate?: number;
+        enabled?: boolean;
+        trigger_scope?: string;
+        code?: unknown;
+      };
+      const { status, message } = await rawFetch(
+        'PATCH',
+        `/v1/private/automations/evaluators/${ruleId}`,
+        {
+          body: {
+            type: rule.type,
+            name: rule.name,
+            project_ids: [projectId],
+            sampling_rate: rule.sampling_rate,
+            enabled: rule.enabled,
+            trigger_scope: rule.trigger_scope,
+            code: rule.code,
+          },
+        },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `resaveAutomationRuleFromReadBack: PATCH ${ruleId} expected 204, got ${status}: ${message}`,
+        );
+      }
     },
 
     /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
