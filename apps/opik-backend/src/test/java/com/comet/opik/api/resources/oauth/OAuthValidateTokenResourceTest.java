@@ -18,6 +18,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -94,12 +97,34 @@ class OAuthValidateTokenResourceTest {
                 .workspaceId(UUID.randomUUID().toString())
                 .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
                 .resource("http://localhost/api/v1/mcp/%s".formatted(RandomStringUtils.secure().nextAlphanumeric(8)))
+                .expiresAt(Instant.now().plus(Duration.ofHours(1)).truncatedTo(ChronoUnit.MILLIS))
                 .build();
         when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.of(validated));
 
         try (Response response = validate(schemePrefix + ACCESS_TOKEN)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
             assertThat(response.readEntity(ValidatedToken.class)).isEqualTo(validated);
+        }
+    }
+
+    @Test
+    @DisplayName("reports the token expiry as an ISO-8601 expires_at so resource servers can cache until then")
+    void reportsExpiresAtOnTheWire() {
+        // opik-mcp caches a "valid" answer until this instant (OPIK-8252); an
+        // epoch number or a camelCase key would silently fall back to its TTL.
+        var expiresAt = Instant.parse("2026-09-04T10:15:30.123Z");
+        var validated = ValidatedToken.builder()
+                .userName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .workspaceId(UUID.randomUUID().toString())
+                .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .resource("http://localhost/api/v1/mcp")
+                .expiresAt(expiresAt)
+                .build();
+        when(mcpOAuthService.validateAccessToken(ACCESS_TOKEN)).thenReturn(Optional.of(validated));
+
+        try (Response response = validate("Bearer " + ACCESS_TOKEN)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
+            assertThat(response.readEntity(String.class)).contains("\"expires_at\":\"2026-09-04T10:15:30.123Z\"");
         }
     }
 }
