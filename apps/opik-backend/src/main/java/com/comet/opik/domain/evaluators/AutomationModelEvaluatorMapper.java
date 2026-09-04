@@ -22,6 +22,7 @@ import org.mapstruct.factory.Mappers;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Mapper
@@ -260,34 +261,41 @@ interface AutomationModelEvaluatorMapper {
             return LlmAsJudgeMessage.builder()
                     .role(role)
                     .build();
-        } else if (contentString.trim().startsWith("[")) {
-            // It's a JSON array, deserialize to List<LlmAsJudgeMessageContent>
-            try {
-                // Deserialize as raw list first to handle potential LinkedHashMap issue
-                List<?> rawList = JsonUtils.getMapper().readValue(
-                        contentString,
-                        JsonUtils.getMapper().getTypeFactory().constructCollectionType(
-                                List.class,
-                                Object.class));
+        }
 
-                // Convert each element to LlmAsJudgeMessageContent
-                List<LlmAsJudgeMessageContent> contentArray = rawList.stream()
-                        .map(this::convertToMessageContent)
-                        .toList();
+        return parseContentArray(contentString)
+                .map(contentArray -> LlmAsJudgeMessage.builder().role(role).contentArray(contentArray).build())
+                .orElseGet(() -> LlmAsJudgeMessage.builder().role(role).content(contentString).build());
+    }
 
-                return LlmAsJudgeMessage.builder()
-                        .role(role)
-                        .contentArray(contentArray)
-                        .build();
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Failed to deserialize message content from JSON", e);
-            }
-        } else {
-            // It's a plain string
-            return LlmAsJudgeMessage.builder()
-                    .role(role)
-                    .content(contentString)
-                    .build();
+    /**
+     * Read the stored content back as structured content parts, or empty when it is not that shape.
+     *
+     * <p>The column keeps no discriminator, so a leading '[' is a hint and not a guarantee: a plain
+     * prompt may legitimately open with one ("[Source Text]..."). Treating unparseable content as the
+     * plain string it looks like keeps such a rule listable; throwing here fails the whole page, and
+     * with it every other rule in the project.
+     */
+    private Optional<List<LlmAsJudgeMessageContent>> parseContentArray(String contentString) {
+        if (!contentString.trim().startsWith("[")) {
+            return Optional.empty();
+        }
+
+        try {
+            // Deserialize as raw list first to handle potential LinkedHashMap issue
+            List<?> rawList = JsonUtils.getMapper().readValue(
+                    contentString,
+                    JsonUtils.getMapper().getTypeFactory().constructCollectionType(
+                            List.class,
+                            Object.class));
+
+            // Convert each element to LlmAsJudgeMessageContent
+            return Optional.of(rawList.stream()
+                    .map(this::convertToMessageContent)
+                    .toList());
+        } catch (JsonProcessingException | RuntimeException e) {
+            // Valid JSON that isn't content parts lands here too, via convertToMessageContent.
+            return Optional.empty();
         }
     }
 
