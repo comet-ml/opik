@@ -24,7 +24,6 @@ export interface ServiceTogglesConfig {
     ollamaProviderEnabled: boolean;
     ollieEnabled: boolean;
     projectHomepageEnabled: boolean;
-    agenticToolsEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
     defaultPageSize?: number;
 }

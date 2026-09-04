@@ -9614,6 +9614,8 @@ components:
           type: string
         name:
           type: string
+        is_default:
+          type: boolean
     AuthorizationServerMetadata:
       type: object
       properties:
@@ -21258,7 +21260,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -21330,8 +21331,6 @@ components:
         ollieEnabled:
           type: boolean
         projectHomepageEnabled:
-          type: boolean
-        agenticToolsEnabled:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean

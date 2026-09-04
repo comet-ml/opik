@@ -2045,6 +2045,137 @@ class DatasetsResourceTest {
     }
 
     @Nested
+    @DisplayName("Experiment Summary Enrichment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentSummaryEnrichment {
+
+        private UUID createExperimentWithItems(Dataset dataset, int itemCount, String apiKey, String workspaceName) {
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, itemCount)
+                    .mapToObj(i -> {
+                        var trace = factory.manufacturePojo(Trace.class);
+                        createTrace(trace, apiKey, workspaceName);
+                        return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                                .experimentId(experimentId)
+                                .traceId(trace.id())
+                                .build();
+                    })
+                    .collect(toUnmodifiableSet());
+
+            createAndAssert(ExperimentItemsBatch.builder().experimentItems(experimentItems).build(), apiKey,
+                    workspaceName);
+
+            return experimentId;
+        }
+
+        private Map<String, Dataset> getDatasetsByName(String workspaceName, String apiKey) {
+            return datasetResourceClient.getDatasets(workspaceName, apiKey).content().stream()
+                    .collect(toMap(Dataset::name, Function.identity()));
+        }
+
+        @Test
+        @DisplayName("when dataset has experiments spread across many experiment ids, then count every experiment")
+        void experimentSummary__whenExperimentsSpreadAcrossManyIds__thenCountEveryExperiment() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var dataset = buildDataset();
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            int experimentCount = 12;
+            Instant beforeCreateExperimentItems = Instant.now();
+            IntStream.range(0, experimentCount)
+                    .forEach(i -> createExperimentWithItems(dataset, 2, apiKey, workspaceName));
+
+            var actualDataset = getDatasetsByName(workspaceName, apiKey).get(dataset.name());
+
+            assertThat(actualDataset.experimentCount()).isEqualTo(experimentCount);
+            assertThat(actualDataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
+        }
+
+        @Test
+        @DisplayName("when workspace experiments belong to other datasets, then dataset without experiments stays empty")
+        void experimentSummary__whenExperimentsBelongToOtherDatasets__thenDatasetWithoutExperimentsStaysEmpty() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var busyDataset = buildDataset();
+            createAndAssert(busyDataset, apiKey, workspaceName);
+            IntStream.range(0, 5).forEach(i -> createExperimentWithItems(busyDataset, 4, apiKey, workspaceName));
+
+            var emptyDataset = buildDataset();
+            createAndAssert(emptyDataset, apiKey, workspaceName);
+
+            var datasetsByName = getDatasetsByName(workspaceName, apiKey);
+
+            assertThat(datasetsByName.get(emptyDataset.name()).experimentCount()).isZero();
+            assertThat(datasetsByName.get(emptyDataset.name()).mostRecentExperimentAt()).isNull();
+            assertThat(datasetsByName.get(busyDataset.name()).experimentCount()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("when batch mixes datasets with and without experiments, then each gets its own summary")
+        void experimentSummary__whenBatchMixesDatasetsWithAndWithoutExperiments__thenEachGetsItsOwnSummary() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetWithThree = buildDataset();
+            createAndAssert(datasetWithThree, apiKey, workspaceName);
+            IntStream.range(0, 3).forEach(i -> createExperimentWithItems(datasetWithThree, 2, apiKey, workspaceName));
+
+            var datasetWithOne = buildDataset();
+            createAndAssert(datasetWithOne, apiKey, workspaceName);
+            createExperimentWithItems(datasetWithOne, 1, apiKey, workspaceName);
+
+            var datasetWithNone = buildDataset();
+            createAndAssert(datasetWithNone, apiKey, workspaceName);
+
+            var datasetsByName = getDatasetsByName(workspaceName, apiKey);
+
+            assertThat(datasetsByName.get(datasetWithThree.name()).experimentCount()).isEqualTo(3);
+            assertThat(datasetsByName.get(datasetWithOne.name()).experimentCount()).isEqualTo(1);
+            assertThat(datasetsByName.get(datasetWithNone.name()).experimentCount()).isZero();
+            assertThat(datasetsByName.get(datasetWithNone.name()).mostRecentExperimentAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("when another workspace has experiments for a same-named dataset, then counts stay isolated")
+        void experimentSummary__whenAnotherWorkspaceHasExperiments__thenCountsStayIsolated() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String otherWorkspaceName = UUID.randomUUID().toString();
+            String otherApiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+
+            String sharedDatasetName = "shared-dataset-" + UUID.randomUUID();
+
+            var dataset = buildDataset().toBuilder().name(sharedDatasetName).build();
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            var otherDataset = buildDataset().toBuilder().name(sharedDatasetName).build();
+            createAndAssert(otherDataset, otherApiKey, otherWorkspaceName);
+
+            IntStream.range(0, 4)
+                    .forEach(i -> createExperimentWithItems(otherDataset, 3, otherApiKey, otherWorkspaceName));
+
+            var actualDataset = getDatasetsByName(workspaceName, apiKey).get(sharedDatasetName);
+
+            assertThat(actualDataset.experimentCount()).isZero();
+            assertThat(actualDataset.mostRecentExperimentAt()).isNull();
+
+            var actualOtherDataset = getDatasetsByName(otherWorkspaceName, otherApiKey).get(sharedDatasetName);
+
+            assertThat(actualOtherDataset.experimentCount()).isEqualTo(4);
+        }
+    }
+
+    @Nested
     @DisplayName("Get:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindDatasets {
