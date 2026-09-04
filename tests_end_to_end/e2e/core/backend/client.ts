@@ -221,6 +221,15 @@ export interface AnnotationQueueDetail {
  */
 export interface ThreadRowRef {
   id: string;
+  /**
+   * The thread's own UUID, distinct from `id` (which is the user-supplied
+   * `thread_id` string). Every thread-addressed write takes this one —
+   * `POST /v1/private/manual-evaluation/threads` rejects anything that is not a
+   * UUID — while every read above takes `id`. Nullable because the field is
+   * optional on the generated type; callers that need it must reject a missing
+   * value rather than defaulting, since there is no id to substitute.
+   */
+  threadModelId: string | null;
   numberOfMessages: number | null;
   totalEstimatedCost: number | null;
   usage: Record<string, number> | null;
@@ -1510,24 +1519,58 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       samplingRate: number;
       /** Python source for the metric class. */
       metric: string;
-      /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
-      arguments: Record<string, string>;
+      /**
+       * `score()` parameter name -> extraction path (e.g. `output.answer`).
+       *
+       * Trace-scoped rules only. `TraceThreadUserDefinedMetricPythonCode`
+       * carries a `metric` and nothing else — the thread scorer hands the whole
+       * conversation to `score()` positionally, so there is no per-argument
+       * mapping to declare — and the field is dropped below rather than sent
+       * and ignored, so a caller that passes one for a thread rule is a type
+       * error instead of a silent no-op.
+       */
+      arguments?: Record<string, string>;
+      /**
+       * Which evaluator the rule is. Defaults to the trace-scoped python
+       * metric; `trace_thread_user_defined_metric_python` is the thread-scoped
+       * one, which fires per conversation rather than per trace.
+       */
+      type?: 'user_defined_metric_python' | 'trace_thread_user_defined_metric_python';
       triggerScope?: 'production' | 'experiment' | 'both';
       enabled?: boolean;
     }): Promise<string> {
+      const type = args.type ?? 'user_defined_metric_python';
+      const isThreadScoped = type === 'trace_thread_user_defined_metric_python';
+      if (isThreadScoped && args.arguments) {
+        throw new Error(
+          `createAutomationRule: '${args.name}' is thread-scoped, which takes no argument ` +
+            'map — the conversation is passed to score() positionally.',
+        );
+      }
+      if (!isThreadScoped && !args.arguments) {
+        // The backend refuses to call the evaluator with an empty argument map,
+        // so an omitted one fails the rule before its metric ever runs — a
+        // failure that reads exactly like a broken metric.
+        throw new Error(
+          `createAutomationRule: '${args.name}' is trace-scoped and needs an argument map.`,
+        );
+      }
       const { status, message, location } = await rawFetch(
         'POST',
         '/v1/private/automations/evaluators/',
         {
           body: {
-            type: 'user_defined_metric_python',
+            type,
             action: 'evaluator',
             name: args.name,
             project_ids: [args.projectId],
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
-            code: { metric: args.metric, arguments: args.arguments },
+            code: {
+              metric: args.metric,
+              ...(isThreadScoped ? {} : { arguments: args.arguments }),
+            },
           },
         },
       );
@@ -1600,6 +1643,54 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }));
     },
 
+    /**
+     * `POST /v1/private/manual-evaluation/threads` — the "Evaluate" action the
+     * Threads view offers on a selection, which enqueues the chosen threads
+     * against the chosen rules regardless of their sampling rate.
+     *
+     * Through `rawFetch` because the pinned SDK has no manual-evaluation
+     * client at all. `entity_type` is mandatory even on the `/threads` route
+     * (omitting it is a 422 naming `entityType`), and the ids are thread MODEL
+     * ids — `ThreadRowRef.threadModelId`, not the `thread_id` string.
+     *
+     * The response is returned rather than swallowed: `entities_queued` is the
+     * only place the backend states how many entries the request became, which
+     * is the difference between a fan-out that split and one that collapsed.
+     */
+    async evaluateThreadsManually(args: {
+      projectId: string;
+      threadModelIds: string[];
+      ruleIds: string[];
+    }): Promise<{ entitiesQueued: number; rulesApplied: number }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        '/v1/private/manual-evaluation/threads',
+        {
+          body: {
+            project_id: args.projectId,
+            entity_ids: args.threadModelIds,
+            rule_ids: args.ruleIds,
+            entity_type: 'thread',
+          },
+        },
+      );
+      if (status !== 202) {
+        throw new Error(
+          `evaluateThreadsManually: expected 202 for ${args.threadModelIds.length} thread(s), ` +
+            `got ${status}: ${message}`,
+        );
+      }
+      const body = json as { entities_queued?: number; rules_applied?: number } | null;
+      if (typeof body?.entities_queued !== 'number' || typeof body?.rules_applied !== 'number') {
+        // Defaulting either count would present as a plausible number and make
+        // the assertion they exist for unfalsifiable.
+        throw new Error(
+          `evaluateThreadsManually: 202 carried no usable counts (got ${JSON.stringify(json)})`,
+        );
+      }
+      return { entitiesQueued: body.entities_queued, rulesApplied: body.rules_applied };
+    },
+
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
       try {
         await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
@@ -1636,6 +1727,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         total: Number(page.total ?? 0),
         threads: (page.content ?? []).map((t) => ({
           id: String(t.id ?? ''),
+          threadModelId: t.threadModelId ?? null,
           // null and 0 are different answers from this endpoint (an absent
           // aggregate is not a zero one), so they must not be collapsed.
           numberOfMessages: t.numberOfMessages ?? null,
