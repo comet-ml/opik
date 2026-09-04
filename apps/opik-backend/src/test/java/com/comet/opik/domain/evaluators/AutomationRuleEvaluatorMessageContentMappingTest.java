@@ -28,7 +28,11 @@ class AutomationRuleEvaluatorMessageContentMappingTest {
             "[test]",
             "[1, 2]", // valid JSON array, but not content parts
             "[\"just a string\"]",
-            "[{\"type\": 42}]" // content part with a non-string type
+            "[{\"type\": 42}]", // content part with a non-string type
+            "[null]", // null element — reached convertToMessageContent and NPE'd
+            "[{}]", // object with no discriminator, which the renderer's switch dereferences
+            "[{\"foo\": \"bar\"}]", // e.g. few-shot examples pasted as JSON
+            "[{\"type\": \"text\", \"text\": \"ok\"}, {}]" // one good part is not enough
     })
     void plainContentThatLooksLikeAnArrayReadsBackAsAString(String content) {
         var message = MAPPER.map(stored(content));
@@ -59,6 +63,16 @@ class AutomationRuleEvaluatorMessageContentMappingTest {
         var message = MAPPER.map(stored("You are an impartial judge."));
 
         assertThat(message.content()).isEqualTo("You are an impartial judge.");
+        assertThat(message.contentArray()).isNull();
+    }
+
+    @Test
+    void unsupportedContentPartTypeIsNotContentParts() {
+        var content = "[{\"type\": \"pdf_url\", \"pdf_url\": {\"url\": \"https://example.com/a.pdf\"}}]";
+
+        var message = MAPPER.map(stored(content));
+
+        assertThat(message.content()).isEqualTo(content);
         assertThat(message.contentArray()).isNull();
     }
 

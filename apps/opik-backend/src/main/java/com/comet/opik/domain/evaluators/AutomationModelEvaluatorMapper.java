@@ -19,16 +19,23 @@ import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Mapper
 interface AutomationModelEvaluatorMapper {
 
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
+
+    Logger log = LoggerFactory.getLogger(AutomationModelEvaluatorMapper.class);
+
+    Set<String> SUPPORTED_CONTENT_PART_TYPES = Set.of("text", "image_url", "video_url", "audio_url");
 
     @Mapping(target = "id", expression = "java(model.id())")
     @Mapping(target = "projectId", expression = "java(model.projectId())")
@@ -281,24 +288,54 @@ interface AutomationModelEvaluatorMapper {
             return Optional.empty();
         }
 
+        List<?> rawList;
         try {
             // Deserialize as raw list first to handle potential LinkedHashMap issue
-            List<?> rawList = JsonUtils.getMapper().readValue(
+            rawList = JsonUtils.getMapper().readValue(
                     contentString,
                     JsonUtils.getMapper().getTypeFactory().constructCollectionType(
                             List.class,
                             Object.class));
+        } catch (JsonProcessingException e) {
+            // Prose that happens to open with '[' — the ordinary case, not a failure.
+            return Optional.empty();
+        }
 
+        if (!rawList.stream().allMatch(AutomationModelEvaluatorMapper::isContentPart)) {
+            // JSON, but not content parts: a null element, or an object carrying no supported
+            // discriminator. Admitting one would hand the renderer a part with a null type, which
+            // its switch dereferences.
+            return Optional.empty();
+        }
+
+        try {
             // Convert each element to LlmAsJudgeMessageContent
             return Optional.of(rawList.stream()
                     .map(this::convertToMessageContent)
                     .toList());
-        } catch (JsonProcessingException | IllegalStateException | ClassCastException e) {
-            // Valid JSON that isn't content parts lands here too, via convertToMessageContent:
-            // IllegalStateException for an element that is not an object, ClassCastException for
-            // an object whose fields are not strings. Anything else is a real bug — let it throw.
+        } catch (IllegalStateException | ClassCastException e) {
+            // The discriminator was right and the payload still would not convert. Unlike the two
+            // fallbacks above this is surprising, so record it — without the content, which is a
+            // customer prompt.
+            log.warn("Failed to read judge message content parts, falling back to plain string", e);
             return Optional.empty();
         }
+    }
+
+    /**
+     * Whether a deserialized element is a content part at all — an object carrying one of the types
+     * {@code OnlineScoringEngine.buildUserMessageFromContentParts} knows how to render. That switch is
+     * the source of truth for this set; a type added there has to be added here or it reads back as a
+     * plain string.
+     */
+    private static boolean isContentPart(Object element) {
+        if (element instanceof LlmAsJudgeMessageContent content) {
+            return content.type() != null && SUPPORTED_CONTENT_PART_TYPES.contains(content.type());
+        }
+
+        return element instanceof Map<?, ?> map
+                && map.get("type") instanceof String type
+                && SUPPORTED_CONTENT_PART_TYPES.contains(type);
     }
 
     /**
