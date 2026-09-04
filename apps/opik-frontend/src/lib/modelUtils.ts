@@ -107,17 +107,31 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, ["none", ...MINIMAL_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+    ["none", ...MINIMAL_TO_HIGH],
+  ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH],
-  // 3.1 Flash Lite is the odd one out: minimal and high only, no low/medium.
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["minimal", "high"]],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW, ["minimal", "high"]],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE, ["minimal", "high"]],
+  // The Flash Lite models do not think by default — verified live: zero thinking tokens on both a
+  // trivial and a deliberately hard prompt, on both providers. So they lead with "none", which sends
+  // no thinkingConfig and keeps their latency where it was. Asking for a level here switches thinking
+  // ON, which measurably slows them (~2.5s -> ~5s at budget 2048 on 3.1 Flash Lite).
+  //
+  // 3.1 Flash Lite also has no low/medium: minimal and high only.
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", "minimal", "high"]],
+  [
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+    ["none", "minimal", "high"],
+  ],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+    ["none", "minimal", "high"],
+  ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["minimal", "high"],
+    ["none", "minimal", "high"],
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
@@ -143,6 +157,7 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
 
 const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
   auto: "Auto",
+  none: "None",
   off: "Off",
   minimal: "Minimal",
   low: "Low",
@@ -191,7 +206,10 @@ export const getThinkingLevelOptions = (
     (value) => ({ label: THINKING_LEVEL_LABELS[value], value }),
   );
 
-// Each model's own default thinking level, from the same Google support table. Preselecting the
+// Each model's own default thinking level. Measured against the live API rather than taken from
+// Google's docs table, which disagrees with it: the docs list 3.5 Flash Lite as defaulting to
+// "minimal", but every Flash Lite model returns zero thinking tokens by default on both providers.
+// Preselecting the
 // documented default keeps the control from silently changing a model's behaviour just by being
 // shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
 // ("auto"), 3.7/3.6/3.5 Flash default to medium, and 3.5 Flash Lite to minimal — none of which is
@@ -228,23 +246,23 @@ const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
     "medium" as GeminiThinkingLevel,
   ],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "none" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-    "minimal" as GeminiThinkingLevel,
+    "none" as GeminiThinkingLevel,
   ],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "none" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-    "minimal" as GeminiThinkingLevel,
+    "none" as GeminiThinkingLevel,
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-    "minimal" as GeminiThinkingLevel,
+    "none" as GeminiThinkingLevel,
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    "minimal" as GeminiThinkingLevel,
+    "none" as GeminiThinkingLevel,
   ],
 ]);
 
@@ -525,9 +543,14 @@ export const sanitizeConfigForRequest = (
     // level, so leaving it on the payload can only be dead weight.
     delete sanitized.thinkingLevel;
 
-    // "auto" means "send nothing and let the model decide", so it is deliberately not folded in —
-    // that absence IS the setting. `level` is already known to be one this model offers.
-    if (level !== "auto" && thinkingLevelOptions.length > 0) {
+    // "auto" and "none" both mean "send no thinkingConfig" — that absence IS the setting. They differ
+    // only in what they promise the user: auto lets a thinking model pick its own budget, none keeps a
+    // non-thinking model as it ships. `level` is already known to be one this model offers.
+    if (
+      level !== "auto" &&
+      level !== "none" &&
+      thinkingLevelOptions.length > 0
+    ) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
       // Merge into any existing thinking block rather than replacing it — the backend also reads

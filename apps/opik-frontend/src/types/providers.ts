@@ -1028,11 +1028,16 @@ export interface LLMOpenRouterConfigsType {
   maxConcurrentRequests?: number;
 }
 
-// "auto" and "off" are Opik's own, not Google levels: pre-Gemini-3 models take a numeric
-// thinking_budget, and these are how the level control expresses that model's dynamic default
-// (send no thinkingConfig) and a zero budget.
+// "auto", "none" and "off" are Opik's own, not Google levels. All three describe what we send
+// rather than a value the API accepts:
+//   auto — send no thinkingConfig, so a thinking-by-default model applies its own dynamic budget
+//   none — send no thinkingConfig, on a model that does not think by default (so nothing is added)
+//   off  — send an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to
+// auto and none are the same wire behaviour under two labels, because "let the model decide" and
+// "no thinking" are the same request but a very different promise to the user.
 export type GeminiThinkingLevel =
   | "auto"
+  | "none"
   | "off"
   | "minimal"
   | "low"

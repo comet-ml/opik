@@ -160,7 +160,7 @@ const LLMJudgeBaseSchema = z.object({
     // Held as its own field so the shared model-config control can drive it, then folded into
     // custom_parameters.thinking on save — the backend reads it from there.
     thinkingLevel: z
-      .enum(["auto", "off", "minimal", "low", "medium", "high"])
+      .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
       .optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
@@ -594,6 +594,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   const thinkingCustomParameters =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
+    thinkingLevel !== "none" &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )
@@ -632,6 +633,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   const formRejectedItsLevel =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
+    thinkingLevel !== "none" &&
     !thinkingCustomParameters;
   const otherCustomParameters =
     thinkingCustomParameters || formRejectedItsLevel
