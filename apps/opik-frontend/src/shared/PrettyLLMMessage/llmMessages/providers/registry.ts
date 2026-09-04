@@ -1,6 +1,7 @@
 import { LLMMessageFormat, LLMMessageFormatImplementation } from "../types";
 import { openaiFormat } from "./openai";
 import { langchainFormat } from "./langchain";
+import { openinferenceFormat } from "./openinference";
 
 const FORMAT_REGISTRY: Record<
   LLMMessageFormat,
@@ -10,6 +11,7 @@ const FORMAT_REGISTRY: Record<
   langchain: langchainFormat,
   anthropic: null,
   google: null,
+  openinference: openinferenceFormat,
 };
 
 export const getFormat = (

@@ -36,8 +36,13 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
-import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
+import {
+  canShowLLMMessages,
+  detectLLMMessages,
+  LLMMessageFormat,
+} from "@/shared/PrettyLLMMessage/llmMessages";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
+import { resolveOpenInferenceHint } from "@/lib/openinference";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -80,20 +85,40 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
+  const openInferenceHint = useMemo(
+    () =>
+      resolveOpenInferenceHint(
+        data.metadata,
+        transformedInput,
+        transformedOutput,
+      ),
+    [data.metadata, transformedInput, transformedOutput],
+  );
+  const formatHint: LLMMessageFormat | undefined = openInferenceHint.detected
+    ? "openinference"
+    : undefined;
+  const formatHintIsAuthoritative = openInferenceHint.authoritative;
+
   // Show Messages tab when at least one field is supported and neither is invalid
   const canShowMessagesTab = useMemo(() => {
-    const input = detectLLMMessages(transformedInput, { fieldType: "input" });
-    const output = detectLLMMessages(transformedOutput, {
-      fieldType: "output",
-    });
+    const input = detectLLMMessages(
+      transformedInput,
+      { fieldType: "input", formatHintIsAuthoritative },
+      formatHint,
+    );
+    const output = detectLLMMessages(
+      transformedOutput,
+      { fieldType: "output", formatHintIsAuthoritative },
+      formatHint,
+    );
 
-    const hasValid = input.supported || output.supported;
-    const hasInvalid =
-      (!input.supported && !input.empty) ||
-      (!output.supported && !output.empty);
-
-    return hasValid && !hasInvalid;
-  }, [transformedInput, transformedOutput]);
+    return canShowLLMMessages(input, output, formatHint === "openinference");
+  }, [
+    formatHint,
+    formatHintIsAuthoritative,
+    transformedInput,
+    transformedOutput,
+  ]);
 
   const defaultTab = canShowMessagesTab ? "messages" : "details";
 
@@ -313,6 +338,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 media={media}
                 isLoading={isSpanInputOutputLoading}
                 scrollContainerRef={rootScrollRef}
+                formatHint={formatHint}
+                formatHintIsAuthoritative={formatHintIsAuthoritative}
+                spanUsage={data.usage}
               />
             </TabsContent>
           )}
@@ -321,6 +349,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               data={data}
               isLoading={isSpanInputOutputLoading}
               search={search}
+              openInferenceHint={openInferenceHint.detected}
             />
           </TabsContent>
           <TabsContent value="feedback_scores">

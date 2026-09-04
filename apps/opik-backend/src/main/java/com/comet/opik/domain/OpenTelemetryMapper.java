@@ -6,9 +6,11 @@ import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
+import com.comet.opik.domain.mapping.otel.OpenInferenceSpanNormalizer;
 import com.comet.opik.domain.mapping.otel.ProviderResolvers;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
@@ -153,6 +155,7 @@ public class OpenTelemetryMapper {
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
+        var openInference = OpenInferenceSpanNormalizer.normalize(attributes).orElse(null);
         // Claude Code spans carry a lot of session/config attributes that aren't input. For that
         // integration the default bucket for unmapped attributes is metadata (not input), so only
         // the explicitly promoted content attributes land in input/output/usage.
@@ -160,7 +163,7 @@ public class OpenTelemetryMapper {
         // batch can mix scopes from more than one integration, so gating this on the batch-wide
         // value could misroute a non-Claude span or skip routing for a real Claude Code span.
         boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCodeSpan(spanName);
-        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+        ObjectNode defaultBucket = isClaudeCode || openInference != null ? metadata : input;
 
         // Hold model and provider until the attribute loop completes so we can apply
         // post-processing (e.g. Elastic Inference Service routing) that needs both values.
@@ -179,6 +182,12 @@ public class OpenTelemetryMapper {
         for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
+
+            // OpenInference semantic attributes have already been normalized as one coherent shape.
+            // Skipping them here prevents generic prefix rules from processing the same key again.
+            if (openInference != null && openInference.consumes(key)) {
+                continue;
+            }
 
             // Claude Code's `new_context` is the latest message fed to the model on llm_request
             // spans (the real LLM input); on interaction/tool spans it just repeats the prompt /
@@ -278,6 +287,37 @@ public class OpenTelemetryMapper {
             extractToolOutputEvent(events, output);
         }
 
+        if (openInference != null) {
+            // User-supplied OpenInference metadata is already filtered by the normalizer. Apply
+            // exact semantic metadata after common rules so marker/MIME/identity fields remain
+            // authoritative and unknown OpenInference fields retain their original dotted key.
+            metadata.setAll(openInference.metadata());
+
+            // An explicit Opik thread_id wins regardless of OTLP attribute order. Otherwise use
+            // the OpenInference session identifier as the trace-grouping thread id.
+            var explicitThreadId = attributes.stream()
+                    .filter(attribute -> "thread_id".equals(attribute.getKey()))
+                    .map(KeyValue::getValue)
+                    .findFirst();
+            if (explicitThreadId.isPresent()) {
+                extractToJsonColumn(metadata, "thread_id", explicitThreadId.get());
+            } else if (StringUtils.isNotBlank(openInference.sessionId())) {
+                metadata.put("thread_id", openInference.sessionId());
+            }
+
+            usage.putAll(openInference.usage());
+            tags.addAll(openInference.tags());
+            if (StringUtils.isNotBlank(openInference.model())) {
+                model = openInference.model();
+            }
+            if (StringUtils.isNotBlank(openInference.provider())) {
+                provider = openInference.provider();
+            }
+            if (openInference.totalEstimatedCost() != null) {
+                spanBuilder.totalEstimatedCost(openInference.totalEstimatedCost());
+            }
+        }
+
         // Fall back to the current `gen_ai.provider.name` only when the deprecated `gen_ai.system`
         // did not report a provider.
         // Both sides must be non-blank: a non-string or empty `gen_ai.provider.name` yields ""
@@ -295,10 +335,29 @@ public class OpenTelemetryMapper {
         model = resolved.model();
         provider = resolved.provider();
 
+        if (openInference != null && usage.containsKey("prompt_tokens")) {
+            // OpenInference prompt totals include cache reads/writes. Preserve those totals for
+            // display, but provide the exclusive input count expected by these providers' pricing.
+            String exclusiveInputKey = switch (provider) {
+                case "anthropic", "anthropic_vertexai" -> "original_usage.input_tokens";
+                case "bedrock", "bedrock_converse" -> "original_usage.inputTokens";
+                case null, default -> null;
+            };
+            if (exclusiveInputKey != null) {
+                long uncachedTokens = (long) usage.get("prompt_tokens")
+                        - usage.getOrDefault("cache_read_input_tokens", 0)
+                        - usage.getOrDefault("cache_creation_input_tokens", 0);
+                usage.put(exclusiveInputKey, (int) Math.max(0, uncachedTokens));
+            }
+        }
+
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
         if ("invoke_agent".equals(metadata.path("gen_ai.operation.name").asText(null))) {
             spanBuilder.type(SpanType.general);
+        }
+        if (openInference != null) {
+            spanBuilder.type(openInference.spanType());
         }
 
         if (model != null) {
@@ -311,11 +370,17 @@ public class OpenTelemetryMapper {
         if (!metadata.isEmpty()) {
             spanBuilder.metadata(metadata);
         }
-        if (!output.isEmpty()) {
-            spanBuilder.output(output);
+        JsonNode finalOutput = openInference == null
+                ? (output.isEmpty() ? null : output)
+                : openInference.composeOutput(output);
+        JsonNode finalInput = openInference == null
+                ? (input.isEmpty() ? null : input)
+                : openInference.composeInput(input);
+        if (finalOutput != null) {
+            spanBuilder.output(finalOutput);
         }
-        if (!input.isEmpty()) {
-            spanBuilder.input(input);
+        if (finalInput != null) {
+            spanBuilder.input(finalInput);
         }
         if (!usage.isEmpty()) {
             // Some integrations (e.g. PydanticAI) send prompt_tokens and completion_tokens

@@ -16,6 +16,7 @@ import CodeBlock from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewe
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import TraceIdentifier from "./TraceIdentifier";
 import { Button } from "@/ui/button";
+import { hasOpenInferenceHint } from "@/lib/openinference";
 
 const STALE_TIME = 5 * 60 * 1000;
 
@@ -135,6 +136,11 @@ const TraceContent: React.FC = () => {
 
   const { media, transformedInput, transformedOutput } =
     useUnifiedMedia(displayTrace);
+  const openInferenceHint = hasOpenInferenceHint(
+    displayTrace?.metadata,
+    transformedInput,
+    transformedOutput,
+  );
 
   return (
     <>
@@ -144,14 +150,18 @@ const TraceContent: React.FC = () => {
           <CodeBlock
             title="Input"
             data={transformedInput}
-            prettifyConfig={{ fieldType: "input" }}
+            prettifyConfig={{ fieldType: "input", openInferenceHint }}
             preserveKey="syntax-highlighter-annotation-input"
             withSearch
           />
           <CodeBlock
             title="Output"
             data={transformedOutput}
-            prettifyConfig={{ fieldType: "output" }}
+            prettifyConfig={{
+              fieldType: "output",
+              openInferenceHint,
+              openInferenceInput: transformedInput,
+            }}
             preserveKey="syntax-highlighter-annotation-output"
             withSearch
           />

@@ -11,6 +11,11 @@ import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
+import {
+  extractLegacyOpenInferenceOutputText,
+  extractOpenInferencePrettyText,
+  hasLegacyOpenInferenceAttributes,
+} from "@/lib/openinference";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -41,6 +46,8 @@ export const traceVisible = (item: ExperimentItem) =>
 
 type PrettifyMessageConfig = {
   type: "input" | "output";
+  openInferenceInput?: object | string;
+  openInferenceHint?: boolean;
 };
 
 type PrettifyMessageResponse = {
@@ -608,11 +615,26 @@ const extractTextFieldFromTruncatedJson = (
 };
 
 export const prettifyMessage = (
-  message: object | string | undefined,
+  message: object | string | number | boolean | undefined,
   config: PrettifyMessageConfig = {
     type: "input",
   },
 ): PrettifyMessageResponse => {
+  const recoveredOpenInferenceOutput =
+    config.type === "output"
+      ? extractLegacyOpenInferenceOutputText(config.openInferenceInput)
+      : undefined;
+  if (isString(recoveredOpenInferenceOutput)) {
+    return {
+      message: recoveredOpenInferenceOutput,
+      prettified: true,
+    };
+  }
+
+  if (typeof message === "number" || typeof message === "boolean") {
+    return { message: String(message), prettified: true };
+  }
+
   if (isString(message)) {
     const extracted = extractTextFieldFromTruncatedJson(message, config);
     return {
@@ -621,7 +643,17 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
   try {
-    let processedMessage = prettifyOpenAIMessageLogic(message, config);
+    const shouldExtractOpenInference =
+      config.openInferenceHint ||
+      hasLegacyOpenInferenceAttributes(message) ||
+      hasLegacyOpenInferenceAttributes(config.openInferenceInput);
+    let processedMessage = shouldExtractOpenInference
+      ? extractOpenInferencePrettyText(message, config.type)
+      : undefined;
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyOpenAIMessageLogic(message, config);
+    }
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyOpenAIAgentsMessageLogic(message, config);

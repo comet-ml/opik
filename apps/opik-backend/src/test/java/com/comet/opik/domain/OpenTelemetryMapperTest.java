@@ -1,8 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.protobuf.ByteString;
@@ -20,6 +22,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -2308,6 +2312,501 @@ class OpenTelemetryMapperTest {
 
             assertThat(span.metadata().has(reservedKey)).isFalse();
             assertThat(span.metadata().get("custom").asText()).isEqualTo("ok");
+        }
+    }
+
+    @Nested
+    class OpenInferenceNormalization {
+
+        private Span enrich(List<KeyValue> attributes) {
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, "mixed-batch-scope", null);
+            return spanBuilder.build();
+        }
+
+        private KeyValue str(String key, String value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value))
+                    .build();
+        }
+
+        private KeyValue integer(String key, long value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setIntValue(value))
+                    .build();
+        }
+
+        private KeyValue decimal(String key, double value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setDoubleValue(value))
+                    .build();
+        }
+
+        private KeyValue bool(String key, boolean value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setBoolValue(value))
+                    .build();
+        }
+
+        private KeyValue array(String key, AnyValue... values) {
+            var value = AnyValue.newBuilder();
+            for (AnyValue item : values) {
+                value.getArrayValueBuilder().addValues(item);
+            }
+            return KeyValue.newBuilder().setKey(key).setValue(value).build();
+        }
+
+        private KeyValue object(String key, KeyValue... fields) {
+            var value = AnyValue.newBuilder();
+            for (KeyValue field : fields) {
+                value.getKvlistValueBuilder().addValues(field);
+            }
+            return KeyValue.newBuilder().setKey(key).setValue(value).build();
+        }
+
+        @Test
+        void normalizesSparseOutOfOrderChatToolsAndMultimodalContent() {
+            var attributes = List.of(
+                    str("llm.output_messages.7.message.contents.8.tool_call.function.arguments",
+                            "{\"city\":\"Paris\"}"),
+                    str("llm.input_messages.10.message.content", "{\"temperature\":21}"),
+                    str("llm.output_messages.7.message.contents.4.message_content.image.image.url",
+                            "data:image/png;base64,AAAA"),
+                    str("llm.output_messages.7.message.tool_calls.4.tool_call.function.name", "weather"),
+                    str("llm.input_messages.2.message.role", "human"),
+                    str("llm.output_messages.7.message.contents.1.message_content.signature", "opaque-signature"),
+                    str("llm.output_messages.7.message.contents.6.message_content.audio.audio.transcript", "hello"),
+                    str("llm.output_messages.7.message.contents.8.message_content.type", "tool_use"),
+                    str("llm.output_messages.7.message.contents.6.message_content.audio.audio.mime_type", "audio/wav"),
+                    str("llm.output_messages.7.message.contents.3.message_content.text", "Visible answer"),
+                    str("llm.output_messages.7.message.contents.1.message_content.text", "Visible reasoning"),
+                    str("llm.output_messages.7.message.contents.1.message_content.id", "reasoning-1"),
+                    str("llm.output_messages.7.message.contents.1.message_content.data", "opaque-data"),
+                    str("llm.output_messages.7.message.contents.1.message_content.encrypted_content",
+                            "opaque-encrypted-content"),
+                    str("llm.output_messages.7.message.contents.6.message_content.audio.audio.url",
+                            "https://example.test/audio.wav"),
+                    str("llm.output_messages.7.message.contents.4.message_content.type", "image"),
+                    str("llm.output_messages.7.message.tool_calls.4.tool_call.id", "call-7"),
+                    str("llm.input_messages.10.message.name", "weather"),
+                    str("llm.output_messages.7.message.contents.8.tool_call.id", "call-7"),
+                    str("llm.output_messages.7.message.contents.6.message_content.type", "audio"),
+                    str("llm.output_messages.7.message.contents.8.tool_call.function.name", "weather"),
+                    str("llm.input_messages.2.message.content", "What is the weather?"),
+                    str("llm.output_messages.7.message.tool_calls.4.tool_call.reasoning_signature", "tool-signature"),
+                    str("llm.output_messages.7.message.role", "model"),
+                    str("llm.input_messages.10.message.tool_call_id", "call-7"),
+                    str("llm.output_messages.7.message.contents.3.message_content.type", "text"),
+                    str("llm.output_messages.7.message.tool_calls.4.tool_call.function.arguments",
+                            "{\"city\":\"Paris\"}"),
+                    str("llm.output_messages.7.message.contents.1.message_content.type", "reasoning"),
+                    str("llm.input_messages.10.message.role", "tool"),
+                    str("openinference.span.kind", "LLM"));
+
+            var span = enrich(attributes);
+
+            assertThat(span.input().path("messages").size()).isEqualTo(2);
+            assertThat(span.input().path("messages").get(0).path("content").asText())
+                    .isEqualTo("What is the weather?");
+            assertThat(span.input().path("messages").get(1).path("tool_call_id").asText()).isEqualTo("call-7");
+
+            var outputMessage = span.output().path("messages").get(0);
+            assertThat(outputMessage.path("role").asText()).isEqualTo("model");
+            assertThat(outputMessage.path("contents").size()).isEqualTo(5);
+            assertThat(outputMessage.path("contents").get(0).path("type").asText()).isEqualTo("reasoning");
+            assertThat(outputMessage.path("contents").get(0).path("signature").asText())
+                    .isEqualTo("opaque-signature");
+            assertThat(outputMessage.path("contents").get(0).path("id").asText()).isEqualTo("reasoning-1");
+            assertThat(outputMessage.path("contents").get(0).path("data").asText()).isEqualTo("opaque-data");
+            assertThat(outputMessage.path("contents").get(0).path("encrypted_content").asText())
+                    .isEqualTo("opaque-encrypted-content");
+            assertThat(outputMessage.path("contents").get(2).path("image").path("url").asText())
+                    .isEqualTo("data:image/png;base64,AAAA");
+            assertThat(outputMessage.path("contents").get(3).path("audio").path("mime_type").asText())
+                    .isEqualTo("audio/wav");
+            assertThat(outputMessage.path("contents").get(4).path("tool_call").path("function")
+                    .path("arguments").asText()).isEqualTo("{\"city\":\"Paris\"}");
+            assertThat(outputMessage.path("tool_calls").get(0).path("reasoning_signature").asText())
+                    .isEqualTo("tool-signature");
+            assertThat(span.input().fieldNames()).toIterable()
+                    .noneMatch(name -> name.startsWith("llm."));
+            assertThat(span.output().fieldNames()).toIterable()
+                    .noneMatch(name -> name.startsWith("llm."));
+        }
+
+        @Test
+        void usesMimeTypeForRawValuesAndMergesSemanticFieldsLast() {
+            var jsonObject = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("input.mime_type", "application/json; charset=utf-8"),
+                    str("input.value", "{\"messages\":\"raw\",\"question\":\"hello\"}"),
+                    str("llm.input_messages.0.message.role", "user"),
+                    str("llm.input_messages.0.message.content", "semantic")));
+            assertThat(jsonObject.input().path("question").asText()).isEqualTo("hello");
+            assertThat(jsonObject.input().path("messages").isArray()).isTrue();
+            assertThat(jsonObject.input().path("messages").get(0).path("content").asText()).isEqualTo("semantic");
+
+            var plainText = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("input.value", "{\"kept\":\"as text\"}")));
+            assertThat(plainText.input().isTextual()).isTrue();
+            assertThat(plainText.input().asText()).isEqualTo("{\"kept\":\"as text\"}");
+
+            var malformedJson = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("output.mime_type", "application/json"),
+                    str("output.value", "{invalid")));
+            assertThat(malformedJson.output().isTextual()).isTrue();
+            assertThat(malformedJson.output().asText()).isEqualTo("{invalid");
+
+            var blankJson = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("input.mime_type", "application/json"),
+                    str("input.value", ""),
+                    str("output.mime_type", "application/json"),
+                    str("output.value", "   ")));
+            assertThat(blankJson.input().isTextual()).isTrue();
+            assertThat(blankJson.input().asText()).isEmpty();
+            assertThat(blankJson.output().isTextual()).isTrue();
+            assertThat(blankJson.output().asText()).isEqualTo("   ");
+
+            var scalarWithStructure = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("output.mime_type", "application/json"),
+                    str("output.value", "[1,2,3]"),
+                    str("llm.output_messages.0.message.role", "assistant"),
+                    str("llm.output_messages.0.message.content", "done")));
+            assertThat(scalarWithStructure.output().path("value").isArray()).isTrue();
+            assertThat(scalarWithStructure.output().path("messages").get(0).path("content").asText())
+                    .isEqualTo("done");
+
+            var textPlain = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("output.mime_type", "text/plain"),
+                    str("output.value", "plain output")));
+            assertThat(textPlain.output().asText()).isEqualTo("plain output");
+
+            var unsupportedMime = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("input.mime_type", "application/xml"),
+                    str("input.value", "<request />")));
+            assertThat(unsupportedMime.input().asText()).isEqualTo("<request />");
+
+            var nativeObject = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    object("input.value", str("question", "native object"), str("messages", "raw collision")),
+                    str("llm.input_messages.0.message.role", "user"),
+                    str("llm.input_messages.0.message.content", "semantic wins")));
+            assertThat(nativeObject.input().path("question").asText()).isEqualTo("native object");
+            assertThat(nativeObject.input().path("messages").get(0).path("content").asText())
+                    .isEqualTo("semantic wins");
+
+            var nativeArray = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    array("input.value",
+                            AnyValue.newBuilder().setIntValue(1).build(),
+                            AnyValue.newBuilder().setStringValue("two").build())));
+            assertThat(nativeArray.input().isArray()).isTrue();
+            assertThat(nativeArray.input().get(0).asInt()).isEqualTo(1);
+            assertThat(nativeArray.input().get(1).asText()).isEqualTo("two");
+        }
+
+        @Test
+        void normalizesCompletionParametersToolsAndLegacyFunctionCalls() {
+            var span = enrich(List.of(
+                    str("llm.tools.8.tool.description", "Look up weather"),
+                    str("llm.prompts.4.prompt.text", "Complete this sentence"),
+                    str("llm.prompt_template.variables", "{\"city\":\"Paris\"}"),
+                    str("llm.tools.8.tool.json_schema", "{\"type\":\"object\"}"),
+                    str("llm.function_call", "{\"name\":\"weather\",\"arguments\":{\"city\":\"Paris\"}}"),
+                    str("llm.invocation_parameters", "{\"temperature\":0.2}"),
+                    str("llm.choices.2.completion.text", "It is sunny."),
+                    str("llm.prompt_template.template", "Weather for {city}"),
+                    str("llm.prompt_template.version", "v2"),
+                    str("llm.tools.8.tool.name", "weather"),
+                    str("llm.finish_reason", "stop"),
+                    str("openinference.span.kind", "LLM")));
+
+            assertThat(span.input().path("tools").get(0).path("json_schema").path("type").asText())
+                    .isEqualTo("object");
+            assertThat(span.input().path("prompts").get(0).path("text").asText())
+                    .isEqualTo("Complete this sentence");
+            assertThat(span.input().path("invocation_parameters").path("temperature").asDouble()).isEqualTo(0.2);
+            assertThat(span.input().path("prompt_template").path("variables").path("city").asText())
+                    .isEqualTo("Paris");
+            assertThat(span.output().path("choices").get(0).path("text").asText()).isEqualTo("It is sunny.");
+            assertThat(span.output().path("function_call").path("arguments").path("city").asText())
+                    .isEqualTo("Paris");
+            assertThat(span.output().path("finish_reason").asText()).isEqualTo("stop");
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {false, true})
+        void preservesIndexedFunctionCallsOnTheirMessages(boolean hasStandaloneCall) throws Exception {
+            var attributes = new ArrayList<>(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.output_messages.1.message.function_call_name", "search"),
+                    str("llm.output_messages.1.message.function_call_arguments_json", "{\"query\":\"weather\"}"),
+                    str("llm.output_messages.0.message.function_call_name", "weather"),
+                    str("llm.output_messages.0.message.function_call_arguments_json", "{\"city\":\"Paris\"}")));
+            if (hasStandaloneCall) {
+                attributes.add(str("llm.function_call", "{\"name\":\"standalone\"}"));
+            }
+
+            var span = enrich(attributes);
+
+            assertThat(span.output().path("messages")).isEqualTo(JsonUtils.getMapper().readTree("""
+                    [
+                      {"function_call": {"name": "weather", "arguments": {"city": "Paris"}}},
+                      {"function_call": {"name": "search", "arguments": {"query": "weather"}}}
+                    ]
+                    """));
+            assertThat(span.output().has("function_call")).isEqualTo(hasStandaloneCall);
+            if (hasStandaloneCall) {
+                assertThat(span.output().path("function_call"))
+                        .isEqualTo(JsonUtils.getMapper().readTree("{\"name\":\"standalone\"}"));
+            }
+        }
+
+        @Test
+        void mapsSpanFieldsWithStablePriorityAndPreservesUnknownAttributesInMetadata() {
+            var attributes = new ArrayList<>(List.of(
+                    str("llm.request.model_name", "requested-model"),
+                    str("llm.model_name", "generic-model"),
+                    str("llm.response.model_name", "actual-model"),
+                    str("llm.system", "anthropic"),
+                    str("llm.provider", "openai"),
+                    integer("llm.token_count.prompt", 20),
+                    integer("llm.token_count.completion", 8),
+                    integer("llm.token_count.total", 28),
+                    integer("llm.token_count.prompt_details.cache_read", 4),
+                    integer("llm.token_count.prompt_details.cache_write", 2),
+                    integer("llm.token_count.prompt_details.audio", 3),
+                    integer("llm.token_count.completion_details.reasoning", 5),
+                    integer("llm.token_count.completion_details.audio", 1),
+                    decimal("llm.cost.total", 0.0125),
+                    str("session.id", "session-fallback"),
+                    str("thread_id", "explicit-thread"),
+                    str("tag.tags", "[\"alpha\",\"beta\"]"),
+                    str("opik.tags", "opik,beta"),
+                    str("metadata", "{\"custom\":\"kept\",\"thread_id\":\"spoofed\",\"integration\":\"spoofed\"}"),
+                    str("user.id", "user-7"),
+                    str("llm.future.attribute", "future-value"),
+                    str("openinference.span.kind", "LLM")));
+
+            var forward = enrich(attributes);
+            Collections.reverse(attributes);
+            var reverse = enrich(attributes);
+
+            for (var span : List.of(forward, reverse)) {
+                assertThat(span.model()).isEqualTo("actual-model");
+                assertThat(span.provider()).isEqualTo("openai");
+                assertThat(span.type()).isEqualTo(SpanType.llm);
+                assertThat(span.usage()).containsEntry("prompt_tokens", 20)
+                        .containsEntry("completion_tokens", 8)
+                        .containsEntry("total_tokens", 28)
+                        .containsEntry("cache_read_input_tokens", 4)
+                        .containsEntry("cache_creation_input_tokens", 2)
+                        .containsEntry("prompt_tokens_details.audio_tokens", 3)
+                        .containsEntry("reasoning_tokens", 5)
+                        .containsEntry("completion_tokens_details.audio_tokens", 1);
+                assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.0125");
+                assertThat(span.metadata().path("thread_id").asText()).isEqualTo("explicit-thread");
+                assertThat(span.metadata().path("custom").asText()).isEqualTo("kept");
+                assertThat(span.metadata().path("integration").asText()).isEqualTo("mixed-batch-scope");
+                assertThat(span.metadata().path("user.id").asText()).isEqualTo("user-7");
+                assertThat(span.metadata().path("openinference.span.kind").asText()).isEqualTo("LLM");
+                assertThat(span.metadata().path("llm.future.attribute").asText()).isEqualTo("future-value");
+                assertThat(span.tags()).containsExactlyInAnyOrder("alpha", "beta", "opik");
+                assertThat(span.input()).isNull();
+            }
+
+            var sessionFallback = enrich(List.of(
+                    str("openinference.span.kind", "CHAIN"),
+                    str("session.id", "session-only")));
+            assertThat(sessionFallback.metadata().path("thread_id").asText()).isEqualTo("session-only");
+
+            var aliasedProvider = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.system", "mistral_ai"),
+                    str("llm.model_name", "mistral-small")));
+            assertThat(aliasedProvider.provider()).isEqualTo("mistral");
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "anthropic, claude-haiku-4-5, original_usage.input_tokens, 0.000405",
+                "aws, anthropic.claude-3-5-haiku-20241022-v1:0, original_usage.inputTokens, 0.000324",
+                "anthropic_vertexai, vertex_ai/claude-haiku-4-5, original_usage.input_tokens, 0.000405"
+        })
+        void calculatesCacheCostWithoutCountingCachedPromptTokensTwice(
+                String provider, String model, String exclusiveInputKey, String expectedCost) {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.provider", provider),
+                    str("llm.model_name", model),
+                    integer("llm.token_count.prompt", 1000),
+                    integer("llm.token_count.completion", 20),
+                    integer("llm.token_count.prompt_details.cache_read", 800),
+                    integer("llm.token_count.prompt_details.cache_write", 100)));
+
+            assertThat(span.usage()).containsEntry("prompt_tokens", 1000)
+                    .containsEntry("total_tokens", 1020)
+                    .containsEntry(exclusiveInputKey, 100);
+            assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
+                    .isEqualByComparingTo(expectedCost);
+        }
+
+        @Test
+        void calculatesAudioCostAtAudioRates() {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.provider", "openai"),
+                    str("llm.model_name", "gpt-4o-audio-preview"),
+                    integer("llm.token_count.prompt", 1000),
+                    integer("llm.token_count.completion", 500),
+                    integer("llm.token_count.prompt_details.audio", 300),
+                    integer("llm.token_count.completion_details.audio", 200)));
+
+            // 700 text input + 300 audio input + 300 text output + 200 audio output.
+            assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
+                    .isEqualByComparingTo("0.03275");
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "LLM, llm",
+                "TOOL, tool",
+                "GUARDRAIL, guardrail",
+                "CHAIN, general",
+                "something-new, general"
+        })
+        void mapsOpenInferenceKinds(String kind, SpanType expected) {
+            assertThat(enrich(List.of(str("openinference.span.kind", kind))).type()).isEqualTo(expected);
+        }
+
+        @Test
+        void malformedIndicesAndValuesDoNotAbortIngestion() {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.input_messages.-1.message.content", "negative"),
+                    str("llm.output_messages.not-a-number.message.content", "invalid"),
+                    integer("llm.input_messages.0.message.role", 7),
+                    integer("llm.output_messages.0.message.function_call_arguments_json", 8),
+                    integer("llm.invocation_parameters", 9),
+                    integer("llm.function_call", 10),
+                    integer("llm.prompt_template.variables", 11),
+                    integer("llm.tools.0.tool.json_schema", 12),
+                    integer("llm.token_count.prompt", -1),
+                    bool("tag.tags", true),
+                    str("llm.tools.999999999999999999999.tool.name", "overflow")));
+
+            assertThat(span.input()).isNull();
+            assertThat(span.output()).isNull();
+            assertThat(span.metadata().fieldNames()).toIterable().contains(
+                    "llm.input_messages.-1.message.content",
+                    "llm.output_messages.not-a-number.message.content",
+                    "llm.input_messages.0.message.role",
+                    "llm.output_messages.0.message.function_call_arguments_json",
+                    "llm.invocation_parameters",
+                    "llm.function_call",
+                    "llm.prompt_template.variables",
+                    "llm.tools.0.tool.json_schema",
+                    "llm.token_count.prompt",
+                    "tag.tags",
+                    "llm.tools.999999999999999999999.tool.name");
+
+            var malformedJsonStrings = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.invocation_parameters", "{broken"),
+                    str("llm.function_call", "{also-broken"),
+                    str("llm.prompt_template.variables", "{still-broken"),
+                    str("llm.tools.0.tool.json_schema", "{schema-broken"),
+                    str("llm.output_messages.0.message.function_call_arguments_json", "{arguments-broken")));
+            assertThat(malformedJsonStrings.input()).isNull();
+            assertThat(malformedJsonStrings.output()).isNull();
+            assertThat(malformedJsonStrings.metadata().path("llm.invocation_parameters").asText())
+                    .isEqualTo("{broken");
+            assertThat(malformedJsonStrings.metadata().path("llm.function_call").asText())
+                    .isEqualTo("{also-broken");
+            assertThat(malformedJsonStrings.metadata().path("llm.prompt_template.variables").asText())
+                    .isEqualTo("{still-broken");
+            assertThat(malformedJsonStrings.metadata().path("llm.tools.0.tool.json_schema").asText())
+                    .isEqualTo("{schema-broken");
+            assertThat(malformedJsonStrings.metadata()
+                    .path("llm.output_messages.0.message.function_call_arguments_json").asText())
+                    .isEqualTo("{arguments-broken");
+
+            var trailingJsonTokens = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("input.mime_type", "application/json"),
+                    str("input.value", "{\"request\":true} {}"),
+                    str("output.mime_type", "application/json"),
+                    str("output.value", "[1,2] false"),
+                    str("llm.invocation_parameters", "{\"temperature\":0.2} {}"),
+                    str("llm.function_call", "{\"name\":\"weather\"} []"),
+                    str("llm.prompt_template.variables", "{\"city\":\"Paris\"} true"),
+                    str("llm.tools.0.tool.json_schema", "{\"type\":\"object\"} null"),
+                    str("llm.output_messages.0.message.function_call_arguments_json", "{\"city\":\"Paris\"} 7")));
+            assertThat(trailingJsonTokens.input().asText()).isEqualTo("{\"request\":true} {}");
+            assertThat(trailingJsonTokens.output().asText()).isEqualTo("[1,2] false");
+            assertThat(trailingJsonTokens.metadata().path("llm.invocation_parameters").asText())
+                    .isEqualTo("{\"temperature\":0.2} {}");
+            assertThat(trailingJsonTokens.metadata().path("llm.function_call").asText())
+                    .isEqualTo("{\"name\":\"weather\"} []");
+            assertThat(trailingJsonTokens.metadata().path("llm.prompt_template.variables").asText())
+                    .isEqualTo("{\"city\":\"Paris\"} true");
+            assertThat(trailingJsonTokens.metadata().path("llm.tools.0.tool.json_schema").asText())
+                    .isEqualTo("{\"type\":\"object\"} null");
+            assertThat(trailingJsonTokens.metadata()
+                    .path("llm.output_messages.0.message.function_call_arguments_json").asText())
+                    .isEqualTo("{\"city\":\"Paris\"} 7");
+        }
+
+        @Test
+        void parsesToolSpanSchemaAndPreservesInvalidJsonAttributesInMetadata() {
+            var valid = enrich(List.of(
+                    str("openinference.span.kind", "TOOL"),
+                    str("tool.json_schema", "{\"type\":\"object\",\"required\":[\"question\"]}")));
+
+            assertThat(valid.input()).isNull();
+            assertThat(valid.metadata().path("tool.json_schema").path("type").asText()).isEqualTo("object");
+            assertThat(valid.metadata().path("tool.json_schema").path("required").get(0).asText())
+                    .isEqualTo("question");
+
+            var invalid = enrich(List.of(
+                    str("openinference.span.kind", "TOOL"),
+                    str("tool.json_schema", "{broken"),
+                    str("metadata", "   ")));
+
+            assertThat(invalid.input()).isNull();
+            assertThat(invalid.metadata().path("tool.json_schema").asText()).isEqualTo("{broken");
+            assertThat(invalid.metadata().path("metadata").asText()).isEqualTo("   ");
+        }
+
+        @Test
+        void markerIsPerSpanAndUnmarkedFallbackRemainsCompatible() {
+            var flattenedMessage = str("llm.output_messages.0.message.content", "hello");
+
+            var marked = enrich(List.of(str("openinference.span.kind", "LLM"), flattenedMessage));
+            var unmarked = enrich(List.of(flattenedMessage));
+            var unmarkedInvocation = enrich(List.of(str("llm.invocation_parameters", "{\"temperature\":0.5}")));
+
+            assertThat(marked.output().path("messages").get(0).path("content").asText()).isEqualTo("hello");
+            assertThat(marked.input()).isNull();
+            assertThat(unmarked.input().path("llm.output_messages.0.message.content").asText()).isEqualTo("hello");
+            assertThat(unmarked.output()).isNull();
+            assertThat(unmarkedInvocation.input().path("llm.invocation_parameters").path("temperature").asDouble())
+                    .isEqualTo(0.5);
+            assertThat(unmarkedInvocation.type()).isEqualTo(SpanType.llm);
         }
     }
 }

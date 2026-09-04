@@ -1,6 +1,7 @@
 ---
 headline: OpenTelemetry
-og:description: Integrate OpenTelemetry SDKs with Opik to enhance your ML/AI apps
+og:description:
+  Integrate OpenTelemetry SDKs with Opik to enhance your ML/AI apps
   with distributed tracing and streamline monitoring.
 og:site_name: Opik Documentation
 og:title: Get Started with OpenTelemetry - Opik
@@ -16,8 +17,8 @@ your ML/AI applications with distributed tracing. This guide will show you how
 to directly integrate OpenTelemetry SDKs with Opik.
 
 <Note>
-  OpenTelemetry integration in Opik currently supports HTTP transport. We're actively working on expanding the feature
-  set - stay tuned for updates!
+  OpenTelemetry integration in Opik currently supports HTTP transport. We're
+  actively working on expanding the feature set - stay tuned for updates!
 </Note>
 
 ## OpenTelemetry Endpoint Configuration
@@ -61,6 +62,31 @@ metrics, logs) need to be sent to different endpoints:
 ```bash wordWrap
 export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://<YOUR-OPIK-INSTANCE>/api/v1/private/otel/v1/traces"
 ```
+
+## OpenInference messages
+
+Spans with the `openinference.span.kind` attribute support the **Messages** tab and
+**Pretty** input/output previews. Newly ingested spans store chat messages in
+`input.messages` and `output.messages`, including tool calls and multimodal content.
+Previously stored spans with flattened OpenInference attributes remain readable in
+the UI; their stored data is not rewritten.
+
+<Warning>
+  If your online evaluation rules or custom consumers reference flattened
+  OpenInference fields, update their variable mappings for newly ingested spans.
+  Historical records retain their original paths.
+</Warning>
+
+| Historical variable mapping                   | Mapping for newly ingested spans |
+| --------------------------------------------- | -------------------------------- |
+| `input.llm.input_messages.0.message.content`  | `input.messages[0].content`      |
+| `input.llm.output_messages.0.message.content` | `output.messages[0].content`     |
+
+Message, content, and tool-call arrays are ordered by their original numeric indices
+and compacted, so inspect a new span before updating mappings that use sparse indices.
+Raw `input.value` and `output.value` are parsed according to their MIME type. When a
+raw scalar or array is the only content, it becomes the entire input or output;
+when combined with structured fields, it remains under `value`.
 
 ## Custom via OpenTelemetry SDKs
 
@@ -121,6 +147,7 @@ OpenAIInstrumentor().instrument()
 </Tip>
 
 <Warning>
-  Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
-  the GRPC exporter you will face errors.
+  Make sure to import the `http` trace exporter
+  (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use the GRPC
+  exporter you will face errors.
 </Warning>
