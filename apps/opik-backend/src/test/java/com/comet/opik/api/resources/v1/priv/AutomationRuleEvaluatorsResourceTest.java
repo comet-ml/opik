@@ -759,6 +759,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 "[null]",
                 "[{}]",
                 "[{\"foo\": \"bar\"}]",
+                "[{\"type\": 42}]",
                 "[{\"type\": \"text\", \"text\": \"Example\"}]\n\nNow evaluate {{input}}"})
         @DisplayName("create evaluator: a prompt that opens with '[' round-trips and does not break the project's list")
         void createEvaluator__whenPromptOpensWithABracket__thenRoundTripsAndListingStillWorks(String prompt) {
