@@ -1057,26 +1057,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
-     * `DELETE /v1/private/dashboards/{id}`.
-     *
-     * A dashboard does not hang off a project, so no project delete reaches
-     * it. `global-teardown` does sweep dashboards by run prefix, but only at
-     * the end of the run — a spec that builds one deletes it per-test.
-     */
-    async deleteDashboard(id: string): Promise<void> {
-      const headers = workspaceHeaders();
-      const res = await fetch(`${env.apiBaseUrl}/v1/private/dashboards/${id}`, {
-        method: 'DELETE',
-        headers,
-      });
-      if (!res.ok && res.status !== 404) {
-        throw new Error(
-          `DELETE /v1/private/dashboards/${id} -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
-        );
-      }
-    },
-
-    /**
      * Uploads one attachment against a trace or span through the real
      * presigned multipart flow: `upload-start` → PUT the bytes → `upload-complete`.
      *
