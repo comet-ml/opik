@@ -54,6 +54,43 @@ ${params}
 }
 
 /**
+ * The thread-scoped counterpart of {@link buildConstantScoreMetric}: a constant
+ * 1.0 for whatever conversation it is handed.
+ *
+ * A separate builder rather than a `scoreArgs` variant, because the runner
+ * calls the two differently. For a `trace_thread_*` rule the python backend
+ * dispatches `metric.score(data)` — one POSITIONAL argument carrying the whole
+ * conversation — while the trace-scoped path spreads the argument map as
+ * keywords (`metric.score(**data)`). A `score()` whose first parameter is named
+ * `output` would still be called successfully here, which is precisely why this
+ * is worth stating: the parameter name is inert on this path, so the thread
+ * metric declares the name the backend documents (`CONTEXT_ARG_NAME`) instead
+ * of borrowing a trace-shaped one that would read as though it mattered.
+ *
+ * Constant rather than derived from the conversation: the specs using this ask
+ * whether every thread in a fan-out was evaluated, not what the metric
+ * concluded — a value that varied with the input would make "scored the wrong
+ * thread" and "scored correctly" produce the same number.
+ */
+export function buildConstantThreadScoreMetric(scoreName: string): string {
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class ConstantThreadScore(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(
+        self,
+        context: Any = None,
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)`;
+}
+
+/**
  * A metric that exits 0 without ever printing its result line.
  *
  * `os._exit` is deliberate: it ends the interpreter immediately, so the runner's
