@@ -18,6 +18,7 @@ type UsePromptVersionsByIdInfiniteParams = {
 type UsePromptVersionsByIdInfiniteOptions = {
   enabled?: boolean;
   refetchInterval?: number;
+  refetchOnWindowFocus?: boolean;
 };
 
 export default function usePromptVersionsByIdInfinite(

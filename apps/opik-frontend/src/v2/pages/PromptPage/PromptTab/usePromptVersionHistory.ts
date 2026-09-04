@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
 import {
   PromptVersion,
@@ -25,6 +25,8 @@ export default function usePromptVersionHistory(
     StringParam,
   );
 
+  const queryClient = useQueryClient();
+
   const {
     data,
     isLoading: isVersionsLoading,
@@ -40,9 +42,38 @@ export default function usePromptVersionHistory(
     },
     {
       enabled: !!prompt?.id,
-      refetchInterval: 30000,
+      // No refetchInterval/refetchOnWindowFocus here: useInfiniteQuery
+      // refetches every already-loaded page sequentially, and the Diff/Deploy
+      // menus deliberately load every page for large prompts — polling or
+      // refocus-refetching that unconditionally would multiply request volume
+      // by however many pages got loaded that session. Instead, the cheap
+      // `prompt` query below polls `version_count` and this list only
+      // refetches (own mutations aside) when that actually changes.
     },
   );
+
+  // `prompt` is polled (see PromptPage) so `version_count` changing is a
+  // cheap signal that some version was added/removed elsewhere — only then
+  // do we pay for the expensive full-history refetch.
+  const versionCountRef = useRef(prompt?.version_count);
+  useEffect(() => {
+    if (
+      prompt?.id &&
+      prompt.version_count !== undefined &&
+      versionCountRef.current !== undefined &&
+      prompt.version_count !== versionCountRef.current
+    ) {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "prompt-versions" &&
+          typeof query.queryKey[1] === "object" &&
+          query.queryKey[1] !== null &&
+          "promptId" in query.queryKey[1] &&
+          query.queryKey[1].promptId === prompt.id,
+      });
+    }
+    versionCountRef.current = prompt?.version_count;
+  }, [prompt?.id, prompt?.version_count, queryClient]);
 
   const versions = useMemo(
     () =>
