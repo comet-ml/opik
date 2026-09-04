@@ -61,14 +61,16 @@ SENSITIVE_PARAMS_TO_EXCLUDE: List[str] = [
 ]
 
 
-def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
+def _extract_provider_from_model(
+    model_name: str,
+) -> Optional[Union[LLMProvider, str]]:
     try:
         provider_info = litellm.get_llm_provider(model_name)
         provider_name = provider_info[1] if len(provider_info) > 1 else None
         if provider_name is None:
             return None
         return litellm_provider_mapping.LITELLM_PROVIDER_MAPPING.get(
-            provider_name, None
+            provider_name, provider_name
         )
     except Exception:
         return None
@@ -205,7 +207,7 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             usage=opik_usage,
             metadata=metadata,
             model=model,
-            provider=provider.value if provider else None,
+            provider=provider.value if isinstance(provider, LLMProvider) else provider,
             total_cost=total_cost,
         )
 
