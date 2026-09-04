@@ -1,6 +1,7 @@
 import logging
 import json
 import math
+import re
 from typing import Any, Dict, TYPE_CHECKING
 import opik.exceptions as exceptions
 from opik.evaluation.metrics import score_result
@@ -60,34 +61,21 @@ def parse_litellm_model_output(
 
         log_probs = _to_dict(choice_dict.get("logprobs"))
         entries = log_probs.get("content") or []
-        score_token_position = 3
-        if len(entries) <= score_token_position:
+        if len(entries) <= 3:
             return _extract_score_from_text_content(choice_dict, name=name)
 
-        entry_dict = _to_dict(entries[score_token_position])
-        top_logprobs = entry_dict.get("top_logprobs") or []
-        token_candidate = str(entry_dict.get("token", ""))
+        # Locate the score token(s) by content instead of assuming a fixed
+        # offset: tokenizers differ on where the whitespace after `"score":`
+        # lands, and a two-digit score ("10") spans two tokens.
+        entry_indices = _locate_score_entries(entries)
+        if entry_indices is None:
+            entry_indices = [3]
 
-        linear_probs_sum = 0.0
-        weighted_score_sum = 0.0
-
-        for candidate in top_logprobs:
-            token_info = _to_dict(candidate)
-            token_str = str(token_info.get("token", ""))
-            if not token_str.isdecimal():
-                continue
-
-            score = int(token_str)
-            if not 0 <= score <= 10:
-                continue
-
-            log_prob = token_info.get("logprob")
-            if log_prob is None:
-                continue
-
-            linear_prob = math.exp(float(log_prob))
-            linear_probs_sum += linear_prob
-            weighted_score_sum += linear_prob * score
+        (
+            linear_probs_sum,
+            weighted_score_sum,
+            token_candidate,
+        ) = _weighted_score_sums(entries, entry_indices)
 
         if linear_probs_sum != 0.0:
             final_score: float = weighted_score_sum / linear_probs_sum / 10
@@ -107,6 +95,93 @@ def parse_litellm_model_output(
     except Exception as exception:
         LOGGER.error(f"Failed to parse model output: {exception}", exc_info=True)
         raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED) from exception
+
+
+_SCORE_KEY_RE = re.compile(r'"score"\s*:\s*(\d+)')
+
+
+def _locate_score_entries(entries: list) -> list[int] | None:
+    """Find the entry indices whose tokens carry the score digits.
+
+    Reconstructs the decoded text from the token stream and locates the
+    digits after `"score":`; returns the one or two indices covering them,
+    or None when the key cannot be found in the reconstructed text (the
+    caller then falls back to the legacy fixed offset).
+    """
+    token_texts = [str(_to_dict(entry).get("token", "")) for entry in entries]
+    full_text = "".join(token_texts)
+    match = _SCORE_KEY_RE.search(full_text)
+    if match is None:
+        return None
+    start, end = match.start(1), match.end(1)
+    offsets = []
+    position = 0
+    for text in token_texts:
+        offsets.append((position, position + len(text)))
+        position += len(text)
+    indices = [
+        index
+        for index, (begin, stop) in enumerate(offsets)
+        if stop > start and begin < end
+    ]
+    if not 1 <= len(indices) <= 2:
+        return None
+    return indices
+
+
+def _decimal_candidates(entry) -> list:
+    return [
+        (str(info.get("token", "")).strip(), math.exp(float(info["logprob"])))
+        for info in (_to_dict(cand) for cand in (entry.get("top_logprobs") or []))
+        if str(info.get("token", "")).strip().isdecimal()
+        and info.get("logprob") is not None
+    ]
+
+
+def _weighted_score_sums(entries: list, entry_indices: list[int]) -> tuple:
+    """Weighted [0, 10] score mass over the candidate space of the score token(s).
+
+    A single-entry span averages that entry's decimal candidates (the
+    legacy behaviour, plus leading/trailing whitespace tolerance). A
+    two-entry span additionally combines the two positions' candidates
+    ("1" + "0" -> 10) and counts a first-position candidate only when it
+    covers the whole digit span ("10"), so the chosen digits are not
+    double-counted.
+    """
+    token_candidate = "".join(
+        str(_to_dict(entries[index]).get("token", "")) for index in entry_indices
+    ).strip()
+
+    linear_probs_sum = 0.0
+    weighted_score_sum = 0.0
+
+    if len(entry_indices) == 1:
+        for token, prob in _decimal_candidates(entries[entry_indices[0]]):
+            score = int(token)
+            if not 0 <= score <= 10:
+                continue
+            linear_probs_sum += prob
+            weighted_score_sum += prob * score
+        return linear_probs_sum, weighted_score_sum, token_candidate
+
+    digits = token_candidate
+    first_candidates = _decimal_candidates(entries[entry_indices[0]])
+    second_candidates = _decimal_candidates(entries[entry_indices[1]])
+
+    for token_a, prob_a in first_candidates:
+        if token_a == digits and 0 <= int(token_a) <= 10:
+            # one token covering the whole span (alternative tokenization)
+            linear_probs_sum += prob_a
+            weighted_score_sum += prob_a * int(token_a)
+        for token_b, prob_b in second_candidates:
+            combined = token_a + token_b
+            if not combined.isdecimal() or not 0 <= int(combined) <= 10:
+                continue
+            prob = prob_a * prob_b
+            linear_probs_sum += prob
+            weighted_score_sum += prob * int(combined)
+
+    return linear_probs_sum, weighted_score_sum, token_candidate
 
 
 def _extract_score_from_text_content(
