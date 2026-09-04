@@ -68,7 +68,7 @@ export class OnlineEvaluationPage {
    * whether the project has any rules.)
    */
   async waitForReady(): Promise<void> {
-    const realRow = this.page.locator('tbody tr[data-row-id]').first();
+    const realRow = this.ruleRows.first();
     const emptyState = this.page.getByText('No online evaluations yet');
     await Promise.race([
       realRow.waitFor({ state: 'visible' }),
@@ -76,11 +76,19 @@ export class OnlineEvaluationPage {
     ]);
   }
 
+  /**
+   * Every rule row the list is currently rendering.
+   *
+   * `data-row-id` is the shared DataTable's per-entity stamp, so this counts
+   * real rows and never the header or an empty-state placeholder.
+   */
+  get ruleRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
   /** Locator for a rule row by name. Uses `data-row-id` row scope + cell-name filter. */
   ruleRow(name: string): Locator {
-    return this.page
-      .locator('tbody tr[data-row-id]')
-      .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
+    return this.ruleRows.filter({ has: this.page.getByRole('cell', { name, exact: true }) });
   }
 
   /**
@@ -238,6 +246,78 @@ export class OnlineEvaluationPage {
       await this.dialog.waitFor({ state: 'hidden' });
 
       await expect(this.ruleStatusCell(name, enabled ? 'Enabled' : 'Disabled')).toBeVisible();
+    });
+  }
+
+  /**
+   * Open a rule's edit dialog through the row's kebab → Edit, and leave it open.
+   *
+   * `setRuleEnabledByName` inlines the same gesture because it owns the whole
+   * toggle-and-submit flow; this exists for the specs that only want to *read*
+   * what the dialog hydrated, without changing anything.
+   */
+  async openEditDialogByName(name: string): Promise<void> {
+    return test.step(`open the edit dialog for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.dialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Submit the add/edit dialog and wait for it to close.
+   *
+   * Used on its own by the specs that save a rule without changing anything;
+   * the `fillAndSubmit…` helpers above do their own submit because they own the
+   * whole create gesture.
+   */
+  async submitDialog(): Promise<void> {
+    return test.step('submit the rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /** Close the add/edit dialog via its Cancel button, discarding anything typed. */
+  async cancelDialog(): Promise<void> {
+    return test.step('close the rule dialog without saving', async () => {
+      await this.dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The exact text the dialog hydrated into the judge prompt message of the
+   * given role.
+   *
+   * Read from the rendered CodeMirror lines rather than an input value, because
+   * that is the only place the text exists — and reading it is the assertion:
+   * a prompt the read-back mapper truncated arrives here truncated.
+   *
+   * `.cm-line` divs are joined with `\n` because that is CodeMirror's document
+   * model — one line element per document line, with soft wrapping handled
+   * inside a line rather than by splitting it. This is sound for the short
+   * judge prompts these specs seed; a document long enough for CodeMirror to
+   * virtualise its viewport would render only the visible lines, so do not
+   * reach for this to read a multi-screen prompt.
+   */
+  async readPromptMessageText(role: 'system' | 'user'): Promise<string> {
+    return test.step(`read the ${role} judge message out of the dialog`, async () => {
+      // `data-role` sits on the same element as the testid, not inside it, so
+      // this is an `and()` of two attributes rather than a `filter({ has })`.
+      const row = this.dialog
+        .getByTestId('playground-message-row')
+        .and(this.page.locator(`[data-role="${role}"]`));
+      await expect(row, `the dialog must hydrate exactly one ${role} message`).toHaveCount(1);
+      const content = row.getByTestId('playground-message-editor').locator('.cm-content');
+      await content.waitFor({ state: 'visible' });
+      return content.evaluate((el) =>
+        Array.from(el.querySelectorAll('.cm-line'))
+          .map((line) => line.textContent ?? '')
+          .join('\n'),
+      );
     });
   }
 
