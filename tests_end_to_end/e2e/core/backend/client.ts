@@ -122,6 +122,28 @@ export interface TraceDetail {
   input: Record<string, unknown> | null;
 }
 
+/**
+ * The fields of a trace that a partial update must carry through untouched.
+ *
+ * Deliberately not `TraceDetail`: that shape exists for feedback-score reads
+ * and flattens away `output`, `metadata` and `tags`, which are exactly the
+ * fields an update that failed to resolve its target row would silently drop.
+ *
+ * `input`/`output`/`metadata` are `unknown` for the same reason
+ * `getTraceSections` keeps them untyped — the caller asserts on what it seeded,
+ * and any shaped type here would let a wrongly-shaped read compare equal.
+ * `tags` is `string[] | null` because an untagged trace answers with the field
+ * absent, which is a different answer from an empty list.
+ */
+export interface TracePayload {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  metadata: unknown;
+  tags: string[] | null;
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -748,6 +770,41 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     },
 
+    /**
+     * One `PUT /v1/private/datasets/items` batch, with explicit control over
+     * `batch_group_id` — the field that decides whether the write commits a new
+     * dataset version (grouped: every batch sharing an id collapses into one)
+     * or mutates the latest version in place (ungrouped, `batch_group_id`
+     * omitted).
+     *
+     * Not reachable through the SDK bridge, which is why this exists alongside
+     * `sdkClient.python.insertDatasetItems`. `Dataset.insert()` mints its own
+     * batch_group_id per call, so the ungrouped mutate-latest path cannot be
+     * driven through it at all; and it drops duplicate entries by content hash
+     * before batching, so a batch carrying the same item id twice never reaches
+     * the endpoint. Both are exactly what the version-counter specs seed.
+     *
+     * Item ids are caller-supplied and must be UUIDv7 (`uuid7()`) — the backend
+     * rejects any other version, and the endpoint answers 204 with no body, so
+     * a test asserting on which rows were stored has to mint them up front.
+     */
+    async writeDatasetItemsBatch(args: {
+      datasetId: string;
+      items: Array<{ id: string; data: Record<string, unknown> }>;
+      /** Omit for the mutate-latest path; the backend reads null as "no group". */
+      batchGroupId?: string;
+    }): Promise<void> {
+      await opik.api.datasets.createOrUpdateDatasetItems({
+        datasetId: args.datasetId,
+        items: args.items.map((item) => ({
+          id: item.id,
+          source: 'manual' as const,
+          data: item.data,
+        })),
+        ...(args.batchGroupId ? { batchGroupId: args.batchGroupId } : {}),
+      });
+    },
+
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
       const page = await opik.api.datasets.getDatasetItems(datasetId);
       const content = page.content ?? [];
@@ -1351,6 +1408,50 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return null;
         throw err;
       }
+    },
+
+    /**
+     * A trace's whole mutable payload — the read that can tell a merged update
+     * from a replacing one.
+     *
+     * Returns null on 404, like `getTrace` and `getTraceSections`: the REST
+     * write answers 201 before the row is queryable, so callers poll rather
+     * than treating an immediate miss as a failure.
+     */
+    async getTracePayload(traceId: string): Promise<TracePayload | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return {
+          id: String(t.id ?? ''),
+          name: t.name ?? '',
+          input: t.input ?? null,
+          output: t.output ?? null,
+          metadata: t.metadata ?? null,
+          // Absent and empty are different answers here — see TracePayload.
+          tags: t.tags ?? null,
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * `PATCH /v1/private/traces/{id}` carrying tags and nothing else — the
+     * update path's smallest possible partial write.
+     *
+     * Scoped by `projectName` because a bare id-only update falls back to the
+     * Default Project, which would silently update nothing in a fixture's own
+     * project.
+     */
+    async updateTraceTags(args: {
+      traceId: string;
+      projectName: string;
+      tags: string[];
+    }): Promise<void> {
+      await opik.api.traces.updateTrace(args.traceId, {
+        body: { projectName: args.projectName, tags: args.tags },
+      });
     },
 
     async deleteTraces(ids: string[]): Promise<void> {

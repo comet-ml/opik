@@ -150,6 +150,7 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(project -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+                    String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     // Strip attachments from the trace with the generated ID and project ID
@@ -163,7 +164,7 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName,
-                                                workspaceName));
+                                                workspaceName, cipxDeviceId));
                                     }));
                 }));
     }
@@ -205,6 +206,7 @@ class TraceServiceImpl implements TraceService {
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+                    String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
@@ -222,7 +224,7 @@ class TraceServiceImpl implements TraceService {
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName,
-                                                workspaceName));
+                                                workspaceName, cipxDeviceId));
                                     }));
                 }));
     }
@@ -354,7 +356,8 @@ class TraceServiceImpl implements TraceService {
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
-                                                ctx.get(RequestContext.USER_NAME)))))))
+                                                ctx.get(RequestContext.USER_NAME),
+                                                ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "")))))))
                         .then()));
     }
 
@@ -368,6 +371,7 @@ class TraceServiceImpl implements TraceService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+            String cipxDeviceId = ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "");
             return dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids()))
                     .flatMap(traceToProjectMap -> {
                         var projectIds = Set.copyOf(traceToProjectMap.values());
@@ -378,7 +382,7 @@ class TraceServiceImpl implements TraceService {
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
                                             userName, batchUpdate.update(), workspaceName, traceToProjectMap));
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
-                                            batchUpdate.update(), workspaceId, userName));
+                                            batchUpdate.update(), workspaceId, userName, cipxDeviceId));
                                 });
                     });
         });

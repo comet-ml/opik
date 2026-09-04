@@ -68,6 +68,7 @@ class AuthServiceImplTest {
         assertThat(result).isEqualTo(List.of(WorkspaceInfo.builder()
                 .id(ProjectService.DEFAULT_WORKSPACE_ID)
                 .name(ProjectService.DEFAULT_WORKSPACE_NAME)
+                .isDefault(true)
                 .build()));
     }
 

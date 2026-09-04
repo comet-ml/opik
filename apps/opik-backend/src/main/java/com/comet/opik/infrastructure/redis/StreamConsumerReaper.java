@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.redis;
 
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -34,7 +35,6 @@ import java.util.Objects;
 @Singleton
 public class StreamConsumerReaper {
 
-    private static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
     private static final AttributeKey<String> GROUP_KEY = AttributeKey.stringKey("consumer_group");
     private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
     private static final String RESULT_SUCCESS = "success";
@@ -89,7 +89,8 @@ public class StreamConsumerReaper {
                     } else {
                         // ACL/connection/timeout/etc.: surface it (metric + warn) instead of silently skipping,
                         // but still return 0 so the other streams are reaped.
-                        reaperConsumers.add(1, Attributes.of(STREAM_KEY, streamName, RESULT_KEY, RESULT_ERROR));
+                        reaperConsumers.add(1,
+                                Attributes.of(ErrorMetricsResolver.STREAM_KEY, streamName, RESULT_KEY, RESULT_ERROR));
                         log.warn("Failed to reap orphaned consumers for stream '{}'", streamName, throwable);
                     }
                     return Mono.just(0L);
@@ -104,7 +105,8 @@ public class StreamConsumerReaper {
                 .flatMap(consumer -> stream.removeConsumer(group, consumer.getName())
                         .doOnSuccess(pending -> {
                             reaperConsumers.add(1,
-                                    Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY,
+                                    Attributes.of(ErrorMetricsResolver.STREAM_KEY, streamName, GROUP_KEY, group,
+                                            RESULT_KEY,
                                             RESULT_SUCCESS));
                             log.info("Reaped orphaned consumer '{}' from group '{}' on stream '{}', idle '{}' ms",
                                     consumer.getName(), group, streamName, consumer.getIdleTime());
@@ -112,7 +114,8 @@ public class StreamConsumerReaper {
                         .thenReturn(1L)
                         .onErrorResume(throwable -> {
                             reaperConsumers.add(1,
-                                    Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY, RESULT_ERROR));
+                                    Attributes.of(ErrorMetricsResolver.STREAM_KEY, streamName, GROUP_KEY, group,
+                                            RESULT_KEY, RESULT_ERROR));
                             log.warn("Failed to reap consumer '{}' from group '{}' on stream '{}'",
                                     consumer.getName(), group, streamName, throwable);
                             return Mono.just(0L);
@@ -120,7 +123,8 @@ public class StreamConsumerReaper {
                 .reduce(0L, Long::sum)
                 .onErrorResume(throwable -> {
                     reaperConsumers.add(1,
-                            Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY, RESULT_ERROR));
+                            Attributes.of(ErrorMetricsResolver.STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY,
+                                    RESULT_ERROR));
                     log.warn("Failed to list consumers for group '{}' on stream '{}'", group, streamName, throwable);
                     return Mono.just(0L);
                 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import uniq from "lodash/uniq";
+import omit from "lodash/omit";
 import {
   LLMJudgeObject,
   EVALUATORS_RULE_SCOPE,
@@ -7,8 +8,15 @@ import {
   EVALUATORS_RULE_TYPE,
   EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
-import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { updateProviderConfig } from "@/lib/modelUtils";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  GeminiThinkingLevel,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
+import {
+  getThinkingLevelOptions,
+  updateProviderConfig,
+} from "@/lib/modelUtils";
 import { getProviderFromModel } from "@/lib/provider";
 import {
   LLM_JUDGE,
@@ -149,6 +157,11 @@ const LLMJudgeBaseSchema = z.object({
       .optional()
       .nullable(),
     custom_parameters: z.record(z.string(), z.unknown()).optional().nullable(),
+    // Held as its own field so the shared model-config control can drive it, then folded into
+    // custom_parameters.thinking on save — the backend reads it from there.
+    thinkingLevel: z
+      .enum(["auto", "off", "minimal", "low", "medium", "high"])
+      .optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -516,10 +529,18 @@ const convertProviderToLLMMessages = (
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const model = data.model?.name ?? "";
+  const persistedCustomParameters = data.model?.custom_parameters ?? null;
+  const thinking = (
+    persistedCustomParameters as { thinking?: { level?: unknown } } | null
+  )?.thinking;
   const rawConfig = {
     temperature: data.model?.temperature,
     seed: data.model?.seed ?? null,
-    custom_parameters: data.model?.custom_parameters ?? null,
+    custom_parameters: persistedCustomParameters,
+    thinkingLevel:
+      typeof thinking?.level === "string"
+        ? (thinking.level as GeminiThinkingLevel)
+        : undefined,
   };
   // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
   // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
@@ -549,7 +570,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
 ) => {
-  const { temperature, seed, custom_parameters } = data.config;
+  const { temperature, seed, custom_parameters, thinkingLevel } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
   };
@@ -562,8 +583,69 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.seed = seed;
   }
 
-  if (custom_parameters != null) {
-    model.custom_parameters = custom_parameters;
+  const persistedThinking = (
+    (custom_parameters ?? {}) as Record<string, unknown>
+  ).thinking as Record<string, unknown> | undefined;
+
+  // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
+  // are not represented in the form, so an unchanged load -> save must not drop them.
+  // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
+  // as no thinking block rather than as a level the backend would have to special-case.
+  const thinkingCustomParameters =
+    thinkingLevel != null &&
+    thinkingLevel !== "auto" &&
+    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
+      (o) => o.value === thinkingLevel,
+    )
+      ? {
+          // "off" must clear any persisted budget_tokens: an explicit budget outranks the level
+          // server-side, so keeping both would leave thinking on while the UI reads "Off".
+          thinking: {
+            ...(thinkingLevel === "off"
+              ? omit(persistedThinking ?? {}, "budget_tokens")
+              : persistedThinking ?? {}),
+            level: thinkingLevel,
+          },
+        }
+      : undefined;
+
+  // On a model whose level control owns `thinking`, drop the persisted copy before re-adding the
+  // current selection: otherwise a level rejected above survives in the spread, and a stale "off"
+  // reaches a model that cannot disable thinking.
+  //
+  // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
+  // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
+  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
+  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
+  const persistedCustomParameters = (custom_parameters ?? {}) as Record<
+    string,
+    unknown
+  >;
+  // Strip the persisted `thinking` when the form is putting one back, and also when the form held a
+  // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
+  // to go, which is what the level check above is for.
+  //
+  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
+  // level of its own here", not "delete whatever else was in there": budget_tokens and
+  // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
+  // this same key for extended thinking.
+  const formRejectedItsLevel =
+    thinkingLevel != null &&
+    thinkingLevel !== "auto" &&
+    !thinkingCustomParameters;
+  const otherCustomParameters =
+    thinkingCustomParameters || formRejectedItsLevel
+      ? omit(persistedCustomParameters, "thinking")
+      : persistedCustomParameters;
+
+  if (
+    Object.keys(otherCustomParameters).length > 0 ||
+    thinkingCustomParameters
+  ) {
+    model.custom_parameters = {
+      ...otherCustomParameters,
+      ...thinkingCustomParameters,
+    };
   }
 
   return {

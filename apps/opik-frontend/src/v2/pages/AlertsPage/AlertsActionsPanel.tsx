@@ -42,6 +42,7 @@ const AlertsActionsPanel: React.FunctionComponent<AlertsActionsPanelsProps> = ({
         <Button
           variant="outline"
           size="icon-sm"
+          data-testid="alerts-bulk-delete-button"
           onClick={() => {
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
