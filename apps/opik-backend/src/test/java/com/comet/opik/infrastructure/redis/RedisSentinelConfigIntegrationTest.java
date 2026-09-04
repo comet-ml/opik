@@ -31,8 +31,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>
  * An actual failover is deliberately not exercised here. It depends on the sentinel timers firing within
  * {@code down-after-milliseconds}, and sentinels running inside a virtualised runner routinely enter tilt mode on clock
- * jitter, which suppresses failover and makes such a test flaky. Reacting to a failover is entirely Redisson's
- * responsibility, what this test covers is the configuration handed to it.
+ * jitter, which suppresses failover and makes such a test flaky. This test verifies initial master discovery and command
+ * execution; it does not assert replica promotion or Redisson reconnection behavior.
  * <p>
  * Sentinels announce the redis nodes by their docker network aliases, which are not routable from the host, so a NAT
  * mapper translates each alias to the port testcontainers published for it. This is only needed by the test, real

@@ -347,6 +347,17 @@ class RedisConfigTest {
         }
 
         @Test
+        @DisplayName("Should reject null Sentinel nodes during direct builds")
+        void shouldRejectNullSentinelNodesDuringDirectBuilds() {
+            var redisConfig = newSentinelConfig("redis://localhost:26379/0");
+            redisConfig.getSentinel().setNodes(null);
+
+            assertThatThrownBy(redisConfig::build)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("sentinel.nodes must not be null");
+        }
+
+        @Test
         @DisplayName("Should fail bean validation when the master name is missing and sentinel is enabled")
         void shouldFailBeanValidationWhenMasterNameIsMissingAndSentinelEnabled() {
             var sentinel = new RedisConfig.SentinelConfig();

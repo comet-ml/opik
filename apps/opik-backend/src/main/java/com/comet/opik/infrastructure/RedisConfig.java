@@ -80,8 +80,11 @@ public class RedisConfig {
     }
 
     /**
-     * Builds a Redisson config backed by Redis Sentinel. Redisson resolves the current master through the sentinels and
-     * transparently reconnects to the promoted replica on failover, so no application code is aware of the topology.
+     * Builds a Redisson config backed by Redis Sentinel. This method configures Sentinel discovery; Redisson handles
+     * topology monitoring and reconnection behavior.
+     * <p>
+     * Successful failover requires a healthy Sentinel quorum, an eligible synchronized replica, and Sentinel-announced
+     * addresses that are reachable from the backend.
      * <p>
      * {@code singleNodeUrl} is reused as the seed sentinel address: its scheme decides whether sentinel connections use
      * TLS, its host and port identify the seed sentinel (usually {@code 26379}), and its credentials and database number
@@ -186,6 +189,7 @@ public class RedisConfig {
 
         /** Derived: the parsed, stripped, blank-free list of extra seed sentinel addresses. */
         public List<String> getNodes() {
+            Preconditions.checkArgument(nodes != null, "sentinel.nodes must not be null");
             return Arrays.stream(nodes.split(","))
                     .map(String::strip)
                     .filter(StringUtils::isNotBlank)
