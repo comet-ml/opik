@@ -42,13 +42,15 @@ export default function usePromptVersionHistory(
     },
     {
       enabled: !!prompt?.id,
-      // No refetchInterval/refetchOnWindowFocus here: useInfiniteQuery
-      // refetches every already-loaded page sequentially, and the Diff/Deploy
-      // menus deliberately load every page for large prompts — polling or
-      // refocus-refetching that unconditionally would multiply request volume
-      // by however many pages got loaded that session. Instead, the cheap
-      // `prompt` query below polls `version_count` and this list only
-      // refetches (own mutations aside) when that actually changes.
+      // No refetchInterval, and refetchOnWindowFocus explicitly off:
+      // useInfiniteQuery refetches every already-loaded page sequentially on
+      // either trigger, and the Diff/Deploy menus deliberately load every
+      // page for large prompts — polling or refocus-refetching that
+      // unconditionally would multiply request volume by however many pages
+      // got loaded that session. Instead, the cheap `prompt` query below
+      // polls `version_count` and this list only refetches (own mutations
+      // aside) when that actually changes.
+      refetchOnWindowFocus: false,
     },
   );
 
