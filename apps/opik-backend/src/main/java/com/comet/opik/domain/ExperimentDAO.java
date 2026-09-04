@@ -1571,6 +1571,23 @@ public class ExperimentDAO {
             ;
             """;
 
+    /**
+     * Only the columns the write path validates against. Deliberately not FIND: that template
+     * carries the aggregation branch chain and the enrichment joins the UI needs, which the write
+     * path pays for and then discards. See {@link ExperimentWriteContext}.
+     */
+    private static final String FIND_WRITE_CONTEXT_BY_ID = """
+            SELECT id, dataset_id, project_id
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String FIND_BY_NAME = """
             SELECT
                 *,
@@ -1812,6 +1829,34 @@ public class ExperimentDAO {
     }
 
     @WithSpan
+    /**
+     * Reads only {@link ExperimentWriteContext} — no aggregation branch counts, no FIND CTE chain,
+     * no enrichment, and no lazy-aggregation trigger. {@link #getById} is left exactly as it was;
+     * the UI still needs the full read model.
+     */
+    Mono<ExperimentWriteContext> getWriteContextById(@NonNull UUID id) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND_WRITE_CONTEXT_BY_ID,
+                            "get_experiment_write_context_by_id", workspaceId, userName, "");
+                    var statement = connection.createStatement(template.render())
+                            .bind("id", id)
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(result -> result.map((row, metadata) -> new ExperimentWriteContext(
+                        UUID.fromString(row.get("id", String.class)),
+                        Optional.ofNullable(row.get("dataset_id", String.class))
+                                .filter(StringUtils::isNotBlank)
+                                .map(UUID::fromString)
+                                .orElse(null),
+                        Optional.ofNullable(row.get("project_id", String.class))
+                                .filter(StringUtils::isNotBlank)
+                                .map(UUID::fromString)
+                                .orElse(null))))
+                .singleOrEmpty();
+    }
+
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         var limit = 1;

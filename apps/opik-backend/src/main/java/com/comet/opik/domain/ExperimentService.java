@@ -354,6 +354,15 @@ public class ExperimentService {
     }
 
     @WithSpan
+    /**
+     * The write path's counterpart to {@link #getById}: reads only what bulk ingestion validates
+     * against, skipping enrichment and the lazy-aggregation trigger. {@code getById} is unchanged —
+     * the UI depends on the aggregates it computes.
+     */
+    public Mono<ExperimentWriteContext> getWriteContextById(@NonNull UUID id) {
+        return experimentDAO.getWriteContextById(id);
+    }
+
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         return enrichExperiment(experimentDAO.getById(id), "Not found experiment with id '%s'".formatted(id))

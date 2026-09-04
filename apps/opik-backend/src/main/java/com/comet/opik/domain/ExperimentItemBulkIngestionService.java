@@ -10,6 +10,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.RetryUtils;
@@ -26,6 +27,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple3;
 
 import java.time.Instant;
@@ -73,6 +75,15 @@ public interface ExperimentItemBulkIngestionService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngestionService {
+
+    /**
+     * Escape hatch, mirroring {@code opik.fastBind}: anything other than an explicit "false" keeps
+     * the lean write-context read. Set {@code -Dopik.leanExperimentContext=false} to restore the
+     * previous {@code getById} behaviour — useful for A/B measurement and for backing the change
+     * out in place without a redeploy.
+     */
+    private static final boolean LEAN_WRITE_CONTEXT = !"false"
+            .equalsIgnoreCase(System.getProperty("opik.leanExperimentContext", "true"));
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -182,13 +193,28 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
-    private Mono<Optional<Experiment>> loadExistingExperiment(Experiment experiment) {
+    /**
+     * Reads only what the write path validates against. This used to call
+     * {@code experimentService.getById}, which builds the full UI read model — aggregation branch
+     * counts, the FIND CTE chain, enrichment and a lazy-aggregation trigger — once per batch, to
+     * supply three fields. {@code getById} itself is untouched; the UI still needs it.
+     */
+    private Mono<Optional<ExperimentWriteContext>> loadExistingExperiment(Experiment experiment) {
         if (experiment.id() == null) {
             return Mono.just(Optional.empty());
         }
 
-        return experimentService.getById(experiment.id())
+        if (!LEAN_WRITE_CONTEXT) {
+            // Escape hatch and A/B control: the previous behaviour, reading the full UI model.
+            return experimentService.getById(experiment.id())
+                    .map(e -> Optional.of(new ExperimentWriteContext(e.id(), e.datasetId(), e.projectId())))
+                    .defaultIfEmpty(Optional.empty())
+                    .onErrorResume(NotFoundException.class, ex -> Mono.just(Optional.empty()));
+        }
+
+        return experimentService.getWriteContextById(experiment.id())
                 .map(Optional::of)
+                .defaultIfEmpty(Optional.empty())
                 .onErrorResume(NotFoundException.class, ex -> Mono.just(Optional.empty()));
     }
 
@@ -203,14 +229,22 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
      * Derivation only reads existing entities; it never creates an experiment or dataset to obtain a project.
      */
     private Mono<ResolvedProject> resolveBulkProject(Experiment experiment, String projectName,
-            Optional<Experiment> existingExperiment) {
+            Optional<ExperimentWriteContext> existingExperiment) {
 
         if (StringUtils.isNotBlank(projectName)) {
             return Mono.just(new ResolvedProject(projectName, ProjectFallback.NONE));
         }
 
-        if (existingExperiment.isPresent() && StringUtils.isNotBlank(existingExperiment.get().projectName())) {
-            return Mono.just(new ResolvedProject(existingExperiment.get().projectName(), ProjectFallback.NONE));
+        // Only this branch needs the existing experiment's project *name*, so resolve it here
+        // rather than making every batch pay for it.
+        if (existingExperiment.isPresent() && existingExperiment.get().projectId() != null) {
+            return resolveProjectName(existingExperiment.get().projectId())
+                    .filter(StringUtils::isNotBlank)
+                    .map(name -> new ResolvedProject(name, ProjectFallback.NONE))
+                    .switchIfEmpty(Mono.defer(() -> resolveDatasetProjectName(experiment.datasetName())
+                            .map(datasetProjectName -> new ResolvedProject(datasetProjectName, ProjectFallback.DATASET))
+                            .defaultIfEmpty(new ResolvedProject(ProjectService.DEFAULT_PROJECT,
+                                    ProjectFallback.DEFAULT))));
         }
 
         return resolveDatasetProjectName(experiment.datasetName())
@@ -230,15 +264,81 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     }
 
     private Mono<Void> validateExperimentConsistency(Experiment experiment, String projectName,
-            Optional<Experiment> existingExperiment) {
+            Optional<ExperimentWriteContext> existingExperiment) {
 
-        // Validate dataset-name consistency against an existing experiment.
-        if (existingExperiment.isPresent()
-                && !experiment.datasetName().equals(existingExperiment.get().datasetName())) {
-            String errorMessage = "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
-                    .formatted(experiment.id(), existingExperiment.get().datasetName(), experiment.datasetName());
-            return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+        // Dataset consistency is checked on ids, not names: experiments stores dataset_id, and two
+        // datasets cannot share one. A request naming a dataset that does not resolve still
+        // conflicts — an unknown dataset cannot be the one this experiment belongs to.
+        Mono<Void> datasetCheck = existingExperiment
+                .map(existing -> resolveDatasetId(experiment.datasetName(), projectName)
+                        .flatMap(requestDatasetId -> requestDatasetId.isPresent()
+                                && requestDatasetId.get().equals(existing.datasetId())
+                                        ? Mono.<Void>empty()
+                                        : datasetConflict(experiment, existing)))
+                .orElseGet(Mono::empty);
+
+        return datasetCheck.then(Mono.defer(() -> validateProjectConsistency(experiment, projectName,
+                existingExperiment)));
+    }
+
+    /**
+     * Only the conflict path resolves the existing dataset's name, so the message stays what it was.
+     * {@code findById} is blocking, hence boundedElastic; this runs only when a request is already
+     * being rejected, never on the hot path.
+     */
+    private Mono<Void> datasetConflict(Experiment experiment, ExperimentWriteContext existing) {
+        return Mono.deferContextual(ctx -> {
+            // The no-arg findById reads workspace and visibility from the request-scoped context, which
+            // does not survive the boundedElastic hop below — it would throw, and the catch would report
+            // a raw id instead of the name. Take both from the Reactor context, which does propagate,
+            // and pass them explicitly.
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+
+            return Mono.fromCallable(() -> {
+                if (existing.datasetId() == null) {
+                    return String.valueOf((Object) null);
+                }
+                try {
+                    return datasetService.findById(existing.datasetId(), workspaceId, visibility).name();
+                } catch (Exception e) {
+                    // Never let name resolution mask the conflict we are actually reporting — but say so.
+                    // A silent fallback is what let the id leak into a user-facing message unnoticed.
+                    log.warn("Could not resolve name for dataset '{}' while reporting an experiment conflict",
+                            existing.datasetId(), e);
+                    return existing.datasetId().toString();
+                }
+            })
+                    .subscribeOn(Schedulers.boundedElastic());
+        })
+                .flatMap(existingName -> Mono.<Void>error(new ClientErrorException(
+                        "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
+                                .formatted(experiment.id(), existingName, experiment.datasetName()),
+                        Response.Status.CONFLICT)));
+    }
+
+    /** Dataset id for the name the request names, scoped to the request project. */
+    private Mono<Optional<UUID>> resolveDatasetId(String datasetName, String projectName) {
+        return datasetService
+                .resolveDatasetByNameAsync(
+                        DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build())
+                .map(dataset -> Optional.ofNullable(dataset.id()))
+                .defaultIfEmpty(Optional.empty())
+                .onErrorResume(NotFoundException.class, ex -> Mono.just(Optional.empty()));
+    }
+
+    /** Project name for an id, resolved only on the branches that need a name. */
+    private Mono<String> resolveProjectName(UUID projectId) {
+        if (projectId == null) {
+            return Mono.empty();
         }
+        return projectService.getOrFail(projectId)
+                .map(Project::name)
+                .onErrorResume(ex -> Mono.empty());
+    }
+
+    private Mono<Void> validateProjectConsistency(Experiment experiment, String projectName,
+            Optional<ExperimentWriteContext> existingExperiment) {
 
         // Mismatches are only validated when an explicit project_name is provided (backward compatible). When
         // it is omitted, the project is derived best-effort (experiment, else dataset, else default), so a
@@ -251,9 +351,12 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 .flatMap(requestProjectId -> {
                     if (existingExperiment.isPresent()
                             && !Optional.ofNullable(existingExperiment.get().projectId()).equals(requestProjectId)) {
-                        String errorMessage = "Experiment '%s' belongs to project '%s', but request specifies project_name '%s'"
-                                .formatted(experiment.id(), existingExperiment.get().projectName(), projectName);
-                        return Mono.<Void>error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+                        // Resolve the existing project's name only to build this error.
+                        return resolveProjectName(existingExperiment.get().projectId())
+                                .flatMap(existingProjectName -> Mono.<Void>error(new ClientErrorException(
+                                        "Experiment '%s' belongs to project '%s', but request specifies project_name '%s'"
+                                                .formatted(experiment.id(), existingProjectName, projectName),
+                                        Response.Status.CONFLICT)));
                     }
 
                     return resolveDatasetProjectId(experiment.datasetName(), projectName)
