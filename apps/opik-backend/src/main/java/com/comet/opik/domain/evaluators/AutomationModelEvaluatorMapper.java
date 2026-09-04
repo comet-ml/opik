@@ -15,6 +15,7 @@ import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectReader;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
@@ -34,6 +35,17 @@ interface AutomationModelEvaluatorMapper {
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
     Logger log = LoggerFactory.getLogger(AutomationModelEvaluatorMapper.class);
+
+    /**
+     * Reads the stored content as a raw list — raw first, to handle the potential LinkedHashMap issue.
+     * FAIL_ON_TRAILING_TOKENS because the shared mapper does not set it: readValue otherwise stops at
+     * the first complete array and drops the rest, so a prompt that opens with an example array and
+     * continues in prose would keep the example and lose the instruction. ObjectReader is immutable and
+     * thread-safe, so it is built once rather than per message read.
+     */
+    ObjectReader CONTENT_PARTS_READER = JsonUtils.getMapper()
+            .readerFor(JsonUtils.getMapper().getTypeFactory().constructCollectionType(List.class, Object.class))
+            .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     @Mapping(target = "id", expression = "java(model.id())")
     @Mapping(target = "projectId", expression = "java(model.projectId())")
@@ -288,16 +300,7 @@ interface AutomationModelEvaluatorMapper {
 
         List<?> rawList;
         try {
-            // Deserialize as raw list first to handle potential LinkedHashMap issue.
-            // FAIL_ON_TRAILING_TOKENS because the shared mapper does not set it: readValue otherwise
-            // stops at the first complete array and drops the rest, so a prompt that opens with an
-            // example array and continues in prose would keep the example and lose the instruction.
-            rawList = JsonUtils.getMapper()
-                    .readerFor(JsonUtils.getMapper().getTypeFactory().constructCollectionType(
-                            List.class,
-                            Object.class))
-                    .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-                    .readValue(contentString);
+            rawList = CONTENT_PARTS_READER.readValue(contentString);
         } catch (JsonProcessingException e) {
             // Prose that happens to open with '[' — the ordinary case, not a failure.
             return Optional.empty();

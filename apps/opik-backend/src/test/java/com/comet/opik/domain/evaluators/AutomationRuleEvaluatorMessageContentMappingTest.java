@@ -74,6 +74,14 @@ class AutomationRuleEvaluatorMessageContentMappingTest {
      * know is still an array the API accepted. Downgrading it to a string would lose the shape for good:
      * the next save stores what it reads back.
      */
+    /**
+     * Preserved, but not renderable: a part whose type the renderer does not know is skipped, so an array
+     * of nothing but unknown parts builds a UserMessage with no contents, which langchain4j rejects
+     * ("contents cannot be null or empty"). Unchanged from before this fix, and unreachable from the UI —
+     * its types make the discriminator a required literal — but the mapper cannot close it, since knowing
+     * which types render means duplicating the renderer's switch here. The renderer declining to build an
+     * empty message is what actually fixes it.
+     */
     @Test
     void contentArrayWithAnUnknownTypeIsPreserved() {
         var message = MAPPER.map(stored("[{\"type\": \"pdf_url\", \"pdf_url\": {\"url\": \"https://x/a.pdf\"}}]"));
