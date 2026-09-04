@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -64,15 +65,12 @@ class OnlineScoringBaseScorerErrorAggregationTest {
                 .verifyComplete();
     }
 
-    @ParameterizedTest(name = "no failures -> empty ({0})")
-    @MethodSource("emptyCase")
+    @Test
     @DisplayName("No failures reduces to empty, which is the success path rather than an error")
-    void noFailuresReducesToEmpty(String testName, List<Throwable> failures) {
-        StepVerifier.create(Flux.fromIterable(failures).reduce(OnlineScoringBaseScorer::preferRetryable))
+    void noFailuresReducesToEmpty() {
+        // Every thread id succeeded, so the flatMap materialized no Throwable at all. This must stay an
+        // empty Mono rather than becoming an error -- it is the path a fully successful message takes.
+        StepVerifier.create(Flux.<Throwable>empty().reduce(OnlineScoringBaseScorer::preferRetryable))
                 .verifyComplete();
-    }
-
-    private static Stream<Arguments> emptyCase() {
-        return Stream.of(Arguments.of("every thread id succeeded", List.<Throwable>of()));
     }
 }
