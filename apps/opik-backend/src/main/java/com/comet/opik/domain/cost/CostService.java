@@ -72,7 +72,12 @@ public class CostService {
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
-    private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
+    // Both hyphen-separated (2025-12-17) and compact (20251217) date suffixes. Anthropic ships
+    // compact dates on every dated model id (claude-haiku-4-5-20251001), so without the optional
+    // separators a compact-dated name only ever prices when it is present verbatim in the price
+    // table -- any name needing normalization (dot form, an `alias_of` entry, or a release the
+    // daily LiteLLM sync has not picked up yet) silently fell through to a zero cost.
+    private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-?(0[1-9]|1[0-2])-?(0[1-9]|[12]\\d|3[01])$";
     private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .ofEntries(
@@ -277,7 +282,11 @@ public class CostService {
      * This handles cases where providers return dated model names (e.g., "gpt-5.2-2025-12-17")
      * but the pricing database only has the base model name (e.g., "gpt-5.2").
      *
-     * Date patterns recognized: YYYY-MM-DD (e.g., "2025-12-17") at the end of the model name.
+     * Date patterns recognized at the end of the model name: YYYY-MM-DD (e.g., "2025-12-17")
+     * and the compact YYYYMMDD form (e.g., "20251217") that Anthropic uses for every dated
+     * model id. The separators are optional independently, so partially-separated forms are
+     * tolerated too; month and day are still range-checked, so a plain 8-digit build number
+     * such as "-99999999" is left alone.
      *
      * @param modelName The model name
      * @return Lowercase model name with date suffix removed if present, otherwise lowercase original name
