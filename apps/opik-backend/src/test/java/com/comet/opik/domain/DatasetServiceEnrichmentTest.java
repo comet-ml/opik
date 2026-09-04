@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.EventBus;
 import jakarta.inject.Provider;
+import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +36,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -605,8 +607,8 @@ class DatasetServiceEnrichmentTest {
         stubPage(datasetId);
         stubVersioningEnabled();
 
-        var versionLookupDone = new java.util.concurrent.atomic.AtomicBoolean(false);
-        var itemCountSawResolvedVersions = new java.util.concurrent.atomic.AtomicBoolean(false);
+        var versionLookupDone = new AtomicBoolean(false);
+        var itemCountSawResolvedVersions = new AtomicBoolean(false);
 
         when(datasetVersionDAO.findLatestVersionsByDatasetIds(anySet(), any())).thenAnswer(invocation -> {
             versionLookupDone.set(true);
@@ -634,27 +636,30 @@ class DatasetServiceEnrichmentTest {
         stubLatestVersions();
 
         // The item count depends only on the versions, so the query must be issued while the two unrelated
-        // summaries are still in flight. The latch counts down in the Mockito answer -- i.e. when the DAO
-        // method is invoked, which is the point the narrowed id set is computed and handed over, not the
+        // summaries are still in flight. itemCountQueryIssued is set in the Mockito answer -- i.e. when the
+        // DAO method is invoked, which is the point the narrowed id set is computed and handed over, not the
         // later subscription to the returned Flux. That is the property under test: if the count were
-        // chained off the whole zip it would never be requested and the latch would time out.
-        var itemCountQueryIssued = new CountDownLatch(1);
-        var releaseSummaries = new CountDownLatch(1);
+        // chained off the whole zip it would never be requested while the summaries are held.
+        var itemCountQueryIssued = new AtomicBoolean(false);
+        var summariesReleased = new AtomicBoolean(false);
 
+        // Both unrelated summaries park until the assertion below has run. Awaitility owns every wait in this
+        // test -- it enforces the deadline and surfaces a ConditionTimeoutException naming the unmet condition,
+        // rather than leaving a worker blocked on a bare await() if the expectation never holds.
         Flux<ExperimentItemDAO.ExperimentSummary> heldExperiments = Flux.defer(() -> {
-            awaitQuietly(releaseSummaries);
+            awaitReleased(summariesReleased);
             return Flux.<ExperimentItemDAO.ExperimentSummary>empty();
         }).subscribeOn(Schedulers.boundedElastic());
 
         Flux<OptimizationDAO.OptimizationSummary> heldOptimizations = Flux.defer(() -> {
-            awaitQuietly(releaseSummaries);
+            awaitReleased(summariesReleased);
             return Flux.<OptimizationDAO.OptimizationSummary>empty();
         }).subscribeOn(Schedulers.boundedElastic());
 
         when(experimentItemDAO.findExperimentSummaryByDatasetIds(anySet())).thenReturn(heldExperiments);
         when(optimizationDAO.findOptimizationSummaryByDatasetIds(anySet())).thenReturn(heldOptimizations);
         when(datasetItemDAO.findDatasetItemSummaryByDatasetIds(anySet())).thenAnswer(invocation -> {
-            itemCountQueryIssued.countDown();
+            itemCountQueryIssued.set(true);
             return Flux.just(new DatasetItemSummary(datasetId, 6));
         });
 
@@ -662,26 +667,25 @@ class DatasetServiceEnrichmentTest {
                 .supplyAsync(() -> service.find(1, 10, DatasetCriteria.builder().build(), List.of()));
 
         try {
-            assertThat(itemCountQueryIssued.await(SUBSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
-                    .as("the item-count query should be issued while the unrelated summaries are still pending")
-                    .isTrue();
+            Awaitility.await("the item-count query is issued while the unrelated summaries are still pending")
+                    .atMost(SUBSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .pollInterval(50, TimeUnit.MILLISECONDS)
+                    .untilTrue(itemCountQueryIssued);
         } finally {
-            releaseSummaries.countDown();
+            // Always release, so a failed assertion reports the real cause instead of being masked by the
+            // held summaries timing out.
+            summariesReleased.set(true);
         }
 
         var actual = enrichment.get(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         assertThat(itemsCountById(actual.content())).containsExactlyInAnyOrderEntriesOf(Map.of(datasetId, 6L));
     }
 
-    private static void awaitQuietly(CountDownLatch latch) {
-        try {
-            if (!latch.await(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("summaries were never released");
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(e);
-        }
+    private static void awaitReleased(AtomicBoolean released) {
+        Awaitility.await("the held summaries are released")
+                .atMost(WORKER_RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .pollInterval(50, TimeUnit.MILLISECONDS)
+                .untilTrue(released);
     }
 
     private void stubVersioningEnabled() {
