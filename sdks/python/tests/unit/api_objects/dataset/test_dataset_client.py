@@ -5,7 +5,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from opik import config
 from opik.api_objects import constants
+from opik.message_processing.batching import sequence_splitter
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
 
@@ -736,3 +738,361 @@ def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
         "Parallel upload is the default, so the version gate must be probed once "
         "per dataset rather than once per insert"
     )
+
+
+class TestStreamingInsert:
+    """`insert` uploads as it consumes, so a large insert holds batches not items.
+
+    It used to build four full-length structures before the first upload — the
+    dataclasses, the survivors of deduplication, the REST models and the list of
+    batches — and then hand every batch to the pool at once, which kept the whole
+    dataset resident until the last upload finished. These pin the two properties
+    that replaced that: nothing is read further ahead than the batches in flight,
+    and an iterable is enough.
+    """
+
+    def test_generator_input__every_item_uploaded_once(self, monkeypatch):
+        _small_batches(monkeypatch, size=2)
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        dataset.insert(item for item in _make_items(7))
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        sent = sorted(
+            item.data["input"]["i"]
+            for call in create_or_update.call_args_list
+            for item in call.kwargs["items"]
+        )
+        assert sent == list(range(7)), (
+            "A generator must upload the same items a list does"
+        )
+
+    def test_generator_input__consumed_exactly_once(self, monkeypatch):
+        """A second pass would silently double-insert, or read nothing at all."""
+        _small_batches(monkeypatch, size=2)
+        pulls = []
+
+        def counting_source():
+            for item in _make_items(6):
+                pulls.append(item["input"]["i"])
+                yield item
+
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=_mock_rest_client(),
+        )
+
+        dataset.insert(counting_source())
+
+        assert pulls == list(range(6))
+
+    def test_dataclass_items__accepted_from_a_generator(self, monkeypatch):
+        _small_batches(monkeypatch, size=2)
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        dataset.insert(dataset_item.DatasetItem(input={"i": i}) for i in range(3))
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        sent = sorted(
+            item.data["input"]["i"]
+            for call in create_or_update.call_args_list
+            for item in call.kwargs["items"]
+        )
+        assert sent == [0, 1, 2]
+
+    def test_deduplication__still_drops_duplicates_from_a_generator(self, monkeypatch):
+        _small_batches(monkeypatch, size=2)
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+        item = {"input": {"key": "value"}}
+
+        dataset.insert(iter([item, item, item]))
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        sent = [
+            sent_item
+            for call in create_or_update.call_args_list
+            for sent_item in call.kwargs["items"]
+        ]
+        assert len(sent) == 1, "Deduplication must survive being done lazily"
+
+    @pytest.mark.parametrize("num_threads", [1, 4])
+    def test__source_is_read_no_further_ahead_than_the_uploads(
+        self, monkeypatch, num_threads
+    ):
+        """The memory bound, measured as items read but not yet being uploaded.
+
+        Deliberately free of barriers and sleeps: each upload records the size of
+        that gap on arrival, and the gap is what streaming bounds. It cannot grow
+        past the batches in flight plus one item of lookahead, whereas the
+        buffer-everything version this replaced drained all 40 before the first
+        upload started.
+        """
+        batch_size = 2
+        item_count = 40
+        _small_batches(monkeypatch, size=batch_size)
+
+        pulled = 0
+        started = 0
+        peak_gap = 0
+        lock = threading.Lock()
+
+        def counting_source():
+            nonlocal pulled
+            for item in _make_items(item_count):
+                pulled += 1
+                yield item
+
+        def tracked_upload(*args, **kwargs):
+            nonlocal started, peak_gap
+            with lock:
+                started += 1
+                peak_gap = max(peak_gap, pulled - started * batch_size)
+
+        mock_rest_client = _mock_rest_client()
+        mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
+            tracked_upload
+        )
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        dataset.insert(counting_source(), num_threads=num_threads)
+
+        ceiling = num_threads * batch_size + 1
+        assert peak_gap <= ceiling, (
+            f"Read {peak_gap} items beyond the uploads with num_threads="
+            f"{num_threads}, expected at most {ceiling} of {item_count}"
+        )
+        assert pulled == item_count, "Everything must still be uploaded in the end"
+
+    def test_parallel__never_more_batches_in_flight_than_workers(self, monkeypatch):
+        """The other half of the bound: the pool must not queue every batch."""
+        batch_size = 2
+        num_threads = 2
+        _small_batches(monkeypatch, size=batch_size)
+
+        lock = threading.Lock()
+        in_flight = 0
+        peak_in_flight = 0
+
+        def tracked_upload(*args, **kwargs):
+            nonlocal in_flight, peak_in_flight
+            with lock:
+                in_flight += 1
+                peak_in_flight = max(peak_in_flight, in_flight)
+            time.sleep(_SEQUENTIAL_HOLD_SECONDS)
+            with lock:
+                in_flight -= 1
+
+        mock_rest_client = _mock_rest_client()
+        mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
+            tracked_upload
+        )
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        dataset.insert(_make_items(20), num_threads=num_threads)
+
+        assert peak_in_flight <= num_threads, (
+            f"{peak_in_flight} uploads ran at once with num_threads={num_threads}"
+        )
+        assert (
+            mock_rest_client.datasets.create_or_update_dataset_items.call_count == 10
+        ), "20 items / batch size 2 => 10 batches"
+
+    def test_source_raises_mid_stream__earlier_batches_are_persisted(self, monkeypatch):
+        """The cost of streaming, pinned so it is a decision and not a surprise.
+
+        Everything used to be read and converted before the first upload, so a
+        source that failed halfway meant nothing was sent. The failure now
+        reaches the caller with the batches before it already persisted - the
+        same contract `num_threads` documents for a batch that fails. The batch
+        still accumulating when the source fails is lost with it: five items at
+        two per batch upload two batches, and the fifth item never reaches one.
+        """
+        _small_batches(monkeypatch, size=2)
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        def failing_source():
+            yield from _make_items(5)
+            raise RuntimeError("the source could not be read to the end")
+
+        with pytest.raises(RuntimeError, match="could not be read"):
+            dataset.insert(failing_source(), num_threads=1)
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        assert create_or_update.call_count == 2, "The batches before the failure stand"
+        sent = [
+            item.data["input"]["i"]
+            for call in create_or_update.call_args_list
+            for item in call.kwargs["items"]
+        ]
+        assert sent == [0, 1, 2, 3], (
+            "The item still accumulating is lost with the source"
+        )
+
+    def test_source_raises_mid_stream__cached_item_count_is_invalidated(
+        self, monkeypatch
+    ):
+        """A partial insert still changed the dataset, so the count cannot stand.
+
+        The invalidation used to sit after the upload call, which a failure
+        skipped — leaving `items_count` reporting the number from before an
+        insert that had in fact added items.
+        """
+        _small_batches(monkeypatch, size=2)
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+        dataset._dataset_items_count = 7
+
+        def failing_source():
+            yield from _make_items(5)
+            raise RuntimeError("the source could not be read to the end")
+
+        with pytest.raises(RuntimeError):
+            dataset.insert(failing_source(), num_threads=1)
+
+        assert dataset._dataset_items_count is None, (
+            "A partially applied insert must not leave a stale cached count"
+        )
+
+    def test_many_items_from_a_generator__batched_at_the_real_count_cap(self):
+        """Volume, against the real cap rather than a shrunken one.
+
+        Every other test here narrows `DATASET_ITEMS_MAX_BATCH_SIZE` to 2 to make
+        batching observable, which means none of them would notice the streaming
+        splitter mis-handling the boundary at its actual value. This runs enough
+        items through a one-shot generator to fill two whole batches and leave a
+        partial one, on the default worker count, and checks that what arrives is
+        exactly what went in.
+        """
+        cap = constants.DATASET_ITEMS_MAX_BATCH_SIZE
+        item_count = cap * 2 + cap // 2
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        dataset.insert(item for item in _make_items(item_count))
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        batch_sizes = [
+            len(call.kwargs["items"]) for call in create_or_update.call_args_list
+        ]
+        assert batch_sizes == [cap, cap, cap // 2], (
+            "Two full batches then the remainder, at the real cap"
+        )
+        assert all(size <= cap for size in batch_sizes)
+
+        sent = sorted(
+            item.data["input"]["i"]
+            for call in create_or_update.call_args_list
+            for item in call.kwargs["items"]
+        )
+        assert sent == list(range(item_count)), (
+            "Every item exactly once: nothing dropped at a batch boundary, "
+            "nothing sent twice by the pool"
+        )
+        assert (
+            len(
+                {
+                    item.id
+                    for call in create_or_update.call_args_list
+                    for item in call.kwargs["items"]
+                }
+            )
+            == item_count
+        )
+
+        # One batch_group_id, so the whole stream is a single dataset version
+        # however many batches it took.
+        assert (
+            len(
+                {
+                    call.kwargs["batch_group_id"]
+                    for call in create_or_update.call_args_list
+                }
+            )
+            == 1
+        )
+
+    def test_large_items_from_a_generator__split_by_payload_size(self):
+        """The size cap has to bite mid-stream, before the count cap does.
+
+        The splitter accumulates an estimate as it reads rather than measuring a
+        finished list, so this is the rule most at risk from streaming: items are
+        sized so that a batch fills on bytes long before it fills on count, and
+        no batch may exceed the limit the uploads are built around.
+        """
+        item_size_bytes = 100 * 1024
+        item_count = 120  # ~12MB, so several batches at the 5MB cap
+        payload = "x" * item_size_bytes
+        mock_rest_client = _mock_rest_client()
+        dataset = Dataset(
+            name="test_dataset",
+            description="Test description",
+            project_name="Test project",
+            rest_client=mock_rest_client,
+        )
+
+        def large_item_source():
+            for i in range(item_count):
+                yield {"input": {"i": i, "filler": payload}}
+
+        dataset.insert(large_item_source(), num_threads=1, deduplication=False)
+
+        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+        batches = [call.kwargs["items"] for call in create_or_update.call_args_list]
+
+        assert len(batches) > 1, "12MB of items cannot arrive as one batch"
+        for batch in batches:
+            assert len(batch) < constants.DATASET_ITEMS_MAX_BATCH_SIZE, (
+                "The count cap must not be what split these"
+            )
+            assert (
+                sequence_splitter.get_payload_size_MB(batch) <= config.MAX_BATCH_SIZE_MB
+            ), "A batch was built larger than the uploads allow"
+
+        sent = sorted(item.data["input"]["i"] for batch in batches for item in batch)
+        assert sent == list(range(item_count))

@@ -7,12 +7,13 @@ from concurrent import futures
 from typing import (
     Optional,
     Any,
+    Iterable,
     List,
     Dict,
-    Sequence,
     Set,
     TYPE_CHECKING,
     Iterator,
+    Union,
 )
 
 from opik.api_objects import rest_helpers
@@ -836,7 +837,7 @@ class Dataset(DatasetExportOperations):
 
     def _send_batches(
         self,
-        batches: List[List[rest_dataset_item.DatasetItemWrite]],
+        batches: Iterable[List[rest_dataset_item.DatasetItemWrite]],
         batch_group_id: str,
         num_threads: int,
     ) -> None:
@@ -849,36 +850,73 @@ class Dataset(DatasetExportOperations):
         pool; the first batch that fails re-raises to the caller. There is no
         rollback, so batches that already succeeded before the failure remain
         persisted.
+
+        ``batches`` is consumed lazily, and at most ``num_threads`` of them exist
+        at any moment. Submitting every batch up front - which is what this used
+        to do - pulled the whole iterable into the pool's queue, so the entire
+        dataset stayed resident until the last upload finished, however small the
+        individual batches were.
         """
         if num_threads <= 1:
             for batch in batches:
                 self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
             return
 
+        batch_iterator = iter(batches)
+
         with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
-            submitted = [
-                pool.submit(
-                    self._insert_batch_with_retry,
-                    batch,
-                    batch_group_id=batch_group_id,
+            in_flight: Set[futures.Future] = set()
+
+            while True:
+                if len(in_flight) >= num_threads:
+                    # Waiting *before* pulling is what bounds memory to the
+                    # worker count rather than the worker count plus one: it also
+                    # paces the producer, which only ever runs as far ahead as
+                    # the uploads drain.
+                    done, in_flight = futures.wait(
+                        in_flight, return_when=futures.FIRST_COMPLETED
+                    )
+                    for future in done:
+                        future.result()
+
+                try:
+                    batch = next(batch_iterator)
+                except StopIteration:
+                    break
+
+                in_flight.add(
+                    pool.submit(
+                        self._insert_batch_with_retry,
+                        batch,
+                        batch_group_id=batch_group_id,
+                    )
                 )
-                for batch in batches
-            ]
-            for future in futures.as_completed(submitted):
+
+            for future in futures.as_completed(in_flight):
                 future.result()
 
     def _deduplicate(
-        self, items: List[dataset_item.DatasetItem]
-    ) -> List[dataset_item.DatasetItem]:
-        """Drop items whose content hash was already seen locally or on the backend."""
-        # Lazy-sync against the backend the first time we insert into a
-        # dataset that was fetched from the backend (list or get-by-name
-        # factory), so content-hash dedup still works without paying an
-        # N+1 sync at list time.
-        if not self._hashes_synced:
-            self.__internal_api__sync_hashes__()
+        self, items: Iterable[dataset_item.DatasetItem]
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """Yield the items whose content hash was not already seen.
 
-        deduplicated_items: List[dataset_item.DatasetItem] = []
+        A generator so an insert never holds the surviving items as a second
+        list: each one is passed straight through to conversion and upload. The
+        backend hash sync happens in the caller rather than here, because a
+        generator body would not run until the first item was pulled.
+
+        Note that `self._hashes` and `self._id_to_hash` still grow with the
+        number of items inserted and outlive the call - streaming bounds what an
+        insert holds *in transit*, not the dedup cache itself. `deduplication=False`
+        is what avoids that cost.
+
+        The cache is also not transactional: an item is recorded here before its
+        batch is known to have been accepted, so a batch that fails leaves its
+        items looking inserted to the next deduplicated insert. That predates
+        streaming - deduplication used to run to completion before the first
+        upload, so the hashes landed before any batch either way - and closing it
+        needs the backend's answer to drive the cache.
+        """
         for item in items:
             item_hash = item.content_hash()
 
@@ -889,15 +927,13 @@ class Dataset(DatasetExportOperations):
                 )
                 continue
 
-            deduplicated_items.append(item)
             self._hashes.add(item_hash)
             self._id_to_hash[item.id] = item_hash
-
-        return deduplicated_items
+            yield item
 
     def __internal_api__insert_items_as_dataclasses__(
         self,
-        items: List[dataset_item.DatasetItem],
+        items: Iterable[dataset_item.DatasetItem],
         num_threads: int = 1,
         deduplication: bool = True,
     ) -> None:
@@ -920,7 +956,15 @@ class Dataset(DatasetExportOperations):
         if num_threads > 1 and not self._parallel_insert_supported:
             num_threads = 1
 
+        items_to_send: Iterable[dataset_item.DatasetItem]
         if deduplication:
+            # Lazy-sync against the backend the first time we insert into a
+            # dataset that was fetched from the backend (list or get-by-name
+            # factory), so content-hash dedup still works without paying an
+            # N+1 sync at list time. Eagerly, before the first item is pulled:
+            # inside the generator it would happen mid-upload.
+            if not self._hashes_synced:
+                self.__internal_api__sync_hashes__()
             items_to_send = self._deduplicate(items)
         else:
             # Nothing was hashed, so the local cache no longer describes the
@@ -928,9 +972,12 @@ class Dataset(DatasetExportOperations):
             items_to_send = items
             self._hashes_synced = False
 
-        rest_items = [self._convert_to_rest_item(item) for item in items_to_send]
+        # Generator, not a list: conversion happens one item ahead of the batch
+        # being filled, so the REST models for the whole insert are never all
+        # alive at once.
+        rest_items = (self._convert_to_rest_item(item) for item in items_to_send)
 
-        batches = sequence_splitter.split_into_batches(
+        batches = sequence_splitter.stream_into_batches(
             rest_items,
             max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
             max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
@@ -938,14 +985,18 @@ class Dataset(DatasetExportOperations):
 
         batch_group_id = id_helpers.generate_id()
 
-        self._send_batches(batches, batch_group_id, num_threads)
-
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
+        try:
+            self._send_batches(batches, batch_group_id, num_threads)
+        finally:
+            # In a `finally` because a partial insert still changed the dataset:
+            # a source that fails halfway, or a batch that fails after earlier
+            # ones landed, leaves items on the backend that a stale cached count
+            # would not include.
+            self._dataset_items_count = None
 
     def insert(
         self,
-        items: Sequence[Dict[str, Any]],
+        items: Iterable[Union[Dict[str, Any], dataset_item.DatasetItem]],
         num_threads: int = 4,
         deduplication: bool = True,
     ) -> None:
@@ -953,8 +1004,14 @@ class Dataset(DatasetExportOperations):
         Insert new items into the dataset. A new dataset version will be created.
 
         Args:
-            items: List of dicts (which will be converted to dataset items)
-                to add to the dataset.
+            items: Dicts (which will be converted to dataset items) to add to the
+                dataset. Any iterable will do, including a generator that reads
+                from a file or a database cursor: items are consumed, converted
+                and uploaded in batches as they arrive, so a large insert holds
+                one batch per worker rather than the whole sequence. Consumed
+                exactly once. An item that cannot be converted raises when it is
+                reached, by which point the batches before it are already
+                persisted.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -980,10 +1037,10 @@ class Dataset(DatasetExportOperations):
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
 
-        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
+        dataset_items = (
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
-        ]
+        )
         self.__internal_api__insert_items_as_dataclasses__(
             dataset_items, num_threads=num_threads, deduplication=deduplication
         )
