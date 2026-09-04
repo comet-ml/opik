@@ -102,6 +102,25 @@ describe("detectOpenInferenceFormat", () => {
     ).toBe(false);
   });
 
+  it("does not treat canonical configuration fields as raw messages", () => {
+    expect(
+      detectOpenInferenceFormat(
+        {
+          invocation_parameters: { temperature: 0.2 },
+          prompt_template: {
+            template: "Answer {{question}}",
+            variables: { question: "Why?" },
+          },
+        },
+        {
+          fieldType: "input",
+          formatHint: "openinference",
+          formatHintIsAuthoritative: true,
+        },
+      ),
+    ).toBe(false);
+  });
+
   it.each([
     { "openinference.span.kind": "LLM" },
     { "llm.finish_reason": "stop" },

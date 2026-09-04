@@ -1,3 +1,5 @@
+import { isBackendAttachmentPlaceholder } from "@/lib/images";
+
 export const OPENINFERENCE_SPAN_KIND = "openinference.span.kind";
 
 export type OpenInferenceFieldType = "input" | "output";
@@ -52,6 +54,7 @@ export const isSafeOpenInferenceMediaUrl = (
   url: string,
   type: "image" | "audio",
 ): boolean => {
+  if (isBackendAttachmentPlaceholder(url)) return true;
   const placeholderMatch = MEDIA_PLACEHOLDER_RE.exec(url);
   if (placeholderMatch?.[1] === type) return true;
   const dataUriMatch = MEDIA_DATA_URI_RE.exec(url);
@@ -95,6 +98,8 @@ const STRUCTURED_OPENINFERENCE_KEYS = new Set([
   "prompts",
   "choices",
   "tools",
+  "invocation_parameters",
+  "prompt_template",
   "finish_reason",
   "function_call",
   "mime_type",
@@ -455,7 +460,7 @@ const parseCanonicalMessage = (
       .filter((item): item is OpenInferenceToolCall => Boolean(item));
     if (toolCalls.length > 0) message.tool_calls = toolCalls;
   }
-  if (hasOwn(value, "function_call")) {
+  if (value.function_call != null) {
     message.function_call = value.function_call;
   }
   return Object.keys(message).length > 0 ? message : undefined;
@@ -548,6 +553,26 @@ const dedupe = <T>(values: T[]): T[] => {
   });
 };
 
+// Match each legacy occurrence at most once against the canonical representation.
+// Identical turns within one conversation are still separate messages.
+const mergeRepresentations = <T>(canonical: T[], legacy: T[]): T[] => {
+  const remaining = new Map<string | undefined, number>();
+  canonical.forEach((value) => {
+    const fingerprint = JSON.stringify(value);
+    remaining.set(fingerprint, (remaining.get(fingerprint) ?? 0) + 1);
+  });
+  return [
+    ...canonical,
+    ...legacy.filter((value) => {
+      const fingerprint = JSON.stringify(value);
+      const count = remaining.get(fingerprint) ?? 0;
+      if (count === 0) return true;
+      remaining.set(fingerprint, count - 1);
+      return false;
+    }),
+  ];
+};
+
 export const hasLegacyOpenInferenceAttributes = (data: unknown): boolean => {
   if (!isRecord(data)) return false;
   return Object.keys(data).some(
@@ -624,14 +649,14 @@ export const parseOpenInferenceFields = (
 
   const inputRecord = isRecord(input) ? input : undefined;
   const outputRecord = isRecord(output) ? output : undefined;
-  const prompts = dedupe([
-    ...extractTexts(input, "prompts"),
-    ...sortedValues(legacy.prompts),
-  ]);
-  const choices = dedupe([
-    ...extractTexts(output, "choices"),
-    ...sortedValues(legacy.choices),
-  ]);
+  const prompts = mergeRepresentations(
+    extractTexts(input, "prompts"),
+    sortedValues(legacy.prompts),
+  );
+  const choices = mergeRepresentations(
+    extractTexts(output, "choices"),
+    sortedValues(legacy.choices),
+  );
   const canonicalTools =
     inputRecord && Array.isArray(inputRecord.tools) ? inputRecord.tools : [];
   const tools = dedupe([...canonicalTools, ...sortedValues(legacy.tools)]);
@@ -642,11 +667,14 @@ export const parseOpenInferenceFields = (
     (outputRecord && outputRecord.function_call) ?? legacy.functionCall;
 
   return {
-    inputMessages: dedupe([...canonicalInputMessages, ...legacyInputMessages]),
-    outputMessages: dedupe([
-      ...canonicalOutputMessages,
-      ...legacyOutputMessages,
-    ]),
+    inputMessages: mergeRepresentations(
+      canonicalInputMessages,
+      legacyInputMessages,
+    ),
+    outputMessages: mergeRepresentations(
+      canonicalOutputMessages,
+      legacyOutputMessages,
+    ),
     prompts,
     choices,
     tools,
@@ -742,18 +770,13 @@ export const extractOpenInferencePrettyText = (
   data: unknown,
   fieldType: OpenInferenceFieldType,
 ): string | undefined => {
-  const hasRoleBasedMessages =
-    isRecord(data) &&
-    Array.isArray(data.messages) &&
-    data.messages.some(
-      (message) => isRecord(message) && typeof message.role === "string",
-    );
+  const hasMessages = parseCanonicalMessages(data).some(hasRenderableMessage);
   const hasCompletionData =
     isRecord(data) &&
     (extractTexts(data, "prompts").length > 0 ||
       extractTexts(data, "choices").length > 0);
   if (
-    !hasRoleBasedMessages &&
+    !hasMessages &&
     !hasCompletionData &&
     !hasLegacyOpenInferenceAttributes(data)
   ) {
