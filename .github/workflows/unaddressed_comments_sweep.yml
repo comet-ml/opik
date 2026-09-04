@@ -1,0 +1,116 @@
+name: 💬 Unaddressed Comments Sweep
+
+# GitHub emits no webhook when a reviewer clicks "Resolve conversation", so
+# unaddressed_comments_labeler.yml cannot see the one action that most often
+# clears the label. Without this sweep a PR whose threads were all resolved keeps
+# its label until an unrelated push or comment happens to retrigger the labeler —
+# and a label that lingers after the work is done is exactly how the signal loses
+# credibility.
+#
+# scout-feedback.yml is the in-repo precedent: a poller that exists purely
+# because the underlying action (reactions there, resolve here) emits no event.
+
+on:
+  schedule:
+    - cron: '17 * * * *' # hourly, off the hour to avoid the top-of-hour runner rush
+  workflow_dispatch:
+    inputs:
+      window_hours:
+        description: How many hours back to look for updated PRs (0 = every open PR)
+        required: false
+        default: '24'
+        type: string
+
+# Don't let a slow sweep overlap the next one and double-write labels.
+concurrency:
+  group: unaddressed-comments-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Recompute unaddressed-comment labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Sweep open PRs
+        uses: actions/github-script@v9
+        env:
+          # Default chosen from measured repo shape: ~131 open PRs but only ~32
+          # touched in any 24h window, so the window cuts the sweep's cost by ~4x.
+          # Resolving a conversation bumps the PR's updatedAt, so a PR that needs
+          # relabeling is inside the window by construction.
+          WINDOW_HOURS: ${{ inputs.window_hours || '24' }}
+        with:
+          script: |
+            const lib = require('./.github/scripts/unaddressed-review-comments.js');
+            const { owner, repo } = context.repo;
+
+            const windowHours = Number(process.env.WINDOW_HOURS);
+            if (!Number.isFinite(windowHours) || windowHours < 0) {
+              core.setFailed(`Invalid window_hours: ${process.env.WINDOW_HOURS}`);
+              return;
+            }
+            const cutoff = windowHours === 0 ? null : new Date(Date.now() - windowHours * 3600_000);
+
+            await lib.ensureLabels({ github, core, owner, repo });
+
+            // Sorted by update recency so the window check can stop at the first
+            // PR older than the cutoff instead of paging through all open PRs.
+            const iterator = github.paginate.iterator(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100,
+            });
+
+            let scanned = 0;
+            let labeled = 0;
+            const failures = [];
+
+            outer:
+            for await (const { data: prs } of iterator) {
+              for (const pr of prs) {
+                if (cutoff && new Date(pr.updated_at) < cutoff) break outer;
+                scanned += 1;
+                try {
+                  const applied = await lib.labelPullRequest({
+                    github,
+                    core,
+                    owner,
+                    repo,
+                    number: pr.number,
+                  });
+                  if (applied.length > 0) labeled += 1;
+                } catch (err) {
+                  // One unreadable PR must not abort the sweep for the rest.
+                  failures.push(`#${pr.number}: ${err.message}`);
+                  core.warning(`PR #${pr.number}: ${err.message}`);
+                }
+              }
+            }
+
+            core.info(
+              `Swept ${scanned} PR(s) updated within ${windowHours || '∞'}h; ${labeled} carry an unaddressed-comment label.`
+            );
+
+            // Surface partial failures without failing the run: a sweep that
+            // half-worked is still better than none, and a red scheduled job
+            // nobody owns becomes background noise.
+            if (failures.length > 0) {
+              core.warning(`${failures.length} PR(s) could not be processed:\n${failures.join('\n')}`);
+            }

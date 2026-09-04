@@ -1,0 +1,74 @@
+name: 💬 Label Unaddressed Review Comments
+
+# Projects GitHub's review-thread state onto PR labels, so "this PR still has
+# review feedback nobody answered" is visible from the PR list and the merge box
+# instead of only from inside the Files tab.
+#
+# Deliberately a separate workflow from labeler.yml rather than a third job in
+# it. labeler.yml runs actions/labeler with sync-labels, which rewrites an
+# authoritative label set on every run; adding review events to that workflow
+# would re-trigger that sweep on every review comment for no benefit. Keeping
+# this separate also means the two never contend: actions/labeler manages the
+# path labels, this workflow manages only its own two, and neither writes the
+# other's.
+
+on:
+  # pull_request_target (not pull_request) so the job holds pull-requests: write
+  # on fork PRs — a pull_request run gets a read-only token there and cannot
+  # apply labels. Roughly half of this repo's open PRs come from forks, so this
+  # is the majority path, not an edge case.
+  #
+  # Safe despite the trigger: the checkout below pins the base repo's ref and
+  # pulls only .github/scripts, and github-script operates purely through the
+  # GitHub API on PR metadata (numbers, logins, labels). No PR-controlled code is
+  # fetched or executed. See the dangerous-triggers audit rationale:
+  # https://docs.zizmor.sh/audits/#dangerous-triggers
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened, synchronize, ready_for_review]
+  # A reply to a review comment lands as pull_request_review_comment.created —
+  # that is the event that clears the label as soon as someone engages, without
+  # waiting for the scheduled sweep.
+  pull_request_review:
+    types: [submitted, dismissed]
+  pull_request_review_comment:
+    types: [created, deleted]
+
+# Keyed on the PR so a burst of review comments collapses into one run per PR
+# instead of racing several label writes against each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Compute unaddressed-comment labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      # Only here so github-script can require() the shared script. Pins the base
+      # repo's SHA explicitly rather than relying on the default ref, and takes
+      # just .github/scripts — the PR's head is never fetched.
+      - name: Checkout base repo scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Apply labels
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const lib = require('./.github/scripts/unaddressed-review-comments.js');
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+
+            await lib.ensureLabels({ github, core, owner, repo });
+            await lib.labelPullRequest({ github, core, owner, repo, number });
