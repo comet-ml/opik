@@ -20,9 +20,17 @@
 -- matter because we never compare a stored hash against a later build. Summed 64-bit hashes miss a real difference with
 -- probability ~2^-64 per window. Materialized/derived columns and is_deleted are excluded — recomputed, not migrated.
 --
--- ../verify.sh is the single driver: it reads this file and runs the `compare` block once per created_at week (optionally
--- sampled), parsing the single verdict row; with --drill-down it runs the `drill-down` block for a week that reported
--- ok=0. Run QA through verify.sh, never this file by hand.
+-- The window bounds pin 'UTC' because they are derived from a UTC calendar date (verify.sh anchors on
+-- toMonday(min(created_at)), and created_at is DateTime64(n, 'UTC')), and because 000001 copies the week under the same
+-- UTC bounds. Unpinned they would shift with the server timezone on both sides at once -- self-consistent, so no
+-- mismatch appears, while the first and last windows silently stop covering what the backfill actually copied.
+--
+-- ../verify.sh is the single driver: it reads this file and runs the blocks below, never this file by hand. Which block,
+-- and when:
+--   * `compare`       once per created_at week (optionally sampled), parsing the single verdict row;
+--   * `confirm-keys`  on a week that reported ok=0, to separate a real difference from a superseded-version artifact;
+--   * `version-ties`  when confirm-keys returned 0, since that verdict is only sound where no version is tied;
+--   * `drill-down`    with --drill-down, on any week that reported ok=0, whatever the two blocks above concluded.
 --
 -- OLD_TABLE is the old-schema table (Nullable, nanosecond) and NEW_TABLE the new-schema one (sentinels, microsecond).
 -- Before the EXCHANGE: OLD_TABLE=traces, NEW_TABLE=traces_local_v2 (the successor being built). After it, `traces` is
@@ -60,8 +68,8 @@ WITH
                 toString(source),
                 toString(environment))) AS h
         FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
-        WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
-          AND created_at <  toDateTime64('${WINDOW_HI}', 9)
+        WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+          AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
           AND cityHash64(id) % ${SAMPLE_MOD} = 0
     ),
     dst AS (
@@ -92,8 +100,8 @@ WITH
                 toString(source),
                 toString(environment))) AS h
         FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
-        WHERE created_at >= toDateTime64('${WINDOW_LO}', 6)
-          AND created_at <  toDateTime64('${WINDOW_HI}', 6)
+        WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+          AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
           AND cityHash64(id) % ${SAMPLE_MOD} = 0
     )
 SELECT
@@ -144,8 +152,8 @@ FROM (
             toString(source),
             toString(environment)) AS src_hash
     FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
-    WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
-      AND created_at <  toDateTime64('${WINDOW_HI}', 9)
+    WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+      AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
       AND cityHash64(id) % ${SAMPLE_MOD} = 0
 ) AS s
 FULL OUTER JOIN (
@@ -176,8 +184,8 @@ FULL OUTER JOIN (
             toString(source),
             toString(environment)) AS dst_hash
     FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
-    WHERE created_at >= toDateTime64('${WINDOW_LO}', 6)
-      AND created_at <  toDateTime64('${WINDOW_HI}', 6)
+    WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+      AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
       AND cityHash64(id) % ${SAMPLE_MOD} = 0
 ) AS d USING (key)
 WHERE src_hash != dst_hash
@@ -201,25 +209,25 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- once, far enough apart to land in different created_at weeks, can trigger it; trace ids are
 -- client-supplied, so a re-sent id is ordinary rather than exotic.
 --
--- LIMITATION, which bounds the argument that follows: this cannot resolve a VERSION TIE. last_updated_at is the
--- ReplacingMergeTree version column, so when two or more rows for a key carry the same value there is nothing left to
--- rank them by: FINAL picks arbitrarily, and the two tables' part layouts differ, so each side may or may not land on
--- the same row. Arbitrary cuts BOTH ways, and the second is the
--- dangerous one:
+-- LIMITATION: this cannot resolve a VERSION TIE, so a 0 here is conclusive only where none exists. last_updated_at is
+-- the ReplacingMergeTree version column, so when two or more rows for a key carry the same value there is nothing left
+-- to rank them by: FINAL picks arbitrarily, and the two tables' part layouts differ, so each side may or may not land
+-- on the same row. Arbitrary cuts BOTH ways, and the second is the dangerous one:
 --   * the picks differ -> the key is reported in genuinely_differing_keys even where both tables hold the same data;
 --   * the picks coincide -> the key is confirmed as matching even if one side is MISSING a version, which is a real
---     copy gap. A 0 from this block is therefore not conclusive while ties exist, and neither is an
---     "OK -- superseded-version artifact" verdict built on it.
--- Deciding a tied key needs each side's full version SET, which this query does not read. The runbook's triage section
--- carries the check; do not infer the shape from row counts here, which this block does not output.
+--     copy gap, reading as a pass.
+-- The `version-ties` block below answers whether that applies to this window, and the driver runs it exactly where the
+-- question arises -- when this block returns 0. Deciding a tied key still needs each side's full version SET, which
+-- neither block reads; the runbook's triage section carries that read.
 --
 -- Why this re-check is trustworthy WHERE VERSIONS DIFFER. It filters ONLY on (workspace_id, project_id, id) -- the sorting key,
 -- which IS the dedup key. That predicate cannot hide a version from FINAL: every part contributes the
 -- granules holding the key, so FINAL always sees all versions of it and returns the true winner. The
 -- window bounds are used only to pick the candidate keys, never to decide the verdict.
 --
--- 0  = every differing key has identical live rows on both sides -> superseded-version artifact, not a
---      data difference (the live row is still compared, and must match, in the week its winner lands in).
+-- 0  = every differing key has identical live rows on both sides -> a superseded-version artifact rather than a data
+--      difference (the live row is still compared, and must match, in the week its winner lands in) -- PROVIDED the
+--      `version-ties` block reports none, which is what the driver checks next.
 -- >0 = that many keys genuinely differ -> real fidelity failure.
 WITH
     diff_keys AS (
@@ -252,8 +260,8 @@ WITH
             toString(source),
             toString(environment)) AS src_hash
             FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
-            WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
-              AND created_at <  toDateTime64('${WINDOW_HI}', 9)
+            WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+              AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
               AND cityHash64(id) % ${SAMPLE_MOD} = 0
         ) AS s
         FULL OUTER JOIN (
@@ -284,8 +292,8 @@ WITH
             toString(source),
             toString(environment)) AS dst_hash
             FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
-            WHERE created_at >= toDateTime64('${WINDOW_LO}', 6)
-              AND created_at <  toDateTime64('${WINDOW_HI}', 6)
+            WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+              AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
               AND cityHash64(id) % ${SAMPLE_MOD} = 0
         ) AS d USING (key)
         WHERE src_hash != dst_hash OR src_hash IS NULL OR dst_hash IS NULL
@@ -361,3 +369,138 @@ WHERE src_hash != dst_hash
    OR dst_hash IS NULL
 SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- >>> END confirm-keys
+
+-- >>> BEGIN version-ties
+-- For a window `confirm-keys` reported as 0: is that 0 decidable? Returns one row, src_version_ties dst_version_ties --
+-- per side, the number of candidate keys whose newest last_updated_at is carried by MORE THAN ONE DISTINCT ROW. Both
+-- being 0 means every candidate had a forced winner, so the artifact verdict stands; non-zero means FINAL chose between rows
+-- that actually differ, and ../verify.sh reports the window INCONCLUSIVE instead of passing it.
+--
+-- DISTINCT CONTENT, not row count, and that distinction is load-bearing. The cutover itself puts several physical rows
+-- at one version on the destination: 000002's delta re-copies every row written during the backfill window, and for a
+-- row that was not modified in between the copy carries the IDENTICAL last_updated_at. Those duplicates collapse only
+-- when a merge runs, and verify.sh runs before the EXCHANGE, on the recent partitions where they are least likely to
+-- have merged. Counting physical rows would therefore report a tie on a faithful copy and fail the gate on the normal
+-- path. FINAL picking either of two byte-identical rows changes no verdict, so only differing content counts here.
+--
+-- The fingerprint is the same normalization `compare` uses, so "differ" means differ in the sense the gate cares about:
+-- sentinel and precision differences between the two schemas are not differences.
+--
+-- TWO LIMITS, both deliberate, and neither is a guarantee this block makes.
+--
+-- It reads THIS WINDOW's rows, while confirm-keys picks candidates from the window and then ranks each key's versions
+-- wherever they landed. So a tie whose differing rows sit in different created_at weeks is not detected here. Following
+-- confirm-keys exactly would mean reading every version of every candidate key with no time predicate -- an unpruned
+-- read per artifact window, and artifact windows are the common outcome rather than the rare one. Reusing its diff_keys
+-- CTE instead is not available: ClickHouse inlines rather than materializes it, and an aggregate over it does not plan.
+-- The window scope is therefore a cost decision, and the residual gap is stated rather than papered over.
+--
+-- Its candidates are every key in the window, not only those that differed, so within the window the counts are an
+-- upper bound: a tie on a key that did not differ can still make a window undecidable.
+--
+-- SCOPE OF THE GUARANTEE, which is narrower than it looks. This runs only where `compare` returned ok=0 and
+-- `confirm-keys` returned 0. The direction this block calls dangerous -- the picks coincide and a key is confirmed as
+-- matching while one side is missing a version -- can also produce ok=1 directly, and such a window never reaches here.
+-- So a plain PASSED does not carry a tie guarantee; only an "OK -- superseded-version artifact" verdict does. Covering
+-- ok=1 windows would mean this read on every window, which is why it is not done by default.
+--
+-- NO FINAL. The question is how many distinct contents share the newest version, which is what FINAL would have to
+-- choose between; under FINAL they collapse to one and every count reads 0. Lightweight deletes are still excluded, as
+-- they are under FINAL, because apply_deleted_mask applies without it. is_deleted tombstones are NOT: that column is
+-- honored only under FINAL, so a tombstoned key's rows are still counted on the destination, and the source table has
+-- no such column at all. Today the only delete path is the lightweight DELETE in 000002, so the two sides agree.
+WITH
+    src_ties AS (
+            SELECT count() AS n
+            FROM (
+                SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                FROM (
+                    SELECT
+                        (workspace_id, project_id, id) AS key,
+                        last_updated_at AS version,
+                        uniqExact(cityHash64(
+                            id,
+                            workspace_id,
+                            toString(project_id),
+                            name,
+                            toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
+                            coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
+                            input,
+                            output,
+                            metadata,
+                            arrayStringConcat(tags, '\x1f'),
+                            toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
+                            toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
+                            created_by,
+                            last_updated_by,
+                            error_info,
+                            thread_id,
+                            toString(visibility_mode),
+                            truncation_threshold,
+                            input_slim,
+                            output_slim,
+                            if(ttft IS NULL, 'nan', toString(ttft)),
+                            toString(source),
+                            toString(environment))) AS distinct_at_version
+                    FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+                    WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+                      AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
+                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                    GROUP BY key, version
+                )
+                GROUP BY key
+            )
+            WHERE distinct_at_newest > 1
+    ),
+    dst_ties AS (
+            SELECT count() AS n
+            FROM (
+                SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                FROM (
+                    SELECT
+                        (workspace_id, project_id, id) AS key,
+                        last_updated_at AS version,
+                        uniqExact(cityHash64(
+                            id,
+                            workspace_id,
+                            toString(project_id),
+                            name,
+                            toUnixTimestamp64Micro(start_time),
+                            toUnixTimestamp64Micro(end_time),
+                            input,
+                            output,
+                            metadata,
+                            arrayStringConcat(tags, '\x1f'),
+                            toUnixTimestamp64Micro(created_at),
+                            toUnixTimestamp64Micro(last_updated_at),
+                            created_by,
+                            last_updated_by,
+                            error_info,
+                            thread_id,
+                            toString(visibility_mode),
+                            truncation_threshold,
+                            input_slim,
+                            output_slim,
+                            if(isNaN(ttft), 'nan', toString(ttft)),
+                            toString(source),
+                            toString(environment))) AS distinct_at_version
+                    FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
+                    WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+                      AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
+                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                    GROUP BY key, version
+                )
+                GROUP BY key
+            )
+            WHERE distinct_at_newest > 1
+    )
+SELECT
+    src_ties.n AS src_version_ties,
+    dst_ties.n AS dst_version_ties
+FROM src_ties, dst_ties
+-- Neither setting is a query-level cap. max_rows_to_read = 0 removes any row limit a settings profile imposes: this
+-- read is not truncatable -- it either covers the window's physical versions or throws -- and a throw would fail a gate
+-- that could otherwise answer. max_bytes_before_external_group_by lets the GROUP BY spill to disk rather than hit the
+-- memory limit. What actually bounds the read is the window predicate above, which prunes partitions.
+SETTINGS max_rows_to_read = 0, max_bytes_before_external_group_by = 4000000000;
+-- >>> END version-ties

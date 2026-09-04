@@ -21,7 +21,13 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
+#                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
+#                             than total query time — so a step that goes quiet while the server works trips it while
+#                             healthy. Trade-off and shared rationale: ../README.md.
 #   --backfill-start TS        the anchor printed by backfill.sh ("RECORD backfill_start=..."). Required.
+#                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
+#                             UTC, so without it the zone it was captured in is unknown.
 #   --max-insert-block-size N  SETTINGS max_insert_block_size for the delta INSERT. Default 1048576.
 #   --max-partitions-per-insert-block N
 #                             partitions one insert block of the delta INSERT may span (SETTINGS
@@ -48,6 +54,7 @@ SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sql"
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
+RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total query time. See --receive-timeout.
 BACKFILL_START=""
 MAX_INSERT_BLOCK_SIZE=1048576
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions per block for the delta INSERT; see the option docs above. 0 = unlimited.
@@ -63,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -72,7 +80,34 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+
+# One place for the connection and client-side options, so every call site below carries the same host, port,
+# database, log_comment and receive_timeout, and cannot drift from the others.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+# No --log_comment here: this driver issues one call, and both statements in 000002 set their own log_comment in
+# SETTINGS. A per-query value overrides the session one, so a tag added here would never reach query_log.
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
 [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start is required (printed by backfill.sh)" >&2; exit 2; }
+# Strip the ' UTC' marker the flag is required to carry (see its option doc). For these bounds a wrong zone is worse
+# than a wrong shape: the statements parse the anchor as UTC, so one captured elsewhere shifts silently, and a LATER
+# value drops rows from the delta and the replay rather than failing.
+case "$BACKFILL_START" in
+    *" UTC")
+        BACKFILL_START="${BACKFILL_START% UTC}"
+        # A bare marker strips to empty, which elsewhere means "not supplied" — two meanings for one value, and
+        # the later "required" diagnostic would point away from the actual mistake.
+        [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start has no timestamp before the ' UTC' marker." >&2; exit 2; }
+        ;;
+    *)
+        echo "ERROR: --backfill-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
+        echo "       --backfill-start '<YYYY-MM-DD HH:MM:SS[.ffffff]> UTC'" >&2
+        echo "       The value is parsed as UTC; without the marker the zone it was captured in is unknown." >&2
+        exit 2
+        ;;
+esac
 [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 [[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
 # 0 is meaningful (ClickHouse reads it as "unlimited"), so allow it — unlike the bound above. Upper-bounded at 6 digits:
@@ -185,7 +220,7 @@ fi
 # --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
 # the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.
 echo "Statement wall times (seconds, in order: delta-insert, deletion-replay):"
-clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --time --multiquery --query "$sql"
+clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 
 echo "Delta + deletion replay complete. RECORD the deletion-replay wall time above (the second value) — the"
 echo "final-delta -> EXCHANGE gap must fit inside the buffer hold. Run verify.sh before the EXCHANGE."

@@ -68,8 +68,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 5. **`databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled = true`** deployed and live before the backfill
    begins, and kept on for the entire backfill→EXCHANGE window. On docker-compose set
    `ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED=true` (the backend service forwards it) and restart the
-   backend. `backfill.sh` captures the `backfill_start` anchor (a `now64(6)` taken just before the first INSERT) and
-   prints it — the delta and the replay both key off it.
+   backend. `backfill.sh` captures the `backfill_start` anchor (a `now64(6, 'UTC')` taken just before the first INSERT)
+   and prints it — the delta and the replay both key off it.
 6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
    `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
    `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
@@ -132,11 +132,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     WHERE source_table = 'traces' AND project_id = '';
     ```
     If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
-14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, with `--backfill-start` set to
-    `now()`.** Both statements execute but match nothing (no row has `created_at`/`last_updated_at` in the future, and
-    the bridge holds no events after that instant), so it is a functional no-op against the data — while still proving
-    the migration user can actually perform every kind of statement the cutover needs. Do this on a least-privilege user
-    and you catch grant gaps in seconds instead of mid-window.
+14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, anchored at the current instant.** The
+    driver takes a literal timestamp carrying the ` UTC` marker, so read the clock first and pass what it printed:
+    `SELECT toString(now64(6, 'UTC'))`, then `--backfill-start '<that value> UTC'`. Both statements execute but match
+    nothing (no row has `created_at`/`last_updated_at` in the future, and the bridge holds no events after that instant),
+    so it is a functional no-op against the data — while still proving the migration user can actually perform every kind
+    of statement the cutover needs. Do this on a least-privilege user and you catch grant gaps in seconds instead of
+    mid-window.
     > This is not hypothetical. On the first real-cluster run the deletion replay failed with
     > `Code: 497 … necessary to have the grant ALTER UPDATE(_row_exists)`: ClickHouse implements a lightweight `DELETE`
     > as `ALTER UPDATE _row_exists = 0`, so it authorises it as **`ALTER UPDATE` on that hidden column, not
@@ -176,7 +178,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    deletion replay second) — **record the second value**: the final-delta→EXCHANGE gap must fit inside the buffer hold
    (Go/No-Go). Without `--time` a bare `--query` prints no timing at all.
    ```bash
-   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts>'
+   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
 3. **QA — run [`scripts/verify.sh`](scripts/verify.sh)** (see "Verifying the migration"): confirm the copy altered no
    data before committing the swap. Run it after step 2 (and it can be re-run after step 4).
@@ -191,7 +193,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    `--with-wrap`. Restore the buffer ceiling and verify.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
-       --backfill-start '<anchor from backfill.sh>' --confirm-buffer-raised --confirm-retention-paused
+       --backfill-start '<anchor from backfill.sh> UTC' --confirm-buffer-raised --confirm-retention-paused
    ```
    Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay), `--confirm-buffer-raised` (writes in
    the final window survive the swap), and `--confirm-retention-paused` (retention deletes bypass the bridge, so a
@@ -420,7 +422,7 @@ and the `EXCHANGE` completing must stay within the buffer hold**. So run the tai
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step.
-4. Run `exchange_and_wrap.sh --backfill-start '<anchor>' …` **immediately** after it (the settle gate + `EXCHANGE` are
+4. Run `exchange_and_wrap.sh --backfill-start '<anchor> UTC' …` **immediately** after it (the settle gate + `EXCHANGE` are
    fast and metadata-only). It captures `cutover_start`, then runs a **final deletion replay** from `backfill_start`
    right before the swap — so deletes bridged in the `[final delta_replay, cutover_start)` gap are masked on the
    successor rather than leaking (that gap is covered by neither the earlier forward replay nor the rollback
@@ -850,6 +852,37 @@ Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOU
 > `readonly = 2` for a read-only assessor (it permits `SET` but no writes), and a non-readonly profile for the migration
 > user. This is worth checking before the window: an ops account that can happily run ad-hoc `SELECT`s may still fail
 > every driver on the first query.
+>
+> **Every driver takes `--receive-timeout` (default 1800s).** ClickHouse's own `receive_timeout` is 300s and bounds the
+> **gap between packets**, not total query time — so a long statement does not trip it on its own, but a step that goes
+> quiet while the server works does, and the client then gives up on a healthy statement. That is why the default is
+> raised across the board rather than per driver. The cost of a generous value is that a genuinely dead connection takes
+> that long to surface; for resumable, idempotent steps that is the better trade.
+
+### Timezones: every window bound pins `'UTC'`
+
+The `traces` timestamp columns are `DateTime64(n, 'UTC')`, but a literal written without a timezone is parsed in the
+**server** timezone — so on a non-UTC server the same statement means something different. Every window bound in the
+reference SQL therefore pins `'UTC'`, and where a bound is a value a driver captured, **the capture pins it too**:
+`backfill.sh` mints `backfill_start` with `now64(6, 'UTC')` and `000002` reads it back as `'UTC'`; `exchange_and_wrap.sh`
+does the same for `cutover_start`.
+
+The epoch sentinel the projection writes for an absent `end_time` is the one literal left unpinned, deliberately. It is
+read back by the destination table's own `DEFAULT` and `duration` expression and by every `end_time` comparison in the
+application, all of which are unpinned; a sentinel that disagrees with its readers is worse than one that is uniformly
+offset. Correcting it means moving the schema and the application together, which is not this runbook's change to make.
+
+Both halves have to agree. Pinning only the literal reinterprets a server-local wall clock as UTC and moves the anchor
+by the server's offset — and a *later* anchor silently drops the rows written in the gap, which the delta and the
+deletion replay both miss because they share that bound.
+
+Because that failure is silent, the persisted anchor carries the claim rather than relying on it: `backfill.sh` writes
+`--state-file` with an explicit ` UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
+attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
+rejected with the two ways out — re-record it with the marker if it is known to have been taken on a UTC server, or
+restart the copy cleanly. The same reasoning is why both drivers print their anchors labelled `UTC`: the value an
+operator pastes into `--backfill-start` or `--cutover-start` says which zone it is in — and those flags **require** the
+marker, so the guard cannot be bypassed by supplying the anchor by hand.
 
 ### Required privileges (provision these before the window)
 
@@ -1017,11 +1050,11 @@ Pick the stage by how far the cutover got:
   **"Untouched" is about rows, not values:** the flag was rolled out before the `EXCHANGE`, so traces written during
   that window carry sentinels and a negative `duration` in the live table, and stage A does not address them. Abandoning
   the cutover therefore still needs the sentinel repair below; retrying it does not, since the retry's copy heals them.
-- **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'
+- **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts> UTC'
   --confirm-retention-paused --accept-post-cutover-write-loss`. `EXCHANGE` `traces_pre_cutover_backup` back to live
   `traces`, park the now-displaced successor as `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts
   if `traces` is `Distributed` — use C.)
-- **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts>'
+- **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts> UTC'
   --confirm-retention-paused --accept-post-cutover-write-loss`. Drops the `Distributed` wrapper, then one atomic
   `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor as
   `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
@@ -1049,7 +1082,15 @@ Pick the stage by how far the cutover got:
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
   table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
-  a multi-shard cluster and must be run once per shard. Separate from the stages by necessity, not
+  a multi-shard cluster and must be run once per shard. It also refuses when the shard count is **unreadable** — the
+  postcondition reads `clusterAllReplicas('{cluster}', …)` and needs the same `system.macros` the count does, so a
+  session that cannot read one cannot verify with the other, and proceeding would risk a whole-table rewrite that can
+  never be certified. The primary fix is to grant `SELECT ON system.clusters` and `system.macros`. Where that is
+  genuinely unavailable and the topology is known, `--confirm-single-shard` unblocks the shard-count guard **only** —
+  the postcondition needs the same macro, so it still cannot be evaluated, the driver reports the repair as unverified
+  and exits non-zero, and the exit-checklist item below ("printed `Sentinel postcondition OK` and exited zero") cannot
+  be ticked from such a run. It does **not** override a count that came back greater than 1, and it is accepted only
+  with `--sentinel-repair-only`, `--reverse-replay-only` and stages B and C. Separate from the stages by necessity, not
   preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
   the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
   behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the
@@ -1158,7 +1199,7 @@ through the replay, not merely across the rename. A failure *between* the two ne
 - **Reverse-replay interrupted (stage B or C).** The promote already restored the original, so `traces` is back in the
   canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
   post-cutover deletes unreplayed and let them resurrect. Re-apply just the replay:
-  `./scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<ts>' --confirm-retention-paused`. It runs
+  `./scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<ts> UTC' --confirm-retention-paused`. It runs
   only `000004_rollback_reverse_replay.sql` and is idempotent (safe to run once or repeatedly). It refuses unless `traces`
   is the restored original (Nullable schema) with the successor parked as `traces_post_rollback_backup`, so it cannot be
   aimed at the live successor (post-EXCHANGE, pre-rollback), where the guard-less replay would mask live rows.
@@ -1310,8 +1351,8 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: trace-delete
    partition pruning carries no flag, so the retry's `EXCHANGE` needs no pruning step in either direction — see
    "Trace-delete partition pruning needs no flip at all".
-5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
-   every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
+5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor, marker included (the
+   shadow still holds every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
    data "was already verified once".
 
@@ -1440,10 +1481,19 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
 
-> **A version tie can make this gate mismatch, and can also make it pass.** If a key carries two or more rows with an
-> identical `last_updated_at`, `FINAL` has no winner and the comparison for that key is arbitrary in both directions. It
-> is not rollback-specific despite where it is written up: see "a version tie" under *Verifying after a rollback* for the
-> shape and the confirming read, ignoring that section's `cutover_start` test, which has no meaning before the `EXCHANGE`.
+> **A version tie makes a window undecidable, and the gate says so rather than guessing.** Where a key's newest
+> `last_updated_at` is carried by more than one **distinct** row, `FINAL` has no winner and the comparison for that key
+> is arbitrary in both directions. Where the re-check would otherwise call the window an artifact, `verify.sh` counts
+> those keys per side with the `version-ties` block and reports the window **INCONCLUSIVE**, exiting non-zero: not a
+> mismatch, and explicitly not a pass.
+>
+> Distinct content, not row count, is what makes this usable before the `EXCHANGE`: the delta re-copies every row the
+> backfill already wrote, and an unmodified row keeps its `last_updated_at`, so the successor legitimately holds several
+> identical rows at one version until a merge collapses them. Counting rows would report every healthy window as
+> undecidable. `FINAL` choosing between byte-identical rows changes no verdict, so only differing content counts.
+>
+> Resolving a real tie is still manual — see "a version tie" under *Verifying after a rollback* for the version-set
+> read, ignoring that section's `cutover_start` test, which has no meaning before the `EXCHANGE`.
 >
 > **Detach it, and expect tens of minutes.** The bounded compare walks one window per week over both
 > tables. On a large table that is minutes per window on the busy weeks and well over half an hour in
@@ -1515,21 +1565,27 @@ from the successor *entirely* is the real signal — that is a copy gap, and it 
 often this bites tracks how much pre-existing data the workload rewrites; for many it is none, which is why the weekly
 bound is still worth passing.
 
-**A third shape, which the confirm-keys re-check cannot resolve: a version tie.** This one is not rollback-specific — it
+**A third shape, which is detected but not resolved: a version tie.** This one is not rollback-specific — it
 can hit the pre-`EXCHANGE` gate too (see "Verifying the migration"), where the `cutover_start` test below does not apply.
 
-Its premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while versions differ.
-`last_updated_at` is the `ReplacingMergeTree` version column, so when two or more rows for a key carry the **same**
-value there is nothing left to rank them by: `FINAL` picks arbitrarily, and because the two tables' part layouts differ,
-each side may or may not land on the same row. **Arbitrary cuts both ways, and the second direction is the dangerous one:**
+The re-check's premise — that filtering on the sorting key lets `FINAL` return the true winner — holds only while
+versions differ. `last_updated_at` is the `ReplacingMergeTree` version column, so when two or more rows for a key carry
+the **same** value there is nothing left to rank them by: `FINAL` picks arbitrarily, and because the two tables' part
+layouts differ, each side may or may not land on the same row. **Arbitrary cuts both ways, and the second direction is
+the dangerous one:**
 
 - the picks differ, and the key is reported in `genuinely_differing_keys` even though both tables hold the same data;
 - the picks coincide, and the key is confirmed as matching **even if one side is missing a version** — a real copy gap.
-  So a `0` from the re-check, and any `OK — superseded-version artifact` verdict built on it, is not conclusive while
-  ties exist.
 
-`--drill-down` cannot show a tie: it reads one `FINAL` row per key and stops at 100. Confirm one by reading the key's
-versions from both tables without `FINAL` — a read-only diagnostic, not a procedure step:
+So a `0` from the re-check is conclusive only where no tie exists. `verify.sh` therefore asks exactly there: on a `0` it
+runs the `version-ties` block, which counts per side how many keys in the window have a **non-unique newest
+`last_updated_at`**, prints them as `version_ties=src:N/dst:N`, and reports the window **INCONCLUSIVE** (exit non-zero)
+rather than as an artifact if either is non-zero. The counts are an upper bound — they cover the whole window, not only
+the differing keys — which errs toward refusing to certify.
+
+Deciding such a window is still manual, and `--drill-down` will not do it: it reads one `FINAL` row per key, so it shows
+the arbitrary pick rather than the tie. Read the key's versions from both tables without `FINAL` — a read-only
+diagnostic, not a procedure step:
 
 ```sql
 SELECT 'src' AS side, created_at, last_updated_at, _part FROM <old-table> WHERE (workspace_id, project_id, id) = (…)
@@ -1564,9 +1620,10 @@ infeasible, sample and still get high confidence:
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
   `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 
-`verify.sh` exits non-zero if any window mismatches and prints the window bounds; re-run with `--drill-down` to list the
-keys that differ or exist on one side only (it runs the `drill-down` block of `000005_verify_migration.sql` for each
-mismatched window).
+`verify.sh` exits non-zero if any window **mismatches or is INCONCLUSIVE**, and prints the window bounds either way;
+re-run with `--drill-down` to list the keys that differ or exist on one side only (it runs the `drill-down` block of
+`000005_verify_migration.sql` for every differing window, artifact and inconclusive verdicts included — those are the
+ones most often worth reading).
 
 ## Verification — the automated test
 

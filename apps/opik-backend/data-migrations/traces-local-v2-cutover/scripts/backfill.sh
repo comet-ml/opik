@@ -35,6 +35,10 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
+#                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
+#                             than total query time — so a step that goes quiet while the server works trips it while
+#                             healthy. Trade-off and shared rationale: ../README.md.
 #   --dry-run                 print the window plan and per-window source counts; do not INSERT.
 #   --from-week N             start at week offset N (0-based from the anchor Monday). Default 0.
 #   --to-week M               stop after week offset M (inclusive). Default: last week with data.
@@ -147,7 +151,9 @@
 #                             source's. The whole-node --min-free-factor check cannot see per-volume headroom, and new
 #                             parts land on the hot volume before they tier; this asserts the operator validated hot
 #                             headroom out of band. (No effect on a single-volume/default policy.)
-#   --state-file PATH         file the captured backfill_start is written to and reused from. On resume the ORIGINAL
+#   --state-file PATH         file the captured backfill_start is written to and reused from, stored with an explicit
+#                             ' UTC' marker and only accepted with it — step 2 parses the anchor as UTC, so one captured
+#                             in another zone would shift it silently. On resume the ORIGINAL
 #                             anchor is kept; re-minting a later one would miss deletes that fired during the first run
 #                             against already-copied rows. Default ./traces_cutover_backfill_start — note this is
 #                             CWD-RELATIVE, so resuming from a different directory would not find it; pass an absolute
@@ -167,6 +173,7 @@ DST_TABLE="traces_local_v2"
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
+RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total query time. See --receive-timeout.
 DRY_RUN=0
 FROM_WEEK=0
 TO_WEEK=""
@@ -211,6 +218,7 @@ while [[ $# -gt 0 ]]; do
         --state-file) STATE_FILE="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -220,6 +228,14 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+
+# One place for the connection and client-side options, so every call site below carries the same host, port,
+# database, log_comment and receive_timeout, and cannot drift from the others.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comment 'traces_local_v2_cutover:backfill')
 # --state-file is an operator-owned path read with cat and written with > (both quoted); reject a blank or multi-line
 # value so the single-line anchor round-trips cleanly.
 [[ -n "$STATE_FILE" && "$STATE_FILE" != *$'\n'* ]] || { echo "ERROR: --state-file must be a non-empty single-line path." >&2; exit 2; }
@@ -308,7 +324,7 @@ mit_require_one_assignment "$(cat "$BACKFILL_SQL")" "$BACKFILL_SQL" || exit 2
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:backfill' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --query "$1"
 }
 
 log() {
@@ -430,7 +446,7 @@ run_backfill_window() {
         exit 2
     fi
     # <<< END max_insert_threads rendering
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Insert one window whose physical row count is already within the per-statement bound. Reconciliation is dedup-aware
@@ -533,37 +549,77 @@ preflight_capacity
 # first INSERT so it covers every write during the (long) backfill, and persisted to --state-file so a resumed run
 # reuses the ORIGINAL anchor. Re-minting a later anchor on resume would miss deletes that fired during the first run
 # against already-copied rows. The operator MUST record it (also saved to the state file).
-if [[ "$DRY_RUN" != "1" ]]; then
-    if [[ -s "$STATE_FILE" ]]; then
-        BACKFILL_START="$(cat "$STATE_FILE")"
-        # Validate the resumed content: the state file is operator-owned, so a corrupted or wrong file would otherwise
-        # feed a garbage anchor forward to step 2. Fail fast unless it is a well-formed timestamp.
-        [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff]')." >&2; exit 1; }
-        log "REUSING backfill_start=$BACKFILL_START from $STATE_FILE (resume: original anchor kept)"
-    else
-        # Refuse to mint a FRESH anchor onto a destination that already holds rows. That combination is contradictory:
-        # a genuine first run starts from an empty successor (migration 000101/000114 creates it empty; a stage-A
-        # rollback truncates it back to empty), so a non-empty destination means this is a RESUME whose original anchor
-        # has been lost — most often because --state-file defaults to a CWD-relative path and the resume ran from a
-        # different directory. Minting a later anchor there is silent data loss: deletes that fired between the real
-        # anchor and this one, against rows the earlier run already copied, are seen by neither the delta (bounded by
-        # the anchor) nor the deletion replay (same bound), so they leak live across the EXCHANGE. The pre-EXCHANGE
-        # verify.sh would flag it, but only as a late, hard-to-attribute mismatch after the copy has been redone.
-        DST_ROWS_AT_ANCHOR="$(ch "SELECT count() FROM $DST_TABLE")"
-        if [[ "$DST_ROWS_AT_ANCHOR" != "0" ]]; then
-            log "ABORT: no anchor in '$STATE_FILE', but $DST_TABLE already holds $DST_ROWS_AT_ANCHOR row(s) — this is a RESUME whose" >&2
-            log "       original backfill_start was lost, and minting a fresh (later) anchor would make the delta and the" >&2
-            log "       deletion replay blind to deletes in the gap, leaking them across the EXCHANGE. Recover the original" >&2
-            log "       anchor, then either point --state-file at the file holding it or write it back:" >&2
-            log "         printf '%s' '<original backfill_start>' > '$STATE_FILE'" >&2
-            log "       If it is unrecoverable, restart the copy cleanly instead (discards the partial shadow):" >&2
-            log "         ./rollback.sh --database $DATABASE --stage A" >&2
-            exit 1
-        fi
-        BACKFILL_START="$(ch "SELECT toString(now64(6))")"
-        printf '%s' "$BACKFILL_START" > "$STATE_FILE"
-        log "RECORD backfill_start=$BACKFILL_START  (saved to $STATE_FILE; pass this to step 2: 000002_delta_and_deletion_replay.sql)"
+# The state file is READ and validated whenever it exists, dry run or not: keeping the guard behind DRY_RUN would let a
+# full rehearsal pass while the real run aborts on the same file. Only minting and persisting need a real run.
+if [[ -e "$STATE_FILE" ]]; then
+    BACKFILL_START="$(cat "$STATE_FILE")"
+    # An existing but EMPTY file is not "no anchor", and must not be read as one. The write below is a truncating
+    # redirect, so a run killed between opening the file and writing to it leaves exactly this state. Treating it as
+    # absent puts the two modes out of step on identical input -- a real run reaches the mint branch and its
+    # destination-not-empty guard, while a dry run reaches neither and prints a plan for an anchor it never had.
+    if [[ -z "$BACKFILL_START" ]]; then
+        echo "ERROR: $STATE_FILE exists but is empty, so it holds no anchor to resume from. A run interrupted while" >&2
+        echo "       persisting the anchor leaves this. If $DST_TABLE is still EMPTY nothing was copied against the" >&2
+        echo "       lost anchor: delete $STATE_FILE and a fresh one is minted. If it is NOT empty, recover the" >&2
+        echo "       original anchor and write it back, marker included:" >&2
+        echo "         printf '%s UTC' '<original backfill_start>' > '$STATE_FILE'" >&2
+        echo "       or restart the copy cleanly, which discards the partial shadow:" >&2
+        echo "         ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --stage A" >&2
+        exit 1
     fi
+    # The anchor is stored with an explicit ' UTC' marker and is only accepted with it. The marker is not
+    # decoration: step 2 parses this value AS UTC, so a value captured in some other zone silently shifts the
+    # anchor, and a LATER anchor drops the writes and deletes in the gap from both the delta and the replay.
+    # A file without the marker cannot be attributed to a timezone, so it is refused rather than reinterpreted.
+    case "$BACKFILL_START" in
+        *" UTC")
+            BACKFILL_START="${BACKFILL_START% UTC}"
+            ;;
+        *)
+            echo "ERROR: $STATE_FILE holds an anchor with no ' UTC' marker, so the timezone it was captured in" >&2
+            echo "       cannot be established. Step 2 reads it as UTC; if it was captured server-local on a" >&2
+            echo "       non-UTC server, the anchor moves by that offset and the delta and deletion replay both" >&2
+            echo "       miss the rows written in the gap." >&2
+            echo "       If you can confirm it was taken on a UTC server, re-record it explicitly:" >&2
+            echo "         printf '%s UTC' '<anchor>' > '$STATE_FILE'" >&2
+            echo "       If $DST_TABLE is still EMPTY this is a first run and no anchor is owed: delete" >&2
+            echo "       $STATE_FILE and a fresh one is minted. Otherwise restart the copy cleanly, which" >&2
+            echo "       discards the partial shadow:" >&2
+            echo "         ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --stage A" >&2
+            exit 1
+            ;;
+    esac
+    # Shape check, after the marker: the file is operator-owned, so a corrupted value would otherwise feed a
+    # garbage anchor forward to step 2.
+    [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff] UTC')." >&2; exit 1; }
+    # Logged WITH the marker: this is the only place a resumed run shows the anchor, and it is the value the operator
+    # pastes into step 2 and step 3, both of which refuse it without one.
+    log "REUSING backfill_start=$BACKFILL_START UTC from $STATE_FILE (resume: original anchor kept)"
+elif [[ "$DRY_RUN" != "1" ]]; then
+    # Refuse to mint a FRESH anchor onto a destination that already holds rows. That combination is contradictory:
+    # a genuine first run starts from an empty successor (migration 000101/000114 creates it empty; a stage-A
+    # rollback truncates it back to empty), so a non-empty destination means this is a RESUME whose original anchor
+    # has been lost — most often because --state-file defaults to a CWD-relative path and the resume ran from a
+    # different directory. Minting a later anchor there is silent data loss: deletes that fired between the real
+    # anchor and this one, against rows the earlier run already copied, are seen by neither the delta (bounded by
+    # the anchor) nor the deletion replay (same bound), so they leak live across the EXCHANGE. The pre-EXCHANGE
+    # verify.sh would flag it, but only as a late, hard-to-attribute mismatch after the copy has been redone.
+    DST_ROWS_AT_ANCHOR="$(ch "SELECT count() FROM $DST_TABLE")"
+    if [[ "$DST_ROWS_AT_ANCHOR" != "0" ]]; then
+        log "ABORT: no anchor in '$STATE_FILE', but $DST_TABLE already holds $DST_ROWS_AT_ANCHOR row(s) — this is a RESUME whose" >&2
+        log "       original backfill_start was lost, and minting a fresh (later) anchor would make the delta and the" >&2
+        log "       deletion replay blind to deletes in the gap, leaking them across the EXCHANGE. Recover the original" >&2
+        log "       anchor, then either point --state-file at the file holding it or write it back:" >&2
+        log "         printf '%s UTC' '<original backfill_start>' > '$STATE_FILE'" >&2
+        log "       If it is unrecoverable, restart the copy cleanly instead (discards the partial shadow):" >&2
+        log "         ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --stage A" >&2
+        exit 1
+    fi
+    # Captured in UTC because step 2 parses it as UTC (see 000002). Both halves must agree: read back in another
+    # timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
+    BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
+    printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE"
+    log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this, marker included, to step 2: 000002_delta_and_deletion_replay.sql)"
 fi
 
 # The anchor is the Monday of the earliest row; the horizon is the Monday after the latest row. All week boundaries are

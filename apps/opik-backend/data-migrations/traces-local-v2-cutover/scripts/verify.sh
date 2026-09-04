@@ -5,8 +5,11 @@
 # Compares the migrated data on the old-schema and new-schema tables, week by week (created_at), using a NORMALIZED
 # fingerprint so sentinel/precision differences (end_time NULL<->epoch, ttft NULL<->NaN, ns<->us) do not count as
 # changes. For each week it reads one (row count, checksum) verdict per side; a mismatch means that week's live, deduped
-# content differs. With --drill-down, a mismatched week is followed by a per-key listing of the rows that differ. Exits
-# non-zero if any window mismatched.
+# content differs. A differing window is then re-checked on the sorting key, which yields one of four verdicts: a real
+# MISMATCH; an OK superseded-version artifact; INCONCLUSIVE, where a version tie left FINAL free to pick between rows
+# that differ; or UNCERTIFIABLE, where that tie check could not be read at all. With --drill-down, any differing window
+# is followed by a per-key listing. Exits non-zero if any window mismatched OR could not be certified: a gate that
+# cannot decide must not pass.
 #
 # The compare and drill-down SQL are NOT duplicated here: both are read from db-app-analytics/000005_verify_migration.sql
 # (the single source, and the exact normalization the gate test asserts). See README "Verifying the migration".
@@ -50,7 +53,9 @@
 #                       'last-sealed' stops before the current calendar week: a convenience when the compare runs in the
 #                       same week as whatever it means to exclude, otherwise pass the offset explicitly.
 #   --weeks-stride S    compare every S-th week (S>1 samples partitions for a quick pass). Default 1.
-#   --drill-down        on a mismatched week, also print up to 100 keys that differ or exist on one side only.
+#   --drill-down        on any week the compare reported as differing, print up to 100 keys that differ or exist on one
+#                       side only. Not limited to a MISMATCH: the artifact and INCONCLUSIVE verdicts are reached from the
+#                       same differing-key set, and those are the ones an operator most often needs to see.
 
 set -euo pipefail
 
@@ -144,9 +149,17 @@ drill_down_window() {
 
 # Count of keys in one window that GENUINELY differ, re-checked on the sorting key so FINAL cannot hide a
 # version (see the confirm-keys block for why a created_at window can surface a superseded row on one side
-# only). 0 means the window's difference is a superseded-version artifact, not a data difference.
+# only). 0 means the window's difference is a superseded-version artifact, not a data difference — provided no
+# key's newest version is tied, which version_ties_window answers next.
 confirm_keys_window() {
     clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block confirm-keys "$1" "$2")"
+}
+
+# Per side, how many keys in one window carry MORE THAN ONE DISTINCT ROW at their newest last_updated_at — i.e. where
+# FINAL had to choose between rows that differ. Run ONLY when confirm-keys returned 0, because that is the only verdict
+# whose soundness depends on it; see the version-ties block for why it is a separate statement and an upper bound.
+version_ties_window() {
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block version-ties "$1" "$2")"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"
@@ -197,6 +210,8 @@ log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEE
 
 mismatches=0
 artifacts=0
+inconclusive=0
+uncertifiable=0
 checked=0
 for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
     LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
@@ -211,6 +226,7 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
     if [[ "$ok" == "1" ]]; then
         log "week $week ($LO .. $HI): OK (rows=$src_rows)"
     else
+        week_certified=0   # set only by the artifact verdict, which differs but passes; gates the drill-down nudge
         # A window difference is not yet a fidelity failure: windowing on created_at under FINAL can surface a
         # SUPERSEDED version on one side only. Re-check the differing keys on the sorting key, where FINAL
         # always sees every version, and let that decide. Plain assignment so set -e catches an infra blip
@@ -221,24 +237,60 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
             unresolved=-1
         }
         if [[ "$unresolved" == "0" ]]; then
-            artifacts=$((artifacts + 1))
-            log "week $week ($LO .. $HI): OK — superseded-version artifact (src_rows=$src_rows dst_rows=$dst_rows); every differing key's live row is identical on both sides"
+            # The artifact reading holds only where FINAL had a forced winner for every key. Ask now, where it decides
+            # the verdict, rather than on every differing window.
+            ties_out="$(version_ties_window "$LO" "$HI")"
+            read -r src_ties dst_ties <<< "$ties_out"
+            # Output that is not two counts cannot certify the window, but it is not a tie either: encoding it as one
+            # would print a tie diagnosis, and a triage procedure, for what is a client or infrastructure failure.
+            if ! [[ "$src_ties" =~ ^[0-9]+$ && "$dst_ties" =~ ^[0-9]+$ ]]; then
+                uncertifiable=$((uncertifiable + 1))
+                log "UNCERTIFIABLE week $week ($LO .. $HI): version-ties returned '$ties_out', expected two counts." >&2
+                log "  The window differs and its re-check found nothing genuinely differing, but whether that verdict is" >&2
+                log "  decidable could not be established. This is a read failure, not a version tie." >&2
+            elif (( src_ties == 0 && dst_ties == 0 )); then
+                artifacts=$((artifacts + 1))
+                week_certified=1
+                log "week $week ($LO .. $HI): OK — superseded-version artifact (src_rows=$src_rows dst_rows=$dst_rows); every differing key's live row is identical on both sides, and no key's newest version is tied"
+            else
+                inconclusive=$((inconclusive + 1))
+                log "INCONCLUSIVE week $week ($LO .. $HI): src_rows=$src_rows dst_rows=$dst_rows version_ties=src:$src_ties/dst:$dst_ties" >&2
+                log "  Every differing key's live row matched, but this window holds keys whose newest last_updated_at is" >&2
+                log "  carried by MORE THAN ONE DISTINCT ROW, so FINAL chose between rows that actually differ and may have" >&2
+                log "  landed on the same one on both sides by luck — including where one side is missing a version." >&2
+                log "  NOT certified either way." >&2
+            fi
         else
             mismatches=$((mismatches + 1))
             log "MISMATCH week $week ($LO .. $HI): src_rows=$src_rows dst_rows=$dst_rows src_checksum=$src_checksum dst_checksum=$dst_checksum genuinely_differing_keys=$unresolved" >&2
-            if [[ "$DRILL_DOWN" == "1" ]]; then
-                log "  differing keys (key, src_hash, dst_hash; NULL = missing on that side):" >&2
-                drill_down_window "$LO" "$HI" >&2
-            else
-                log "  re-run with --drill-down to list the differing keys for this window" >&2
-            fi
+            log "  A version tie can also produce this: where a key's newest last_updated_at is carried by more than one" >&2
+            log "  DISTINCT row, FINAL may pick a different one per side, the part layouts differing. See the runbook's triage." >&2
+        fi
+        if [[ "$DRILL_DOWN" == "1" ]]; then
+            log "  differing keys (key, src_hash, dst_hash; NULL = missing on that side):" >&2
+            # Non-fatal on purpose: the verdict for this window is already decided above, and since --drill-down now
+            # runs on artifact windows too, an unguarded failure here under set -e would abort a run that was passing.
+            drill_down_window "$LO" "$HI" >&2 || log "  drill-down failed for week $week; the verdict above stands" >&2
+        elif (( week_certified == 0 )); then
+            # Only suggested where there is something to investigate. An artifact window differs but passes, so nudging
+            # an operator to drill into it would read as an unresolved problem on a clean run.
+            log "  re-run with --drill-down to list the differing keys for this window" >&2
         fi
     fi
 done
 
-# Fidelity mismatch is the hard failure (exit 1).
-if [[ "$mismatches" != "0" ]]; then
-    log "FAILED: $mismatches of $checked windows mismatched." >&2
+# Fidelity mismatch is the hard failure, and so is a window the re-check could not decide (both exit 1).
+if (( mismatches != 0 || inconclusive != 0 || uncertifiable != 0 )); then
+    (( mismatches == 0 )) || log "FAILED: $mismatches of $checked windows mismatched." >&2
+    if (( uncertifiable != 0 )); then
+        log "FAILED: $uncertifiable of $checked windows could not be read to completion — the tie check did not return" >&2
+        log "        counts, so those windows are neither certified nor shown to differ. Re-run them." >&2
+    fi
+    if (( inconclusive != 0 )); then
+        log "FAILED: $inconclusive of $checked windows could not be certified — a version tie left FINAL's choice" >&2
+        log "        arbitrary on at least one side, so the re-check's 'no genuine difference' cannot be relied on." >&2
+        log "        Triage those windows per the runbook. This is neither a mismatch nor a pass." >&2
+    fi
     exit 1
 fi
 if [[ "$checked" == "0" ]]; then
@@ -251,7 +303,8 @@ fi
 if [[ "$artifacts" != "0" ]]; then
     log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD); $artifacts window(s) held a superseded-version"
     log "        artifact only — a key written more than once lands its stale version in an earlier created_at week on"
-    log "        one side. Live data is identical on both sides; nothing to fix (see the confirm-keys block)."
+    log "        one side. Live data is identical on both sides and no key in those windows had a tied newest version,"
+    log "        so the re-check was decisive; nothing to fix (see the confirm-keys block)."
 else
     log "PASSED: all $checked windows match (weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD)."
 fi

@@ -32,7 +32,13 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
+#                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
+#                             than total query time — so a step that goes quiet while the server works trips it while
+#                             healthy. Trade-off and shared rationale: ../README.md.
 #   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
+#                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
+#                             UTC, so without it the zone it was captured in is unknown.
 #                     before the swap this runs a final deletion replay from that anchor, so deletes bridged since the
 #                     last delta_replay.sh don't leak live across the EXCHANGE (they'd be covered by neither the forward
 #                     replay nor the rollback reverse-replay otherwise).
@@ -79,6 +85,7 @@ DELTA_SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sq
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
+RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total query time. See --receive-timeout.
 BACKFILL_START=""
 SKIP_WRAP=0
 WITH_WRAP=0
@@ -103,6 +110,7 @@ while [[ $# -gt 0 ]]; do
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -112,9 +120,37 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+
+# One place for the connection and client-side options, so every call site below carries the same host, port,
+# database and receive_timeout. log_comment is NOT here: the final deletion replay is tagged separately so it
+# can be found on its own in query_log, and clickhouse-client rejects a setting passed twice — so each call
+# site supplies its own tag rather than overriding a default.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 [[ -f "$DELTA_SQL_FILE" ]] || { echo "ERROR: cannot find $DELTA_SQL_FILE" >&2; exit 2; }
 # --backfill-start (the anchor printed by backfill.sh) is interpolated into the final deletion replay; validate its shape.
+# Strip the ' UTC' marker the flag is required to carry (see its option doc). For these bounds a wrong zone is worse
+# than a wrong shape: the statements parse the anchor as UTC, so one captured elsewhere shifts silently, and a LATER
+# value drops rows from the delta and the replay rather than failing.
+case "$BACKFILL_START" in
+    *" UTC")
+        BACKFILL_START="${BACKFILL_START% UTC}"
+        # A bare marker strips to empty, which elsewhere means "not supplied" — two meanings for one value, and
+        # the later "required" diagnostic would point away from the actual mistake.
+        [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start has no timestamp before the ' UTC' marker." >&2; exit 2; }
+        ;;
+        "") ;;                      # not supplied; the caller decides whether that is allowed
+    *)
+        echo "ERROR: --backfill-start must carry an explicit ' UTC' marker, as the drivers print it:" >&2
+        echo "       --backfill-start '<YYYY-MM-DD HH:MM:SS[.ffffff]> UTC'" >&2
+        echo "       The value is parsed as UTC; without the marker the zone it was captured in is unknown." >&2
+        exit 2
+        ;;
+esac
 [[ -z "$BACKFILL_START" || "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # At most one wrap mode. Default (none set) is EXCHANGE only.
 if (( SKIP_WRAP + WITH_WRAP + WRAP_ONLY > 1 )); then
@@ -169,7 +205,7 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
 fi
 
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
 }
 
 # Single scalar (empty string if the object does not exist).
@@ -296,7 +332,7 @@ run_block() {
     # hosts_active); status 0 with an empty error means that host applied it. Labelled so the rows are not mistaken for
     # output of the preceding step (e.g. the final deletion replay).
     echo "  $1: ON CLUSTER responses per host (host, port, status, error, hosts_remaining, hosts_active):"
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --multiquery --query "$sql"
 }
 
 # Final deletion replay before the EXCHANGE. delta_replay.sh (step 2) replayed deletes only up to when it ran; cutover_start
@@ -312,7 +348,7 @@ run_final_deletion_replay() {
     sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
     # --time prints the statement's elapsed seconds to stderr (a bare --query prints nothing). This replay sits inside
     # the final-delta -> EXCHANGE gap the buffer hold has to cover, so its wall time is the number to record.
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --time --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --time --multiquery --query "$sql"
 }
 
 if [[ "$WRAP_ONLY" == "1" ]]; then
@@ -331,8 +367,9 @@ if [[ "$WRAP_ONLY" == "1" ]]; then
     exit 0
 fi
 
-CUTOVER_START="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6))")"
-echo "RECORD cutover_start=$CUTOVER_START  (pass to rollback.sh --cutover-start if you roll back after this point)"
+# Captured in UTC; the reverse replay and its postcondition parse it as UTC (000004_rollback_reverse_replay.sql).
+CUTOVER_START="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6, 'UTC'))")"
+echo "RECORD cutover_start=$CUTOVER_START UTC  (pass the timestamp to rollback.sh --cutover-start if you roll back after this point)"
 
 echo "Final deletion replay: masking deletes bridged since the last delta_replay so none leak across the swap..."
 run_final_deletion_replay
