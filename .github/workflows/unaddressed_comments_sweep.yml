@@ -77,16 +77,25 @@ jobs:
             const isBot = (login) =>
               !!login && (REVIEW_BOTS.has(login) || login.endsWith("[bot]"));
 
+            // totalCount/pageInfo on comments let a thread deeper than one page be
+            // detected and completed, so a reply past the cap is never missed.
+            const THREAD_PAGE = 100;
+            const COMMENT_PAGE = 100;
             const QUERY = `
               query ($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
-                    reviewThreads(first: 100, after: $cursor) {
+                    reviewThreads(first: ${THREAD_PAGE}, after: $cursor) {
                       pageInfo { hasNextPage endCursor }
                       nodes {
+                        id
                         isResolved
                         isOutdated
-                        comments(first: 100) { nodes { author { login } } }
+                        comments(first: ${COMMENT_PAGE}) {
+                          totalCount
+                          pageInfo { hasNextPage endCursor }
+                          nodes { author { login } }
+                        }
                       }
                     }
                   }
@@ -94,17 +103,54 @@ jobs:
               }
             `;
 
+            const COMMENTS_QUERY = `
+              query ($threadId: ID!, $cursor: String) {
+                node(id: $threadId) {
+                  ... on PullRequestReviewThread {
+                    comments(first: ${COMMENT_PAGE}, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes { author { login } }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const authorsOf = async (thread) => {
+              const logins = thread.comments.nodes
+                .map((c) => c.author && c.author.login)
+                .filter(Boolean);
+              const opener = logins[0];
+              if (!opener) return logins;
+              if (logins.some((l) => l !== opener)) return logins;
+              if (!thread.comments.pageInfo.hasNextPage) return logins;
+
+              core.info(
+                `Thread ${thread.id} has ${thread.comments.totalCount} comments; paging past the first ${COMMENT_PAGE}`
+              );
+              let c = thread.comments.pageInfo.endCursor;
+              for (;;) {
+                const res = await github.graphql(COMMENTS_QUERY, { threadId: thread.id, cursor: c });
+                const page = res.node.comments;
+                for (const node of page.nodes) {
+                  const login = node.author && node.author.login;
+                  if (login) logins.push(login);
+                }
+                if (logins.some((l) => l !== opener)) return logins;
+                if (!page.pageInfo.hasNextPage) return logins;
+                c = page.pageInfo.endCursor;
+              }
+            };
+
             // See unaddressed_comments_labeler.yml for why resolution alone is not
             // a usable signal, and why the reply check excludes the thread's opener.
-            const classify = (threads) => {
+            const classify = async (threads) => {
               let bot = 0;
               let human = 0;
               for (const thread of threads) {
                 if (thread.isResolved) continue;
                 if (thread.isOutdated) continue;
-                const authors = thread.comments.nodes
-                  .map((c) => c.author && c.author.login)
-                  .filter(Boolean);
+                const authors = await authorsOf(thread);
                 const opener = authors[0];
                 if (!opener) continue;
                 if (authors.some((login) => login !== opener)) continue;
@@ -144,7 +190,7 @@ jobs:
                 cursor = page.pageInfo.endCursor;
               }
 
-              const { bot, human } = classify(threads);
+              const { bot, human } = await classify(threads);
               const wanted = [];
               if (bot > 0) wanted.push(BOT_LABEL);
               if (human > 0) wanted.push(HUMAN_LABEL);
