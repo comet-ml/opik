@@ -185,8 +185,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                 .toList();
         Mono<Void> traceThreadMono = Flux.fromIterable(traceThreadRules)
                 .flatMap(rule -> {
-                    log.info("Enqueueing trace-thread evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
-                            traceIdStrings.size());
+                    log.info("Enqueueing '{}' trace-thread evaluation messages, one per trace ID, for rule '{}'",
+                            traceIdStrings.size(), rule.getId());
                     return onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule, projectId, workspaceId,
                             userName);
                 })
@@ -384,8 +384,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     // reactive context. enqueueThreadMessage does a blocking rule lookup, so defer onto boundedElastic.
                     return Flux.fromIterable(rules)
                             .flatMap(rule -> {
-                                log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
-                                        threadIds.size());
+                                log.info("Enqueueing '{}' evaluation messages, one per thread ID, for rule '{}'",
+                                        threadIds.size(), rule.getId());
                                 return onlineScorePublisher.enqueueThreadMessage(threadIds, rule, projectId,
                                         workspaceId, userName);
                             })
