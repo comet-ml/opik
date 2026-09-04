@@ -25,7 +25,6 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Mapper
@@ -34,8 +33,6 @@ interface AutomationModelEvaluatorMapper {
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
     Logger log = LoggerFactory.getLogger(AutomationModelEvaluatorMapper.class);
-
-    Set<String> SUPPORTED_CONTENT_PART_TYPES = Set.of("text", "image_url", "video_url", "audio_url");
 
     @Mapping(target = "id", expression = "java(model.id())")
     @Mapping(target = "projectId", expression = "java(model.projectId())")
@@ -323,19 +320,18 @@ interface AutomationModelEvaluatorMapper {
     }
 
     /**
-     * Whether a deserialized element is a content part at all — an object carrying one of the types
-     * {@code OnlineScoringEngine.buildUserMessageFromContentParts} knows how to render. That switch is
-     * the source of truth for this set; a type added there has to be added here or it reads back as a
-     * plain string.
+     * Whether a deserialized element is a content part at all — an object declaring a string
+     * discriminator. Deliberately not a closed set: {@code type} is unconstrained on write, so
+     * rejecting a value this renderer does not know would downgrade an array the API accepted into a
+     * string, and the next save would store it as one. The renderer already skips a type it cannot
+     * render; losing the shape on the way out is the worse failure.
      */
     private static boolean isContentPart(Object element) {
         if (element instanceof LlmAsJudgeMessageContent content) {
-            return content.type() != null && SUPPORTED_CONTENT_PART_TYPES.contains(content.type());
+            return content.type() != null;
         }
 
-        return element instanceof Map<?, ?> map
-                && map.get("type") instanceof String type
-                && SUPPORTED_CONTENT_PART_TYPES.contains(type);
+        return element instanceof Map<?, ?> map && map.get("type") instanceof String;
     }
 
     /**

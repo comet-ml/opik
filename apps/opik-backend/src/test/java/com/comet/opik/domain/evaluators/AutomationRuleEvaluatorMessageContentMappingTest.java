@@ -66,14 +66,18 @@ class AutomationRuleEvaluatorMessageContentMappingTest {
         assertThat(message.contentArray()).isNull();
     }
 
+    /**
+     * {@code type} is unconstrained on write, so an array carrying a discriminator this renderer does not
+     * know is still an array the API accepted. Downgrading it to a string would lose the shape for good:
+     * the next save stores what it reads back.
+     */
     @Test
-    void unsupportedContentPartTypeIsNotContentParts() {
-        var content = "[{\"type\": \"pdf_url\", \"pdf_url\": {\"url\": \"https://example.com/a.pdf\"}}]";
+    void contentPartWithAnUnknownTypeIsStillContentParts() {
+        var message = MAPPER.map(stored("[{\"type\": \"pdf_url\", \"pdf_url\": {\"url\": \"https://x/a.pdf\"}}]"));
 
-        var message = MAPPER.map(stored(content));
-
-        assertThat(message.content()).isEqualTo(content);
-        assertThat(message.contentArray()).isNull();
+        assertThat(message.content()).isNull();
+        assertThat(message.contentArray()).hasSize(1);
+        assertThat(message.contentArray().getFirst().type()).isEqualTo("pdf_url");
     }
 
     @Test
