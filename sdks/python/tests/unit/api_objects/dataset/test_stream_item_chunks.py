@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from typing import Any, Dict, List, Optional
 from unittest.mock import Mock, patch
 
@@ -81,17 +82,36 @@ def _rest_items(count: int) -> List[Dict[str, Any]]:
     ]
 
 
-def _build_dataset(endpoint: Optional[FakeItemsEndpoint]) -> Dataset:
+def _mock_rest_client(endpoint=None, version_hash: Optional[str] = None) -> Mock:
+    """A rest client whose dataset-id and version lookups are both controlled.
+
+    ``version_hash=None`` models a backend with no version to pin a read to,
+    which is the default so the assertions about the ``version`` query
+    parameter stay meaningful.
+    """
     mock_rest_client = Mock()
     mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
+
+    versions_page = Mock()
+    versions_page.content = (
+        [Mock(version_hash=version_hash)] if version_hash is not None else []
+    )
+    mock_rest_client.datasets.list_dataset_versions.return_value = versions_page
+
     if endpoint is not None:
         mock_rest_client._client_wrapper.httpx_client.request.side_effect = endpoint
 
+    return mock_rest_client
+
+
+def _build_dataset(
+    endpoint: Optional[FakeItemsEndpoint], version_hash: Optional[str] = None
+) -> Dataset:
     return Dataset(
         name="test-dataset",
         description=None,
         project_name=None,
-        rest_client=mock_rest_client,
+        rest_client=_mock_rest_client(endpoint, version_hash),
     )
 
 
@@ -466,16 +486,11 @@ def test_stream_items__malformed_total__raises_instead_of_truncating(total):
     if total is not None:
         body["total"] = total
 
-    mock_rest_client = Mock()
-    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
-    mock_rest_client._client_wrapper.httpx_client.request.side_effect = (
-        _endpoint_returning(body)
-    )
     dataset = Dataset(
         name="test-dataset",
         description=None,
         project_name=None,
-        rest_client=mock_rest_client,
+        rest_client=_mock_rest_client(_endpoint_returning(body)),
     )
 
     with pytest.raises(exceptions.OpikException, match="Malformed response"):
@@ -483,16 +498,13 @@ def test_stream_items__malformed_total__raises_instead_of_truncating(total):
 
 
 def test_stream_items__non_list_content__raises():
-    mock_rest_client = Mock()
-    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
-    mock_rest_client._client_wrapper.httpx_client.request.side_effect = (
-        _endpoint_returning({"total": 2, "content": {"not": "a list"}})
-    )
     dataset = Dataset(
         name="test-dataset",
         description=None,
         project_name=None,
-        rest_client=mock_rest_client,
+        rest_client=_mock_rest_client(
+            _endpoint_returning({"total": 2, "content": {"not": "a list"}})
+        ),
     )
 
     with pytest.raises(exceptions.OpikException, match="Malformed response"):
@@ -501,16 +513,11 @@ def test_stream_items__non_list_content__raises():
 
 def test_stream_items__total_zero_with_empty_content__reads_nothing():
     """A genuinely empty dataset is not malformed."""
-    mock_rest_client = Mock()
-    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
-    mock_rest_client._client_wrapper.httpx_client.request.side_effect = (
-        _endpoint_returning({"total": 0, "content": []})
-    )
     dataset = Dataset(
         name="test-dataset",
         description=None,
         project_name=None,
-        rest_client=mock_rest_client,
+        rest_client=_mock_rest_client(_endpoint_returning({"total": 0, "content": []})),
     )
 
     assert list(dataset.stream_items()) == []
@@ -560,4 +567,128 @@ def test_get_items__chunk_size_cap_applies_through_get_items():
     assert all(
         call["params"]["size"] <= constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE
         for call in endpoint.calls
+    )
+
+
+def test_stream_items__version_available__every_page_pinned_to_it():
+    """Pages are addressed by offset, so they must all read one version --
+    otherwise an insert landing at offset 0 shifts the unfetched pages."""
+    endpoint = FakeItemsEndpoint(_rest_items(25))
+    dataset = _build_dataset(endpoint, version_hash="v-hash-abc")
+
+    list(dataset.stream_items(chunk_size=10, num_threads=4))
+
+    assert len(endpoint.calls) == 3
+    assert {call["params"]["version"] for call in endpoint.calls} == {"v-hash-abc"}
+
+
+def test_stream_items__no_version_available__reads_the_live_state():
+    endpoint = FakeItemsEndpoint(_rest_items(25))
+    dataset = _build_dataset(endpoint, version_hash=None)
+
+    list(dataset.stream_items(chunk_size=10, num_threads=4))
+
+    assert {call["params"]["version"] for call in endpoint.calls} == {None}
+
+
+def test_stream_items__version_resolved_once__not_per_page():
+    endpoint = FakeItemsEndpoint(_rest_items(50))
+    dataset = _build_dataset(endpoint, version_hash="v-hash-abc")
+
+    list(dataset.stream_items(chunk_size=10, num_threads=4))
+
+    assert dataset._rest_client.datasets.list_dataset_versions.call_count == 1
+
+
+def test_stream_items__version_lookup_deferred_until_iteration():
+    endpoint = FakeItemsEndpoint(_rest_items(10))
+    dataset = _build_dataset(endpoint, version_hash="v-hash-abc")
+    versions = dataset._rest_client.datasets.list_dataset_versions
+
+    stream = dataset.stream_items()
+
+    assert versions.call_count == 0
+    next(iter(stream))
+    assert versions.call_count == 1
+
+
+def test_get_items__pins_the_read_to_a_version_too():
+    endpoint = FakeItemsEndpoint(_rest_items(25))
+    dataset = _build_dataset(endpoint, version_hash="v-hash-abc")
+
+    dataset.get_items(chunk_size=10)
+
+    assert {call["params"]["version"] for call in endpoint.calls} == {"v-hash-abc"}
+
+
+class ShiftingItemsEndpoint(FakeItemsEndpoint):
+    """Simulates an insert landing between page 1 and page 2.
+
+    Ids sort newest-first, so a new item takes offset 0 and pushes every later
+    item one slot further down -- the exact shift that makes an offset-paged
+    read of a live dataset return one item twice and skip another.
+    """
+
+    def __call__(self, path, *, method, params):
+        response = super().__call__(path, method=method, params=params)
+        if params["page"] == 1 and params.get("version") is None:
+            self._items.insert(0, {"id": "i-new", "data": {"question": "inserted"}})
+        return response
+
+
+def test_stream_items__unversioned_read_with_a_concurrent_insert__shifts():
+    """Documents the failure mode the version pin exists to prevent, so a
+    regression in the pinning shows up as this test starting to pass."""
+    endpoint = ShiftingItemsEndpoint(
+        [{"id": f"i{i}", "data": {"question": f"q{i}"}} for i in range(4)]
+    )
+    dataset = _build_dataset(endpoint, version_hash=None)
+
+    ids = [
+        item["id"]
+        for chunk in dataset.stream_items(chunk_size=2, num_threads=1)
+        for item in chunk
+    ]
+
+    # i1 is returned twice and i3 never arrives.
+    assert len(ids) != len(set(ids)), (
+        "expected the unversioned read to duplicate an item once the dataset shifted"
+    )
+
+
+def test_stream_items__version_pinned_read_is_unaffected_by_a_concurrent_insert():
+    endpoint = ShiftingItemsEndpoint(
+        [{"id": f"i{i}", "data": {"question": f"q{i}"}} for i in range(4)]
+    )
+    dataset = _build_dataset(endpoint, version_hash="v-hash-abc")
+
+    ids = [
+        item["id"]
+        for chunk in dataset.stream_items(chunk_size=2, num_threads=1)
+        for item in chunk
+    ]
+
+    assert ids == ["i0", "i1", "i2", "i3"]
+    assert len(ids) == len(set(ids))
+
+
+def test_stream_items__abandoned_early__does_not_block_on_in_flight_pages():
+    """Closing the generator must not join the outstanding requests: the yields
+    happen inside the pool's scope, so a `with` block would turn a plain
+    `break` into a wait for every page still in flight."""
+    page_delay = 0.5
+    endpoint = FakeItemsEndpoint(_rest_items(200), delay_seconds=page_delay)
+    dataset = _build_dataset(endpoint)
+
+    stream = dataset.stream_items(chunk_size=10, num_threads=4)
+    for _ in stream:
+        break  # abandon after the first chunk, with pages still in flight
+
+    started = time.perf_counter()
+    stream.close()
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < page_delay, (
+        f"closing the stream blocked for {elapsed:.2f}s; it must not wait for "
+        "in-flight pages"
     )

@@ -117,13 +117,19 @@ def _read_pages(
         worker_count,
     )
 
-    with futures.ThreadPoolExecutor(
+    # Deliberately not a `with` block: its __exit__ is shutdown(wait=True), and
+    # because the yields below happen inside it, closing the generator -- an
+    # early `break`, or garbage collection -- would block the caller until every
+    # outstanding page came back. At a 2000-item page that is a visible stall on
+    # what looks like a plain `break`, and at GC time it would surface on an
+    # unrelated line.
+    pool = futures.ThreadPoolExecutor(
         max_workers=worker_count, thread_name_prefix="opik_dataset_items_read"
-    ) as pool:
+    )
+    try:
         # Two pages in flight per worker: enough that a worker always has the
         # next page waiting, while keeping the reader's memory bounded by the
-        # look-ahead rather than by the size of the dataset. A consumer that
-        # stops iterating leaves at most this many requests to drain.
+        # look-ahead rather than by the size of the dataset.
         in_flight: Deque[futures.Future] = collections.deque(
             pool.submit(fetch_page, page)
             for page in itertools.islice(remaining_pages, worker_count * 2)
@@ -137,6 +143,11 @@ def _read_pages(
                 in_flight.append(pool.submit(fetch_page, next_page))
 
             yield _page_items(page)
+    finally:
+        # Drops the pages that haven't started and doesn't join the ones that
+        # have, so abandoning the iterator returns immediately. On the normal
+        # path there is nothing left in flight, so this is a no-op.
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _build_page_fetcher(

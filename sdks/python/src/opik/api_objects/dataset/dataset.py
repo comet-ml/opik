@@ -122,6 +122,7 @@ class DatasetExportOperations(abc.ABC):
         nb_samples: Optional[int] = None,
         filter_string: Optional[str] = None,
         num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
+        chunk_size: int = constants.DATASET_STREAM_BATCH_SIZE,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve dataset items as a list of dictionaries.
@@ -137,6 +138,10 @@ class DatasetExportOperations(abc.ABC):
                 ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Use
                 :meth:`stream_items` instead when the dataset is too large to
                 hold in memory all at once.
+            chunk_size: Number of items fetched per request. See
+                :meth:`stream_items` for how to pick it; the whole result is
+                materialized either way, so this only trades request count
+                against per-request size.
             filter_string: Optional OQL filter string to filter dataset items.
                 Supports filtering by tags, data fields, metadata, etc.
 
@@ -156,12 +161,15 @@ class DatasetExportOperations(abc.ABC):
             A list of dictionaries representing the dataset items.
 
         Raises:
-            ValueError: If ``num_threads`` is not a positive integer, or
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``chunk_size`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
                 ``nb_samples`` is not a positive integer.
         """
         return [
             item
             for chunk in self.stream_items(
+                chunk_size=chunk_size,
                 filter_string=filter_string,
                 nb_samples=nb_samples,
                 num_threads=num_threads,
@@ -188,6 +196,13 @@ class DatasetExportOperations(abc.ABC):
 
         Items have exactly the shape :meth:`get_items` returns: the item's
         data plus its ``id``.
+
+        The read is pinned to a single dataset version, so items inserted or
+        deleted while it is in progress do not affect it. On backends where
+        dataset versioning is unavailable there is no version to pin to and the
+        live state is read instead; a concurrent insert can then shift the
+        remaining pages, returning one item twice and skipping another. Read a
+        :class:`DatasetVersion` explicitly if you need that guarantee there.
 
         Args:
             chunk_size: Number of items per chunk, defaulting to and capped at
@@ -1138,8 +1153,36 @@ class Dataset(DatasetExportOperations):
             num_threads=num_threads,
             nb_samples=nb_samples,
             filter_string=filter_string,
-            dataset_version=None,
+            dataset_version=self._resolve_read_version(),
         )
+
+    def _resolve_read_version(self) -> Optional[str]:
+        """The version hash every page of one read is pinned to, if there is one.
+
+        Pages are addressed by offset, and the backend sorts newest id first, so
+        an item inserted mid-read lands at offset 0 and shifts every page that
+        has not been fetched yet -- returning one item twice and skipping
+        another. Reading a single version instead makes the whole read a
+        snapshot, which is what the cursor-based stream got for free from its
+        ``id < last_retrieved_id`` seek.
+
+        Returns None when the backend has no version to pin to (versioning
+        disabled, or a dataset with no versions yet); the read then falls back
+        to the live state and stays vulnerable to that shift, which is called
+        out on :meth:`stream_items`.
+        """
+        version_info = self.get_version_info()
+        version_hash = version_info.version_hash if version_info else None
+
+        if version_hash is None:
+            LOGGER.debug(
+                "No dataset version to pin the read of dataset %s to; reading "
+                "the live state, which may return an item twice or skip one if "
+                "items are inserted or deleted while the read is in progress.",
+                self._name,
+            )
+
+        return version_hash
 
     def insert_from_json(
         self,
