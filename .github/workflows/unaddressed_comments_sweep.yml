@@ -1,0 +1,304 @@
+name: 💬 Unaddressed Comments Sweep
+
+# GitHub emits no webhook when a reviewer clicks "Resolve conversation", so
+# unaddressed_comments_labeler.yml cannot see the one action that most often
+# clears the label. Without this sweep a PR whose threads were all resolved keeps
+# its label until an unrelated push or comment happens to retrigger the labeler —
+# and a label that lingers after the work is done is exactly how the signal loses
+# credibility.
+#
+# scout-feedback.yml is the in-repo precedent: a poller that exists purely
+# because the underlying action (reactions there, resolve here) emits no event.
+#
+# The classifier below is duplicated from unaddressed_comments_labeler.yml. It is
+# inlined in both rather than shared from .github/scripts because the labeler
+# runs under pull_request_target, where the only safe ref to check out is the base
+# SHA — which by definition lacks a script the PR is introducing. If you change
+# the rule here, change it there too.
+
+on:
+  schedule:
+    - cron: '17 * * * *' # hourly, off the hour to avoid the top-of-hour runner rush
+  workflow_dispatch:
+    inputs:
+      window_hours:
+        description: How many hours back to look for updated PRs (0 = every open PR)
+        required: false
+        default: '24'
+        type: string
+
+# Don't let a slow sweep overlap the next one and double-write labels. Unlike the
+# event-driven labeler, these runs are not superseding each other, so they queue
+# rather than cancel.
+concurrency:
+  group: unaddressed-comments-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Recompute unaddressed-comment labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Sweep open PRs
+        uses: actions/github-script@v9
+        env:
+          # Default chosen from measured repo shape: ~131 open PRs but only ~32
+          # touched in any 24h window, so the window cuts the sweep's cost by ~4x.
+          # Resolving a conversation bumps the PR's updatedAt, so a PR that needs
+          # relabeling is inside the window by construction.
+          WINDOW_HOURS: ${{ inputs.window_hours || '24' }}
+        with:
+          script: |
+            // Keep in sync with unaddressed_comments_labeler.yml.
+            const REVIEW_BOTS = new Set(["baz-reviewer", "github-advanced-security"]);
+            const CHIP_COLOR = "2d3139";
+            const BOT_LABEL = "💬 unaddressed: bot";
+            const HUMAN_LABEL = "💬 unaddressed: human";
+            const MANAGED = [
+              { name: BOT_LABEL, description: "Unresolved review comments from a bot reviewer with no reply from another participant" },
+              { name: HUMAN_LABEL, description: "Unresolved review comments from a human reviewer with no reply from another participant" },
+            ];
+
+            const { owner, repo } = context.repo;
+
+            // 0 means "every open PR". Anything above a year is past any useful
+            // window and, left unbounded, overflows the Date below into an
+            // Invalid Date whose comparisons are all false — which silently
+            // disables the cutoff and scans every PR instead of erroring.
+            const MAX_WINDOW_HOURS = 24 * 366;
+            const windowHours = Number(process.env.WINDOW_HOURS);
+            if (!Number.isInteger(windowHours) || windowHours < 0 || windowHours > MAX_WINDOW_HOURS) {
+              core.setFailed(
+                `Invalid window_hours: ${process.env.WINDOW_HOURS} (expected an integer 0-${MAX_WINDOW_HOURS}; 0 means every open PR)`
+              );
+              return;
+            }
+            const cutoff = windowHours === 0 ? null : new Date(Date.now() - windowHours * 3600000);
+
+            const isBot = (login) =>
+              !!login && (REVIEW_BOTS.has(login) || login.endsWith("[bot]"));
+
+            // totalCount/pageInfo on comments let a thread deeper than one page be
+            // detected and completed, so a reply past the cap is never missed.
+            const THREAD_PAGE = 100;
+            const COMMENT_PAGE = 100;
+            const MAX_COMMENT_PAGES = 20;
+            const QUERY = `
+              query ($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: ${THREAD_PAGE}, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        id
+                        isResolved
+                        isOutdated
+                        comments(first: ${COMMENT_PAGE}) {
+                          totalCount
+                          pageInfo { hasNextPage endCursor }
+                          nodes { author { login } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const COMMENTS_QUERY = `
+              query ($threadId: ID!, $cursor: String) {
+                node(id: $threadId) {
+                  ... on PullRequestReviewThread {
+                    comments(first: ${COMMENT_PAGE}, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes { author { login } }
+                    }
+                  }
+                }
+              }
+            `;
+
+            // GitHub's schema declares these connections as LIST of OBJECT with no
+            // NON_NULL on either the list or its elements, so `nodes` and any
+            // element may legitimately be null. Normalize at every ingestion point
+            // rather than guarding each dereference — one missing guard would abort
+            // reconciliation for the whole PR.
+            const liveNodes = (connection) =>
+              ((connection && connection.nodes) || []).filter(Boolean);
+
+            const authorsOf = async (thread) => {
+              const logins = liveNodes(thread.comments)
+                .map((c) => c.author && c.author.login)
+                .filter(Boolean);
+              const opener = logins[0];
+              if (!opener) return logins;
+              if (logins.some((l) => l !== opener)) return logins;
+              const firstPage = (thread.comments && thread.comments.pageInfo) || {};
+              if (!firstPage.hasNextPage) return logins;
+
+              core.info(
+                `Thread ${thread.id} has ${thread.comments.totalCount} comments; paging past the first ${COMMENT_PAGE}`
+              );
+              let c = firstPage.endCursor;
+              // Bounded so a pathologically deep thread cannot consume the job's
+              // 3-minute budget and leave every label stale. At 100 comments per
+              // page this covers 2000; beyond that we stop and report what we have.
+              // Exhausting the budget without finding another participant is
+              // reported rather than silently treated as unaddressed.
+              for (let page_i = 0; page_i < MAX_COMMENT_PAGES; page_i++) {
+                const res = await github.graphql(COMMENTS_QUERY, { threadId: thread.id, cursor: c });
+                // node is null if the thread was deleted mid-pagination; treat what
+                // we already collected as the full picture rather than throwing.
+                const page = res.node && res.node.comments;
+                if (!page) return logins;
+                for (const node of liveNodes(page)) {
+                  const login = node.author && node.author.login;
+                  if (login) logins.push(login);
+                }
+                if (logins.some((l) => l !== opener)) return logins;
+                if (!page.pageInfo || !page.pageInfo.hasNextPage) return logins;
+                c = page.pageInfo.endCursor;
+              }
+              core.warning(
+                `Thread ${thread.id} exceeded ${MAX_COMMENT_PAGES} comment pages; classifying as addressed to avoid a false label`
+              );
+              // Fail toward silence: an unverifiable thread should not nag.
+              return [opener, "__pagination_budget_exhausted__"];
+            };
+
+            // See unaddressed_comments_labeler.yml for why resolution alone is not
+            // a usable signal, and why the reply check excludes the thread's opener.
+            const classify = async (threads) => {
+              let bot = 0;
+              let human = 0;
+              for (const thread of threads) {
+                if (thread.isResolved) continue;
+                if (thread.isOutdated) continue;
+                const authors = await authorsOf(thread);
+                const opener = authors[0];
+                if (!opener) continue;
+                if (authors.some((login) => login !== opener)) continue;
+                if (isBot(opener)) bot += 1;
+                else human += 1;
+              }
+              return { bot, human };
+            };
+
+            for (const label of MANAGED) {
+              try {
+                const { data: existing } = await github.rest.issues.getLabel({ owner, repo, name: label.name });
+                if (existing.color !== CHIP_COLOR || existing.description !== label.description) {
+                  await github.rest.issues.updateLabel({
+                    owner, repo, name: label.name, color: CHIP_COLOR, description: label.description,
+                  });
+                }
+              } catch (err) {
+                if (err.status !== 404) throw err;
+                try {
+                  await github.rest.issues.createLabel({
+                    owner, repo, name: label.name, color: CHIP_COLOR, description: label.description,
+                  });
+                  core.info(`Created label: ${label.name}`);
+                } catch (createErr) {
+                  // The event-driven labeler can win this race; 422 already_exists
+                  // means the label is present, which is the desired end state.
+                  // Failing here would abort the sweep before any PR is handled.
+                  const exists =
+                    createErr.status === 422 &&
+                    JSON.stringify(createErr.response ? createErr.response.data : {}).includes("already_exists");
+                  if (!exists) throw createErr;
+                  core.info(`Label created concurrently, continuing: ${label.name}`);
+                }
+              }
+            }
+
+            const managedNames = MANAGED.map((l) => l.name);
+
+            const relabel = async (number) => {
+              const threads = [];
+              let cursor = null;
+              for (;;) {
+                const res = await github.graphql(QUERY, { owner, repo, number, cursor });
+                // pullRequest is nullable — it comes back null if the PR became
+                // unavailable mid-sweep. Throw rather than proceeding with an empty
+                // thread list, which would compute "no labels wanted" and strip the
+                // PR's existing labels. The caller logs it and continues to the
+                // next PR.
+                const pr = res.repository && res.repository.pullRequest;
+                const page = pr && pr.reviewThreads;
+                if (!page) throw new Error('review threads unavailable');
+                threads.push(...liveNodes(page));
+                if (!page.pageInfo || !page.pageInfo.hasNextPage) break;
+                cursor = page.pageInfo.endCursor;
+              }
+
+              const { bot, human } = await classify(threads);
+              const wanted = [];
+              if (bot > 0) wanted.push(BOT_LABEL);
+              if (human > 0) wanted.push(HUMAN_LABEL);
+
+              const live = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              const current = live.map((l) => l.name);
+
+              for (const stale of current.filter((n) => managedNames.includes(n) && !wanted.includes(n))) {
+                try {
+                  await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: stale });
+                  core.info(`PR #${number}: removed ${stale}`);
+                } catch (err) {
+                  if (err.status !== 404) throw err;
+                }
+              }
+
+              const missing = wanted.filter((n) => !current.includes(n));
+              if (missing.length > 0) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: missing });
+                core.info(`PR #${number}: added ${missing.join(", ")}`);
+              }
+
+              return wanted;
+            };
+
+            // Sorted by update recency so the window check can stop at the first PR
+            // older than the cutoff instead of paging through every open PR.
+            const iterator = github.paginate.iterator(github.rest.pulls.list, {
+              owner, repo, state: 'open', sort: 'updated', direction: 'desc', per_page: 100,
+            });
+
+            let scanned = 0;
+            let labeled = 0;
+            const failures = [];
+
+            outer:
+            for await (const { data: prs } of iterator) {
+              for (const pr of prs) {
+                if (cutoff && new Date(pr.updated_at) < cutoff) break outer;
+                scanned += 1;
+                try {
+                  const applied = await relabel(pr.number);
+                  if (applied.length > 0) labeled += 1;
+                } catch (err) {
+                  // One unreadable PR must not abort the sweep for the rest.
+                  failures.push(`#${pr.number}: ${err.message}`);
+                  core.warning(`PR #${pr.number}: ${err.message}`);
+                }
+              }
+            }
+
+            core.info(
+              `Swept ${scanned} PR(s) updated within ${windowHours || '∞'}h; ${labeled} carry an unaddressed-comment label.`
+            );
+
+            // Surface partial failures without failing the run: a sweep that
+            // half-worked beats none, and a red scheduled job nobody owns becomes
+            // background noise.
+            if (failures.length > 0) {
+              core.warning(`${failures.length} PR(s) could not be processed:\n${failures.join('\n')}`);
+            }

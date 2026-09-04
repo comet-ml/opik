@@ -1,0 +1,323 @@
+name: 💬 Label Unaddressed Review Comments
+
+# Projects GitHub's review-thread state onto PR labels, so "this PR still has
+# review feedback nobody answered" is visible from the PR list and the merge box
+# instead of only from inside the Files tab.
+#
+# Deliberately a separate workflow from labeler.yml rather than a third job in
+# it. labeler.yml runs actions/labeler with sync-labels, which rewrites an
+# authoritative label set on every run; adding review events to that workflow
+# would re-trigger that sweep on every review comment for no benefit. Keeping
+# this separate also means the two never contend: actions/labeler manages the
+# path labels, this workflow manages only its own two, and neither writes the
+# other's.
+#
+# The logic is inlined rather than require()d from .github/scripts, matching the
+# size-labeler in labeler.yml. A shared file cannot work here: under
+# pull_request_target the only safe ref to check out is the base SHA, which by
+# definition does not contain a script the PR is introducing or editing — the
+# workflow would fail on the very PR that changes it. The sweep workflow carries
+# the same classifier; if you change the rule in one, change it in both.
+
+on:
+  # pull_request_target (not pull_request) so the job holds pull-requests: write
+  # on fork PRs — a pull_request run gets a read-only token there and cannot
+  # apply labels. Roughly half of this repo's open PRs come from forks, so this
+  # is the majority path, not an edge case.
+  #
+  # Safe despite the trigger: there is no checkout at all, and github-script
+  # operates purely through the GitHub API on PR metadata (numbers, logins,
+  # labels). No PR-controlled code is ever fetched or executed. See the
+  # dangerous-triggers audit rationale:
+  # https://docs.zizmor.sh/audits/#dangerous-triggers
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened, synchronize, ready_for_review]
+  # A reply to a review comment lands as pull_request_review_comment.created —
+  # that is the event that clears the label as soon as someone engages, without
+  # waiting for the scheduled sweep.
+  #
+  # These two have no _target variant, and on a fork-originated PR they run with
+  # a read-only GITHUB_TOKEN, so the label write would 403. The job therefore
+  # skips fork PRs on these events (see the `if:` below) and leaves them to the
+  # hourly sweep, which runs on a schedule and always holds a writable token.
+  # Net effect: same-repo PRs relabel within seconds of a review, fork PRs within
+  # the hour. Making forks fast too would need a privileged relay
+  # (workflow_run on a fork-safe artifact), which is more machinery than the
+  # latency saves.
+  pull_request_review:
+    types: [submitted, dismissed]
+  pull_request_review_comment:
+    types: [created, deleted]
+
+# Keyed on the PR, so a reviewer posting a review plus several inline comments at
+# once collapses to a single run instead of a stampede of racing label writes.
+#
+# cancel-in-progress is safe here because a run holds no state: each one
+# recomputes the verdict from scratch against the live API, so cancelling the
+# superseded runs loses nothing and the last one to start writes the final,
+# settled answer. Expect to see cancelled runs after a review burst — that is
+# the mechanism working, not a failure.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Compute unaddressed-comment labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    # Skip fork PRs on the review events, which would carry a read-only token and
+    # fail the label write. pull_request_target always has a writable token, so it
+    # runs for forks too. Fork PRs on review events fall through to the sweep.
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Compute and apply labels
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // Review bots whose comments are attributed to the bot label. Add a
+            // new review bot here (and in unaddressed_comments_sweep.yml).
+            //
+            // baz-reviewer has no "[bot]" suffix, so the suffix test below does
+            // not catch it — hence the explicit list. Keep both: the suffix
+            // covers GitHub Apps we never enumerate (dependabot[bot],
+            // copilot-bot[bot], ...) without a repo change each time one starts
+            // reviewing.
+            const REVIEW_BOTS = new Set(["baz-reviewer", "github-advanced-security"]);
+
+            // Uniform charcoal chip, matching the size labels, so this metadata
+            // family stays recessive against semantic labels (bug, Frontend, ...).
+            const CHIP_COLOR = "2d3139";
+            const BOT_LABEL = "💬 unaddressed: bot";
+            const HUMAN_LABEL = "💬 unaddressed: human";
+            const MANAGED = [
+              { name: BOT_LABEL, description: "Unresolved review comments from a bot reviewer with no reply from another participant" },
+              { name: HUMAN_LABEL, description: "Unresolved review comments from a human reviewer with no reply from another participant" },
+            ];
+
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+
+            const isBot = (login) =>
+              !!login && (REVIEW_BOTS.has(login) || login.endsWith("[bot]"));
+
+            // Threads are paginated; comment authors come back inline so a PR with
+            // N threads normally costs 1 request rather than N+1 (PRs here reach 30
+            // threads).
+            //
+            // totalCount is selected so a thread deeper than the inline page can be
+            // detected and completed below — without it, a reply past the cap would
+            // be invisible and the thread wrongly reported as unaddressed.
+            const THREAD_PAGE = 100;
+            const COMMENT_PAGE = 100;
+            const MAX_COMMENT_PAGES = 20;
+            const QUERY = `
+              query ($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: ${THREAD_PAGE}, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        id
+                        isResolved
+                        isOutdated
+                        comments(first: ${COMMENT_PAGE}) {
+                          totalCount
+                          pageInfo { hasNextPage endCursor }
+                          nodes { author { login } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            // Pages the remaining comments of one unusually deep thread. Only the
+            // author logins matter, so this stops as soon as a login differing from
+            // the opener appears.
+            const COMMENTS_QUERY = `
+              query ($threadId: ID!, $cursor: String) {
+                node(id: $threadId) {
+                  ... on PullRequestReviewThread {
+                    comments(first: ${COMMENT_PAGE}, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes { author { login } }
+                    }
+                  }
+                }
+              }
+            `;
+
+            // GitHub's schema declares these connections as LIST of OBJECT with no
+            // NON_NULL on either the list or its elements, so `nodes` and any
+            // element may legitimately be null. Normalize at every ingestion point
+            // rather than guarding each dereference — one missing guard would abort
+            // reconciliation for the whole PR.
+            const liveNodes = (connection) =>
+              ((connection && connection.nodes) || []).filter(Boolean);
+
+            const threads = [];
+            let cursor = null;
+            for (;;) {
+              const res = await github.graphql(QUERY, { owner, repo, number, cursor });
+              // pullRequest is nullable — it comes back null if the PR became
+              // unavailable mid-run. Stop with what we have rather than throwing.
+              const pr = res.repository && res.repository.pullRequest;
+              const page = pr && pr.reviewThreads;
+              if (!page) {
+                core.warning(`PR #${number} review threads unavailable; leaving labels unchanged`);
+                return;
+              }
+              threads.push(...liveNodes(page));
+              if (!page.pageInfo || !page.pageInfo.hasNextPage) break;
+              cursor = page.pageInfo.endCursor;
+            }
+
+            // Collect every author login for a thread, following comment pagination
+            // when the thread is deeper than one page. Returns early once a second
+            // distinct login is found, since that alone settles the verdict.
+            const authorsOf = async (thread) => {
+              const logins = liveNodes(thread.comments)
+                .map((c) => c.author && c.author.login)
+                .filter(Boolean);
+              const opener = logins[0];
+              if (!opener) return logins;
+              if (logins.some((l) => l !== opener)) return logins;
+              const firstPage = (thread.comments && thread.comments.pageInfo) || {};
+              if (!firstPage.hasNextPage) return logins;
+
+              core.info(
+                `Thread ${thread.id} has ${thread.comments.totalCount} comments; paging past the first ${COMMENT_PAGE}`
+              );
+              let c = firstPage.endCursor;
+              // Bounded so a pathologically deep thread cannot consume the job's
+              // 3-minute budget and leave every label stale. At 100 comments per
+              // page this covers 2000; beyond that we stop and report what we have.
+              // Exhausting the budget without finding another participant is
+              // reported rather than silently treated as unaddressed.
+              for (let page_i = 0; page_i < MAX_COMMENT_PAGES; page_i++) {
+                const res = await github.graphql(COMMENTS_QUERY, { threadId: thread.id, cursor: c });
+                // node is null if the thread was deleted mid-pagination; treat what
+                // we already collected as the full picture rather than throwing.
+                const page = res.node && res.node.comments;
+                if (!page) return logins;
+                for (const node of liveNodes(page)) {
+                  const login = node.author && node.author.login;
+                  if (login) logins.push(login);
+                }
+                if (logins.some((l) => l !== opener)) return logins;
+                if (!page.pageInfo || !page.pageInfo.hasNextPage) return logins;
+                c = page.pageInfo.endCursor;
+              }
+              core.warning(
+                `Thread ${thread.id} exceeded ${MAX_COMMENT_PAGES} comment pages; classifying as addressed to avoid a false label`
+              );
+              // Fail toward silence: an unverifiable thread should not nag.
+              return [opener, "__pagination_budget_exhausted__"];
+            };
+
+            // A thread is unaddressed when nobody engaged with it and it was never
+            // resolved.
+            //
+            // Resolution alone is not a usable signal: clicking "Resolve
+            // conversation" is an inconsistent habit, so keying on it flags PRs
+            // whose feedback was fully discussed alongside PRs whose feedback was
+            // ignored. Requiring a reply from someone other than the thread's
+            // opener separates those without asking anyone to change how they work.
+            //
+            // "Other than the opener" carries real weight: review bots routinely
+            // follow up on their own comments, so a plain comment count treats a
+            // bot-talking-to-itself thread as engaged and silently clears the label
+            // on a thread nobody ever answered.
+            let bot = 0;
+            let human = 0;
+            for (const thread of threads) {
+              if (thread.isResolved) continue;
+              // The commented lines have since been rewritten; the point is moot.
+              if (thread.isOutdated) continue;
+
+              const authors = await authorsOf(thread);
+              const opener = authors[0];
+              // A deleted or unreadable author can't be attributed.
+              if (!opener) continue;
+              if (authors.some((login) => login !== opener)) continue;
+
+              if (isBot(opener)) bot += 1;
+              else human += 1;
+            }
+
+            const wanted = [];
+            if (bot > 0) wanted.push(BOT_LABEL);
+            if (human > 0) wanted.push(HUMAN_LABEL);
+            core.info(
+              `PR #${number}: ${threads.length} threads, unaddressed bot=${bot} human=${human} -> [${wanted.join(", ") || "none"}]`
+            );
+
+            // Create the managed labels on demand, and keep color/description
+            // authoritative however they were first created, so no manual label
+            // setup is needed in a fresh fork.
+            for (const label of MANAGED) {
+              try {
+                const { data: existing } = await github.rest.issues.getLabel({ owner, repo, name: label.name });
+                if (existing.color !== CHIP_COLOR || existing.description !== label.description) {
+                  await github.rest.issues.updateLabel({
+                    owner, repo, name: label.name, color: CHIP_COLOR, description: label.description,
+                  });
+                }
+              } catch (err) {
+                if (err.status !== 404) throw err;
+                try {
+                  await github.rest.issues.createLabel({
+                    owner, repo, name: label.name, color: CHIP_COLOR, description: label.description,
+                  });
+                  core.info(`Created label: ${label.name}`);
+                } catch (createErr) {
+                  // This job and the sweep can both reach the create path at once
+                  // for a label that does not exist yet. The loser gets 422
+                  // already_exists, which means the label is now present — the
+                  // desired end state — so treat it as success rather than
+                  // failing before any reconciliation happens.
+                  const exists =
+                    createErr.status === 422 &&
+                    JSON.stringify(createErr.response ? createErr.response.data : {}).includes("already_exists");
+                  if (!exists) throw createErr;
+                  core.info(`Label created concurrently, continuing: ${label.name}`);
+                }
+              }
+            }
+
+            // Read the live label set rather than the event payload, which is a
+            // stale snapshot from when the event fired.
+            const live = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner, repo, issue_number: number, per_page: 100,
+            });
+            const current = live.map((l) => l.name);
+            const managedNames = MANAGED.map((l) => l.name);
+
+            // Reconcile with an incremental delta over the managed labels only:
+            // unlike setLabels, this cannot clobber a path label, a size label, or
+            // a label someone applied by hand.
+            for (const stale of current.filter((n) => managedNames.includes(n) && !wanted.includes(n))) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: stale });
+                core.info(`Removed ${stale}`);
+              } catch (err) {
+                // Someone may have removed it between the read and now; 404 is benign.
+                if (err.status !== 404) throw err;
+              }
+            }
+
+            const missing = wanted.filter((n) => !current.includes(n));
+            if (missing.length > 0) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: missing });
+              core.info(`Added ${missing.join(", ")}`);
+            }
