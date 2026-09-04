@@ -155,7 +155,7 @@ class DatasetExportOperations(abc.ABC):
 
     def stream_items(
         self,
-        chunk_size: int = constants.DATASET_ITEMS_READ_CHUNK_SIZE,
+        chunk_size: int = constants.DATASET_STREAM_BATCH_SIZE,
         num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
         filter_string: Optional[str] = None,
         nb_samples: Optional[int] = None,
@@ -174,7 +174,13 @@ class DatasetExportOperations(abc.ABC):
         data plus its ``id``.
 
         Args:
-            chunk_size: Number of items per chunk. Defaults to 1000.
+            chunk_size: Number of items per chunk, defaulting to the same
+                batch size the typed item stream reads with
+                (``constants.DATASET_STREAM_BATCH_SIZE``). Fetching a chunk
+                costs a fixed overhead whatever its size, so lowering this
+                makes the whole read slower; raise it to trade memory for
+                speed, bearing in mind that up to ``2 * num_threads`` chunks
+                are held at once.
             num_threads: Number of chunks fetched concurrently. Must be a
                 positive integer, defaults to 4; pass ``1`` to fetch
                 sequentially. Capped at

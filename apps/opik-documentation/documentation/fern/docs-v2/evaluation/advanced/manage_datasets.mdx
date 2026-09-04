@@ -430,7 +430,7 @@ from opik import Opik
 client = Opik()
 dataset = client.get_dataset(name="My dataset")
 
-for chunk in dataset.stream_items(chunk_size=1000, num_threads=8):
+for chunk in dataset.stream_items(num_threads=8):
     process(chunk)  # chunk is a list of dicts, exactly as get_items() returns them
 ```
 

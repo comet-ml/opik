@@ -6,7 +6,7 @@ import opik.exceptions
 from opik import synchronization
 
 from opik.api_objects.dataset import dataset_item
-from opik.api_objects import helpers
+from opik.api_objects import constants, helpers
 from . import verifiers
 from ..testlib import generate_project_name
 import pytest
@@ -449,7 +449,7 @@ def test_dataset_items_count__returns_correct_count_after_insert(
 
 def _stream_all_items(dataset, **stream_kwargs):
     """Flatten stream_items() into a single list, asserting chunk sizes."""
-    chunk_size = stream_kwargs.get("chunk_size", 1000)
+    chunk_size = stream_kwargs.get("chunk_size", constants.DATASET_STREAM_BATCH_SIZE)
     chunks = list(dataset.stream_items(**stream_kwargs))
 
     for chunk in chunks[:-1]:

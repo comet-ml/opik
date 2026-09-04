@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from opik.api_objects import constants
 from opik.api_objects.dataset import rest_operations
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.core.api_error import ApiError
@@ -306,15 +307,19 @@ def test_stream_items__invalid_arguments__raises_before_any_request():
 def test_get_items__reads_through_the_parallel_paginated_endpoint():
     """get_items() is a thin wrapper over the chunked reader, not the
     cursor-chained typed stream it used to call."""
-    endpoint = FakeItemsEndpoint(_rest_items(2500))
+    total = constants.DATASET_STREAM_BATCH_SIZE * 2 + 1
+    endpoint = FakeItemsEndpoint(_rest_items(total))
     dataset = _build_dataset(endpoint)
 
     items = dataset.get_items()
 
-    assert len(items) == 2500
-    assert [item["id"] for item in items] == [f"item-{i}" for i in range(2500)]
-    # Default chunk_size, so 2500 items is 3 pages of the paginated endpoint.
+    assert len(items) == total
+    assert [item["id"] for item in items] == [f"item-{i}" for i in range(total)]
+    # Just over two default-sized chunks, so three pages of the endpoint.
     assert sorted(endpoint.requested_pages) == [1, 2, 3]
+    assert [call["params"]["size"] for call in endpoint.calls] == [
+        constants.DATASET_STREAM_BATCH_SIZE
+    ] * 3
     assert all(
         call["path"] == f"v1/private/datasets/{DATASET_ID}/items"
         for call in endpoint.calls
@@ -347,12 +352,14 @@ def test_get_items__data_shadowing_item_fields__keys_dropped_as_before():
 
 
 def test_get_items__nb_samples__limits_items_and_pages():
-    endpoint = FakeItemsEndpoint(_rest_items(5000))
+    chunk = constants.DATASET_STREAM_BATCH_SIZE
+    endpoint = FakeItemsEndpoint(_rest_items(chunk * 5))
     dataset = _build_dataset(endpoint)
 
-    items = dataset.get_items(nb_samples=1200)
+    items = dataset.get_items(nb_samples=chunk + 200)
 
-    assert len(items) == 1200
+    assert len(items) == chunk + 200
+    # Only the two pages holding wanted items are fetched, not all five.
     assert sorted(endpoint.requested_pages) == [1, 2]
 
 
