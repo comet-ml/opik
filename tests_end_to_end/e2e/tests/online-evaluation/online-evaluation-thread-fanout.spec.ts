@@ -39,6 +39,11 @@ test.describe('Online Evaluation — thread-scoped rule fan-out', { tag: ['@t2-c
     automationRulesCleanup,
     page,
   }) => {
+    // Budget for the longest chain: the cohort fixture's 60s thread-aggregation
+    // poll, the 180s wait for the rule to store scores, then three thread panels
+    // opened in sequence. Kept just above the 180s inner poll so that one fires
+    // first — it fails naming the threads that never got scored, which beats an
+    // opaque "test timeout exceeded".
     test.setTimeout(300_000);
 
     const { projectId, threads } = threadCohort;
@@ -146,7 +151,10 @@ test.describe('Online Evaluation — thread-scoped rule fan-out', { tag: ['@t2-c
       // fourth would satisfy all of them.
       const { total, threads: rows } = await backendClient.listThreads({ projectId });
       expect(total, 'the seeded cohort is the whole project').toBe(threads.length);
-      expect(rows.map((r) => r.id).sort()).toEqual([...threadIds].sort());
+      expect(
+        rows.map((r) => r.id).sort(),
+        'the project holds the seeded threads and no others',
+      ).toEqual([...threadIds].sort());
     });
 
     await test.step('Each thread shows the score in its panel', async () => {
@@ -167,7 +175,10 @@ test.describe('Online Evaluation — thread-scoped rule fan-out', { tag: ['@t2-c
           panel.feedbackScoreRow(scoreName),
           `thread '${threadId}' must render exactly one row for the rule's score`,
         ).toHaveCount(1);
-        expect(await panel.readFeedbackScoreValue(scoreName)).toBeCloseTo(1.0, 6);
+        expect(
+          await panel.readFeedbackScoreValue(scoreName),
+          `thread '${threadId}' must render the rule's score as 1.0`,
+        ).toBeCloseTo(1.0, 6);
       }
     });
   });
