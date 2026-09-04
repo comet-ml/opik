@@ -1,11 +1,19 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.infrastructure.RedisConfig;
+import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
+import io.dropwizard.configuration.ResourceConfigurationSourceProvider;
+import io.dropwizard.configuration.SubstitutingSourceProvider;
+import io.dropwizard.configuration.YamlConfigurationFactory;
+import io.dropwizard.core.Configuration;
+import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -70,6 +78,27 @@ class RedisConfigTest {
     @Nested
     @DisplayName("Sentinel mode")
     class SentinelMode {
+
+        @Test
+        @DisplayName("Should preserve Sentinel node order when loading environment-substituted YAML")
+        void shouldPreserveSentinelNodeOrderWhenLoadingEnvironmentSubstitutedYaml() throws Exception {
+            var environment = Map.of(
+                    "OPIK_REDIS_SENTINEL_NODES",
+                    "redis://sentinel-2:26379,redis://sentinel-3:26379");
+            var substitutor = new EnvironmentVariableSubstitutor(false);
+            substitutor.setVariableResolver(environment::get);
+            var sourceProvider = new SubstitutingSourceProvider(new ResourceConfigurationSourceProvider(), substitutor);
+
+            var config = new YamlConfigurationFactory<>(
+                    SentinelTestConfiguration.class,
+                    Validators.newValidator(),
+                    Jackson.newObjectMapper(),
+                    "dw")
+                    .build(sourceProvider, "redis/sentinel-config-test.yml");
+
+            assertThat(config.getSentinel().getNodes())
+                    .containsExactly("redis://sentinel-2:26379", "redis://sentinel-3:26379");
+        }
 
         @Test
         @DisplayName("Should build sentinel config with the master name and the seed address from the url")
@@ -372,6 +401,19 @@ class RedisConfigTest {
             var sentinel = new RedisConfig.SentinelConfig();
 
             assertThat(sentinel.isMasterNameProvidedWhenEnabled()).isTrue();
+        }
+    }
+
+    public static class SentinelTestConfiguration extends Configuration {
+
+        private RedisConfig.SentinelConfig sentinel;
+
+        public RedisConfig.SentinelConfig getSentinel() {
+            return sentinel;
+        }
+
+        public void setSentinel(RedisConfig.SentinelConfig sentinel) {
+            this.sentinel = sentinel;
         }
     }
 }
