@@ -3,6 +3,8 @@ import { MODE_TYPE } from "@/shared/SyntaxHighlighter/constants";
 
 export type PrettifyConfig = {
   fieldType: "input" | "output";
+  openInferenceHint?: boolean;
+  openInferenceInput?: object | string;
 };
 
 export type CodeOutput = {

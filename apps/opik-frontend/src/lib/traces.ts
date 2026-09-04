@@ -16,6 +16,7 @@ import mergeWith from "lodash/mergeWith";
 import {
   extractLegacyOpenInferenceOutputText,
   extractOpenInferencePrettyText,
+  hasLegacyOpenInferenceAttributes,
 } from "@/lib/openinference";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
@@ -45,6 +46,7 @@ export const traceVisible = (item: ExperimentItem) =>
 type PrettifyMessageConfig = {
   type: "input" | "output";
   openInferenceInput?: object | string;
+  openInferenceHint?: boolean;
 };
 
 type PrettifyMessageResponse = {
@@ -657,7 +659,13 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
   try {
-    let processedMessage = extractOpenInferencePrettyText(message, config.type);
+    const shouldExtractOpenInference =
+      config.openInferenceHint ||
+      hasLegacyOpenInferenceAttributes(message) ||
+      hasLegacyOpenInferenceAttributes(config.openInferenceInput);
+    let processedMessage = shouldExtractOpenInference
+      ? extractOpenInferencePrettyText(message, config.type)
+      : undefined;
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyOpenAIMessageLogic(message, config);

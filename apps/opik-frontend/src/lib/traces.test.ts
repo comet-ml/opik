@@ -566,7 +566,7 @@ describe("prettifyMessage", () => {
           },
         ],
       },
-      { type: "output" },
+      { type: "output", openInferenceHint: true },
     );
 
     expect(result).toEqual({
@@ -579,13 +579,13 @@ describe("prettifyMessage", () => {
     expect(
       prettifyMessage(
         { prompts: [{ text: "First" }, { text: "Latest prompt" }] },
-        { type: "input" },
+        { type: "input", openInferenceHint: true },
       ),
     ).toEqual({ message: "Latest prompt", prettified: true });
     expect(
       prettifyMessage(
         { choices: [{ text: "One" }, { text: "Final completion" }] },
-        { type: "output" },
+        { type: "output", openInferenceHint: true },
       ),
     ).toEqual({ message: "Final completion", prettified: true });
   });
@@ -633,6 +633,7 @@ describe("prettifyMessage", () => {
         },
         {
           type: "output",
+          openInferenceHint: true,
           openInferenceInput: {
             messages: [{ role: "tool", content: "Tool result" }],
           },
@@ -655,6 +656,26 @@ describe("prettifyMessage", () => {
       }),
     ).toEqual({
       message: "Actual answer",
+      prettified: true,
+    });
+  });
+
+  it("does not apply OpenInference extraction to unmarked role messages", () => {
+    const message = {
+      messages: [{ role: "assistant", content: "Keep the existing shape" }],
+    };
+
+    expect(prettifyMessage(message, { type: "input" })).toEqual({
+      message,
+      prettified: false,
+    });
+    expect(
+      prettifyMessage(message, {
+        type: "input",
+        openInferenceHint: true,
+      }),
+    ).toEqual({
+      message: "Keep the existing shape",
       prettified: true,
     });
   });

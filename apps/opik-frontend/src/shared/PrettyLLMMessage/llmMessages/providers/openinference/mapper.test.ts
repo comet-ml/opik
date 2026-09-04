@@ -54,10 +54,13 @@ describe("OpenInference message mapping", () => {
       finish_reason: "tool_calls",
     };
 
-    const result = mapAndCombineMessages(input, output, "openinference", {
-      prompt_tokens: 12,
-      completion_tokens: 4,
-      total_tokens: 16,
+    const result = mapAndCombineMessages(input, output, {
+      formatHint: "openinference",
+      spanUsage: {
+        prompt_tokens: 12,
+        completion_tokens: 4,
+        total_tokens: 16,
+      },
     });
 
     expect(result.messages.map((message) => message.role)).toEqual([
@@ -151,11 +154,9 @@ describe("OpenInference message mapping", () => {
       mime_type: "application/json",
     };
 
-    const result = mapAndCombineMessages(
-      legacyInput,
-      legacyOutput,
-      "openinference",
-    );
+    const result = mapAndCombineMessages(legacyInput, legacyOutput, {
+      formatHint: "openinference",
+    });
 
     expect(result.messages).toHaveLength(2);
     expect(result.messages[0]).toMatchObject({
@@ -187,13 +188,36 @@ describe("OpenInference message mapping", () => {
         "llm.input_messages.0.message.content": "Hello",
       },
       { value: "Raw answer", mime_type: "text/plain" },
-      "openinference",
+      { formatHint: "openinference" },
     );
 
     expect(result.messages).toHaveLength(2);
     expect(result.messages[1].id).toBe("openinference-output-fallback-0");
     expect(result.messages[1].blocks[0].props).toMatchObject({
       children: "Raw answer",
+    });
+  });
+
+  it("renders unwrapped raw objects when an exact span marker supplied the hint", () => {
+    const result = mapAndCombineMessages(
+      { request_id: "request-7" },
+      { response_id: "response-7" },
+      {
+        formatHint: "openinference",
+        formatHintIsAuthoritative: true,
+      },
+    );
+
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0]).toMatchObject({
+      id: "openinference-input-fallback-0",
+      role: "user",
+      blocks: [{ blockType: "code", props: { label: "Input" } }],
+    });
+    expect(result.messages[1]).toMatchObject({
+      id: "openinference-output-fallback-0",
+      role: "assistant",
+      blocks: [{ blockType: "code", props: { label: "Output" } }],
     });
   });
 
@@ -215,5 +239,212 @@ describe("OpenInference message mapping", () => {
       { fieldType: "output", formatHint: "openinference" },
     );
     expect(result.messages[0].role).toBe("assistant");
+  });
+
+  it("uses raw fallback when partial semantic messages have no renderable blocks", () => {
+    const result = combineOpenInferenceMessages(
+      {
+        raw: { messages: [{ role: "user" }], value: "Raw question" },
+        mapped: { messages: [] },
+      },
+      {
+        raw: { messages: [{ role: "assistant" }], value: "Raw answer" },
+        mapped: { messages: [] },
+      },
+    );
+
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0]).toMatchObject({
+      id: "openinference-input-fallback-0",
+      role: "user",
+    });
+    expect(result.messages[0].blocks[0].props).toMatchObject({
+      children: "Raw question",
+    });
+    expect(result.messages[1]).toMatchObject({
+      id: "openinference-output-fallback-0",
+      role: "assistant",
+    });
+    expect(result.messages[1].blocks[0].props).toMatchObject({
+      children: "Raw answer",
+    });
+  });
+
+  it("keeps distinct tool calls that share a function and arguments", () => {
+    const result = mapOpenInferenceMessages(
+      {
+        messages: [
+          {
+            role: "assistant",
+            contents: [
+              {
+                type: "tool_use",
+                tool_call: {
+                  id: "ordered-call",
+                  function: { name: "weather", arguments: '{"city":"Paris"}' },
+                },
+              },
+            ],
+            tool_calls: [
+              {
+                id: "separate-call",
+                function: { name: "weather", arguments: '{"city":"Paris"}' },
+              },
+            ],
+          },
+        ],
+      },
+      { fieldType: "output", formatHint: "openinference" },
+    );
+
+    expect(
+      result.messages[0].blocks.filter((block) => block.blockType === "code"),
+    ).toHaveLength(2);
+  });
+
+  it("matches each ordered tool use to at most one message-level tool call", () => {
+    const result = mapOpenInferenceMessages(
+      {
+        messages: [
+          {
+            role: "assistant",
+            contents: [
+              {
+                type: "tool_use",
+                tool_call: {
+                  function: {
+                    name: "weather",
+                    arguments: '{"city":"Paris"}',
+                  },
+                },
+              },
+            ],
+            tool_calls: [
+              {
+                id: "call-1",
+                function: {
+                  name: "weather",
+                  arguments: '{"city":"Paris"}',
+                },
+              },
+              {
+                id: "call-2",
+                function: {
+                  name: "weather",
+                  arguments: '{"city":"Paris"}',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { fieldType: "output", formatHint: "openinference" },
+    );
+
+    expect(
+      result.messages[0].blocks.filter((block) => block.blockType === "code"),
+    ).toHaveLength(2);
+  });
+
+  it("uses raw fallback instead of rendering an id-only tool call", () => {
+    const result = mapOpenInferenceMessages(
+      {
+        messages: [
+          {
+            role: "assistant",
+            tool_calls: [{ id: "only-id" }],
+          },
+        ],
+        value: "Raw answer",
+      },
+      { fieldType: "output", formatHint: "openinference" },
+    );
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({
+      id: "openinference-output-fallback-0",
+      blocks: [{ blockType: "text", props: { children: "Raw answer" } }],
+    });
+  });
+
+  it("rejects unsafe media URLs while preserving safe media and transcripts", () => {
+    const result = mapOpenInferenceMessages(
+      {
+        messages: [
+          {
+            role: "assistant",
+            contents: [
+              { type: "image", image: { url: "javascript:alert(1)" } },
+              {
+                type: "image",
+                image: { url: "https://example.test/image.png" },
+              },
+              { type: "image", image: { url: "data:text/html,<script />" } },
+              { type: "image", image: { url: "data:image/png;base64,AA==" } },
+              {
+                type: "audio",
+                audio: {
+                  url: "custom:unsafe",
+                  transcript: "Transcript remains visible",
+                },
+              },
+              {
+                type: "audio",
+                audio: { url: "data:audio/wav;base64,AA==" },
+              },
+            ],
+          },
+        ],
+      },
+      { fieldType: "output", formatHint: "openinference" },
+    );
+
+    expect(result.messages[0].blocks.map((block) => block.blockType)).toEqual([
+      "image",
+      "image",
+      "text",
+      "audio",
+    ]);
+    expect(result.messages[0].blocks).toMatchObject([
+      {
+        blockType: "image",
+        props: { images: [{ url: "https://example.test/image.png" }] },
+      },
+      {
+        blockType: "image",
+        props: { images: [{ url: "data:image/png;base64,AA==" }] },
+      },
+      { blockType: "text" },
+      {
+        blockType: "audio",
+        props: { audios: [{ url: "data:audio/wav;base64,AA==" }] },
+      },
+    ]);
+  });
+
+  it("preserves a separately detected OpenAI output", () => {
+    const result = mapAndCombineMessages(
+      {
+        "openinference.span.kind": "LLM",
+        "llm.input_messages.0.message.role": "user",
+        "llm.input_messages.0.message.content": "Question",
+      },
+      {
+        id: "chatcmpl-1",
+        model: "provider-model",
+        choices: [{ message: { role: "assistant", content: "OpenAI answer" } }],
+        usage: { total_tokens: 7 },
+      },
+      {
+        formatHint: "openinference",
+        formatHintIsAuthoritative: true,
+      },
+    );
+
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[1]).toMatchObject({ role: "assistant" });
+    expect(result.messages[1].blocks[0].props).toMatchObject({
+      children: "OpenAI answer",
+    });
   });
 });

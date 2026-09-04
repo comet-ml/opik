@@ -2,6 +2,8 @@ import {
   OpenInferenceContent,
   OpenInferenceMessage,
   OpenInferenceToolCall,
+  isRenderableOpenInferenceToolCall,
+  isSafeOpenInferenceMediaUrl,
   parseOpenInferenceFields,
   ParsedOpenInferenceFields,
 } from "@/lib/openinference";
@@ -82,20 +84,22 @@ const codeBlock = (value: unknown, label: string): LLMBlockDescriptor => ({
   props: { code: formatCode(value), label },
 });
 
-const toolCallFingerprints = (toolCall: OpenInferenceToolCall): string[] => {
-  const fingerprints: string[] = [];
-  if (toolCall.id) fingerprints.push(`id:${toolCall.id}`);
-  if (toolCall.function?.name || toolCall.function?.arguments) {
-    fingerprints.push(
-      `function:${toolCall.function?.name ?? ""}:${
-        toolCall.function?.arguments ?? ""
-      }`,
-    );
+const isSameToolCall = (
+  left: OpenInferenceToolCall,
+  right: OpenInferenceToolCall,
+): boolean => {
+  if (left.id && right.id) return left.id === right.id;
+  if (left.reasoning_signature && right.reasoning_signature) {
+    return left.reasoning_signature === right.reasoning_signature;
   }
-  if (toolCall.reasoning_signature) {
-    fingerprints.push(`reasoning:${toolCall.reasoning_signature}`);
-  }
-  return fingerprints;
+  const leftFunction = left.function;
+  const rightFunction = right.function;
+  if (!leftFunction || !rightFunction) return false;
+  if (!leftFunction.name && !leftFunction.arguments) return false;
+  return (
+    leftFunction.name === rightFunction.name &&
+    leftFunction.arguments === rightFunction.arguments
+  );
 };
 
 const toolCallBlock = (toolCall: OpenInferenceToolCall): LLMBlockDescriptor =>
@@ -107,15 +111,18 @@ const toolCallBlock = (toolCall: OpenInferenceToolCall): LLMBlockDescriptor =>
 const contentBlocks = (
   contents: OpenInferenceContent[],
   role: MessageRole,
-): { blocks: LLMBlockDescriptor[]; orderedToolCalls: Set<string> } => {
+): {
+  blocks: LLMBlockDescriptor[];
+  orderedToolCalls: OpenInferenceToolCall[];
+} => {
   const blocks: LLMBlockDescriptor[] = [];
-  const orderedToolCalls = new Set<string>();
+  const orderedToolCalls: OpenInferenceToolCall[] = [];
 
   contents.forEach((content, index) => {
     switch (content.type) {
       case "image": {
         const url = content.image?.url;
-        if (url) {
+        if (url && isSafeOpenInferenceMediaUrl(url, "image")) {
           blocks.push({
             blockType: "image",
             component: PrettyLLMMessage.ImageBlock,
@@ -126,7 +133,7 @@ const contentBlocks = (
       }
       case "audio": {
         const url = content.audio?.url;
-        if (url) {
+        if (url && isSafeOpenInferenceMediaUrl(url, "audio")) {
           blocks.push({
             blockType: "audio",
             component: PrettyLLMMessage.AudioPlayerBlock,
@@ -139,10 +146,11 @@ const contentBlocks = (
         break;
       }
       case "tool_use": {
-        if (content.tool_call) {
-          toolCallFingerprints(content.tool_call).forEach((fingerprint) =>
-            orderedToolCalls.add(fingerprint),
-          );
+        if (
+          content.tool_call &&
+          isRenderableOpenInferenceToolCall(content.tool_call)
+        ) {
+          orderedToolCalls.push(content.tool_call);
           blocks.push(toolCallBlock(content.tool_call));
         }
         break;
@@ -168,16 +176,25 @@ const mapMessage = (
   if (message.contents) {
     const mappedContents = contentBlocks(message.contents, role);
     blocks.push(...mappedContents.blocks);
+    const unmatchedOrderedToolCalls = [...mappedContents.orderedToolCalls];
     message.tool_calls
-      ?.filter(
-        (toolCall) =>
-          !toolCallFingerprints(toolCall).some((fingerprint) =>
-            mappedContents.orderedToolCalls.has(fingerprint),
-          ),
-      )
-      .forEach((toolCall) => blocks.push(toolCallBlock(toolCall)));
+      ?.filter(isRenderableOpenInferenceToolCall)
+      .forEach((toolCall) => {
+        const matchIndex = unmatchedOrderedToolCalls.findIndex(
+          (orderedToolCall) => isSameToolCall(toolCall, orderedToolCall),
+        );
+        if (matchIndex >= 0) {
+          unmatchedOrderedToolCalls.splice(matchIndex, 1);
+        } else {
+          blocks.push(toolCallBlock(toolCall));
+        }
+      });
   } else {
-    if (message.content !== undefined && message.content !== null) {
+    if (
+      message.content !== undefined &&
+      message.content !== null &&
+      message.content !== ""
+    ) {
       blocks.push(
         role === "tool"
           ? codeBlock(message.content, message.name ?? "Tool result")
@@ -186,9 +203,9 @@ const mapMessage = (
             : codeBlock(message.content, "Content"),
       );
     }
-    message.tool_calls?.forEach((toolCall) =>
-      blocks.push(toolCallBlock(toolCall)),
-    );
+    message.tool_calls
+      ?.filter(isRenderableOpenInferenceToolCall)
+      .forEach((toolCall) => blocks.push(toolCallBlock(toolCall)));
   }
 
   if (message.function_call !== undefined) {
@@ -248,11 +265,12 @@ const toolLabel = (tool: unknown, index: number): string => {
 };
 
 const mapParsed = (parsed: ParsedOpenInferenceFields): LLMMapperResult => {
-  const messages: LLMMessageDescriptor[] = parsed.inputMessages.map(
-    (message, index) => mapMessage(message, index, "input"),
-  );
+  const mappedInputMessages = parsed.inputMessages
+    .map((message, index) => mapMessage(message, index, "input"))
+    .filter((message) => message.blocks.length > 0);
+  const messages: LLMMessageDescriptor[] = [...mappedInputMessages];
 
-  if (parsed.inputMessages.length === 0 && parsed.inputFallback !== undefined) {
+  if (mappedInputMessages.length === 0 && parsed.inputFallback !== undefined) {
     messages.push(fallbackMessage(parsed.inputFallback, "input", 0));
   }
 
@@ -277,11 +295,10 @@ const mapParsed = (parsed: ParsedOpenInferenceFields): LLMMapperResult => {
   }
 
   const outputStart = messages.length;
-  messages.push(
-    ...parsed.outputMessages.map((message, index) =>
-      mapMessage(message, index, "output"),
-    ),
-  );
+  const mappedOutputMessages = parsed.outputMessages
+    .map((message, index) => mapMessage(message, index, "output"))
+    .filter((message) => message.blocks.length > 0);
+  messages.push(...mappedOutputMessages);
 
   parsed.choices.forEach((choice, index) => {
     messages.push({
@@ -309,7 +326,7 @@ const mapParsed = (parsed: ParsedOpenInferenceFields): LLMMapperResult => {
   // A historical output.value often duplicates the richer llm.output_messages.*
   // attributes that were incorrectly stored in input. Use raw output only as fallback.
   if (
-    parsed.outputMessages.length === 0 &&
+    mappedOutputMessages.length === 0 &&
     parsed.choices.length === 0 &&
     parsed.functionCall === undefined &&
     parsed.outputFallback !== undefined

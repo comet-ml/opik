@@ -3,6 +3,8 @@ package com.comet.opik.domain.mapping.otel;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
@@ -13,7 +15,6 @@ import io.opentelemetry.proto.common.v1.KeyValue;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
@@ -270,6 +271,13 @@ public final class OpenInferenceSpanNormalizer {
                     putPromptTemplateField("version", key, value, false);
                     yield true;
                 }
+                case "tool.json_schema" -> {
+                    JsonNode parsed = parseJsonStringOrMetadata(key, value);
+                    if (parsed != null) {
+                        metadata.set(key, parsed);
+                    }
+                    yield true;
+                }
                 case "llm.cost.total" -> {
                     totalEstimatedCost = OpenTelemetryMappingUtils.extractCost(value).orElse(null);
                     if (totalEstimatedCost == null) {
@@ -493,21 +501,20 @@ public final class OpenInferenceSpanNormalizer {
                 metadata.set("metadata", toJsonNode(value));
                 return;
             }
-            try {
-                JsonNode parsed = JsonUtils.getJsonNodeFromString(value.getStringValue());
-                if (!parsed.isObject()) {
-                    metadata.set("metadata", parsed);
-                    return;
-                }
-                parsed.fields().forEachRemaining(entry -> {
-                    if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
-                        metadata.set(entry.getKey(), entry.getValue());
-                    }
-                });
-            } catch (UncheckedIOException exception) {
-                log.debug("Failed to parse OpenInference metadata as JSON", exception);
+            JsonNode parsed = parseJsonString(value.getStringValue());
+            if (parsed == null) {
                 metadata.put("metadata", value.getStringValue());
+                return;
             }
+            if (!parsed.isObject()) {
+                metadata.set("metadata", parsed);
+                return;
+            }
+            parsed.fields().forEachRemaining(entry -> {
+                if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
+                    metadata.set(entry.getKey(), entry.getValue());
+                }
+            });
         }
 
         private String stringValueOrMetadata(String key, AnyValue value) {
@@ -531,7 +538,11 @@ public final class OpenInferenceSpanNormalizer {
                 metadata.set(originalKey, toJsonNode(value));
                 return null;
             }
-            return parseJsonString(value.getStringValue());
+            JsonNode parsed = parseJsonString(value.getStringValue());
+            if (parsed == null) {
+                metadata.put(originalKey, value.getStringValue());
+            }
+            return parsed;
         }
     }
 
@@ -561,7 +572,11 @@ public final class OpenInferenceSpanNormalizer {
                 if (!value.hasStringValue()) {
                     return false;
                 }
-                functionCall.set("arguments", parseJsonString(value.getStringValue()));
+                JsonNode arguments = parseJsonString(value.getStringValue());
+                if (arguments == null) {
+                    return false;
+                }
+                functionCall.set("arguments", arguments);
                 return true;
             }
 
@@ -744,12 +759,12 @@ public final class OpenInferenceSpanNormalizer {
         if (!JSON_MIME_TYPE.equals(normalizeMimeType(mimeType))) {
             return JsonUtils.valueToTree(value.getStringValue());
         }
-        try {
-            return JsonUtils.getJsonNodeFromString(value.getStringValue());
-        } catch (UncheckedIOException exception) {
-            log.debug("Failed to parse OpenInference {} as JSON; preserving the original value", key, exception);
-            return JsonUtils.valueToTree(value.getStringValue());
+        JsonNode parsed = parseJsonString(value.getStringValue());
+        if (parsed != null) {
+            return parsed;
         }
+        log.debug("Failed to parse OpenInference {} as JSON; preserving the original value", key);
+        return JsonUtils.valueToTree(value.getStringValue());
     }
 
     private static String normalizeMimeType(String mimeType) {
@@ -762,7 +777,15 @@ public final class OpenInferenceSpanNormalizer {
     }
 
     private static JsonNode parseJsonString(String value) {
-        return JsonUtils.getJsonNodeFromStringWithFallback(value);
+        try {
+            JsonNode parsed = JsonUtils.getMapper()
+                    .reader()
+                    .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .readTree(value);
+            return parsed == null || parsed.isMissingNode() ? null : parsed;
+        } catch (JsonProcessingException exception) {
+            return null;
+        }
     }
 
     private static SpanType toSpanType(String kind) {

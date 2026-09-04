@@ -12,5 +12,6 @@ export const detectOpenInferenceFormat: FormatDetector = (
     data,
     fieldType,
     prettifyConfig?.formatHint === "openinference",
+    prettifyConfig?.formatHintIsAuthoritative,
   );
 };

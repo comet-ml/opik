@@ -37,6 +37,7 @@ type MessagesTabProps = {
   isLoading: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
   formatHint?: LLMMessageFormat;
+  formatHintIsAuthoritative?: boolean;
   spanUsage?: PrettyLLMMessageUsageProps["usage"];
 };
 
@@ -60,17 +61,23 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   isLoading,
   scrollContainerRef,
   formatHint,
+  formatHintIsAuthoritative,
   spanUsage,
 }) => {
   const { messages: combinedMessages, usage } = useMemo(
     () =>
-      mapAndCombineMessages(
-        transformedInput,
-        transformedOutput,
+      mapAndCombineMessages(transformedInput, transformedOutput, {
         formatHint,
+        formatHintIsAuthoritative,
         spanUsage,
-      ),
-    [formatHint, spanUsage, transformedInput, transformedOutput],
+      }),
+    [
+      formatHint,
+      formatHintIsAuthoritative,
+      spanUsage,
+      transformedInput,
+      transformedOutput,
+    ],
   );
 
   const allMessageIds = useMemo(

@@ -1,4 +1,4 @@
-export { detectLLMMessages } from "./detectLLMMessages";
+export { canShowLLMMessages, detectLLMMessages } from "./detectLLMMessages";
 export { mapAndCombineMessages } from "./mapAndCombineMessages";
 
 export type {

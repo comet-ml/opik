@@ -8,6 +8,7 @@ import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
+import { hasOpenInferenceHint } from "@/lib/openinference";
 
 type CustomMeta = {
   fieldType: "input" | "output";
@@ -26,12 +27,23 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const { fieldType = "input", colorIndicator = false } = (custom ??
     {}) as CustomMeta;
   const value = context.getValue() as string | object | undefined | null;
-  const rowInput = (context.row.original as { input?: object | string })?.input;
+  const row = context.row.original as {
+    input?: object | string;
+    output?: object | string;
+    metadata?: object;
+  };
+  const rowInput = row.input;
+  const openInferenceHint = hasOpenInferenceHint(
+    row.metadata,
+    row.input,
+    row.output,
+  );
 
   const displayMessage = useMemo(() => {
     const pretty = prettifyMessage(value ?? undefined, {
       type: fieldType,
       openInferenceInput: fieldType === "output" ? rowInput : undefined,
+      openInferenceHint,
     });
 
     if (!pretty.message) return "-";
@@ -48,7 +60,14 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     }
 
     return message;
-  }, [value, fieldType, rowInput, truncationEnabled, maxDataLength]);
+  }, [
+    value,
+    fieldType,
+    rowInput,
+    openInferenceHint,
+    truncationEnabled,
+    maxDataLength,
+  ]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
