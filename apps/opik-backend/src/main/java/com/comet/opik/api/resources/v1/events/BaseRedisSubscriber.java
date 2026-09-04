@@ -434,10 +434,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     claimErrors.add(1);
                     log.error("Error claiming pending messages", throwable);
                     // A failed scan leaves the cursor where it was, so the next attempt retries the same
-                    // window rather than skipping it. Except on NOGROUP: the group is being recreated, so
-                    // any cursor into the old group's PEL is meaningless.
+                    // window rather than skipping it. The NOGROUP case is different, but recoverFromNoGroup
+                    // resets the cursor itself so both it and the read path get the same treatment.
                     if (isNoGroupError(throwable)) {
-                        claimCursor = StreamMessageId.MIN;
                         return recoverFromNoGroup();
                     }
                     return Mono.just(Map.of());
@@ -507,6 +506,16 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private Mono<Map<StreamMessageId, Map<String, M>>> recoverFromNoGroup() {
         log.warn("Recreating not found consumer group '{}' for stream '{}'",
                 config.getConsumerGroupName(), config.getStreamName());
+        // The cursor indexes the OLD group's pending list, so it means nothing once the group is
+        // recreated. Reset here rather than at the call sites: NOGROUP surfaces from both readMessages
+        // and claimPendingMessages, and the read path is the likelier of the two to notice it first
+        // (reads run on every tick that is not a claim tick).
+        //
+        // Leaving it stale is not self-correcting on a busy stream. A scan starting above the recreated
+        // PEL's entries only wraps once it exhausts the list, and entries arriving after the stale
+        // position keep giving it work at the high end -- so the wrap can be deferred indefinitely while
+        // the oldest entries, the ones this scan exists to reach, are never examined.
+        claimCursor = StreamMessageId.MIN;
         return createConsumerGroup()
                 .onErrorResume(throwable -> {
                     log.error("Failed to recreate consumer group '{}' for stream '{}'",

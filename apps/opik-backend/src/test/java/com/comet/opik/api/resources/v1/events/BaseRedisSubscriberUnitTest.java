@@ -622,6 +622,58 @@ class BaseRedisSubscriberUnitTest {
     @Nested
     class NoGroupErrorTests {
 
+        /**
+         * Regression for review feedback on OPIK-8240: {@code recoverFromNoGroup} is reached from BOTH
+         * {@code readMessages} and {@code claimPendingMessages}, and the cursor reset was originally only
+         * at the claim call site. The read path is the likelier of the two to notice NOGROUP first, since
+         * reads run on every tick that is not a claim tick.
+         *
+         * <p>A cursor left pointing into the old group's pending list is not self-correcting on a busy
+         * stream: a scan starting above the recreated PEL's entries only wraps once it exhausts the list,
+         * and entries arriving after the stale position keep feeding it at the high end, so the oldest
+         * entries can go unexamined indefinitely -- the exact starvation this fix exists to remove.
+         */
+        @Test
+        void shouldResetTheClaimCursorWhenTheGroupIsRecreatedViaTheReadPath() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+            var fastConfig = CONFIG.toBuilder().claimIntervalRatio(2).build();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            var starts = new CopyOnWriteArrayList<StreamMessageId>();
+            var claims = new AtomicInteger();
+
+            // First claim advances the cursor well past the start of the PEL.
+            when(stream.autoClaim(
+                    eq(fastConfig.getConsumerGroupName()),
+                    anyString(),
+                    eq(fastConfig.getPendingMessageDuration().toJavaDuration().toMillis()),
+                    eq(TimeUnit.MILLISECONDS),
+                    any(StreamMessageId.class),
+                    eq(fastConfig.getConsumerBatchSize())))
+                    .thenAnswer(invocation -> {
+                        starts.add(invocation.getArgument(4));
+                        claims.incrementAndGet();
+                        return Mono.just(new AutoClaimResult<>(
+                                new StreamMessageId(9_000L, 0), Map.of(), List.of()));
+                    });
+            // Reads then hit NOGROUP, which recreates the group underneath us.
+            when(stream.readGroup(eq(fastConfig.getConsumerGroupName()), anyString(),
+                    any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> Mono
+                            .error(new RuntimeException("NOGROUP No such key stream or consumer group")));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).until(() -> starts.size() >= 2);
+
+            // The recreated group has a fresh PEL, so the next scan must start from the beginning rather
+            // than from the position it reached in the group that no longer exists.
+            assertThat(starts.getFirst()).isEqualTo(StreamMessageId.MIN);
+            assertThat(starts.get(1)).isEqualTo(StreamMessageId.MIN);
+        }
+
         @Test
         void shouldRecoverOnClaimAndNotDie() {
             whenCreateGroupReturnEmpty();
