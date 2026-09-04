@@ -38,7 +38,9 @@ class BaseRedisSubscriberCursorTest {
     void midScanPositionIsCarriedForward() {
         // Redis caps each XAUTOCLAIM at COUNT * 10 entries EXAMINED, so without carrying this forward the
         // scan only ever sees the first ~100 pending entries and anything behind them is never reclaimed.
+        // isEqualTo, not isSameAs: the contract is that the position is carried forward, not that the
+        // same object is. An equal-but-distinct StreamMessageId preserves cursor semantics exactly.
         var midScan = new StreamMessageId(1787891543627L, 0);
-        assertThat(BaseRedisSubscriber.nextCursor(midScan)).isSameAs(midScan);
+        assertThat(BaseRedisSubscriber.nextCursor(midScan)).isEqualTo(midScan);
     }
 }
