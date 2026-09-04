@@ -4,6 +4,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.protobuf.ByteString;
@@ -2545,6 +2546,34 @@ class OpenTelemetryMapperTest {
             assertThat(span.output().path("function_call").path("arguments").path("city").asText())
                     .isEqualTo("Paris");
             assertThat(span.output().path("finish_reason").asText()).isEqualTo("stop");
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {false, true})
+        void preservesIndexedFunctionCallsOnTheirMessages(boolean hasStandaloneCall) throws Exception {
+            var attributes = new ArrayList<>(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("llm.output_messages.1.message.function_call_name", "search"),
+                    str("llm.output_messages.1.message.function_call_arguments_json", "{\"query\":\"weather\"}"),
+                    str("llm.output_messages.0.message.function_call_name", "weather"),
+                    str("llm.output_messages.0.message.function_call_arguments_json", "{\"city\":\"Paris\"}")));
+            if (hasStandaloneCall) {
+                attributes.add(str("llm.function_call", "{\"name\":\"standalone\"}"));
+            }
+
+            var span = enrich(attributes);
+
+            assertThat(span.output().path("messages")).isEqualTo(JsonUtils.getMapper().readTree("""
+                    [
+                      {"function_call": {"name": "weather", "arguments": {"city": "Paris"}}},
+                      {"function_call": {"name": "search", "arguments": {"query": "weather"}}}
+                    ]
+                    """));
+            assertThat(span.output().has("function_call")).isEqualTo(hasStandaloneCall);
+            if (hasStandaloneCall) {
+                assertThat(span.output().path("function_call"))
+                        .isEqualTo(JsonUtils.getMapper().readTree("{\"name\":\"standalone\"}"));
+            }
         }
 
         @Test
