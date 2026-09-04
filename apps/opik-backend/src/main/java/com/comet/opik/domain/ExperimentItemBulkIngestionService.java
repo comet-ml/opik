@@ -85,6 +85,13 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     private static final boolean LEAN_WRITE_CONTEXT = !"false"
             .equalsIgnoreCase(System.getProperty("opik.leanExperimentContext", "true"));
 
+    /**
+     * Skip {@code experimentService.create()} when the experiment already exists. Set
+     * {@code -Dopik.skipRedundantExperimentCreate=false} to restore the unconditional create.
+     */
+    private static final boolean SKIP_REDUNDANT_CREATE = !"false"
+            .equalsIgnoreCase(System.getProperty("opik.skipRedundantExperimentCreate", "true"));
+
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull ExperimentService experimentService;
@@ -138,8 +145,18 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                         ? experiment
                                         : experiment.toBuilder().projectName(bulkProjectName).build();
 
-                                return experimentService.create(experimentToCreate)
-                                        .retryWhen(RetryUtils.handleConnectionError())
+                                // An experiment that already exists needs no create(): that call runs
+                                // resolveProjectId, getOrCreateDataset and resolveDatasetVersion (MySQL
+                                // round trips) plus an upsert, per batch, to arrive at an id we already
+                                // hold. Creation still happens for the first batch of a new experiment.
+                                Mono<UUID> experimentIdMono = (SKIP_REDUNDANT_CREATE
+                                        && existingExperiment.isPresent()
+                                        && existingExperiment.get().id() != null)
+                                                ? Mono.just(existingExperiment.get().id())
+                                                : experimentService.create(experimentToCreate)
+                                                        .retryWhen(RetryUtils.handleConnectionError());
+
+                                return experimentIdMono
                                         .flatMap(experimentId -> {
                                             log.info(
                                                     "Using experiment with id '{}', name '{}', datasetName '{}', projectName '{}', workspaceId '{}'",
