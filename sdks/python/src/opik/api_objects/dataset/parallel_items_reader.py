@@ -20,11 +20,18 @@ from concurrent import futures
 from typing import Any, Callable, Deque, Dict, Iterator, List, Optional
 import collections
 
+import opik.exceptions as exceptions
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core import api_error as rest_api_error
 from opik.rest_client_configurator import retry_decorator
 
 LOGGER = logging.getLogger(__name__)
+
+_MALFORMED_PAGE = (
+    "Malformed response from the dataset items endpoint. "
+    "The page count for the rest of the read is derived from this response, so "
+    "continuing would silently return only part of the dataset."
+)
 
 
 def stream_item_chunks(
@@ -91,9 +98,9 @@ def _read_pages(
     how many pages there are to fan out over.
     """
     first_page = fetch_page(1)
+    total = _page_total(first_page)
     yield _page_items(first_page)
 
-    total = first_page.get("total") or 0
     wanted = total if max_items is None else min(total, max_items)
     last_page = math.ceil(wanted / chunk_size)
     if last_page <= 1:
@@ -172,5 +179,38 @@ def _build_page_fetcher(
 
 
 def _page_items(page: Dict[str, Any]) -> List[Dict[str, Any]]:
-    content: List[Dict[str, Any]] = page.get("content") or []
+    content = page.get("content")
+    if content is None:
+        content = []
+    if not isinstance(content, list):
+        raise exceptions.OpikException(
+            f"{_MALFORMED_PAGE} Expected 'content' to be a list, got "
+            f"{type(content).__name__}."
+        )
     return content
+
+
+def _page_total(page: Dict[str, Any]) -> int:
+    """Read the item count the rest of the read is planned against.
+
+    Validated rather than defaulted: the page count is derived from ``total``,
+    so a missing or non-numeric value would silently cap the read at the first
+    page and hand back part of the dataset as if it were all of it.
+    """
+    if not isinstance(page, dict):
+        raise exceptions.OpikException(
+            f"{_MALFORMED_PAGE} Expected a JSON object, got {type(page).__name__}."
+        )
+
+    total = page.get("total")
+    # bool is an int subclass, and True would silently read as 1 item.
+    if isinstance(total, bool) or not isinstance(total, int):
+        raise exceptions.OpikException(
+            f"{_MALFORMED_PAGE} Expected an integer 'total', got {total!r}."
+        )
+    if total < 0:
+        raise exceptions.OpikException(
+            f"{_MALFORMED_PAGE} Expected a non-negative 'total', got {total}."
+        )
+
+    return total

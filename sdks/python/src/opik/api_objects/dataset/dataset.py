@@ -127,7 +127,9 @@ class DatasetExportOperations(abc.ABC):
         Retrieve dataset items as a list of dictionaries.
 
         Args:
-            nb_samples: Maximum number of items to retrieve. If not set, all items are returned.
+            nb_samples: Maximum number of items to retrieve. Must be a positive
+                integer; omit it or pass ``None`` to return all items. Zero and
+                negative values raise rather than being treated as a limit.
             num_threads: Number of item pages fetched concurrently. Must be a
                 positive integer, defaults to 4; pass ``1`` to fetch
                 sequentially. Raising it speeds up large reads at the cost of
@@ -188,21 +190,23 @@ class DatasetExportOperations(abc.ABC):
         data plus its ``id``.
 
         Args:
-            chunk_size: Number of items per chunk, defaulting to the same
-                batch size the typed item stream reads with
+            chunk_size: Number of items per chunk, defaulting to and capped at
+                the same batch size the typed item stream reads with
                 (``constants.DATASET_STREAM_BATCH_SIZE``). Fetching a chunk
                 costs a fixed overhead whatever its size, so lowering this
-                makes the whole read slower; raise it to trade memory for
-                speed, bearing in mind that up to ``2 * num_threads`` chunks
-                are held at once.
+                makes the whole read slower; lower it when the items are
+                individually large, bearing in mind that up to
+                ``2 * num_threads`` chunks are held in memory at once.
             num_threads: Number of chunks fetched concurrently. Must be a
                 positive integer, defaults to 4; pass ``1`` to fetch
                 sequentially. Capped at
                 ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
             filter_string: Optional OQL filter string to filter dataset items.
                 Accepts the same expressions as :meth:`get_items`.
-            nb_samples: Maximum number of items to read. If not set, the whole
-                dataset is read.
+            nb_samples: Maximum number of items to read. Must be a positive
+                integer; omit it or pass ``None`` to read the whole dataset.
+                Zero and negative values raise rather than being treated as a
+                limit.
 
         Yields:
             Lists of dictionaries representing the dataset items, in dataset
@@ -210,8 +214,10 @@ class DatasetExportOperations(abc.ABC):
             chunks are never yielded.
 
         Raises:
-            ValueError: If ``chunk_size`` or ``num_threads`` is not a positive
-                integer, or ``nb_samples`` is not a positive integer.
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``chunk_size`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
+                ``nb_samples`` is not a positive integer.
 
         Example:
             >>> for chunk in dataset.stream_items(chunk_size=2000, num_threads=8):
@@ -226,6 +232,11 @@ class DatasetExportOperations(abc.ABC):
             raise ValueError("chunk_size must be a positive integer")
         if chunk_size < 1:
             raise ValueError("chunk_size must be a positive integer")
+        if chunk_size > constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE:
+            raise ValueError(
+                "chunk_size must not exceed "
+                f"{constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE}, got {chunk_size}"
+            )
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
@@ -1117,7 +1128,10 @@ class Dataset(DatasetExportOperations):
         nb_samples: Optional[int],
         filter_string: Optional[str],
     ) -> Iterator[List[Dict[str, Any]]]:
-        return rest_operations.stream_dataset_item_chunks(
+        # A generator, so `self.id` -- which resolves the dataset by name over
+        # REST when it hasn't been seeded -- is not touched until the caller
+        # actually starts iterating. Keeps `stream_items()` free of I/O.
+        yield from rest_operations.stream_dataset_item_chunks(
             rest_client=self._rest_client,
             dataset_id=self.id,
             chunk_size=chunk_size,

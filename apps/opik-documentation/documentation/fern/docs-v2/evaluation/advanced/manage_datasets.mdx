@@ -418,8 +418,7 @@ You can download a dataset from Opik using the `get_dataset` method:
 ### Downloading large datasets faster
 
 Dataset items are fetched a page at a time, and those pages are downloaded concurrently. Raise
-`num_threads` to speed up a large read — the default is 4, and 8 is usually worth trying on
-datasets of tens of thousands of items:
+`num_threads` to speed up a large read — the default is 4:
 
 ```python title="Python" language="python"
 from opik import Opik
@@ -451,7 +450,7 @@ for chunk in dataset.stream_items(chunk_size=5000, num_threads=8):
 ```
 
 Chunks arrive in dataset order; only the last one may be shorter than `chunk_size`. Both methods
-accept the same `filter_string`, and `nb_samples` to stop after a given number of items:
+accept the same `filter_string`, and `nb_samples` to read only the first N items:
 
 ```python title="Python" language="python"
 for chunk in dataset.stream_items(
@@ -462,11 +461,15 @@ for chunk in dataset.stream_items(
     process(chunk)
 ```
 
+`nb_samples` must be a positive integer — omit it or pass `None` to read everything. Passing `0`
+or a negative value raises `ValueError` rather than being treated as a limit.
+
 <Note>
-  `chunk_size` controls how many items each request fetches (default 2000). Fetching a chunk costs
-  a fixed overhead whatever its size, so lowering it makes the whole read slower — raise it to
-  trade memory for speed. Lower it only when individual items are large, since up to
-  `2 * num_threads` chunks are held in memory at once.
+  `chunk_size` controls how many items each request fetches. It defaults to 2000, which is also
+  the maximum — a larger value raises `ValueError`, so that peak memory stays bounded. Fetching a
+  chunk costs a fixed overhead whatever its size, so lowering it makes the whole read slower;
+  lower it only when individual items are large, since up to `2 * num_threads` chunks are held in
+  memory at once.
 </Note>
 
 ## Filtering datasets programmatically

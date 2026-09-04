@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+import opik.exceptions as exceptions
 from opik.api_objects import constants
 from opik.api_objects.dataset import rest_operations
 from opik.api_objects.dataset.dataset import Dataset
@@ -173,14 +174,21 @@ def test_stream_items__nb_samples_above_total__reads_everything():
 
 
 def test_stream_items__lazy__no_request_until_iterated():
+    """No I/O at all before the first chunk is pulled -- including the
+    by-name dataset-id lookup, which is a REST call of its own."""
     endpoint = FakeItemsEndpoint(_rest_items(10))
     dataset = _build_dataset(endpoint)
+    lookup = dataset._rest_client.datasets.get_dataset_by_identifier
 
     stream = dataset.stream_items()
 
     assert endpoint.calls == []
+    assert lookup.call_count == 0
+
     next(iter(stream))
+
     assert endpoint.requested_pages == [1]
+    assert lookup.call_count == 1
 
 
 def test_stream_items__data_with_id_key__real_item_id_wins():
@@ -430,3 +438,126 @@ def test_get_items__positional_args_unchanged__nb_samples_still_first():
     dataset = _build_dataset(endpoint)
 
     assert len(dataset.get_items(10)) == 10
+
+
+def _endpoint_returning(body: Dict[str, Any]) -> Mock:
+    """An items endpoint that returns one fixed, possibly malformed, page."""
+
+    def call(path: str, *, method: str, params: Dict[str, Any]) -> Mock:
+        response = Mock()
+        response.status_code = 200
+        response.headers = {}
+        response.text = ""
+        response.json.return_value = body
+        return response
+
+    return call
+
+
+@pytest.mark.parametrize(
+    "total",
+    [None, "abc", 1.5, True, -1],
+    ids=["missing", "string", "float", "bool", "negative"],
+)
+def test_stream_items__malformed_total__raises_instead_of_truncating(total):
+    """A bad `total` would cap the read at page 1 and look like a short
+    dataset, so it has to fail loudly rather than silently."""
+    body: Dict[str, Any] = {"content": _rest_items(2)}
+    if total is not None:
+        body["total"] = total
+
+    mock_rest_client = Mock()
+    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
+    mock_rest_client._client_wrapper.httpx_client.request.side_effect = (
+        _endpoint_returning(body)
+    )
+    dataset = Dataset(
+        name="test-dataset",
+        description=None,
+        project_name=None,
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(exceptions.OpikException, match="Malformed response"):
+        list(dataset.stream_items())
+
+
+def test_stream_items__non_list_content__raises():
+    mock_rest_client = Mock()
+    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
+    mock_rest_client._client_wrapper.httpx_client.request.side_effect = (
+        _endpoint_returning({"total": 2, "content": {"not": "a list"}})
+    )
+    dataset = Dataset(
+        name="test-dataset",
+        description=None,
+        project_name=None,
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(exceptions.OpikException, match="Malformed response"):
+        list(dataset.stream_items())
+
+
+def test_stream_items__total_zero_with_empty_content__reads_nothing():
+    """A genuinely empty dataset is not malformed."""
+    mock_rest_client = Mock()
+    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = DATASET_ID
+    mock_rest_client._client_wrapper.httpx_client.request.side_effect = (
+        _endpoint_returning({"total": 0, "content": []})
+    )
+    dataset = Dataset(
+        name="test-dataset",
+        description=None,
+        project_name=None,
+        rest_client=mock_rest_client,
+    )
+
+    assert list(dataset.stream_items()) == []
+
+
+def test_stream_items__chunk_size_at_the_cap__accepted():
+    endpoint = FakeItemsEndpoint(_rest_items(10))
+    dataset = _build_dataset(endpoint)
+
+    chunks = list(
+        dataset.stream_items(chunk_size=constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE)
+    )
+
+    assert sum(len(chunk) for chunk in chunks) == 10
+
+
+@pytest.mark.parametrize(
+    "chunk_size",
+    [
+        constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE + 1,
+        10**9,
+        2**31,
+    ],
+)
+def test_stream_items__chunk_size_above_the_cap__raises_before_any_request(chunk_size):
+    """Oversized pages are rejected client-side; forwarding them would let the
+    backend materialize an unbounded response, and values beyond int32 would
+    only fail after the request went out."""
+    endpoint = FakeItemsEndpoint(_rest_items(10))
+    dataset = _build_dataset(endpoint)
+
+    with pytest.raises(ValueError, match="chunk_size must not exceed"):
+        dataset.stream_items(chunk_size=chunk_size)
+
+    assert endpoint.calls == []
+
+
+def test_get_items__chunk_size_cap_applies_through_get_items():
+    """get_items() never exceeds the cap, since it uses the default."""
+    endpoint = FakeItemsEndpoint(
+        _rest_items(constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE + 5)
+    )
+    dataset = _build_dataset(endpoint)
+
+    dataset.get_items()
+
+    assert all(
+        call["params"]["size"] <= constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE
+        for call in endpoint.calls
+    )
