@@ -43,7 +43,25 @@ export type ParsedOpenInferenceFields = {
   functionCall?: unknown;
   inputFallback?: unknown;
   outputFallback?: unknown;
-  hasOpenInferenceData: boolean;
+};
+
+const MEDIA_PLACEHOLDER_RE = /^\[(image|audio)_\d+\]$/;
+const MEDIA_DATA_URI_RE = /^data:(image|audio)\/[a-z0-9.+-]+(?:;[^,]*)?,/i;
+
+export const isSafeOpenInferenceMediaUrl = (
+  url: string,
+  type: "image" | "audio",
+): boolean => {
+  const placeholderMatch = MEDIA_PLACEHOLDER_RE.exec(url);
+  if (placeholderMatch?.[1] === type) return true;
+  const dataUriMatch = MEDIA_DATA_URI_RE.exec(url);
+  if (dataUriMatch?.[1].toLowerCase() === type) return true;
+  try {
+    const protocol = new URL(url).protocol.toLowerCase();
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -57,7 +75,7 @@ const TOOL_ATTRIBUTE_RE =
 const PROMPT_ATTRIBUTE_RE = /^llm\.prompts\.([^.]+)\.prompt\.text$/;
 const CHOICE_ATTRIBUTE_RE = /^llm\.choices\.([^.]+)\.completion\.text$/;
 
-const DISPLAYABLE_LEGACY_PREFIXES = [
+const LEGACY_OPENINFERENCE_PREFIXES = [
   "llm.input_messages.",
   "llm.output_messages.",
   "llm.prompts.",
@@ -65,10 +83,21 @@ const DISPLAYABLE_LEGACY_PREFIXES = [
   "llm.tools.",
 ];
 
-const DISPLAYABLE_LEGACY_KEYS = new Set([
+const LEGACY_OPENINFERENCE_KEYS = new Set([
   OPENINFERENCE_SPAN_KIND,
   "llm.finish_reason",
   "llm.function_call",
+]);
+
+const STRUCTURED_OPENINFERENCE_KEYS = new Set([
+  OPENINFERENCE_SPAN_KIND,
+  "messages",
+  "prompts",
+  "choices",
+  "tools",
+  "finish_reason",
+  "function_call",
+  "mime_type",
 ]);
 
 const isRecord = (value: unknown): value is UnknownRecord =>
@@ -281,7 +310,6 @@ type LegacyAccumulator = {
   tools: Map<number, UnknownRecord>;
   finishReason?: string;
   functionCall?: unknown;
-  found: boolean;
 };
 
 const createLegacyAccumulator = (): LegacyAccumulator => ({
@@ -290,7 +318,6 @@ const createLegacyAccumulator = (): LegacyAccumulator => ({
   prompts: new Map(),
   choices: new Map(),
   tools: new Map(),
-  found: false,
 });
 
 const acceptLegacyAttribute = (
@@ -300,7 +327,6 @@ const acceptLegacyAttribute = (
 ) => {
   const messageMatch = key.match(MESSAGE_ATTRIBUTE_RE);
   if (messageMatch) {
-    accumulator.found = true;
     const index = parseIndex(messageMatch[2]);
     if (index === undefined) return;
     const messages =
@@ -318,7 +344,6 @@ const acceptLegacyAttribute = (
 
   const toolMatch = key.match(TOOL_ATTRIBUTE_RE);
   if (toolMatch) {
-    accumulator.found = true;
     const index = parseIndex(toolMatch[1]);
     if (index === undefined) return;
     const tool = accumulator.tools.get(index) ?? {};
@@ -330,7 +355,6 @@ const acceptLegacyAttribute = (
 
   const promptMatch = key.match(PROMPT_ATTRIBUTE_RE);
   if (promptMatch) {
-    accumulator.found = true;
     const index = parseIndex(promptMatch[1]);
     const text = toStringValue(value);
     if (index !== undefined && text !== undefined)
@@ -340,7 +364,6 @@ const acceptLegacyAttribute = (
 
   const choiceMatch = key.match(CHOICE_ATTRIBUTE_RE);
   if (choiceMatch) {
-    accumulator.found = true;
     const index = parseIndex(choiceMatch[1]);
     const text = toStringValue(value);
     if (index !== undefined && text !== undefined)
@@ -349,10 +372,8 @@ const acceptLegacyAttribute = (
   }
 
   if (key === "llm.finish_reason") {
-    accumulator.found = true;
     accumulator.finishReason = toStringValue(value);
   } else if (key === "llm.function_call") {
-    accumulator.found = true;
     accumulator.functionCall = parseMaybeJson(value);
   }
 };
@@ -447,6 +468,42 @@ const parseCanonicalMessages = (data: unknown): OpenInferenceMessage[] => {
     .filter((message): message is OpenInferenceMessage => Boolean(message));
 };
 
+export const isRenderableOpenInferenceToolCall = (
+  toolCall: OpenInferenceToolCall,
+): boolean => Boolean(toolCall.function?.name || toolCall.function?.arguments);
+
+const hasRenderableMessage = (message: OpenInferenceMessage): boolean => {
+  if (
+    message.content !== undefined &&
+    message.content !== null &&
+    message.content !== ""
+  ) {
+    return true;
+  }
+  if (message.function_call !== undefined && message.function_call !== null) {
+    return true;
+  }
+  if (message.tool_calls?.some(isRenderableOpenInferenceToolCall)) return true;
+  return Boolean(
+    message.contents?.some(
+      (content) =>
+        Boolean(content.text || content.audio?.transcript) ||
+        Boolean(
+          content.image?.url &&
+            isSafeOpenInferenceMediaUrl(content.image.url, "image"),
+        ) ||
+        Boolean(
+          content.audio?.url &&
+            isSafeOpenInferenceMediaUrl(content.audio.url, "audio"),
+        ) ||
+        Boolean(
+          content.tool_call &&
+            isRenderableOpenInferenceToolCall(content.tool_call),
+        ),
+    ),
+  );
+};
+
 const extractTexts = (data: unknown, key: "prompts" | "choices"): string[] => {
   if (!isRecord(data) || !Array.isArray(data[key])) return [];
   const items = data[key] as unknown[];
@@ -460,9 +517,20 @@ const extractTexts = (data: unknown, key: "prompts" | "choices"): string[] => {
     .filter((item): item is string => item !== undefined);
 };
 
+const hasUnwrappedRawObject = (data: unknown): boolean => {
+  if (!isRecord(data)) return false;
+  return Object.keys(data).some(
+    (key) =>
+      !STRUCTURED_OPENINFERENCE_KEYS.has(key) &&
+      !LEGACY_OPENINFERENCE_KEYS.has(key) &&
+      !LEGACY_OPENINFERENCE_PREFIXES.some((prefix) => key.startsWith(prefix)),
+  );
+};
+
 const extractFallback = (data: unknown): unknown => {
   if (!isRecord(data)) return data;
-  return hasOwn(data, "value") ? data.value : undefined;
+  if (hasOwn(data, "value")) return data.value;
+  return hasUnwrappedRawObject(data) ? data : undefined;
 };
 
 const dedupe = <T>(values: T[]): T[] => {
@@ -484,8 +552,8 @@ export const hasLegacyOpenInferenceAttributes = (data: unknown): boolean => {
   if (!isRecord(data)) return false;
   return Object.keys(data).some(
     (key) =>
-      DISPLAYABLE_LEGACY_KEYS.has(key) ||
-      DISPLAYABLE_LEGACY_PREFIXES.some((prefix) => key.startsWith(prefix)),
+      LEGACY_OPENINFERENCE_KEYS.has(key) ||
+      LEGACY_OPENINFERENCE_PREFIXES.some((prefix) => key.startsWith(prefix)),
   );
 };
 
@@ -502,49 +570,40 @@ export const hasLegacyOpenInferenceOutputAttributes = (
   );
 };
 
-const hasCanonicalDisplayData = (
-  data: unknown,
-  fieldType: OpenInferenceFieldType,
-): boolean => {
-  if (!isRecord(data)) return false;
-  if (Array.isArray(data.messages) && data.messages.some(parseCanonicalMessage))
-    return true;
-  if (fieldType === "input") {
-    return (
-      extractTexts(data, "prompts").length > 0 ||
-      (Array.isArray(data.tools) && data.tools.length > 0)
-    );
-  }
-  return (
-    extractTexts(data, "choices").length > 0 || hasOwn(data, "function_call")
+export const hasOpenInferenceMarker = (
+  metadata: unknown,
+  input: unknown,
+  output?: unknown,
+): boolean =>
+  [metadata, input, output].some(
+    (value) => isRecord(value) && hasOwn(value, OPENINFERENCE_SPAN_KIND),
   );
+
+export type OpenInferenceHint = {
+  detected: boolean;
+  authoritative: boolean;
 };
 
-/**
- * A hint selects OpenInference ahead of generic OpenAI detection, but does not make a raw
- * {@code {value: ...}} object displayable on its own.
- */
-export const isOpenInferenceField = (
-  data: unknown,
-  fieldType: OpenInferenceFieldType,
-  hinted: boolean,
-): boolean =>
-  hasLegacyOpenInferenceAttributes(data) ||
-  (hinted && hasCanonicalDisplayData(data, fieldType));
+export const resolveOpenInferenceHint = (
+  metadata: unknown,
+  input: unknown,
+  output?: unknown,
+): OpenInferenceHint => {
+  const authoritative = hasOpenInferenceMarker(metadata, input, output);
+  return {
+    authoritative,
+    detected:
+      authoritative ||
+      hasLegacyOpenInferenceAttributes(input) ||
+      hasLegacyOpenInferenceAttributes(output),
+  };
+};
 
 export const hasOpenInferenceHint = (
   metadata: unknown,
   input: unknown,
   output?: unknown,
-): boolean => {
-  const metadataMarker =
-    isRecord(metadata) && hasOwn(metadata, OPENINFERENCE_SPAN_KIND);
-  return (
-    metadataMarker ||
-    hasLegacyOpenInferenceAttributes(input) ||
-    hasLegacyOpenInferenceAttributes(output)
-  );
-};
+): boolean => resolveOpenInferenceHint(metadata, input, output).detected;
 
 export const parseOpenInferenceFields = (
   input: unknown,
@@ -595,13 +654,44 @@ export const parseOpenInferenceFields = (
     functionCall,
     inputFallback: extractFallback(input),
     outputFallback: extractFallback(output),
-    hasOpenInferenceData:
-      legacy.found ||
-      hasLegacyOpenInferenceAttributes(input) ||
-      hasLegacyOpenInferenceAttributes(output) ||
-      hasCanonicalDisplayData(input, "input") ||
-      hasCanonicalDisplayData(output, "output"),
   };
+};
+
+const hasRenderableParsedField = (
+  parsed: ParsedOpenInferenceFields,
+  fieldType: OpenInferenceFieldType,
+): boolean => {
+  const messages =
+    fieldType === "input" ? parsed.inputMessages : parsed.outputMessages;
+  if (messages.some(hasRenderableMessage)) return true;
+  if (fieldType === "input") {
+    return parsed.prompts.length > 0 || parsed.tools.length > 0;
+  }
+  return parsed.choices.length > 0 || parsed.functionCall !== undefined;
+};
+
+/** A format hint only unlocks raw fallback when it came from an exact span marker. */
+export const isOpenInferenceField = (
+  data: unknown,
+  fieldType: OpenInferenceFieldType,
+  hinted: boolean,
+  authoritativeHint: boolean = false,
+): boolean => {
+  const hasLegacyAttributes = hasLegacyOpenInferenceAttributes(data);
+  if (!hinted && !hasLegacyAttributes) return false;
+
+  const parsed = parseOpenInferenceFields(
+    fieldType === "input" ? data : undefined,
+    fieldType === "output" ? data : undefined,
+  );
+  if (hasRenderableParsedField(parsed, fieldType)) return true;
+
+  const fallback =
+    fieldType === "input" ? parsed.inputFallback : parsed.outputFallback;
+  if (fallback !== undefined && (authoritativeHint || hasLegacyAttributes)) {
+    return true;
+  }
+  return false;
 };
 
 const messageText = (

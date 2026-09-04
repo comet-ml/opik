@@ -16,6 +16,7 @@ import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { prettifyMessage } from "@/lib/traces";
 import { toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
+import { hasOpenInferenceHint } from "@/lib/openinference";
 
 const INTERNAL_TRACE_TOOLTIP =
   "Internal call (e.g. title generation), hidden by default";
@@ -33,6 +34,11 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   // Same flag that hides the trace by default. Once revealed, it is badged so it is not
   // read as a conversation turn.
   const isInternal = isSpanHiddenByDefault(trace);
+  const openInferenceHint = hasOpenInferenceHint(
+    trace.metadata,
+    trace.input,
+    trace.output,
+  );
 
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
@@ -41,7 +47,10 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.feedback_scores]);
 
   const input = useMemo(() => {
-    const message = prettifyMessage(trace.input).message;
+    const message = prettifyMessage(trace.input, {
+      type: "input",
+      openInferenceHint,
+    }).message;
 
     if (isObject(message)) {
       return (
@@ -58,12 +67,13 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input, jsonViewTheme]);
+  }, [trace.input, jsonViewTheme, openInferenceHint]);
 
   const output = useMemo(() => {
     const message = prettifyMessage(trace.output, {
       type: "output",
       openInferenceInput: trace.input,
+      openInferenceHint,
     }).message;
 
     if (isObject(message)) {
@@ -81,7 +91,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input, trace.output, jsonViewTheme]);
+  }, [trace.input, trace.output, jsonViewTheme, openInferenceHint]);
 
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>

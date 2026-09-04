@@ -1,4 +1,8 @@
-import { LLMMessageFormatDetectionResult, LLMMessageFormat } from "./types";
+import {
+  LLMMessageFormatDetectionResult,
+  LLMMessageFormat,
+  LLMMessagePrettifyConfig,
+} from "./types";
 import { getFormat, getAllFormats } from "./providers/registry";
 
 /**
@@ -15,7 +19,7 @@ import { getFormat, getAllFormats } from "./providers/registry";
  */
 export const detectLLMMessages = (
   data: unknown,
-  prettifyConfig?: { fieldType?: "input" | "output" },
+  prettifyConfig?: LLMMessagePrettifyConfig,
   formatHint?: LLMMessageFormat,
 ): LLMMessageFormatDetectionResult => {
   const isEmpty =
@@ -30,6 +34,35 @@ export const detectLLMMessages = (
   if (formatHint) {
     const format = getFormat(formatHint);
     if (format && format.detector(data, { ...prettifyConfig, formatHint })) {
+      const reliesOnAuthoritativeFallback =
+        prettifyConfig?.formatHintIsAuthoritative === true &&
+        !format.detector(data, {
+          ...prettifyConfig,
+          formatHint,
+          formatHintIsAuthoritative: false,
+        });
+
+      // An exact OpenInference marker permits raw fallbacks. Prefer a provider mapper when
+      // the field also has a provider-specific shape, since it can render richer messages.
+      if (reliesOnAuthoritativeFallback) {
+        const detectedFormat = getAllFormats().find(
+          (candidate) =>
+            candidate.name !== formatHint &&
+            candidate.detector(data, {
+              ...prettifyConfig,
+              formatHint: undefined,
+              formatHintIsAuthoritative: false,
+            }),
+        );
+        if (detectedFormat) {
+          return {
+            supported: true,
+            format: detectedFormat.name,
+            confidence: "medium",
+          };
+        }
+      }
+
       return {
         supported: true,
         format: format.name,
@@ -51,6 +84,19 @@ export const detectLLMMessages = (
   }
 
   return { supported: false };
+};
+
+export const canShowLLMMessages = (
+  input: LLMMessageFormatDetectionResult,
+  output: LLMMessageFormatDetectionResult,
+  allowPartialFields: boolean = false,
+): boolean => {
+  const hasSupportedField = input.supported || output.supported;
+  if (allowPartialFields) return hasSupportedField;
+
+  const hasUnsupportedField =
+    (!input.supported && !input.empty) || (!output.supported && !output.empty);
+  return hasSupportedField && !hasUnsupportedField;
 };
 
 export default detectLLMMessages;
