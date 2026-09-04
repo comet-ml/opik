@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
@@ -330,9 +336,32 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     [versions, versionLabelByCommit],
   );
 
-  // Reset selection and view mode each time the sheet reopens.
+  // Reset selection and view mode only on the reopen transition — reading
+  // the rest via a ref (not as effect deps) so a background refetch that
+  // changes `versions`/`versionOptions` while the sheet is already open
+  // (pagination continuing, a version_count-triggered invalidation) doesn't
+  // stomp on whatever the user has manually picked in the selectors.
+  const latestRef = useRef({
+    versions,
+    versionOptions,
+    initialBaseVersionId,
+    initialDiffVersionId,
+  });
+  latestRef.current = {
+    versions,
+    versionOptions,
+    initialBaseVersionId,
+    initialDiffVersionId,
+  };
+
   useEffect(() => {
     if (!open) return;
+    const {
+      versions,
+      versionOptions,
+      initialBaseVersionId,
+      initialDiffVersionId,
+    } = latestRef.current;
     const requestedBase =
       (initialBaseVersionId
         ? versions.find((v) => v.id === initialBaseVersionId)
@@ -355,13 +384,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         normalizeChatTemplate(requestedDiff?.template || ""),
       ) !== null;
     setViewMode(requestedIsChatDiff ? "pretty" : "json");
-  }, [
-    open,
-    versionOptions,
-    versions,
-    initialBaseVersionId,
-    initialDiffVersionId,
-  ]);
+  }, [open]);
 
   const baseLabel = baseVersion
     ? versionLabelByCommit.get(baseVersion.commit) ?? ""

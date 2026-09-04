@@ -101,10 +101,16 @@ export default function usePromptVersionHistory(
   // correctly (fetched independently below), but the sidebar can't highlight
   // it or scroll it into view until its page is loaded — keep paging until
   // it's found (or there's nothing left to load) so the two stay in sync.
-  const isChasingDeepLink =
-    !!activeVersionId &&
-    !!versions &&
-    !versions.some((v) => v.id === activeVersionId);
+  // Memoized: a stale/nonexistent id keeps this true until every page is
+  // loaded, so an unmemoized `.some()` would re-scan the whole (growing)
+  // list on every render this component makes for unrelated reasons too.
+  const isChasingDeepLink = useMemo(
+    () =>
+      !!activeVersionId &&
+      !!versions &&
+      !versions.some((v) => v.id === activeVersionId),
+    [activeVersionId, versions],
+  );
 
   // The Diff and Deploy menus each only offer whatever pages are already
   // loaded — while either is open, keep paging until every version is
