@@ -241,13 +241,27 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   initialBaseVersionId,
   initialDiffVersionId,
 }) => {
-  const [baseVersion, setBaseVersion] = useState<PromptVersion | undefined>(
-    last(versions),
+  // Only the *choice* of which version is selected is snapshotted state —
+  // the version data itself is always re-resolved live from `versions`
+  // below, so a background refetch (tag edit, environment change) keeps
+  // rendered content current, and a version deleted out from under an open
+  // dialog resolves to undefined (renders nothing) instead of stale content.
+  const [baseVersionId, setBaseVersionId] = useState<string | undefined>(
+    last(versions)?.id,
   );
-  const [diffVersion, setDiffVersion] = useState<PromptVersion | undefined>(
-    first(versions),
+  const [diffVersionId, setDiffVersionId] = useState<string | undefined>(
+    first(versions)?.id,
   );
   const [viewMode, setViewMode] = useState<ViewMode>("pretty");
+
+  const baseVersion = useMemo(
+    () => versions.find((v) => v.id === baseVersionId),
+    [versions, baseVersionId],
+  );
+  const diffVersion = useMemo(
+    () => versions.find((v) => v.id === diffVersionId),
+    [versions, diffVersionId],
+  );
 
   const baseText = useMemo(
     () => normalizeChatTemplate(baseVersion?.template || ""),
@@ -372,8 +386,8 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         ? versions.find((v) => v.id === initialDiffVersionId)
         : undefined) ??
       versions.find((v) => v.commit === last(versionOptions)?.value);
-    setBaseVersion(requestedBase);
-    setDiffVersion(requestedDiff);
+    setBaseVersionId(requestedBase?.id);
+    setDiffVersionId(requestedDiff?.id);
     // Compute viewMode from the requested versions, not the stale state-derived
     // `isChatDiff`, so we don't briefly render the wrong mode on reopen.
     const requestedIsChatDiff =
