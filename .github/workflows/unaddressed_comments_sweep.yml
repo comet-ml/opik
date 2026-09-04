@@ -124,19 +124,28 @@ jobs:
               }
             `;
 
+            // GitHub's schema declares these connections as LIST of OBJECT with no
+            // NON_NULL on either the list or its elements, so `nodes` and any
+            // element may legitimately be null. Normalize at every ingestion point
+            // rather than guarding each dereference — one missing guard would abort
+            // reconciliation for the whole PR.
+            const liveNodes = (connection) =>
+              ((connection && connection.nodes) || []).filter(Boolean);
+
             const authorsOf = async (thread) => {
-              const logins = thread.comments.nodes
+              const logins = liveNodes(thread.comments)
                 .map((c) => c.author && c.author.login)
                 .filter(Boolean);
               const opener = logins[0];
               if (!opener) return logins;
               if (logins.some((l) => l !== opener)) return logins;
-              if (!thread.comments.pageInfo.hasNextPage) return logins;
+              const firstPage = (thread.comments && thread.comments.pageInfo) || {};
+              if (!firstPage.hasNextPage) return logins;
 
               core.info(
                 `Thread ${thread.id} has ${thread.comments.totalCount} comments; paging past the first ${COMMENT_PAGE}`
               );
-              let c = thread.comments.pageInfo.endCursor;
+              let c = firstPage.endCursor;
               // Bounded so a pathologically deep thread cannot consume the job's
               // 3-minute budget and leave every label stale. At 100 comments per
               // page this covers 2000; beyond that we stop and report what we have.
@@ -144,13 +153,16 @@ jobs:
               // reported rather than silently treated as unaddressed.
               for (let page_i = 0; page_i < MAX_COMMENT_PAGES; page_i++) {
                 const res = await github.graphql(COMMENTS_QUERY, { threadId: thread.id, cursor: c });
-                const page = res.node.comments;
-                for (const node of page.nodes) {
+                // node is null if the thread was deleted mid-pagination; treat what
+                // we already collected as the full picture rather than throwing.
+                const page = res.node && res.node.comments;
+                if (!page) return logins;
+                for (const node of liveNodes(page)) {
                   const login = node.author && node.author.login;
                   if (login) logins.push(login);
                 }
                 if (logins.some((l) => l !== opener)) return logins;
-                if (!page.pageInfo.hasNextPage) return logins;
+                if (!page.pageInfo || !page.pageInfo.hasNextPage) return logins;
                 c = page.pageInfo.endCursor;
               }
               core.warning(
@@ -213,9 +225,16 @@ jobs:
               let cursor = null;
               for (;;) {
                 const res = await github.graphql(QUERY, { owner, repo, number, cursor });
-                const page = res.repository.pullRequest.reviewThreads;
-                threads.push(...page.nodes);
-                if (!page.pageInfo.hasNextPage) break;
+                // pullRequest is nullable — it comes back null if the PR became
+                // unavailable mid-sweep. Throw rather than proceeding with an empty
+                // thread list, which would compute "no labels wanted" and strip the
+                // PR's existing labels. The caller logs it and continues to the
+                // next PR.
+                const pr = res.repository && res.repository.pullRequest;
+                const page = pr && pr.reviewThreads;
+                if (!page) throw new Error('review threads unavailable');
+                threads.push(...liveNodes(page));
+                if (!page.pageInfo || !page.pageInfo.hasNextPage) break;
                 cursor = page.pageInfo.endCursor;
               }
 
