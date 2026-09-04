@@ -9,14 +9,19 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * Single derivation point for the {@code id_at} weekly partition values a batch of ids resolves to, so a mutation can
- * name its own partitions instead of being planned against every part of the table.
+ * Single derivation point for the {@code id_at} weekly partition value(s) a batch of ids resolves to, so a mutation
+ * can name its own partitions instead of being planned against every part of the table. {@link #groupByPartition}
+ * groups ids by the partition each belongs to, for a caller emitting one statement per partition (OPIK-8230) that
+ * must bind only the ids belonging to it.
  *
  * <p>Mirrors the partition expression of {@code traces_local_v2} / {@code spans_local_v2} exactly —
  * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}, where {@code id_at} is
@@ -55,9 +60,9 @@ import java.util.UUID;
  * <h2>Why the caller must treat an empty result as "no predicate", never as "no partitions"</h2>
  *
  * <p>The whole value of the derivation is that the partitions a batch resolves to are the <em>only</em> places its rows
- * can be; a set that is merely close is a silently skipped delete, not a slower one. So this returns a set only when
- * every id in the batch is one it can derive exactly, and empty otherwise — leaving the caller to emit its unbounded
- * form, which is always correct and merely slower. The two rejections are:</p>
+ * can be; a grouping that is merely close is a silently skipped delete, not a slower one. So this returns non-empty
+ * only when every id in the batch is one it can derive exactly, and empty otherwise — leaving the caller to emit its
+ * unbounded form, which is always correct and merely slower. The two rejections are:</p>
  * <ul>
  *     <li><b>Any id that is not a UUIDv7.</b> Its high 48 bits are not a timestamp, and {@code UUIDv7ToDateTime}
  *     returns {@code 1970-01-01} for it rather than throwing, so the row sits in the epoch partition while the bits
@@ -101,49 +106,80 @@ public class WeeklyPartitions {
     private static final long ID_AT_LEGACY_MODULUS = 1L << 32;
 
     /**
-     * The weekly partition values the ids resolve to — under each {@code id_at} type the mutation may run against (see
-     * the class javadoc) — or empty if the batch contains an id whose partition cannot be derived exactly. In the empty
-     * case the caller must omit its partition predicate entirely. An empty batch yields empty for the same reason:
-     * there is nothing to bound the mutation to.
+     * Groups the ids by the weekly partition value(s) each resolves to — under each {@code id_at} type the mutation
+     * may run against (see the class javadoc) — or empty if the batch contains an id whose partition cannot be
+     * derived exactly. In the empty case the caller must omit its partition predicate entirely and emit the
+     * unbounded form. An empty batch yields empty for the same reason: there is nothing to bound the mutation to.
+     * {@code IN PARTITION} accepts exactly one partition per statement (OPIK-8230), so a caller emitting one
+     * statement per partition needs to know which ids go in each, not merely their union.
      * <p>
-     * A {@code null} batch throws rather than reading as empty, which is the one place this class is deliberately
-     * intolerant. Empty is a <em>documented answer</em> — "this batch cannot be pruned, emit the unbounded form" — and a
-     * caller that lost its batch would receive that answer, silently issue a correct-but-unbounded mutation, and never
-     * learn it had a bug. A null collection here is a programming error, not a data condition; a null <em>element</em>
-     * is the data condition, and that keeps returning empty.
+     * An id past {@link #ID_AT_LEGACY_MODULUS} appears in <b>two</b> groups — one per {@code id_at} representation
+     * it resolves to. That is safe, not a widening bug: a statement scoped to the group that does not actually
+     * contain the id's row is a no-op there, never a wrong deletion, since the row-matching {@code (project_id, id)}
+     * predicate inside each statement is unchanged regardless of which partition the statement targets.
+     * <p>
+     * A {@code null} batch throws rather than reading as empty: empty is a documented answer meaning "emit the
+     * unbounded form", so a caller that lost its batch would silently get back the slow mutation this class exists to
+     * avoid. A null <em>element</em> still returns empty, which is safe because it is unreachable from the delete
+     * path: {@code TraceDAO#delete} rejects a null id before any of this runs.
      *
      * @throws NullPointerException if {@code ids} is null.
      */
-    public static Optional<Set<Long>> of(@NonNull Collection<UUID> ids) {
-        var partitions = new HashSet<Long>();
+    public static Optional<Map<Long, Set<UUID>>> groupByPartition(@NonNull Collection<UUID> ids) {
+        var grouped = new HashMap<Long, Set<UUID>>();
 
         for (UUID id : ids) {
-            if (id == null || id.version() != 7) {
+            var idPartitions = partitionsOf(id);
+            if (idPartitions.isEmpty()) {
                 return Optional.empty();
             }
-            // UUIDv7: the high 48 bits are the unix epoch in milliseconds. `>>> 16` reads them unsigned, so the value
-            // is in [0, 2^48) — never negative, and never large enough for Instant.ofEpochSecond to overflow. That is
-            // also why neither derivation checks a floor: the smallest id_at any UUIDv7 can carry is the epoch, and
-            // even its Monday (1969-12-29) is comfortably inside Date32 on both schemas.
-            long epochMilli = id.getMostSignificantBits() >>> 16;
-            if (epochMilli >= ID_AT_CEILING) {
-                return Optional.empty();
-            }
-            // Truncating to whole seconds is the column's own conversion (DateTime64(0) / DateTime both store seconds)
-            // and cannot move a value into an earlier day, so it never changes the week.
-            long epochSecond = epochMilli / 1_000L;
-            partitions.add(weeklyPartitionOf(epochSecond)); // DateTime64(0, 'UTC') — the partitioned successor
-            // Only past the 32-bit range do the two columns disagree; below it the modulo is the identity, so the
-            // branch is the invariant stated as code rather than an optimisation: an ordinary id CANNOT widen the set.
-            if (epochSecond >= ID_AT_LEGACY_MODULUS) {
-                partitions.add(weeklyPartitionOf(epochSecond % ID_AT_LEGACY_MODULUS)); // DateTime('UTC') — legacy
+            for (Long partition : idPartitions.get()) {
+                grouped.computeIfAbsent(partition, _ -> new HashSet<>()).add(id);
             }
         }
 
-        // Set.copyOf, not the working HashSet: what escapes here decides which partitions a DELETE mutation touches, so
-        // a caller holding a mutable reference could narrow the set after it was derived and turn a correct delete into
-        // a silent no-op. Immutable by default per apps/opik-backend/AGENTS.md, and the accumulator stays local.
-        return partitions.isEmpty() ? Optional.empty() : Optional.of(Set.copyOf(partitions));
+        if (grouped.isEmpty()) {
+            return Optional.empty();
+        }
+        // Immutable outer map AND immutable per-partition sets: what escapes here decides which partitions a DELETE
+        // mutation touches, so a caller holding a mutable reference could narrow it after derivation and turn a
+        // correct delete into a silent no-op. Collectors.toUnmodifiableMap's values must themselves be made
+        // unmodifiable explicitly; it does not do so for you.
+        return Optional.of(grouped.entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Set.copyOf(entry.getValue()))));
+    }
+
+    /**
+     * The weekly partition value(s) a single id resolves to under each {@code id_at} type the mutation may meet (see
+     * class javadoc) — extracted from {@link #groupByPartition} so the per-id {@code id_at} math reads separately
+     * from the grouping it feeds. Empty exactly when the id cannot be derived exactly: not a UUIDv7, or an embedded
+     * timestamp at or past {@link #ID_AT_CEILING}.
+     */
+    private static Optional<Set<Long>> partitionsOf(UUID id) {
+        if (id == null || id.version() != 7) {
+            return Optional.empty();
+        }
+        // UUIDv7: the high 48 bits are the unix epoch in milliseconds. `>>> 16` reads them unsigned, so the value
+        // is in [0, 2^48) — never negative, and never large enough for Instant.ofEpochSecond to overflow. That is
+        // also why neither derivation checks a floor: the smallest id_at any UUIDv7 can carry is the epoch, and
+        // even its Monday (1969-12-29) is comfortably inside Date32 on both schemas.
+        long epochMilli = id.getMostSignificantBits() >>> 16;
+        if (epochMilli >= ID_AT_CEILING) {
+            return Optional.empty();
+        }
+        // Truncating to whole seconds is the column's own conversion (DateTime64(0) / DateTime both store seconds)
+        // and cannot move a value into an earlier day, so it never changes the week.
+        long epochSecond = epochMilli / 1_000L;
+        // DateTime64(0, 'UTC') — the partitioned successor. Only past the 32-bit range do the two columns disagree;
+        // below it the modulo is the identity, so the branch is the invariant stated as code rather than an
+        // optimisation: an ordinary id CANNOT widen the set. Immutable on the way out, for the same reason
+        // groupByPartition copies its own result — see there. Set.of throws on a duplicate, which is safe here
+        // rather than merely untested: the two arguments are weeks 2^32 seconds (~136 years) apart, so they cannot
+        // be the same week.
+        return Optional.of(epochSecond >= ID_AT_LEGACY_MODULUS
+                ? Set.of(weeklyPartitionOf(epochSecond),
+                        weeklyPartitionOf(epochSecond % ID_AT_LEGACY_MODULUS)) // DateTime('UTC') — legacy
+                : Set.of(weeklyPartitionOf(epochSecond)));
     }
 
     /**

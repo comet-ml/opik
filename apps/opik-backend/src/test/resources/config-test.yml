@@ -96,6 +96,13 @@ databaseAnalyticsDataModel:
   #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
   #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
   #   Flip in lockstep with the cutover EXCHANGE.
+  #   Also gates partition-scoped trace deletes: that same EXCHANGE puts the weekly-partitioned successor behind the
+  #   name mutations target, so true additionally means a delete may scope itself with IN PARTITION instead of being
+  #   registered against every part of the table. The two facts have only ever flipped together, which is why this
+  #   gates both rather than there being a second flag. IN PARTITION against an unpartitioned table is a hard error
+  #   (code 248), not a lost optimisation, so setting this true ahead of the EXCHANGE breaks deletes - as it already
+  #   breaks writes, which bind sentinels a Nullable column has no use for. Off falls back to the unbounded delete:
+  #   correct, merely slower.
   traceColumnsNonNullable: false
   #  Default: false
   #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable

@@ -15,6 +15,13 @@ import lombok.Builder;
  * epoch end time round-trips unchanged rather than being read as {@code null}. Flip this in lockstep with the EXCHANGE
  * step of the cutover.</p>
  *
+ * <p>It also gates partition-scoped deletes (OPIK-8230): the EXCHANGE that makes these columns non-nullable is the
+ * same one that puts the weekly-partitioned successor behind the name mutations target, so this flag being
+ * {@code true} is equally what says a delete may scope itself with {@code IN PARTITION}. One flag for two facts
+ * because they have only ever flipped together; a second would have to be threaded through the cutover runbook and
+ * tooling to track no independent state. The name says only the first duty and is deliberately not renamed - the env
+ * var is exposed.</p>
+ *
  * <p>{@code spanColumnsNonNullable}: the {@code spans} sibling of {@code traceColumnsNonNullable}, gating the same
  * sentinel wiring for {@code spans.end_time}→epoch and {@code spans.duration}/{@code spans.ttft}→{@code NaN}. Default
  * {@code false} while the {@code spans} table still has {@code Nullable(...)} columns; set {@code true} in lockstep with
