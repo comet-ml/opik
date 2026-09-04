@@ -1062,4 +1062,52 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code cohere} as a canonical provider so that the non-zero-cost entries in
+     * {@code model_prices_and_context_window.json} tagged with {@code litellm_provider: "cohere"} are
+     * no longer silently dropped at load time. No Cohere model publishes cache rates today, so all
+     * Cohere requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesCohereModels() {
+        // command: input 1e-06, output 2e-06
+        // 1000 * 1e-06 + 200 * 2e-06 = 0.0014
+        BigDecimal cost = CostService.calculateCost("command", "cohere",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.0014");
+    }
+
+    /**
+     * Covers registering {@code novita} as a canonical provider so that the non-zero-cost entries in
+     * {@code model_prices_and_context_window.json} tagged with {@code litellm_provider: "novita"} are
+     * no longer silently dropped at load time. No Novita model publishes cache rates today, so all
+     * Novita requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNovitaModels() {
+        // novita/zai-org/autoglm-phone-9b-multilingual: input 3.5e-08, output 1.38e-07
+        // 1000 * 3.5e-08 + 200 * 1.38e-07 = 0.0000626
+        BigDecimal cost = CostService.calculateCost("novita/zai-org/autoglm-phone-9b-multilingual", "novita",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.0000626");
+    }
+
+    /**
+     * Covers registering {@code cloudflare} as a canonical provider so that the non-zero-cost entries
+     * in {@code model_prices_and_context_window.json} tagged with {@code litellm_provider: "cloudflare"}
+     * are no longer silently dropped at load time. No Cloudflare model publishes cache rates today, so
+     * all Cloudflare requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesCloudflareModels() {
+        // cloudflare/@cf/meta/llama-2-7b-chat-fp16: input 1.923e-06, output 1.923e-06
+        // 1000 * 1.923e-06 + 200 * 1.923e-06 = 0.0023076
+        BigDecimal cost = CostService.calculateCost("cloudflare/@cf/meta/llama-2-7b-chat-fp16", "cloudflare",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.0023076");
+    }
 }
