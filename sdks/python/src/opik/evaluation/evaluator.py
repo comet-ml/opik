@@ -1660,7 +1660,10 @@ def evaluate_resume(
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
         trial_count=context.default_runs_per_item,
-        experiment_scoring_functions=experiment_scoring_functions,
+        # Aggregates are computed once, after merging: running them over the
+        # pending slice would display a value that disagrees with the merged one
+        # and would execute side-effecting functions twice.
+        experiment_scoring_functions=[],
         source="experiment",
         # The tolerance the original evaluation call ran with, read back from the
         # resume state, so a resumed run does not silently become stricter than
@@ -1682,6 +1685,8 @@ def evaluate_resume(
         )
     )
     if merged_scores:
+        if verbose >= 1:
+            report.display_experiment_scores(merged_scores)
         has_fabricated_scores = any(
             evaluation_result._is_fabricated_score(score) for score in merged_scores
         )

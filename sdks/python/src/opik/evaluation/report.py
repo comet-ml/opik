@@ -119,6 +119,33 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
+def display_experiment_scores(
+    experiment_scores: List[score_result.ScoreResult],
+) -> None:
+    """Show experiment-level aggregates on their own, for resume."""
+    if not experiment_scores:
+        return
+
+    score_strings = text.Text("")
+    for score in experiment_scores:
+        if score.scoring_failed:
+            score_strings += text.Text(f"{score.name}: failed", style="red")
+        else:
+            score_strings += text.Text(
+                f"{score.name}: {score.value:.4f}", style="green bold"
+            )
+        score_strings += text.Text("\n")
+
+    console.Console().print(
+        panel.Panel(
+            align.Align.left(score_strings),
+            title="Experiment scores",
+            title_align="left",
+            expand=False,
+        )
+    )
+
+
 def display_experiment_link(experiment_url: str) -> None:
     console_container = console.Console()
 

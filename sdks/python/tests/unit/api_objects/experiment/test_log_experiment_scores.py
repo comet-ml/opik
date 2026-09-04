@@ -96,3 +96,26 @@ def test_log_experiment_scores__duplicate_names__deduplicates_payload() -> None:
     assert [(score.name, score.value) for score in scores] == [
         ("accuracy", 0.9),
     ]
+
+
+def test_log_experiment_scores__all_failed_without_preserve__no_op() -> None:
+    rest_client = Mock()
+    experiment = experiment_module.Experiment(
+        id="experiment-id",
+        name="experiment-name",
+        dataset_name="dataset-name",
+        rest_client=rest_client,
+        streamer=Mock(),
+        experiments_client=Mock(),
+    )
+
+    effective_scores = experiment.log_experiment_scores(
+        score_results=[
+            score_result.ScoreResult(name="accuracy", value=0.0, scoring_failed=True),
+        ],
+    )
+
+    rest_client.experiments.update_experiment.assert_not_called()
+    assert [(score.name, score.scoring_failed) for score in effective_scores] == [
+        ("accuracy", True)
+    ]

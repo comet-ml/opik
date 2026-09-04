@@ -140,12 +140,14 @@ def normalize_experiment_score(
             effective_name,
             _safe_str(metadata_error),
         )
+        # The name is known here, so callers can still update this one score in
+        # place; marking it fabricated would drop every unrelated aggregate.
         return _build_failed_score_result(
             effective_name,
             metadata_error,
             reason=_safe_str(metadata_error),
             category_name=score.category_name,
-            fabricated=True,
+            fabricated=False,
         )
 
     if score.scoring_failed:

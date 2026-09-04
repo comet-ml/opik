@@ -427,6 +427,55 @@ class TestMergeWithPreviouslyCompleted:
         assert logged_kwargs["score_results"][0].value == 0.5
         assert logged_kwargs["preserve_unrelated"] is True
         assert mock_evaluate_task.call_args.kwargs["log_experiment_scores"] is False
+        # The slice run gets no aggregate functions: they would run twice and the
+        # slice-only value would be displayed before the merged one is computed.
+        assert mock_evaluate_task.call_args.kwargs["experiment_scoring_functions"] == []
+
+    def test_experiment_scoring_functions__merged_aggregates_are_displayed(self):
+        context = _make_context(
+            items_to_stream=[dataset_item.DatasetItem(id="partial")],
+            completed_runs_by_item_id={"partial": 0},
+            default_runs_per_item=1,
+        )
+        new_result = _evaluation_result_from(
+            [_new_test_result("partial", "trace-partial-new", score=1.0)],
+            context.experiment,
+        )
+        context.experiment.log_experiment_scores.return_value = [
+            score_result.ScoreResult(name="mean_equals", value=1.0),
+        ]
+
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
+            mock.patch.object(
+                evaluator.report, "display_experiment_scores"
+            ) as mock_display,
+        ):
+            evaluator.evaluate_resume(
+                "exp-1",
+                task=lambda _: {"output": "x"},
+                experiment_scoring_functions=[
+                    lambda test_results: score_result.ScoreResult(
+                        name="mean_equals", value=1.0
+                    )
+                ],
+                verbose=1,
+            )
+
+        displayed = mock_display.call_args.args[0]
+        assert [(score.name, score.value) for score in displayed] == [
+            ("mean_equals", 1.0)
+        ]
 
     def test_failed_aggregate_clears_previous_backend_value(self):
         context = _make_context(

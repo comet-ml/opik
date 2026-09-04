@@ -2753,7 +2753,9 @@ def test_evaluate__with_experiment_scores(fake_backend):
     assert call_args[1]["experiment_scores"][0].value == 1.0
 
 
-def test_evaluate__classification_missing_label_clears_experiment_scores(fake_backend):
+def test_evaluate__classification_missing_label_skips_experiment_score_write(
+    fake_backend,
+):
     mock_dataset = create_mock_dataset(
         items=[
             dataset_item.DatasetItem(
@@ -2802,10 +2804,7 @@ def test_evaluate__classification_missing_label_clears_experiment_scores(fake_ba
 
     assert len(result.experiment_scores) == 1
     assert result.experiment_scores[0].scoring_failed is True
-    mock_update_experiment.assert_called_once_with(
-        id="experiment-id",
-        experiment_scores=[],
-    )
+    mock_update_experiment.assert_not_called()
 
 
 def test_evaluate__with_experiment_scores_empty_results(fake_backend):

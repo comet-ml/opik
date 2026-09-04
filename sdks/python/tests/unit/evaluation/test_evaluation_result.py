@@ -807,11 +807,11 @@ def test_normalize_experiment_score__valid_score_with_invalid_metadata(bad_metad
     assert res.name == "accuracy"
     assert res.value == 0.0
     assert res.scoring_failed is True
-    assert res.metadata["_fabricated"] is True
+    assert "_fabricated" not in res.metadata
     assert res.metadata["error_info"]["exception_type"] == "EvaluationError"
     assert "metadata" in res.metadata["error_info"]["message"]
     assert res.metadata["error_info"]["traceback"]
-    assert evaluation_result._is_fabricated_score(res)
+    assert not evaluation_result._is_fabricated_score(res)
     assert "metadata must be a mapping" in res.reason
 
 

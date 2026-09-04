@@ -364,6 +364,11 @@ class Experiment:
             )
 
         experiment_scores = list(experiment_scores_map.values())
+        # The update is a full replacement, so writing an empty list would erase
+        # aggregates this call never looked at.
+        if not experiment_scores and not preserve_unrelated:
+            return effective_scores
+
         self._rest_client.experiments.update_experiment(
             id=self.id,
             experiment_scores=experiment_scores,
