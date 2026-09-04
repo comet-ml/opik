@@ -769,7 +769,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var control = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectIds(Set.of(projectId))
                     .build();
-            evaluatorsResourceClient.createEvaluator(control, WORKSPACE_NAME, API_KEY);
+            var controlId = evaluatorsResourceClient.createEvaluator(control, WORKSPACE_NAME, API_KEY);
 
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectIds(Set.of(projectId))
@@ -785,9 +785,40 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(message.contentArray()).isNull();
             }
 
+            // Both rows by id, and the prompt read back through the listing itself: the regression was the
+            // listing mapping every row, so a size check alone would pass on two of anything.
             var page = evaluatorsResourceClient.findEvaluatorPage(
                     projectId, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
-            assertThat(page.content()).hasSize(2);
+            assertThat(page.content()).extracting(AutomationRuleEvaluator::getId)
+                    .containsExactlyInAnyOrder(id, controlId);
+            var listed = (AutomationRuleEvaluatorLlmAsJudge) page.content().stream()
+                    .filter(rule -> id.equals(rule.getId()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(listed.getCode().messages().getFirst().content()).isEqualTo(prompt);
+        }
+
+        @Test
+        @DisplayName("create evaluator: an empty content array reads back as text, since a message with no parts cannot render")
+        void createEvaluator__whenContentArrayIsEmpty__thenItReadsBackAsText() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + RandomStringUtils.secure().nextAlphanumeric(36), API_KEY, WORKSPACE_NAME);
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .code(structuredCode(List.of()))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var response = evaluatorsResourceClient.getEvaluator(
+                    id, projectId, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actual = (AutomationRuleEvaluatorLlmAsJudge) response.readEntity(AutomationRuleEvaluator.class);
+                var message = actual.getCode().messages().getFirst();
+                // Sent as an array and returned as text. Pinned deliberately: preserving the empty array
+                // would hand the renderer a message with no parts, which langchain4j rejects outright.
+                assertThat(message.content()).isEqualTo("[]");
+                assertThat(message.contentArray()).isNull();
+            }
         }
 
         @Test
