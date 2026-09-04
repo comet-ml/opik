@@ -69,6 +69,12 @@ def parse_litellm_model_output(
         # lands, and a two-digit score ("10") spans two tokens.
         entry_indices = _locate_score_entries(entries)
         if entry_indices is None:
+            LOGGER.debug(
+                "g_eval score key not found in the reconstructed response; "
+                "falling back to the legacy fixed token offset. Reconstructed "
+                "response: %r",
+                "".join(str(_to_dict(entry).get("token", "")) for entry in entries),
+            )
             entry_indices = [3]
 
         (
