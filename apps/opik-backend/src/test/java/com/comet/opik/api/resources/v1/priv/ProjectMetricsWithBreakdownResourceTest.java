@@ -79,6 +79,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -218,9 +219,13 @@ class ProjectMetricsWithBreakdownResourceTest {
     static Stream<Arguments> spanCostBreakdownFields() {
         return Stream.of(
                 Arguments.of(BreakdownField.TAGS),
+                Arguments.of(BreakdownField.METADATA),
                 Arguments.of(BreakdownField.NAME),
+                Arguments.of(BreakdownField.ERROR_INFO),
+                Arguments.of(BreakdownField.ERROR_TYPE),
                 Arguments.of(BreakdownField.MODEL),
-                Arguments.of(BreakdownField.PROVIDER));
+                Arguments.of(BreakdownField.PROVIDER),
+                Arguments.of(BreakdownField.TYPE));
     }
 
     /**
@@ -1095,36 +1100,49 @@ class ProjectMetricsWithBreakdownResourceTest {
             createSpansWithCostForBreakdown(projectName, bucket1, breakdownField, "group-a", 2,
                     new BigDecimal("1.25"));
             createSpansWithCostForBreakdown(projectName, bucket2, breakdownField, "group-a", 2,
-                    new BigDecimal("1.25"));
+                    new BigDecimal("1.50"));
             createSpansWithCostForBreakdown(projectName, bucket1, breakdownField, "group-b", 2,
                     new BigDecimal("2.50"));
             createSpansWithCostForBreakdown(projectName, bucket2, breakdownField, "group-b", 2,
-                    new BigDecimal("2.50"));
+                    new BigDecimal("3.00"));
 
-            var request = ProjectMetricRequest.builder()
+            var requestBuilder = ProjectMetricRequest.builder()
                     .metricType(MetricType.SPAN_COST)
                     .interval(interval)
                     .intervalStart(subtract(marker, 3, interval))
-                    .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(breakdownField).build())
-                    .build();
+                    .intervalEnd(Instant.now());
 
-            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request,
+            if (breakdownField == BreakdownField.METADATA) {
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .metadataKey("env")
+                        .build());
+            } else {
+                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+            }
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
                     BigDecimal.class, API_KEY, WORKSPACE_NAME);
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.SPAN_COST);
             assertThat(response.results())
                     .extracting(result -> result.name())
-                    .containsExactly("group-b", "group-a");
+                    .containsExactly(
+                            expectedSpanBreakdownGroupName(breakdownField, "group-b"),
+                            expectedSpanBreakdownGroupName(breakdownField, "group-a"));
             assertThat(response.results().getFirst().data())
                     .hasSize(2)
-                    .extracting(dataPoint -> dataPoint.value())
-                    .allSatisfy(value -> assertThat(value).isEqualByComparingTo(new BigDecimal("5.00")));
+                    .extracting(dataPoint -> dataPoint.time(), dataPoint -> dataPoint.value())
+                    .containsExactly(
+                            tuple(bucket1, new BigDecimal("5.00")),
+                            tuple(bucket2, new BigDecimal("6.00")));
             assertThat(response.results().getLast().data())
                     .hasSize(2)
-                    .extracting(dataPoint -> dataPoint.value())
-                    .allSatisfy(value -> assertThat(value).isEqualByComparingTo(new BigDecimal("2.50")));
+                    .extracting(dataPoint -> dataPoint.time(), dataPoint -> dataPoint.value())
+                    .containsExactly(
+                            tuple(bucket1, new BigDecimal("2.50")),
+                            tuple(bucket2, new BigDecimal("3.00")));
         }
     }
 
@@ -1763,16 +1781,33 @@ class ProjectMetricsWithBreakdownResourceTest {
             case NAME -> builder.name(groupValue);
             case ERROR_INFO -> {
                 if ("group-a".equals(groupValue)) {
-                    builder.errorInfo(ErrorInfo.builder().message("Some error").build());
+                    builder.errorInfo(ErrorInfo.builder()
+                            .exceptionType("TestError")
+                            .message("Some error")
+                            .traceback("Test traceback")
+                            .build());
                 } else {
                     builder.errorInfo(null);
                 }
             }
+            case ERROR_TYPE -> builder.errorInfo(ErrorInfo.builder()
+                    .exceptionType(groupValue)
+                    .message("Some error")
+                    .traceback("Test traceback")
+                    .build());
             case MODEL -> builder.model(groupValue);
             case PROVIDER -> builder.provider(groupValue);
             case TYPE -> builder.type("group-a".equals(groupValue) ? SpanType.llm : SpanType.tool);
             default -> {
             }
         }
+    }
+
+    private static String expectedSpanBreakdownGroupName(BreakdownField breakdownField, String groupValue) {
+        return switch (breakdownField) {
+            case ERROR_INFO -> "group-a".equals(groupValue) ? "Has Error" : "No Error";
+            case TYPE -> "group-a".equals(groupValue) ? SpanType.llm.name() : SpanType.tool.name();
+            default -> groupValue;
+        };
     }
 }

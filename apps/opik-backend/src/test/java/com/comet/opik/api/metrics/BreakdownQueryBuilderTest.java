@@ -13,28 +13,33 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class BreakdownQueryBuilderTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"TAGS", "NAME", "MODEL", "PROVIDER"})
+    @ValueSource(strings = {"TAGS", "METADATA", "NAME", "ERROR_INFO", "ERROR_TYPE", "MODEL", "PROVIDER", "TYPE"})
     @DisplayName("validate: allows span cost breakdown fields")
     void validate_allowsSpanCostBreakdownFields(String fieldName) {
-        var breakdown = BreakdownConfig.builder()
-                .field(BreakdownField.valueOf(fieldName))
-                .build();
+        var breakdown = spanCostBreakdown(fieldName);
 
         assertThatCode(() -> BreakdownQueryBuilder.validate(breakdown, MetricType.SPAN_COST))
                 .doesNotThrowAnyException();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"TAGS", "NAME", "MODEL", "PROVIDER"})
+    @ValueSource(strings = {"TAGS", "METADATA", "NAME", "ERROR_INFO", "ERROR_TYPE", "MODEL", "PROVIDER", "TYPE"})
     @DisplayName("getBreakdownGroupExpression: uses span alias for span cost")
     void getBreakdownGroupExpression_usesSpanAliasForSpanCost(String fieldName) {
-        var breakdown = BreakdownConfig.builder()
-                .field(BreakdownField.valueOf(fieldName))
-                .build();
+        var breakdown = spanCostBreakdown(fieldName);
 
         assertThat(BreakdownQueryBuilder.getBreakdownGroupExpression(MetricType.SPAN_COST, breakdown))
                 .contains("s.")
                 .doesNotContain("t.");
+    }
+
+    private static BreakdownConfig spanCostBreakdown(String fieldName) {
+        var field = BreakdownField.valueOf(fieldName);
+        var builder = BreakdownConfig.builder().field(field);
+        if (field == BreakdownField.METADATA) {
+            builder.metadataKey("env");
+        }
+        return builder.build();
     }
 
     @ParameterizedTest
