@@ -70,9 +70,9 @@ curl http://localhost:8080/v1/internal/hello-world/queue-size
 7. [Usage Guide](#usage-guide)
 8. [Adding New Queues](#adding-new-queues)
 9. [Testing](#testing)
-11. [Troubleshooting](#troubleshooting)
-12. [Design Decisions](#design-decisions)
-13. [Refactoring History](#refactoring-history)
+10. [Troubleshooting](#troubleshooting)
+11. [Design Decisions](#design-decisions)
+12. [Refactoring History](#refactoring-history)
 
 ---
 
