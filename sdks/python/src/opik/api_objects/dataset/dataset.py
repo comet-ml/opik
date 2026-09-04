@@ -1035,7 +1035,7 @@ class Dataset(DatasetExportOperations):
         for item in items:
             if "id" not in item:
                 raise exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    "Missing id for dataset item to update: %s", item
+                    f"Missing id for dataset item to update: {item}"
                 )
 
         self.insert(items, deduplication=deduplication)
