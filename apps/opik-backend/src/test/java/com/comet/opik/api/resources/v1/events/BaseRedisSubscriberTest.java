@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
@@ -22,7 +24,10 @@ import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamReadGroupArgs;
+import org.redisson.client.codec.Codec;
+import org.redisson.codec.CompositeCodec;
 import org.redisson.codec.JsonJacksonCodec;
+import org.redisson.codec.LZ4CodecV2;
 import org.redisson.config.Config;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -32,6 +37,7 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -88,6 +94,120 @@ class BaseRedisSubscriberTest {
         subscribers.forEach(BaseRedisSubscriber::stop);
     }
 
+    /**
+     * The OPIK-8164 mechanism end to end, on real Redis, with a real decode failure.
+     * <p>
+     * Every other drop test in this PR either injects a pre-built {@code UndecodableStreamMessage} into
+     * a mocked {@code readGroup}, or exercises the decoder in isolation. Neither reproduces the thing
+     * that actually happened: the payload is written successfully, because Jackson has no
+     * serialization-side limit, and then breaches {@code maxStringLength} on the way back out — inside
+     * Redisson's {@code CommandDecoder}, below {@code BaseRedisSubscriber}, which pre-PR is exactly why
+     * the entry could never be acked and the stream wedged permanently.
+     * <p>
+     * A small {@code maxStringLength} stands in for production's 100 MB so the asymmetry is reproduced
+     * at a few hundred bytes instead of tens of megabytes. The write path is unbounded either way, so
+     * the mechanism is identical.
+     * <p>
+     * Worth knowing what this run exposed about timing, because the retry timers are compressed here
+     * and are not in production. Retirement is driven by the delivery count, which only advances when
+     * {@code XAUTOCLAIM} redelivers the entry after {@code pendingMessageDuration}. At the shipped
+     * online-scoring values ({@code pendingMessageDuration: 10m}, {@code maxRetries: 3}) an undecodable
+     * entry therefore stays in the stream for roughly 30 minutes, being re-read and re-decoded on each
+     * cycle, before it is removed. The wedge is bounded rather than eliminated — and for a payload of
+     * production size, each cycle re-attempts a large materialization. That is the cost of not deleting
+     * on first delivery; it is the right trade while a newer pod might still decode the entry, but it
+     * is not free.
+     */
+    @Nested
+    class UndecodablePayloadTests {
+
+        private static final int SMALL_STRING_LIMIT = 512;
+
+        private TestStreamConfiguration smallLimitConfig;
+        private RStreamReactive<String, String> smallLimitStream;
+
+        /** The JAVA codec's shape, but with a string limit small enough to breach cheaply. */
+        private Codec smallLimitCodec() {
+            var mapper = JsonUtils.getMapper().copy();
+            mapper.getFactory().setStreamReadConstraints(
+                    StreamReadConstraints.builder().maxStringLength(SMALL_STRING_LIMIT).build());
+            return RedisStreamCodec.faultTolerant(
+                    new CompositeCodec(new LZ4CodecV2(), new JsonJacksonCodec(mapper)));
+        }
+
+        @BeforeEach
+        void setUp() {
+            smallLimitConfig = TestStreamConfiguration.create().toBuilder()
+                    .codec(smallLimitCodec())
+                    // Retirement is driven by the delivery count, which only rises when XAUTOCLAIM
+                    // redelivers the entry after pendingMessageDuration. The class default is 2 minutes
+                    // and maxRetries 3, so an undecodable entry would sit in the stream for ~6 minutes.
+                    // Compressed here to keep the test quick; see the class javadoc for what this means
+                    // at the shipped values.
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(500))
+                    .claimIntervalRatio(2)
+                    .maxRetries(2)
+                    .build();
+            smallLimitStream = redissonClient.getStream(
+                    smallLimitConfig.getStreamName(), smallLimitConfig.getCodec());
+            smallLimitStream.delete().block();
+        }
+
+        @Test
+        void shouldDrainAnEntryThatOnlyFailsOnRead() {
+            var subscriber = trackSubscriber(
+                    TestRedisSubscriber.createSubscriber(smallLimitConfig, redissonClient));
+            var oversized = "a".repeat(SMALL_STRING_LIMIT + 1);
+            var healthy = "well-within-limits";
+
+            // Start first: the consumer group is created at '$', so it only sees entries added after
+            // start(). Publishing beforehand leaves them permanently undelivered and proves nothing.
+            subscriber.start();
+
+            // Writes fine: Jackson constrains reads, not writes. This is the asymmetry behind OPIK-8164.
+            var oversizedId = smallLimitStream
+                    .add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, oversized)).block();
+            smallLimitStream.add(StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, healthy)).block();
+            assertThat(smallLimitStream.size().block()).isEqualTo(2);
+
+            // The healthy entry behind it still gets through -- pre-PR it was stranded in the same batch.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(1));
+
+            // And the undecodable entry eventually leaves too, once the delivery count reaches
+            // maxRetries -- bounded, not permanent. This is the half that distinguishes the fix from
+            // the pre-PR wedge, where XLEN never returned to zero.
+            //
+            // Deliberately NOT asserting an intermediate "still exactly 1 entry" here. Ack and remove
+            // are asynchronous and batched (postProcessSuccessMessages runs after bufferTimeout), so
+            // processEvent completing does not mean the healthy entry's XACK/XDEL has landed -- an
+            // immediate size check races it and legitimately observes 2. That the undecodable entry
+            // survives its first delivery is pinned deterministically by the mocked unit tests
+            // (shouldNotRemoveUndecodableMessageBeforeMaxRetries), which control the delivery count
+            // directly instead of inferring it from wall-clock ordering.
+            await().atMost(AWAIT_TIMEOUT_SECONDS * 10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(smallLimitStream.size().block()).isZero());
+
+            // XDEL alone is not enough. A broken XACK would leave the id in the consumer group's PEL,
+            // where XAUTOCLAIM keeps reclaiming it -- a wedge by another name, and invisible to XLEN.
+            // Checked by id, and via listPending rather than pendingRange so the assertion does not
+            // itself have to decode the payload that cannot be decoded.
+            // defaultIfEmpty: Redisson's reactive listPending COMPLETES EMPTY rather than emitting an
+            // empty list when the PEL is clear, so block() returns null on the passing path.
+            var stillPending = smallLimitStream.listPending(
+                    smallLimitConfig.getConsumerGroupName(),
+                    StreamMessageId.MIN, StreamMessageId.MAX, Integer.MAX_VALUE)
+                    .defaultIfEmpty(List.of())
+                    .block();
+            assertThat(stillPending).noneSatisfy(
+                    entry -> assertThat(entry.getId()).isEqualTo(oversizedId));
+            assertThat(stillPending).isEmpty();
+
+            // It never reached processEvent: the sentinel is intercepted in processMessage.
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+    }
+
     @Nested
     class SuccessTests {
 
@@ -128,8 +248,15 @@ class BaseRedisSubscriberTest {
             assertThat(processingThreads).hasSizeGreaterThan(1);
         }
 
+        /**
+         * OPIK-8192 changed this contract. An entry with no value under the payload field used to be
+         * handed to {@code processEvent} as null, leaving every subscriber to dereference it and throw;
+         * it is now short-circuited in {@code processMessage} and retired as a non-retryable failure
+         * without reaching {@code processEvent} at all. So the assertion is the inverse of what it was:
+         * the null never arrives, and only the well-formed entries are processed.
+         */
         @Test
-        void shouldHandleNullPayloadSuccessfully() {
+        void shouldRemoveEntriesWithNoPayloadWithoutReachingProcessEvent() {
             var nullCount = new AtomicInteger(0);
             var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
@@ -141,15 +268,15 @@ class BaseRedisSubscriberTest {
             }));
             subscriber.start();
 
-            // Publish message with different field (no payload field, will result in null)
+            // Published under a different field, so nothing resolves under the payload field.
             publishMessagesToStream("other-payload", otherPayloadMessages);
             publishMessagesToStream(usualPayloadMessages);
 
-            waitForMessagesProcessed(subscriber, otherPayloadMessages.size() + usualPayloadMessages.size());
+            // Only the well-formed entries reach processEvent and count as successes.
+            waitForMessagesProcessed(subscriber, usualPayloadMessages.size());
+            // Both sets leave the stream: the payload-less ones as non-retryable failures.
             waitForMessagesAckedAndRemoved();
-            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(nullCount.get()).isEqualTo(otherPayloadMessages.size()));
-            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+            assertThat(nullCount.get()).isZero();
         }
 
         @Test
@@ -243,25 +370,32 @@ class BaseRedisSubscriberTest {
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
         }
 
+        /**
+         * Rebased off the null-payload path by OPIK-8192: payload-less entries no longer reach
+         * {@code processEvent}, so they can no longer be the source of the failures this test is about.
+         * The failure is now raised from a real payload, which is what the test always meant to
+         * exercise -- that healthy traffic keeps flowing past failing messages.
+         */
         @Test
         void shouldContinueProcessingAfterFailedMessages() {
-            var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var failingMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var failing = Set.copyOf(failingMessages);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient, message -> {
-                if (message == null) {
-                    return Mono.error(new NullPointerException("Intentional failure"));
+                if (failing.contains(message)) {
+                    // Non-retryable, so it is removed on first delivery rather than re-claimed.
+                    return Mono.error(new IllegalArgumentException("Intentional failure"));
                 }
                 return Mono.empty();
             }));
             subscriber.start();
 
-            // Publish messages including one with null payload
-            publishMessagesToStream("other-payload", otherPayloadMessages);
+            publishMessagesToStream(failingMessages);
             publishMessagesToStream(usualPayloadMessages);
 
             waitForMessagesProcessed(subscriber, usualPayloadMessages.size());
             waitForMessagesAckedAndRemoved();
-            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(otherPayloadMessages.size());
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(failingMessages.size());
         }
 
         @Test

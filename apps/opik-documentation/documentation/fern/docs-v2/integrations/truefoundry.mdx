@@ -1,23 +1,28 @@
 ---
-description: Start here to integrate TrueFoundry with Opik for enterprise MLOps platform capabilities with LLM gateway features.
+description: Start here to integrate the TrueFoundry AI Gateway with Opik and trace every LLM and MCP call that passes through the gateway.
 headline: TrueFoundry
-og:description: Learn to integrate TrueFoundry with Opik using the OpenAI SDK wrapper to log all LLM calls for comprehensive observability.
+og:description: Learn to export TrueFoundry AI Gateway traces to Opik over OpenTelemetry, or to trace gateway calls from your own code with the Opik OpenAI SDK wrapper.
 og:site_name: Opik Documentation
-og:title: Integrate TrueFoundry with Opik for Enterprise MLOps
+og:title: Integrate the TrueFoundry AI Gateway with Opik
 title: Observability for TrueFoundry with Opik
 ---
 
-[TrueFoundry](https://www.truefoundry.com/) is an enterprise MLOps platform that provides a unified interface for deploying and managing ML models, including LLMs. It offers features like model deployment, monitoring, A/B testing, and cost optimization.
+[TrueFoundry AI Gateway](https://www.truefoundry.com/ai-gateway) is the proxy layer that sits between your applications and the LLM providers and MCP Servers. It is an enterprise-grade platform that enables users to access 1000+ LLMs using a unified interface while taking care of observability and governance.
+
+The gateway exports OpenTelemetry traces, and Opik ingests them at its native OTLP endpoint. You get one trace for every request that passes through the gateway, without a change to your application code.
 
 ## Gateway Overview
 
-TrueFoundry provides enterprise-grade features for managing ML and LLM deployments, including:
+The TrueFoundry AI Gateway gives you these features:
 
-- **Unified OpenAI-Compatible Endpoint**: Routes through TrueFoundry to any supported model (OpenAI, Anthropic, self-hosted, etc.)
-- **End-to-End Tracing**: Full request/response logs with system messages, token breakdowns (prompt, completion, total), latency per call, and cost analytics per model and environment
-- **Production-Grade Controls**: Rate limiting, quotas by user/team, budget alerts and spend caps, scoped API keys with RBAC
-- **Data Sovereignty**: VPC and on-premises deployment options for compliance and data privacy
-- **Multi-Cloud Support**: Deploy across AWS, Azure, GCP, and on-premise infrastructure
+- **Unified OpenAI-compatible endpoint**: One endpoint routes to any supported model, from a commercial provider or from your own deployment.
+- **Native MCP support**: Connect enterprise tools to your agents, and apply OAuth2, RBAC, and metadata policies to each tool call.
+- **Routing and reliability**: Load balancing by weight, latency, or priority, with automatic fallback chains and retries.
+- **Governance controls**: Rate limits, quotas per user and per team, budget alerts, spend caps, and scoped API keys with RBAC.
+- **Observability**: Token, latency, cost, and error metrics for each request, with OpenTelemetry export to a platform such as Opik.
+- **Data sovereignty**: VPC and on-premises deployment options for compliance and data privacy.
+
+To learn more about the gateway, see the [TrueFoundry AI Gateway documentation](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway).
 
 ## Account Setup
 
@@ -25,7 +30,130 @@ TrueFoundry provides enterprise-grade features for managing ML and LLM deploymen
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=truefoundry&utm_campaign=opik) for more information.
 
-## Getting Started
+## Integration Options
+
+You can connect TrueFoundry to Opik in two ways. The two options work together, so you can also use both.
+
+| Option | How it works | Use it when |
+| --- | --- | --- |
+| [Gateway trace export](#gateway-trace-export) | You enable the OpenTelemetry exporter in the gateway settings. The gateway sends one trace per request. | You want all traffic from all teams, and you do not want to change application code. |
+| [Application tracing](#application-tracing) | You wrap the OpenAI client in your code with the Opik SDK. | You want to group LLM calls into multi-step traces, and to add tags, metadata, and feedback scores. |
+
+## Gateway Trace Export
+
+The gateway exports OpenTelemetry traces over OTLP. Opik accepts these traces at its native OTLP endpoint. TrueFoundry also documents this setup, with a screenshot of each field, on the [Comet Opik page in the TrueFoundry documentation](https://www.truefoundry.com/docs/ai-gateway/comet-opik).
+
+### Prerequisites
+
+- A TrueFoundry account with access to the AI Gateway. See the [TrueFoundry quick start](https://www.truefoundry.com/docs/ai-gateway/quick-start).
+- An Opik account, on Opik Cloud or on your own deployment.
+- Your Opik API key, your Opik workspace name, and the name of the Opik project for the traces.
+
+<Warning>
+  Opik ingests traces only. Keep the **Otel Metrics Exporter Configuration** toggle disabled. Opik also accepts HTTP
+  transport only, so do not select the gRPC configuration.
+</Warning>
+
+### Trace Endpoint
+
+The Opik OTLP base endpoint is `/api/v1/private/otel`. TrueFoundry sends traces to the signal-specific endpoint, which is the base endpoint with `/v1/traces` at the end. TrueFoundry does not add this path for you, so enter the full path in the **Endpoint** field.
+
+<Tabs>
+  <Tab value="Opik Cloud" title="Opik Cloud">
+    ```text wordWrap
+    https://www.comet.com/opik/api/v1/private/otel/v1/traces
+    ```
+  </Tab>
+  <Tab value="Self-hosted deployment" title="Self-hosted deployment">
+    ```text wordWrap
+    http://<YOUR-OPIK-INSTANCE>/api/v1/private/otel/v1/traces
+    ```
+  </Tab>
+  <Tab value="Enterprise deployment" title="Enterprise deployment">
+    ```text wordWrap
+    https://<COMET-SERVER>/api/v1/private/otel/v1/traces
+    ```
+  </Tab>
+</Tabs>
+
+### Configuring the Exporter
+
+<Steps>
+  <Step title="Get your Opik API key, workspace, and project">
+    Open your Opik account settings and copy your API key. Note the workspace name from the workspace switcher. Then
+    choose the name of the project for the traces. Opik creates the project on the first trace if it does not exist.
+  </Step>
+  <Step title="Open the OTEL configuration in TrueFoundry">
+    In the TrueFoundry dashboard, go to **AI Gateway** → **Controls** → **Settings**. Find the **OTEL Config** section
+    and click the edit button.
+  </Step>
+  <Step title="Enable the traces exporter">
+    Turn on the **Otel Traces Exporter Configuration** toggle, then enter the values below.
+
+    | Field | Value |
+    | --- | --- |
+    | Protocol | HTTP Configuration |
+    | Endpoint | The trace endpoint for your deployment, from the section above |
+    | Encoding | Proto |
+    | Header `Authorization` | Your Opik API key |
+    | Header `Comet-Workspace` | Your Opik workspace name |
+    | Header `projectName` | The name of the Opik project for the traces |
+
+    <Warning>
+      The `Authorization` header value is the raw API key. Do not add the `Bearer ` prefix.
+    </Warning>
+  </Step>
+  <Step title="Save the configuration">
+    Leave the **Otel Metrics Exporter Configuration** toggle disabled, then click **Save**.
+  </Step>
+  <Step title="Verify the integration">
+    Send a request through the gateway. Then open the traces view for your project in Opik. You see spans from
+    `tfy-llm-gateway`, with the inputs, the outputs, the token counts, the latency, and the cost.
+  </Step>
+</Steps>
+
+### Configuration Reference
+
+| Configuration | Value |
+| --- | --- |
+| Traces endpoint | `<opik-host>/api/v1/private/otel/v1/traces` |
+| Metrics endpoint | Not supported. Opik ingests traces only. |
+| Protocol | HTTP. Opik does not accept gRPC. |
+| Encoding | Proto. Opik also accepts JSON. |
+| `Authorization` | Your Opik API key, raw, with no `Bearer ` prefix |
+| `Comet-Workspace` | Your Opik workspace name |
+| `projectName` | The target Opik project. Opik uses `Default Project` when you omit this header. |
+
+<Note>
+  For more information about the Opik OTLP endpoint and its headers, see the [OpenTelemetry
+  integration](/integrations/opentelemetry) guide.
+</Note>
+
+### Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No traces appear in Opik">
+    Check that the **Endpoint** field ends with `/v1/traces`. TrueFoundry does not add this path for you, so the base
+    OTLP endpoint on its own returns an error. Check also that the protocol is **HTTP Configuration** and that the
+    encoding is **Proto**.
+  </Accordion>
+  <Accordion title="The gateway reports an authentication error">
+    The `Authorization` header takes the raw Opik API key. Remove the `Bearer ` prefix if you added one. Then check
+    that the `Comet-Workspace` header matches your Opik workspace name exactly.
+  </Accordion>
+  <Accordion title="Traces land in the wrong project">
+    The `projectName` header sets the project. Opik uses the project named `Default Project` when this header is
+    absent or empty. Add the header, then send a new request.
+  </Accordion>
+  <Accordion title="Metrics do not appear in Opik">
+    This is expected. Opik ingests traces only, and it rejects OTLP metrics. Keep the **Otel Metrics Exporter
+    Configuration** toggle disabled.
+  </Accordion>
+</AccordionGroup>
+
+## Application Tracing
+
+The gateway exposes an OpenAI-compatible API, so you can use the [Opik OpenAI SDK wrapper](/integrations/openai) to log gateway calls as generations in Opik. Use this option when you want to group several LLM calls into one trace.
 
 ### Installation
 
@@ -46,13 +174,16 @@ Configure the Opik Python SDK for your deployment type. See the [Python SDK Conf
 
 ### Configuring TrueFoundry
 
-You'll need your TrueFoundry API endpoint and credentials. You can get these from your TrueFoundry dashboard.
+You need a TrueFoundry API key and the base URL of your gateway.
+
+- **Base URL**: `https://gateway.truefoundry.ai` for TrueFoundry SaaS. For a self-hosted gateway, get the base URL from the **Code Snippet** tab of the TrueFoundry playground.
+- **API key**: Create a Personal Access Token or a Virtual Account Token in the **Access** section of the TrueFoundry platform. See [Generating TrueFoundry API keys](https://www.truefoundry.com/docs/ai-gateway/authentication).
 
 Set your configuration as environment variables:
 
 ```bash
-export TRUEFOUNDRY_API_KEY="YOUR_TRUEFOUNDRY_API_KEY"
-export TRUEFOUNDRY_BASE_URL="YOUR_TRUEFOUNDRY_BASE_URL"
+export TRUEFOUNDRY_API_KEY="<your-truefoundry-api-key>"
+export TRUEFOUNDRY_BASE_URL="<your-truefoundry-base-url>"
 ```
 
 Or set them programmatically:
@@ -67,10 +198,6 @@ if "TRUEFOUNDRY_API_KEY" not in os.environ:
 if "TRUEFOUNDRY_BASE_URL" not in os.environ:
     os.environ["TRUEFOUNDRY_BASE_URL"] = input("Enter your TrueFoundry base URL: ")
 ```
-
-## Logging LLM Calls
-
-Since TrueFoundry provides an OpenAI-compatible API for LLM deployments, we can use the [Opik OpenAI SDK wrapper](/integrations/openai) to automatically log TrueFoundry calls as generations in Opik.
 
 ### Simple LLM Call
 
@@ -90,7 +217,7 @@ client = track_openai(client, project_name="truefoundry-integration-demo")
 
 # Make a chat completion request
 response = client.chat.completions.create(
-    model="your-deployed-model-name",
+    model="openai-main/gpt-4o",
     messages=[
         {"role": "system", "content": "You are a knowledgeable AI assistant."},
         {"role": "user", "content": "What is the largest city in France?"}
@@ -101,9 +228,13 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-## Advanced Usage
+<Note>
+  The `model` value is the TrueFoundry model ID, in the format `provider_account/model_name`. Copy it from the **Code
+  Snippet** tab of the TrueFoundry playground. See the [TrueFoundry Chat Completions
+  API](https://www.truefoundry.com/docs/ai-gateway/chat-completions-overview) for the full request format.
+</Note>
 
-### Using with the `@track` decorator
+### Multi-Step Traces
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If TrueFoundry is called within one of these steps, the LLM call will be associated with that corresponding step:
 
@@ -123,7 +254,7 @@ client = track_openai(client)
 @track
 def generate_response(prompt: str):
     response = client.chat.completions.create(
-        model="your-deployed-model-name",
+        model="openai-main/gpt-4o",
         messages=[
             {"role": "system", "content": "You are a knowledgeable AI assistant."},
             {"role": "user", "content": prompt}
@@ -134,7 +265,7 @@ def generate_response(prompt: str):
 @track
 def refine_response(initial_response: str):
     response = client.chat.completions.create(
-        model="your-deployed-model-name",
+        model="openai-main/gpt-4o",
         messages=[
             {"role": "system", "content": "You enhance and polish text responses."},
             {"role": "user", "content": f"Please improve this response: {initial_response}"}
@@ -146,10 +277,10 @@ def refine_response(initial_response: str):
 def generate_and_refine(prompt: str):
     # First LLM call: Generate initial response
     initial = generate_response(prompt)
-    
+
     # Second LLM call: Refine the response
     refined = refine_response(initial)
-    
+
     return refined
 
 # Example usage
@@ -157,6 +288,19 @@ result = generate_and_refine("Explain quantum computing in simple terms.")
 ```
 
 The trace will show nested LLM calls with hierarchical spans.
+
+## TrueFoundry Documentation
+
+- [Comet Opik integration](https://www.truefoundry.com/docs/ai-gateway/comet-opik) — the TrueFoundry side of the OpenTelemetry export, with a screenshot of each field.
+- [AI Gateway quick start](https://www.truefoundry.com/docs/ai-gateway/quick-start) — create an account, add models, and get your base URL, API key, and model ID.
+- [Chat Completions API](https://www.truefoundry.com/docs/ai-gateway/chat-completions-overview) — the unified request format for all supported models.
+- [Authentication](https://www.truefoundry.com/docs/ai-gateway/authentication) — Personal Access Tokens and Virtual Account Tokens.
+
+## Next steps
+
+- [Log traces](/tracing/advanced/log_traces) — add tags, metadata, and feedback scores to the traces from your gateway.
+- [Evaluate your LLM application](/evaluation/overview) — build datasets from gateway traffic and score it.
+- [Gateway integrations](/production/gateway-guardrails/gateway) — the other LLM gateways that Opik supports.
 
 ## Further Improvements
 

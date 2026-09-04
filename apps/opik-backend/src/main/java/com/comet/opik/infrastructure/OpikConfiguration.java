@@ -43,6 +43,9 @@ public class OpikConfiguration extends JobConfiguration {
     private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
 
     @Valid @NotNull @JsonProperty
+    private CipxTokenValidationConfig cipxTokenValidation = new CipxTokenValidationConfig();
+
+    @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
 
     @Valid @NotNull @JsonProperty

@@ -1,17 +1,22 @@
 import React from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
-import { LLMVertexAIConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
-  DEFAULT_VERTEX_AI_CONFIGS,
-  THINKING_LEVEL_OPTIONS,
-} from "@/constants/llm";
+  GeminiThinkingLevel,
+  LLMVertexAIConfigsType,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
+import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { supportsVertexAIThinkingLevel } from "@/lib/modelUtils";
+import {
+  getDefaultThinkingLevel,
+  getThinkingLevelOptions,
+  supportsVertexAIThinkingLevel,
+} from "@/lib/modelUtils";
 
 interface VertexAIModelConfigsProps {
   configs: LLMVertexAIConfigsType;
@@ -25,6 +30,8 @@ const VertexAIModelConfigs = ({
   onChange,
 }: VertexAIModelConfigsProps) => {
   const hasThinkingLevel = supportsVertexAIThinkingLevel(model);
+  const thinkingLevelOptions = getThinkingLevelOptions(model);
+  const defaultThinkingLevel = getDefaultThinkingLevel(model);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -86,11 +93,11 @@ const VertexAIModelConfigs = ({
           </div>
           <SelectBox
             id="thinkingLevel"
-            value={configs.thinkingLevel || "low"}
-            onChange={(value: "low" | "high") =>
+            value={configs.thinkingLevel || defaultThinkingLevel}
+            onChange={(value: GeminiThinkingLevel) =>
               onChange({ thinkingLevel: value })
             }
-            options={THINKING_LEVEL_OPTIONS}
+            options={thinkingLevelOptions}
             placeholder="Select thinking level"
           />
         </div>

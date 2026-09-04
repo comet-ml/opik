@@ -29,6 +29,11 @@ public class JacksonConfig {
      *
      * This ensures that if HTTP layer accepts a payload, internal processing can handle it.
      * Attachment stripping happens asynchronously after initial ingestion.
+     *
+     * <p>Also bounds Redis stream decoding, which reads a batch of entries at a time: worst-case transient
+     * heap for a stream consumer is roughly this value x {@code onlineScoring.consumerBatchSize}. The type
+     * is {@code int}, so the effective ceiling is already {@code MAX_CONFIGURABLE_BYTES}; anything above
+     * the 100 MB default is an explicit operator decision that needs the heap sized to match.
      */
     @JsonProperty
     @Min(value = 1048576, message = "maxStringLength must be at least 1MB") private int maxStringLength = StreamReadConstraints.DEFAULT_MAX_STRING_LEN;

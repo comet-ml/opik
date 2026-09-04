@@ -2,8 +2,12 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
@@ -22,6 +26,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -116,7 +121,30 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         Optional.ofNullable(request.seed())
                 .ifPresent(generationConfig::setSeed);
 
+        thinkingConfig(GeminiThinkingParams.from(request.customParameters()))
+                .ifPresent(generationConfig::setThinkingConfig);
+
         return generationConfig.build();
+    }
+
+    /**
+     * Vertex's {@code ThinkingConfig} has no level field, so a level is translated into the budget it maps to.
+     */
+    private static Optional<GenerationConfig.ThinkingConfig> thinkingConfig(GeminiThinkingParams params) {
+        if (params.isAbsent()) {
+            return Optional.empty();
+        }
+
+        var thinkingConfig = GenerationConfig.ThinkingConfig.newBuilder();
+
+        Optional.ofNullable(params.budgetForLevel()).ifPresent(thinkingConfig::setThinkingBudget);
+        // include_thoughts is deliberately not forwarded here either. Nothing on the Vertex path
+        // filters thought parts: langchain4j builds the answer from ResponseHandler.getText(), which
+        // concatenates every part with no thought check and has no returnThinking equivalent. Asking
+        // for thoughts would prepend the reasoning trace to the answer, and on the judge path that
+        // breaks the JSON parse in OnlineScoringEngine, yielding no scores at all.
+
+        return Optional.of(thinkingConfig.build());
     }
 
     /**
@@ -179,6 +207,16 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(requestBuilder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(requestBuilder::seed);
+
+        // Round-tripped through the request so the generation config is derived in one place for both paths.
+        // Only an object converts to a Map: custom_parameters is unvalidated free-form JSON, and Jackson throws
+        // IllegalArgumentException on an array or scalar, which would fail the whole run rather than be ignored.
+        Optional.ofNullable(modelParameters.customParameters())
+                .filter(JsonNode::isObject)
+                .map(customParameters -> JsonUtils.getMapper()
+                        .convertValue(customParameters, new TypeReference<Map<String, Object>>() {
+                        }))
+                .ifPresent(requestBuilder::customParameters);
 
         return newVertexAIClient(apiKey, requestBuilder.build());
     }
