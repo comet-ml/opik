@@ -35,6 +35,15 @@ on:
   # A reply to a review comment lands as pull_request_review_comment.created —
   # that is the event that clears the label as soon as someone engages, without
   # waiting for the scheduled sweep.
+  #
+  # These two have no _target variant, and on a fork-originated PR they run with
+  # a read-only GITHUB_TOKEN, so the label write would 403. The job therefore
+  # skips fork PRs on these events (see the `if:` below) and leaves them to the
+  # hourly sweep, which runs on a schedule and always holds a writable token.
+  # Net effect: same-repo PRs relabel within seconds of a review, fork PRs within
+  # the hour. Making forks fast too would need a privileged relay
+  # (workflow_run on a fork-safe artifact), which is more machinery than the
+  # latency saves.
   pull_request_review:
     types: [submitted, dismissed]
   pull_request_review_comment:
@@ -57,6 +66,13 @@ jobs:
     name: Compute unaddressed-comment labels
     runs-on: ubuntu-latest
     timeout-minutes: 3
+
+    # Skip fork PRs on the review events, which would carry a read-only token and
+    # fail the label write. pull_request_target always has a writable token, so it
+    # runs for forks too. Fork PRs on review events fall through to the sweep.
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      github.event.pull_request.head.repo.full_name == github.repository
 
     permissions:
       pull-requests: write
@@ -83,8 +99,8 @@ jobs:
             const BOT_LABEL = "💬 unaddressed: bot";
             const HUMAN_LABEL = "💬 unaddressed: human";
             const MANAGED = [
-              { name: BOT_LABEL, description: "Review comments from a bot reviewer that nobody has replied to or resolved" },
-              { name: HUMAN_LABEL, description: "Review comments from a human reviewer that nobody has replied to or resolved" },
+              { name: BOT_LABEL, description: "Unresolved review comments from a bot reviewer with no reply from another participant" },
+              { name: HUMAN_LABEL, description: "Unresolved review comments from a human reviewer with no reply from another participant" },
             ];
 
             const { owner, repo } = context.repo;
@@ -102,6 +118,7 @@ jobs:
             // be invisible and the thread wrongly reported as unaddressed.
             const THREAD_PAGE = 100;
             const COMMENT_PAGE = 100;
+            const MAX_COMMENT_PAGES = 20;
             const QUERY = `
               query ($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
@@ -166,7 +183,12 @@ jobs:
                 `Thread ${thread.id} has ${thread.comments.totalCount} comments; paging past the first ${COMMENT_PAGE}`
               );
               let c = thread.comments.pageInfo.endCursor;
-              for (;;) {
+              // Bounded so a pathologically deep thread cannot consume the job's
+              // 3-minute budget and leave every label stale. At 100 comments per
+              // page this covers 2000; beyond that we stop and report what we have.
+              // Exhausting the budget without finding another participant is
+              // reported rather than silently treated as unaddressed.
+              for (let page_i = 0; page_i < MAX_COMMENT_PAGES; page_i++) {
                 const res = await github.graphql(COMMENTS_QUERY, { threadId: thread.id, cursor: c });
                 const page = res.node.comments;
                 for (const node of page.nodes) {
@@ -177,6 +199,11 @@ jobs:
                 if (!page.pageInfo.hasNextPage) return logins;
                 c = page.pageInfo.endCursor;
               }
+              core.warning(
+                `Thread ${thread.id} exceeded ${MAX_COMMENT_PAGES} comment pages; classifying as addressed to avoid a false label`
+              );
+              // Fail toward silence: an unverifiable thread should not nag.
+              return [opener, "__pagination_budget_exhausted__"];
             };
 
             // A thread is unaddressed when nobody engaged with it and it was never
@@ -229,10 +256,23 @@ jobs:
                 }
               } catch (err) {
                 if (err.status !== 404) throw err;
-                await github.rest.issues.createLabel({
-                  owner, repo, name: label.name, color: CHIP_COLOR, description: label.description,
-                });
-                core.info(`Created label: ${label.name}`);
+                try {
+                  await github.rest.issues.createLabel({
+                    owner, repo, name: label.name, color: CHIP_COLOR, description: label.description,
+                  });
+                  core.info(`Created label: ${label.name}`);
+                } catch (createErr) {
+                  // This job and the sweep can both reach the create path at once
+                  // for a label that does not exist yet. The loser gets 422
+                  // already_exists, which means the label is now present — the
+                  // desired end state — so treat it as success rather than
+                  // failing before any reconciliation happens.
+                  const exists =
+                    createErr.status === 422 &&
+                    JSON.stringify(createErr.response ? createErr.response.data : {}).includes("already_exists");
+                  if (!exists) throw createErr;
+                  core.info(`Label created concurrently, continuing: ${label.name}`);
+                }
               }
             }
 
