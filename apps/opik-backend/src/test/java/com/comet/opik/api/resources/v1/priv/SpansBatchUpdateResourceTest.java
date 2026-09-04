@@ -20,6 +20,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -387,6 +388,113 @@ class SpansBatchUpdateResourceTest {
             assertThat(span.errorInfo().exceptionType()).isEqualTo("ValidationError");
             assertThat(span.errorInfo().message()).isEqualTo("Invalid input");
             assertThat(span.ttft()).isEqualTo(123.45);
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch Update Cost:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchUpdateCost {
+
+        private static final String MODEL = "gpt-4o-2024-05-13";
+        private static final String PROVIDER = "openai";
+        private static final Map<String, Integer> USAGE = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        private UUID traceId;
+
+        @BeforeEach
+        void setUp() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+            traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("Success: batch update recalculates the cost when the model becomes priceable")
+        void batchUpdate__whenModelBecomesPriceable__thenRecalculateCost() {
+            var id = createUnpricedSpan(null);
+
+            batchUpdate(id, SpanUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .model(MODEL)
+                    .provider(PROVIDER)
+                    .usage(USAGE)
+                    .build());
+
+            var updatedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedSpan.totalEstimatedCost())
+                    .isEqualByComparingTo(CostService.calculateCost(MODEL, PROVIDER, USAGE, null));
+            assertThat(updatedSpan.totalEstimatedCostVersion()).isNotBlank();
+        }
+
+        @Test
+        @DisplayName("Success: batch update keeps a manually set cost")
+        void batchUpdate__whenSpanHasManualCost__thenKeepManualCost() {
+            var manualCost = new BigDecimal("0.5");
+            var id = createUnpricedSpan(manualCost);
+
+            batchUpdate(id, SpanUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .model(MODEL)
+                    .provider(PROVIDER)
+                    .usage(USAGE)
+                    .build());
+
+            var updatedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedSpan.totalEstimatedCost()).isEqualByComparingTo(manualCost);
+            assertThat(updatedSpan.totalEstimatedCostVersion()).isNull();
+        }
+
+        @Test
+        @DisplayName("Success: batch update without a priceable model keeps the stored cost")
+        void batchUpdate__whenUpdateIsNotPriceable__thenKeepStoredCost() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .parentSpanId(null)
+                    .model(MODEL)
+                    .provider(PROVIDER)
+                    .usage(USAGE)
+                    .totalEstimatedCost(null)
+                    .feedbackScores(null)
+                    .build();
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            var storedCost = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).totalEstimatedCost();
+
+            batchUpdate(id, SpanUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .name("updated-name")
+                    .build());
+
+            var updatedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedSpan.totalEstimatedCost()).isEqualByComparingTo(storedCost);
+        }
+
+        private UUID createUnpricedSpan(BigDecimal manualCost) {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .parentSpanId(null)
+                    .model(null)
+                    .provider(null)
+                    .usage(null)
+                    .totalEstimatedCost(manualCost)
+                    .feedbackScores(null)
+                    .build();
+            return spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+        }
+
+        private void batchUpdate(UUID id, SpanUpdate update) {
+            spanResourceClient.batchUpdateSpans(SpanBatchUpdate.builder()
+                    .ids(Set.of(id))
+                    .update(update)
+                    .mergeTags(false)
+                    .build(), API_KEY, TEST_WORKSPACE);
         }
     }
 }
