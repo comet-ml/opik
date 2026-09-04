@@ -79,6 +79,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -210,6 +211,18 @@ class ProjectMetricsWithBreakdownResourceTest {
                 Arguments.of(BreakdownField.METADATA),
                 Arguments.of(BreakdownField.NAME),
                 Arguments.of(BreakdownField.ERROR_INFO),
+                Arguments.of(BreakdownField.MODEL),
+                Arguments.of(BreakdownField.PROVIDER),
+                Arguments.of(BreakdownField.TYPE));
+    }
+
+    static Stream<Arguments> spanCostBreakdownFields() {
+        return Stream.of(
+                Arguments.of(BreakdownField.TAGS),
+                Arguments.of(BreakdownField.METADATA),
+                Arguments.of(BreakdownField.NAME),
+                Arguments.of(BreakdownField.ERROR_INFO),
+                Arguments.of(BreakdownField.ERROR_TYPE),
                 Arguments.of(BreakdownField.MODEL),
                 Arguments.of(BreakdownField.PROVIDER),
                 Arguments.of(BreakdownField.TYPE));
@@ -1068,6 +1081,72 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     @Nested
+    @DisplayName("Span Cost with Breakdown")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanCostWithBreakdownTest {
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ProjectMetricsWithBreakdownResourceTest#spanCostBreakdownFields")
+        @DisplayName("happyPath: returns per-group cost totals in every time bucket")
+        void happyPath(BreakdownField breakdownField) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant bucket1 = subtract(marker, 2, interval);
+            Instant bucket2 = subtract(marker, 1, interval);
+            createSpansWithCostForBreakdown(projectName, bucket1, breakdownField, "group-a", 2,
+                    new BigDecimal("1.25"));
+            createSpansWithCostForBreakdown(projectName, bucket2, breakdownField, "group-a", 2,
+                    new BigDecimal("1.50"));
+            createSpansWithCostForBreakdown(projectName, bucket1, breakdownField, "group-b", 2,
+                    new BigDecimal("2.50"));
+            createSpansWithCostForBreakdown(projectName, bucket2, breakdownField, "group-b", 2,
+                    new BigDecimal("3.00"));
+
+            var requestBuilder = ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 3, interval))
+                    .intervalEnd(Instant.now());
+
+            if (breakdownField == BreakdownField.METADATA) {
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .metadataKey("env")
+                        .build());
+            } else {
+                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+            }
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
+                    BigDecimal.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(MetricType.SPAN_COST);
+            assertThat(response.results())
+                    .extracting(result -> result.name())
+                    .containsExactly(
+                            expectedSpanBreakdownGroupName(breakdownField, "group-b"),
+                            expectedSpanBreakdownGroupName(breakdownField, "group-a"));
+            assertThat(response.results().getFirst().data())
+                    .hasSize(2)
+                    .extracting(dataPoint -> dataPoint.time(), dataPoint -> dataPoint.value())
+                    .containsExactly(
+                            tuple(bucket1, new BigDecimal("5.00")),
+                            tuple(bucket2, new BigDecimal("6.00")));
+            assertThat(response.results().getLast().data())
+                    .hasSize(2)
+                    .extracting(dataPoint -> dataPoint.time(), dataPoint -> dataPoint.value())
+                    .containsExactly(
+                            tuple(bucket1, new BigDecimal("2.50")),
+                            tuple(bucket2, new BigDecimal("3.00")));
+        }
+    }
+
+    @Nested
     @DisplayName("Span Duration with Breakdown")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanDurationWithBreakdownTest {
@@ -1652,6 +1731,24 @@ class ProjectMetricsWithBreakdownResourceTest {
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
     }
 
+    private void createSpansWithCostForBreakdown(String projectName, Instant marker,
+            BreakdownField breakdownField, String groupValue, int count, BigDecimal cost) {
+        List<Span> spans = IntStream.range(0, count)
+                .mapToObj(i -> {
+                    Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                    var builder = factory.manufacturePojo(Span.class).toBuilder()
+                            .id(idGenerator.generateId(spanStartTime))
+                            .projectName(projectName)
+                            .startTime(spanStartTime)
+                            .totalEstimatedCost(cost);
+
+                    applyBreakdownFieldToSpan(builder, breakdownField, groupValue);
+                    return builder.build();
+                })
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+    }
+
     private void createSpansWithFeedbackScores(String projectName, Instant marker, BreakdownField breakdownField,
             String groupValue, int count, String scoreName) {
         for (int i = 0; i < count; i++) {
@@ -1684,16 +1781,33 @@ class ProjectMetricsWithBreakdownResourceTest {
             case NAME -> builder.name(groupValue);
             case ERROR_INFO -> {
                 if ("group-a".equals(groupValue)) {
-                    builder.errorInfo(ErrorInfo.builder().message("Some error").build());
+                    builder.errorInfo(ErrorInfo.builder()
+                            .exceptionType("TestError")
+                            .message("Some error")
+                            .traceback("Test traceback")
+                            .build());
                 } else {
                     builder.errorInfo(null);
                 }
             }
+            case ERROR_TYPE -> builder.errorInfo(ErrorInfo.builder()
+                    .exceptionType(groupValue)
+                    .message("Some error")
+                    .traceback("Test traceback")
+                    .build());
             case MODEL -> builder.model(groupValue);
             case PROVIDER -> builder.provider(groupValue);
             case TYPE -> builder.type("group-a".equals(groupValue) ? SpanType.llm : SpanType.tool);
             default -> {
             }
         }
+    }
+
+    private static String expectedSpanBreakdownGroupName(BreakdownField breakdownField, String groupValue) {
+        return switch (breakdownField) {
+            case ERROR_INFO -> "group-a".equals(groupValue) ? "Has Error" : "No Error";
+            case TYPE -> "group-a".equals(groupValue) ? SpanType.llm.name() : SpanType.tool.name();
+            default -> groupValue;
+        };
     }
 }
