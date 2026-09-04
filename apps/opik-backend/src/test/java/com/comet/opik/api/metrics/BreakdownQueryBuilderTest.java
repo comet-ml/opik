@@ -7,9 +7,35 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BreakdownQueryBuilderTest {
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TAGS", "NAME", "MODEL", "PROVIDER"})
+    @DisplayName("validate: allows span cost breakdown fields")
+    void validate_allowsSpanCostBreakdownFields(String fieldName) {
+        var breakdown = BreakdownConfig.builder()
+                .field(BreakdownField.valueOf(fieldName))
+                .build();
+
+        assertThatCode(() -> BreakdownQueryBuilder.validate(breakdown, MetricType.SPAN_COST))
+                .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TAGS", "NAME", "MODEL", "PROVIDER"})
+    @DisplayName("getBreakdownGroupExpression: uses span alias for span cost")
+    void getBreakdownGroupExpression_usesSpanAliasForSpanCost(String fieldName) {
+        var breakdown = BreakdownConfig.builder()
+                .field(BreakdownField.valueOf(fieldName))
+                .build();
+
+        assertThat(BreakdownQueryBuilder.getBreakdownGroupExpression(MetricType.SPAN_COST, breakdown))
+                .contains("s.")
+                .doesNotContain("t.");
+    }
 
     @ParameterizedTest
     @CsvSource({"p50,0.5", "p90,0.9", "p99,0.99", "P50,0.5", "P99,0.99"})

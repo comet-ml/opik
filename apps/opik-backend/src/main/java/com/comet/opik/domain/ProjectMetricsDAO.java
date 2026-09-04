@@ -1125,6 +1125,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
+    private static final String GET_SPAN_COST_WITH_BREAKDOWN = """
+            %s
+            SELECT <bucket> AS bucket,
+                   <group_expression> AS group_name,
+                   sum(total_estimated_cost) AS value
+            FROM spans_filtered s
+            GROUP BY bucket, group_name
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
+
     private static final String GET_SPAN_ERROR_RATE = """
             %s
             SELECT <bucket> AS bucket,
@@ -1498,8 +1509,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getSpanCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetric(projectId, request, GET_SPAN_COST, "spanCost",
-                row -> NAME_SPAN_COST, row -> row.get("value", BigDecimal.class));
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                request.hasBreakdown() ? GET_SPAN_COST_WITH_BREAKDOWN : GET_SPAN_COST, "spanCost")
+                .flatMapMany(result -> request.hasBreakdown()
+                        ? rowToDataPointWithBreakdown(result, row -> NAME_SPAN_COST,
+                                row -> row.get("value", BigDecimal.class))
+                        : rowToDataPoint(result, row -> NAME_SPAN_COST,
+                                row -> row.get("value", BigDecimal.class)))
+                .collectList());
     }
 
     @Override
