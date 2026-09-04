@@ -65,14 +65,14 @@ curl http://localhost:8080/v1/internal/hello-world/queue-size
 2. [Architecture](#architecture)
 3. [Detailed Setup](#detailed-setup)
 4. [Components](#components)
-6. [OpenTelemetry Metrics](#opentelemetry-metrics)
-7. [Configuration](#configuration)
-8. [Usage Guide](#usage-guide)
-9. [Adding New Queues](#adding-new-queues)
-10. [Testing](#testing)
-11. [Troubleshooting](#troubleshooting)
-12. [Design Decisions](#design-decisions)
-13. [Refactoring History](#refactoring-history)
+5. [OpenTelemetry Metrics](#opentelemetry-metrics)
+6. [Queue Configuration](#queue-configuration-configyml)
+7. [Usage Guide](#usage-guide)
+8. [Adding New Queues](#adding-new-queues)
+9. [Testing](#testing)
+10. [Troubleshooting](#troubleshooting)
+11. [Design Decisions](#design-decisions)
+12. [Refactoring History](#refactoring-history)
 
 ---
 
