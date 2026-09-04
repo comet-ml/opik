@@ -66,7 +66,12 @@ runs:
     - name: Install dependencies
       shell: bash
       working-directory: ${{ inputs.working_directory }}
-      run: npm ci
+      # `--no-audit` drops the post-install vulnerability report. That report is a
+      # separate call to npm's audit endpoint, which stalled for npm's full 300s
+      # fetch-timeout during a registry incident (run 33867982882) and pushed the
+      # SDK publish job past its limit. Nothing here acts on the report, and it
+      # does not change what gets installed.
+      run: npm ci --no-audit
 
     - name: Generate version
       id: version
