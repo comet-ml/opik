@@ -1,0 +1,269 @@
+---
+headline: Redis Sentinel
+og:description: Configure the Opik Java backend to use Redis Sentinel for master
+  discovery and automatic reconnection after failover.
+og:site_name: Opik Documentation
+og:title: Configure Redis Sentinel for self-hosted Opik
+subtitle: Use Sentinel-based Redis master discovery in self-hosted deployments
+title: Redis Sentinel
+---
+
+By default, the Opik Java backend connects directly to a single Redis endpoint through `REDIS_URL`. Enable Redis Sentinel when you want the backend to discover the active Redis master and reconnect after Sentinel promotes a replica. Opik configures the backend client only; you must provide and operate the Redis master, replicas, and Sentinel processes.
+
+<Callout intent="warning">
+  Redis Sentinel support currently applies only to the **Java backend**. The Python backend and its RQ workers still expect `REDIS_URL` to point to a Redis data endpoint. Do not configure those services with a Sentinel port; this feature alone does not provide Redis high availability for them.
+</Callout>
+
+## Prerequisites
+
+Before enabling Sentinel mode, make sure that:
+
+- A Redis master and at least one replica are running and synchronized.
+- All Sentinel processes monitor the same master set name.
+- Sentinel-announced Redis and Sentinel addresses are reachable from the Java backend.
+- Authentication and TLS settings are consistent across the topology.
+- Production deployments use at least three Sentinel processes in independent failure domains. A typical three-Sentinel deployment uses a quorum of `2`.
+
+See the [Redis Sentinel documentation](https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/) for Redis-side deployment and quorum guidance.
+
+## Configure the Java backend
+
+The example below uses:
+
+- `mymaster` as the Sentinel master set name
+- `sentinel-1:26379` as the initial Sentinel seed
+- `sentinel-2:26379` and `sentinel-3:26379` as additional seeds
+- `redis-password` for Redis data-node authentication
+- `sentinel-password` for Sentinel authentication
+- Redis database `0`
+
+<Tabs>
+  <Tab title="Docker Compose">
+    Add the Java backend overrides to `deployment/docker-compose/docker-compose.override.yaml`:
+
+    ```yaml
+    services:
+      backend:
+        environment:
+          REDIS_URL: "redis://:redis-password@sentinel-1:26379/0"
+          OPIK_REDIS_SENTINEL_ENABLED: "true"
+          OPIK_REDIS_SENTINEL_MASTER_NAME: "mymaster"
+          OPIK_REDIS_SENTINEL_NODES: "redis://sentinel-2:26379,redis://sentinel-3:26379"
+          OPIK_REDIS_SENTINEL_PASSWORD: "sentinel-password"
+    ```
+
+    Apply the change from the `deployment/docker-compose` directory:
+
+    ```bash
+    docker compose up -d backend
+    ```
+  </Tab>
+
+  <Tab title="Kubernetes / Helm">
+    Add the Java backend environment variables to your Helm values file:
+
+    ```yaml
+    component:
+      backend:
+        env:
+          REDIS_URL: "redis://:redis-password@sentinel-1:26379/0"
+          OPIK_REDIS_SENTINEL_ENABLED: "true"
+          OPIK_REDIS_SENTINEL_MASTER_NAME: "mymaster"
+          OPIK_REDIS_SENTINEL_NODES: "redis://sentinel-2:26379,redis://sentinel-3:26379"
+          OPIK_REDIS_SENTINEL_PASSWORD: "sentinel-password"
+    ```
+
+    Apply the change:
+
+    ```bash
+    helm upgrade opik opik/opik -n opik -f values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+Keep the Python backend's `REDIS_URL` configured separately and pointed at a direct or otherwise stable Redis data endpoint, not at a Sentinel port.
+
+## How `REDIS_URL` is interpreted
+
+When Sentinel mode is disabled, `REDIS_URL` remains the direct single-node Redis URL. When Sentinel mode is enabled, the same URL is interpreted as follows:
+
+| URL part | Meaning in Sentinel mode |
+|---|---|
+| Scheme (`redis://` or `rediss://`) | Connection scheme for the Sentinel topology |
+| Host and port | Initial Sentinel seed, commonly port `26379` |
+| Username and password | Credentials for Redis data nodes, not for Sentinel |
+| Path | Redis database selected on the discovered master |
+
+Sentinel authentication is configured independently with `OPIK_REDIS_SENTINEL_USERNAME` and `OPIK_REDIS_SENTINEL_PASSWORD`.
+
+For ACL-based authentication, use separate credentials for the data nodes and Sentinel:
+
+```bash
+REDIS_URL="redis://redis-user:redis-password@sentinel-1:26379/0"
+OPIK_REDIS_SENTINEL_USERNAME="sentinel-user"
+OPIK_REDIS_SENTINEL_PASSWORD="sentinel-password"
+```
+
+If Sentinel does not require authentication, omit the Sentinel username and password variables.
+
+## Configuration reference
+
+Configure these environment variables on the Java backend service:
+
+| Environment variable | Default | Description |
+|---|---:|---|
+| `REDIS_URL` | `redis://:opik@localhost:6379/0` | Direct Redis URL in single-node mode. In Sentinel mode, its host and port identify the initial Sentinel seed, while its credentials and database apply to Redis data nodes. |
+| `OPIK_REDIS_SENTINEL_ENABLED` | `false` | Enables Sentinel-based master discovery. |
+| `OPIK_REDIS_SENTINEL_MASTER_NAME` | Empty | Sentinel master set name. Required when Sentinel mode is enabled. |
+| `OPIK_REDIS_SENTINEL_NODES` | Empty | Comma-separated additional Sentinel seed addresses. Include the `redis://` or `rediss://` scheme for each address. |
+| `OPIK_REDIS_SENTINEL_USERNAME` | Empty | Username used to authenticate to Sentinel nodes when Sentinel ACLs are enabled. |
+| `OPIK_REDIS_SENTINEL_PASSWORD` | Empty | Password used to authenticate to Sentinel nodes. |
+| `OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS` | `3` | Number of retry attempts for commands that fail during a topology change. |
+| `OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST` | `true` | Requires Sentinel discovery to report at least two Sentinel nodes. Set to `false` only for single-Sentinel development environments. |
+| `OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT` | `10s` | Timeout for establishing Redis or Sentinel connections. |
+| `OPIK_REDIS_SENTINEL_TIMEOUT` | `5s` | Timeout for Redis command responses. |
+| `OPIK_REDIS_SENTINEL_SCAN_INTERVAL` | `2s` | Interval at which Redisson checks for Sentinel topology changes. |
+
+Duration values accept forms such as `500ms`, `5s`, and `1m`.
+
+## TLS
+
+Use the `rediss://` scheme in `REDIS_URL` and every address in `OPIK_REDIS_SENTINEL_NODES` when the Sentinel topology requires TLS.
+
+Opik does not expose separate connection schemes for Sentinel and Redis data nodes, so a topology that mixes plaintext Sentinel connections with TLS data-node connections, or the reverse, is not supported by this configuration.
+
+For TLS deployments, make sure Sentinel announces hostnames or addresses that:
+
+- Are reachable from the Java backend
+- Match the subject alternative names in the Redis server certificates
+
+## Production guidance
+
+- Keep `OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST=true` in production.
+- Provide multiple seed addresses through `OPIK_REDIS_SENTINEL_NODES` so backend startup does not depend on one Sentinel being reachable.
+- Place Sentinel processes in independent failure domains.
+- Ensure replicas are synchronized and eligible for promotion before testing failover.
+- Store Redis and Sentinel credentials in your deployment's secret manager rather than directly in a committed values or Compose file.
+- Remember that Redis replication is asynchronous. Sentinel improves availability but does not guarantee that every acknowledged write survives every failure.
+
+## Verify the configuration
+
+### Confirm Sentinel mode at startup
+
+Check the Java backend logs for:
+
+```text
+Built redis sentinel config with master name 'mymaster'
+```
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```bash
+    docker compose logs backend | grep "Built redis sentinel config"
+    ```
+  </Tab>
+
+  <Tab title="Kubernetes / Helm">
+    ```bash
+    kubectl logs -n opik deployment/opik-backend \
+      | grep "Built redis sentinel config"
+    ```
+  </Tab>
+</Tabs>
+
+If the log reports `Built redis single node config`, Sentinel mode is not enabled in the Java backend process.
+
+### Check Redis health
+
+Query the backend health endpoint from inside the deployment or through a port-forward:
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```bash
+    docker compose exec backend \
+      curl -fsS "http://localhost:8080/health-check?name=redis"
+    ```
+  </Tab>
+
+  <Tab title="Kubernetes / Helm">
+    In one terminal:
+
+    ```bash
+    kubectl port-forward -n opik deployment/opik-backend 8080:8080
+    ```
+
+    In another terminal:
+
+    ```bash
+    curl -i "http://localhost:8080/health-check?name=redis"
+    ```
+  </Tab>
+</Tabs>
+
+A healthy Redis topology returns HTTP `200`.
+
+<Callout intent="info">
+  The Redis health check evaluates the Sentinel-discovered master and replica group. It can temporarily report unhealthy during failover, or while a discovered node remains unavailable, even if the active master can serve some application traffic.
+</Callout>
+
+### Validate failover
+
+<Callout intent="warning">
+  Perform this procedure only in a development or staging environment. Triggering a failover changes the writable Redis node and can interrupt active requests.
+</Callout>
+
+Keep the Opik Java backend running while performing this check.
+
+The commands below use `OPIK_REDIS_SENTINEL_USERNAME` and `OPIK_REDIS_SENTINEL_PASSWORD`. Set these variables in the shell running `redis-cli`. If the username is unset, the commands authenticate as the Redis `default` ACL user.
+
+1. Confirm that Sentinel reports the expected current master:
+
+   ```bash
+   REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+     --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+     -h sentinel-1 -p 26379 \
+     SENTINEL GET-MASTER-ADDR-BY-NAME mymaster
+   ```
+
+2. Trigger a controlled failover, or stop the current master according to your Redis operating procedure:
+
+   ```bash
+   REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+     --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+     -h sentinel-1 -p 26379 \
+     SENTINEL FAILOVER mymaster
+   ```
+
+3. Wait until `SENTINEL GET-MASTER-ADDR-BY-NAME` reports the promoted replica.
+4. Without restarting the Java backend, repeat a normal Opik operation that uses Redis and confirm it succeeds.
+5. Confirm that the Java backend process remained running throughout the failover.
+
+Requests may briefly fail or time out while Sentinel promotes a replica and Redisson reconnects. Tune the retry and timeout settings to match your Sentinel failure-detection and failover timing.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Resolution |
+|---|---|---|
+| `Master node is undefined` or `GET-MASTER-ADDR-BY-NAME` returns no address | The configured master name does not match the Sentinel master set | Run `SENTINEL MASTERS` and set `OPIK_REDIS_SENTINEL_MASTER_NAME` to the reported name. |
+| Startup reports fewer than two Sentinel nodes | Sentinel discovery cannot reach enough nodes | Check network access and announced addresses. Use `OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST=false` only for local single-Sentinel testing. |
+| Sentinel authentication succeeds but Redis commands fail with authentication errors | Sentinel credentials were also used as data-node credentials, or the reverse | Put Redis data-node credentials in `REDIS_URL` and Sentinel credentials in the dedicated Sentinel variables. |
+| TLS handshake or hostname verification fails | The URL scheme is incorrect, or Sentinel announces an address that does not match the certificate | Use the correct `redis://` or `rediss://` scheme and configure routable certificate-valid announced hostnames. |
+| Sentinel reports a new master, but Opik cannot reconnect | The promoted node's announced address is not reachable from the Java backend | Correct Redis and Sentinel announce settings, DNS, firewall rules, or network routes. |
+| The Python backend or RQ workers cannot connect after being pointed at port `26379` | Those components do not use Sentinel discovery | Point their `REDIS_URL` at a Redis data endpoint rather than a Sentinel endpoint. |
+
+Useful Sentinel diagnostics:
+
+```bash
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL MASTERS
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL SENTINELS mymaster
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL REPLICAS mymaster
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL CKQUORUM mymaster
+```

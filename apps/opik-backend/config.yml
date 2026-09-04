@@ -284,6 +284,39 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is interpreted as the seed sentinel address (usually port 26379) instead of a Redis data
+  # node. Redisson discovers the current master through the sentinels and reconnects automatically on failover. The
+  # credentials and database number in singleNodeUrl still apply to the master data nodes.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: ${OPIK_REDIS_SENTINEL_ENABLED:-false}
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ${OPIK_REDIS_SENTINEL_MASTER_NAME:-''}
+    # Description: Comma separated list of additional seed sentinel addresses, e.g.
+    # redis://sentinel-1:26379,redis://sentinel-2:26379. The address derived from singleNodeUrl is always included
+    nodes: ${OPIK_REDIS_SENTINEL_NODES:-''}
+    # Description: Username for authenticating against the sentinel nodes themselves, if they enforce ACLs
+    username: ${OPIK_REDIS_SENTINEL_USERNAME:-''}
+    # Description: Password for authenticating against the sentinel nodes themselves, if they require auth
+    password: ${OPIK_REDIS_SENTINEL_PASSWORD:-''}
+    # Default: 3
+    # Description: Number of times a failed command is retried while a failover is in progress
+    retryAttempts: ${OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS:-3}
+    # Default: true
+    # Description: Require the sentinels to report at least two nodes, as recommended for a production quorum. Set to
+    # false to allow a single sentinel, e.g. in development setups
+    checkSentinelsList: ${OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST:-true}
+    # Default: 10s
+    # Description: Timeout for establishing connections
+    connectTimeout: ${OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT:-10s}
+    # Default: 5s
+    # Description: Timeout for command responses
+    timeout: ${OPIK_REDIS_SENTINEL_TIMEOUT:-5s}
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes
+    scanInterval: ${OPIK_REDIS_SENTINEL_SCAN_INTERVAL:-2s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
