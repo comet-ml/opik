@@ -21839,6 +21839,8 @@ components:
         id:
           type: string
           format: uuid
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
     SpanSearchStreamRequest_Public:
       type: object
       properties:
@@ -22580,6 +22582,8 @@ components:
         thread_id:
           minLength: 1
           type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
     FeedbackScoreBatchThread:
       required:
       - scores

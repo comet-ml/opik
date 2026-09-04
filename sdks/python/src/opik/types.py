@@ -1,6 +1,6 @@
 import enum
 import sys
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import StrictStr
 from typing_extensions import TypedDict
@@ -83,6 +83,9 @@ class FeedbackScoreDict(TypedDict):
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
 
+    metadata: NotRequired[Optional[Dict[str, Any]]]
+    """Optional caller-supplied metadata persisted with the score (e.g. evaluator provenance)."""
+
 
 class BatchFeedbackScoreDict(TypedDict):
     """
@@ -117,6 +120,9 @@ class BatchFeedbackScoreDict(TypedDict):
 
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
+
+    metadata: NotRequired[Optional[Dict[str, Any]]]
+    """Optional caller-supplied metadata persisted with the score (e.g. evaluator provenance)."""
 
 
 class BatchAssertionResultDict(TypedDict):

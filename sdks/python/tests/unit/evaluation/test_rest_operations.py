@@ -124,3 +124,33 @@ class TestLogTestResultFeedbackScoresRouting:
 
         client.log_traces_feedback_scores.assert_not_called()
         client.log_assertion_results.assert_not_called()
+
+    def test_metadata__propagated_into_feedback_score_dict(self):
+        client = _client_mock()
+        results = [
+            score_result.ScoreResult(
+                name="correctness",
+                value=0.83,
+                metadata={
+                    "evaluator_revision": "rubric-v3",
+                    "config_fingerprint": "abc",
+                },
+            ),
+            score_result.ScoreResult(name="precision", value=0.9),
+        ]
+
+        rest_operations.log_test_result_feedback_scores(
+            client=client,
+            score_results=results,
+            trace_id="trace-1",
+            project_name="proj-A",
+        )
+
+        client.log_traces_feedback_scores.assert_called_once()
+        scores = client.log_traces_feedback_scores.call_args.kwargs["scores"]
+        by_name = {s["name"]: s for s in scores}
+        assert by_name["correctness"]["metadata"] == {
+            "evaluator_revision": "rubric-v3",
+            "config_fingerprint": "abc",
+        }
+        assert by_name["precision"].get("metadata") is None

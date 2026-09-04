@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -26,6 +27,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -83,6 +85,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 value,
                 reason,
                 source,
+                metadata,
                 <if(author)>author,<endif>
                 <if(author)>source_queue_id,<endif>
                 created_by,
@@ -101,14 +104,15 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :value<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
+                         :metadata<item.index>,
                          <if(author)>:author<item.index>,<endif>
                          <if(author)>:source_queue_id<item.index>,<endif>
                          :user_name,
                          :user_name
-                     )
-                     <if(item.hasNext)>
-                        ,
-                     <endif>
+                      )
+                      <if(item.hasNext)>
+                         ,
+                      <endif>
                 }>
             ;
             """;
@@ -301,6 +305,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 .orElse("");
     }
 
+    private String serializeMetadata(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return "";
+        }
+        return JsonUtils.writeValueAsString(metadata);
+    }
+
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
@@ -348,6 +359,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
+                    .bind("metadata" + i, serializeMetadata(feedbackScoreBatchItem.metadata()))
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
 
