@@ -214,10 +214,13 @@ A healthy Redis topology returns HTTP `200`.
 
 Keep the Opik Java backend running while performing this check.
 
+The commands below use `OPIK_REDIS_SENTINEL_USERNAME` and `OPIK_REDIS_SENTINEL_PASSWORD`. Set these variables in the shell running `redis-cli`. If the username is unset, the commands authenticate as the Redis `default` ACL user.
+
 1. Confirm that Sentinel reports the expected current master:
 
    ```bash
-   REDISCLI_AUTH="sentinel-password" redis-cli \
+   REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+     --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
      -h sentinel-1 -p 26379 \
      SENTINEL GET-MASTER-ADDR-BY-NAME mymaster
    ```
@@ -225,7 +228,8 @@ Keep the Opik Java backend running while performing this check.
 2. Trigger a controlled failover, or stop the current master according to your Redis operating procedure:
 
    ```bash
-   REDISCLI_AUTH="sentinel-password" redis-cli \
+   REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+     --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
      -h sentinel-1 -p 26379 \
      SENTINEL FAILOVER mymaster
    ```
@@ -250,8 +254,16 @@ Requests may briefly fail or time out while Sentinel promotes a replica and Redi
 Useful Sentinel diagnostics:
 
 ```bash
-REDISCLI_AUTH="sentinel-password" redis-cli -h sentinel-1 -p 26379 SENTINEL MASTERS
-REDISCLI_AUTH="sentinel-password" redis-cli -h sentinel-1 -p 26379 SENTINEL SENTINELS mymaster
-REDISCLI_AUTH="sentinel-password" redis-cli -h sentinel-1 -p 26379 SENTINEL REPLICAS mymaster
-REDISCLI_AUTH="sentinel-password" redis-cli -h sentinel-1 -p 26379 SENTINEL CKQUORUM mymaster
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL MASTERS
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL SENTINELS mymaster
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL REPLICAS mymaster
+REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+  --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+  -h sentinel-1 -p 26379 SENTINEL CKQUORUM mymaster
 ```
