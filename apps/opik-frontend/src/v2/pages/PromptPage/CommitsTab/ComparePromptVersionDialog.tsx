@@ -509,7 +509,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
               </SectionContainer>
             )}
 
-            {anyMediaChanged && (
+            {baseVersion && diffVersion && anyMediaChanged && (
               <>
                 {mediaChanges
                   .filter((m) => m.changed)
