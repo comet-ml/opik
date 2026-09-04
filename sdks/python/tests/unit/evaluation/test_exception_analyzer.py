@@ -21,8 +21,13 @@ def test_openai_rate_limit_error_is_detected():
     assert exception_analyzer.is_llm_provider_rate_limit_error(error) is True
 
 
-def test_status_code_fallback_classifies_429_without_litellm():
-    """litellm is not installed in this environment; the status_code fallback must still classify."""
+def test_status_code_fallback_classifies_429_without_provider_sdks(monkeypatch):
+    """The status_code fallback must classify 429 on its own, independent of
+    whether the provider SDKs happen to be importable in this environment."""
+    monkeypatch.setitem(sys.modules, "openai", None)
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    monkeypatch.setitem(sys.modules, "litellm.exceptions", None)
+
     assert (
         exception_analyzer.is_llm_provider_rate_limit_error(
             _HttpStatusError("retry me")
