@@ -121,12 +121,20 @@ class DatasetExportOperations(abc.ABC):
         self,
         nb_samples: Optional[int] = None,
         filter_string: Optional[str] = None,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve dataset items as a list of dictionaries.
 
         Args:
             nb_samples: Maximum number of items to retrieve. If not set, all items are returned.
+            num_threads: Number of item pages fetched concurrently. Must be a
+                positive integer, defaults to 4; pass ``1`` to fetch
+                sequentially. Raising it speeds up large reads at the cost of
+                more load on the backend. Capped at
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Use
+                :meth:`stream_items` instead when the dataset is too large to
+                hold in memory all at once.
             filter_string: Optional OQL filter string to filter dataset items.
                 Supports filtering by tags, data fields, metadata, etc.
 
@@ -144,11 +152,17 @@ class DatasetExportOperations(abc.ABC):
 
         Returns:
             A list of dictionaries representing the dataset items.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, or
+                ``nb_samples`` is not a positive integer.
         """
         return [
             item
             for chunk in self.stream_items(
-                filter_string=filter_string, nb_samples=nb_samples
+                filter_string=filter_string,
+                nb_samples=nb_samples,
+                num_threads=num_threads,
             )
             for item in chunk
         ]

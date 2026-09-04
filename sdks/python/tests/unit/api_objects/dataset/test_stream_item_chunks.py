@@ -385,3 +385,48 @@ def test_get_items__empty_dataset__returns_empty_list():
     dataset = _build_dataset(endpoint)
 
     assert dataset.get_items() == []
+
+
+def test_get_items__num_threads__forwarded_to_the_reader():
+    chunk = constants.DATASET_STREAM_BATCH_SIZE
+    endpoint = FakeItemsEndpoint(_rest_items(chunk * 4), delay_seconds=0.05)
+    dataset = _build_dataset(endpoint)
+
+    items = dataset.get_items(num_threads=4)
+
+    assert len(items) == chunk * 4
+    assert endpoint.max_in_flight > 1
+
+
+def test_get_items__num_threads_one__fetches_pages_sequentially():
+    chunk = constants.DATASET_STREAM_BATCH_SIZE
+    endpoint = FakeItemsEndpoint(_rest_items(chunk * 3), delay_seconds=0.05)
+    dataset = _build_dataset(endpoint)
+
+    items = dataset.get_items(num_threads=1)
+
+    assert len(items) == chunk * 3
+    assert endpoint.max_in_flight == 1
+
+
+def test_get_items__thread_count_does_not_change_the_result():
+    endpoint = FakeItemsEndpoint(_rest_items(constants.DATASET_STREAM_BATCH_SIZE * 3))
+    dataset = _build_dataset(endpoint)
+
+    assert dataset.get_items(num_threads=1) == dataset.get_items(num_threads=8)
+
+
+@pytest.mark.parametrize("num_threads", [0, -1, True, "4"])
+def test_get_items__invalid_num_threads__raises_value_error(num_threads):
+    dataset = _build_dataset(endpoint=None)
+
+    with pytest.raises(ValueError):
+        dataset.get_items(num_threads=num_threads)
+
+
+def test_get_items__positional_args_unchanged__nb_samples_still_first():
+    """num_threads was appended, so existing positional callers are unaffected."""
+    endpoint = FakeItemsEndpoint(_rest_items(50))
+    dataset = _build_dataset(endpoint)
+
+    assert len(dataset.get_items(10)) == 10
