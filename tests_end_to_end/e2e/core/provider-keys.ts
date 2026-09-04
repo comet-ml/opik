@@ -49,20 +49,52 @@ function endpoint(path = ''): string {
   return `${env.apiBaseUrl}/v1/private/llm-provider-key${path}`;
 }
 
-export async function findProviderKeyByName(providerName: string): Promise<ProviderKeyRef | null> {
+async function listProviderKeys(): Promise<ProviderKeyRef[]> {
   const response = await fetch(endpoint(), { headers: restHeaders() });
   if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
   const body = (await response.json()) as { content: ProviderKeyRef[] };
-  return body.content.find((key) => key.provider_name === providerName) ?? null;
+  return body.content;
 }
 
+export async function findProviderKeyByName(providerName: string): Promise<ProviderKeyRef | null> {
+  const keys = await listProviderKeys();
+  return keys.find((key) => key.provider_name === providerName) ?? null;
+}
+
+/**
+ * Find a key by its PROVIDER slug (`gemini`, `vertex-ai`, …) rather than by
+ * `provider_name`, which only the custom/bedrock/ollama providers carry.
+ *
+ * The workspace holds at most one key per built-in provider, so this is the
+ * only way to ask "is Gemini already configured here" — and a caller that
+ * seeds one has to ask, because creating a second would collide with whatever
+ * key the environment already had.
+ */
+export async function findProviderKeyByProvider(provider: string): Promise<ProviderKeyRef | null> {
+  const keys = await listProviderKeys();
+  return keys.find((key) => key.provider === provider) ?? null;
+}
+
+/**
+ * Create a provider key, and report its id from the `Location` header —
+ * creation answers 201 with an empty body, so that header is the only place
+ * the id appears.
+ *
+ * `null` rather than a throw when the header is missing, so a caller that
+ * cleans up by `provider_name` is not made to care: only a caller that has to
+ * address the key by id needs the header, and that caller is the one that
+ * should complain about it.
+ */
 export async function createProviderKey(payload: {
   provider: string;
-  provider_name: string;
-  base_url: string;
+  /** Only the custom/bedrock/ollama providers name their keys. */
+  provider_name?: string;
+  base_url?: string;
+  /** The provider secret. Built-in providers key off this rather than `auth_config`. */
+  api_key?: string;
   configuration?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
-}): Promise<void> {
+}): Promise<string | null> {
   const response = await fetch(endpoint(), {
     method: 'POST',
     headers: restHeaders(),
@@ -71,19 +103,24 @@ export async function createProviderKey(payload: {
   if (!response.ok) {
     throw new Error(`create provider key returned ${response.status}: ${await response.text()}`);
   }
+  return response.headers.get('location')?.split('/').filter(Boolean).pop() ?? null;
+}
+
+export async function deleteProviderKeyById(id: string): Promise<void> {
+  const response = await fetch(endpoint('/delete'), {
+    method: 'POST',
+    headers: restHeaders(),
+    body: JSON.stringify({ ids: [id] }),
+  });
+  if (!response.ok) {
+    throw new Error(`delete provider key returned ${response.status}`);
+  }
 }
 
 export async function deleteProviderKeyByName(providerName: string): Promise<void> {
   const found = await findProviderKeyByName(providerName);
   if (!found) return;
-  const response = await fetch(endpoint('/delete'), {
-    method: 'POST',
-    headers: restHeaders(),
-    body: JSON.stringify({ ids: [found.id] }),
-  });
-  if (!response.ok) {
-    throw new Error(`delete provider key returned ${response.status}`);
-  }
+  await deleteProviderKeyById(found.id);
 }
 
 /** Carries the HTTP status so callers can classify a failure instead of parsing prose. */

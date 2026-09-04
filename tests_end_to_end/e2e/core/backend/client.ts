@@ -181,6 +181,28 @@ export interface AutomationRuleDetail {
   triggerScope: string;
 }
 
+/**
+ * The `code.model` block of an LLM-as-judge rule, as the REST view answers it.
+ *
+ * Read raw rather than through the pinned SDK for the same reason as
+ * `AutomationRuleDetail`: the SDK's evaluator shape has no
+ * `custom_parameters`, and this is the field that decides what the judge call
+ * actually sends to the provider.
+ */
+export interface LlmJudgeModelDetail {
+  /** The model id the rule will call, e.g. `gemini-3.5-flash-lite`. */
+  name: string;
+  /**
+   * `custom_parameters` verbatim, `null` when the rule carries none.
+   *
+   * Kept nullable rather than defaulted to `{}` because absent and empty are
+   * different answers here: a thinking level of "none" must REMOVE the block,
+   * and a spec that cannot tell "no block" from "empty block" cannot assert
+   * that.
+   */
+  customParameters: Record<string, unknown> | null;
+}
+
 /** One line of a rule's user-facing log stream. */
 export interface AutomationRuleLogRef {
   level: string;
@@ -1577,6 +1599,41 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         enabled: rule.enabled ?? true,
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
+      };
+    },
+
+    /**
+     * The model block of an LLM-as-judge rule — the model id and the
+     * `custom_parameters` the judge call will carry.
+     *
+     * Throws rather than defaulting when the rule is not an LLM-as-judge one:
+     * a Python-code rule has no `code.model` at all, and answering `null` for
+     * it would let a mis-typed spec assert "no custom parameters" about a rule
+     * that could never have had any.
+     */
+    async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelDetail> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeModel: ${ruleId} answered ${status}: ${message}`);
+      }
+      const model = (json as { code?: { model?: unknown } } | null)?.code?.model as
+        | { name?: unknown; custom_parameters?: unknown }
+        | undefined;
+      if (!model || typeof model.name !== 'string') {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} carries no code.model.name — not an LLM-as-judge rule?`,
+        );
+      }
+      const custom = model.custom_parameters;
+      return {
+        name: model.name,
+        customParameters:
+          custom === null || custom === undefined
+            ? null
+            : (custom as Record<string, unknown>),
       };
     },
 
