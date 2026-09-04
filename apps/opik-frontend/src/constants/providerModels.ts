@@ -968,6 +968,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FIN,
+      label: "inclusionai/ling-3.0-flash-fin",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FIN_FREE,
       label: "inclusionai/ling-3.0-flash-fin:free",
     },
@@ -1607,6 +1611,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
       label: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY,
+      label: "nvidia/nemotron-3.5-content-safety",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
@@ -2965,7 +2973,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
-      label: "Gemini Flash Latest",
+      label: "Gemini Flash Latest High Res Exp",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
@@ -2982,6 +2990,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_PRO_PREVIEW,
       label: "Lyria 3 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LYRIA_3_5,
+      label: "Lyria 3.5",
     },
   ],
 

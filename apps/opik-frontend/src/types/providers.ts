@@ -100,6 +100,7 @@ export enum PROVIDER_MODEL_TYPE {
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
   CLAUDE_FABLE_5 = "claude-fable-5",
+  CLAUDE_FABLE_5_1 = "claude-fable-5-1",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
@@ -113,7 +114,6 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
-  CLAUDE_FABLE_5_1 = "claude-fable-5-1",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -317,6 +317,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
   INCLUSIONAI_LING_3_0_FLASH = "inclusionai/ling-3.0-flash",
+  INCLUSIONAI_LING_3_0_FLASH_FIN = "inclusionai/ling-3.0-flash-fin",
   INCLUSIONAI_LING_3_0_FLASH_FIN_FREE = "inclusionai/ling-3.0-flash-fin:free",
   INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
   INCLUSIONAI_LING_3_0_TINY_FREE = "inclusionai/ling-3.0-tiny:free",
@@ -477,6 +478,7 @@ export enum PROVIDER_MODEL_TYPE {
   NVIDIA_NEMOTRON_3_ULTRA_550B_A55B = "nvidia/nemotron-3-ultra-550b-a55b",
   NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_BATCH = "nvidia/nemotron-3-ultra-550b-a55b:batch",
   NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE = "nvidia/nemotron-3-ultra-550b-a55b:free",
+  NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY = "nvidia/nemotron-3.5-content-safety",
   NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE = "nvidia/nemotron-3.5-content-safety:free",
   NVIDIA_NEMOTRON_3_5_LIGHTNING = "nvidia/nemotron-3.5-lightning",
   NVIDIA_NEMOTRON_3_5_LIGHTNING_FREE = "nvidia/nemotron-3.5-lightning:free",
@@ -829,6 +831,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_5_TRANSCRIBE = "gemini-3.5-transcribe",
   GEMINI_3_6_FLASH = "gemini-3.6-flash",
   GEMINI_3_7_FLASH = "gemini-3.7-flash",
+  GEMINI_3_8_FLASH = "gemini-3.8-flash",
+  GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
   GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
@@ -838,8 +842,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_8_FLASH = "gemini-3.8-flash",
-  GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
+  LYRIA_3_5 = "lyria-3.5",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
