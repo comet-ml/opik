@@ -53,9 +53,8 @@ concurrency:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    # 15, not 5: npm's default per-request fetch-timeout is 300s, so a 5-minute
-    # job cannot outlast a single stalled registry request. Matches
-    # typescript_sdk_integration_publish.yml.
+    # npm's per-request fetch-timeout is 300s; a 5-minute job cannot outlast one
+    # stalled request. Matches typescript_sdk_integration_publish.yml.
     timeout-minutes: 15
     permissions:
       # `contents: write` — the release path commits the version bump and pushes it.
