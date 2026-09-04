@@ -31,3 +31,34 @@ def test_display_experiment_results__shows_successful_experiment_score(capsys):
 
     assert "0.5000" in out
     assert "failed" not in out
+
+
+def test_display_experiment_scores__empty_list__prints_nothing(capsys):
+    report.display_experiment_scores(experiment_scores=[])
+
+    assert capsys.readouterr().out == ""
+
+
+def test_display_experiment_scores__marks_failed_experiment_score(capsys):
+    report.display_experiment_scores(
+        experiment_scores=[
+            score_result.ScoreResult(name="f1_macro", value=0.0, scoring_failed=True)
+        ],
+    )
+
+    out = capsys.readouterr().out
+
+    assert "f1_macro" in out
+    assert "failed" in out
+    assert "0.0000" not in out
+
+
+def test_display_experiment_scores__shows_successful_experiment_score(capsys):
+    report.display_experiment_scores(
+        experiment_scores=[score_result.ScoreResult(name="f1_macro", value=0.5)],
+    )
+
+    out = capsys.readouterr().out
+
+    assert "0.5000" in out
+    assert "failed" not in out

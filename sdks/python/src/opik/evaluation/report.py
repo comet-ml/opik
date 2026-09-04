@@ -41,6 +41,21 @@ def _compute_average_scores(
     return average_scores, failed_scores
 
 
+def _format_experiment_scores(
+    experiment_scores: List[score_result.ScoreResult],
+) -> text.Text:
+    score_strings = text.Text("")
+    for score in experiment_scores:
+        if score.scoring_failed:
+            score_strings += text.Text(f"{score.name}: failed", style="red")
+        else:
+            score_strings += text.Text(
+                f"{score.name}: {score.value:.4f}", style="green bold"
+            )
+        score_strings += text.Text("\n")
+    return score_strings
+
+
 def display_experiment_results(
     dataset_name: str,
     total_time: float,
@@ -82,14 +97,7 @@ def display_experiment_results(
 
     # Add experiment scores if available
     if experiment_scores:
-        for score in experiment_scores:
-            if score.scoring_failed:
-                score_strings += text.Text(f"{score.name}: failed", style="red")
-            else:
-                score_strings += text.Text(
-                    f"{score.name}: {score.value:.4f}", style="green bold"
-                )
-            score_strings += text.Text("\n")
+        score_strings += _format_experiment_scores(experiment_scores)
 
     aligned_test_results = align.Align.left(score_strings)
 
@@ -126,19 +134,9 @@ def display_experiment_scores(
     if not experiment_scores:
         return
 
-    score_strings = text.Text("")
-    for score in experiment_scores:
-        if score.scoring_failed:
-            score_strings += text.Text(f"{score.name}: failed", style="red")
-        else:
-            score_strings += text.Text(
-                f"{score.name}: {score.value:.4f}", style="green bold"
-            )
-        score_strings += text.Text("\n")
-
     console.Console().print(
         panel.Panel(
-            align.Align.left(score_strings),
+            align.Align.left(_format_experiment_scores(experiment_scores)),
             title="Experiment scores",
             title_align="left",
             expand=False,
