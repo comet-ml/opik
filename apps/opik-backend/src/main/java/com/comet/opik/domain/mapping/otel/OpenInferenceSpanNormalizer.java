@@ -63,9 +63,9 @@ public final class OpenInferenceSpanNormalizer {
             "llm.token_count.total", "total_tokens",
             "llm.token_count.prompt_details.cache_read", "cache_read_input_tokens",
             "llm.token_count.prompt_details.cache_write", "cache_creation_input_tokens",
-            "llm.token_count.prompt_details.audio", "input_audio_tokens",
+            "llm.token_count.prompt_details.audio", "prompt_tokens_details.audio_tokens",
             "llm.token_count.completion_details.reasoning", "reasoning_tokens",
-            "llm.token_count.completion_details.audio", "output_audio_tokens");
+            "llm.token_count.completion_details.audio", "completion_tokens_details.audio_tokens");
 
     private static final Set<String> RESERVED_METADATA_KEYS = Set.of(
             "thread_id", "integration", "server.address", SPAN_KIND, INPUT_MIME_TYPE, OUTPUT_MIME_TYPE,
@@ -399,6 +399,11 @@ public final class OpenInferenceSpanNormalizer {
         }
 
         private Result finish() {
+            String resolvedProvider = StringUtils.firstNonBlank(provider, system);
+            // OpenInference names the hosting provider "aws"; Opik prices it as Bedrock.
+            if ("aws".equals(resolvedProvider)) {
+                resolvedProvider = "bedrock";
+            }
             if (!inputMessages.isEmpty()) {
                 ArrayNode messages = buildMessages(inputMessages, false);
                 if (!messages.isEmpty()) {
@@ -448,7 +453,7 @@ public final class OpenInferenceSpanNormalizer {
                     Map.copyOf(usage),
                     Set.copyOf(tags),
                     StringUtils.firstNonBlank(responseModel, model, requestModel),
-                    StringUtils.firstNonBlank(provider, system),
+                    resolvedProvider,
                     toSpanType(spanKind),
                     totalEstimatedCost,
                     sessionId);

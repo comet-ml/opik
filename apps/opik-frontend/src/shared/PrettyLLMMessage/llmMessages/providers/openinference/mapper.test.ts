@@ -6,6 +6,119 @@ import {
 } from "./mapper";
 
 describe("OpenInference message mapping", () => {
+  it.each(["canonical", "legacy", "both"])(
+    "preserves repeated turns in %s messages",
+    (representation) => {
+      const messages = [
+        { role: "user", content: "Continue" },
+        { role: "assistant", content: "First answer" },
+        { role: "user", content: "Continue" },
+      ];
+      const legacy = Object.fromEntries(
+        messages.flatMap((message, index) => [
+          [`llm.input_messages.${index}.message.role`, message.role],
+          [`llm.input_messages.${index}.message.content`, message.content],
+        ]),
+      );
+      const input = {
+        ...(representation !== "legacy" && { messages }),
+        ...(representation !== "canonical" && legacy),
+      };
+
+      const result = mapAndCombineMessages(input, undefined, {
+        formatHint: "openinference",
+      });
+
+      expect(result.messages).toMatchObject(
+        messages.map(({ role, content }) => ({
+          role,
+          blocks: [{ blockType: "text", props: { children: content } }],
+        })),
+      );
+    },
+  );
+
+  it("preserves repeated completion choices", () => {
+    const result = mapAndCombineMessages(
+      undefined,
+      {
+        choices: [{ text: "Same answer" }, { text: "Same answer" }],
+      },
+      { formatHint: "openinference" },
+    );
+
+    expect(result.messages).toMatchObject([
+      { blocks: [{ blockType: "text", props: { children: "Same answer" } }] },
+      { blocks: [{ blockType: "text", props: { children: "Same answer" } }] },
+    ]);
+  });
+
+  it.each([
+    ["image", "png", "images"],
+    ["audio", "wav", "audios"],
+  ])(
+    "passes backend %s placeholders to the media resolver",
+    (type, extension, prop) => {
+      const url = `[output-attachment-1-1768916401606.${extension}]`;
+      const result = mapAndCombineMessages(
+        undefined,
+        {
+          messages: [
+            {
+              role: "assistant",
+              contents: [{ type, [type]: { url } }],
+            },
+          ],
+        },
+        { formatHint: "openinference", formatHintIsAuthoritative: true },
+      );
+
+      expect(result.messages).toMatchObject([
+        {
+          role: "assistant",
+          blocks: [{ blockType: type, props: { [prop]: [{ url }] } }],
+        },
+      ]);
+    },
+  );
+
+  it("does not render a null function call", () => {
+    const result = mapAndCombineMessages(
+      undefined,
+      {
+        messages: [
+          { role: "assistant", content: "Answer", function_call: null },
+        ],
+      },
+      { formatHint: "openinference" },
+    );
+
+    expect(result.messages[0].blocks).toMatchObject([
+      { blockType: "text", props: { children: "Answer" } },
+    ]);
+  });
+
+  it.each([{}, { completion_tokens: 5 }])(
+    "retains provider usage when span usage is incomplete: %j",
+    (spanUsage) => {
+      const result = mapAndCombineMessages(
+        { messages: [{ role: "user", content: "Question" }] },
+        {
+          choices: [{ message: { role: "assistant", content: "Answer" } }],
+          usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 },
+        },
+        { spanUsage },
+      );
+
+      expect(result.usage).toEqual({
+        prompt_tokens: 3,
+        completion_tokens: 4,
+        total_tokens: 7,
+        ...spanUsage,
+      });
+    },
+  );
+
   it("maps canonical chat, roles, tools, usage and ordered multimodal content", () => {
     const toolCall = {
       id: "call-1",
@@ -270,7 +383,15 @@ describe("OpenInference message mapping", () => {
     });
   });
 
-  it("keeps distinct tool calls that share a function and arguments", () => {
+  it.each([
+    { name: "distinct ids", orderedId: "ordered-call", ids: ["separate-call"] },
+    {
+      name: "one match per ordered call",
+      orderedId: undefined,
+      ids: ["call-1", "call-2"],
+    },
+  ])("preserves distinct tool calls: $name", ({ orderedId, ids }) => {
+    const fn = { name: "weather", arguments: '{"city":"Paris"}' };
     const result = mapOpenInferenceMessages(
       {
         messages: [
@@ -280,61 +401,12 @@ describe("OpenInference message mapping", () => {
               {
                 type: "tool_use",
                 tool_call: {
-                  id: "ordered-call",
-                  function: { name: "weather", arguments: '{"city":"Paris"}' },
+                  id: orderedId,
+                  function: fn,
                 },
               },
             ],
-            tool_calls: [
-              {
-                id: "separate-call",
-                function: { name: "weather", arguments: '{"city":"Paris"}' },
-              },
-            ],
-          },
-        ],
-      },
-      { fieldType: "output", formatHint: "openinference" },
-    );
-
-    expect(
-      result.messages[0].blocks.filter((block) => block.blockType === "code"),
-    ).toHaveLength(2);
-  });
-
-  it("matches each ordered tool use to at most one message-level tool call", () => {
-    const result = mapOpenInferenceMessages(
-      {
-        messages: [
-          {
-            role: "assistant",
-            contents: [
-              {
-                type: "tool_use",
-                tool_call: {
-                  function: {
-                    name: "weather",
-                    arguments: '{"city":"Paris"}',
-                  },
-                },
-              },
-            ],
-            tool_calls: [
-              {
-                id: "call-1",
-                function: {
-                  name: "weather",
-                  arguments: '{"city":"Paris"}',
-                },
-              },
-              {
-                id: "call-2",
-                function: {
-                  name: "weather",
-                  arguments: '{"city":"Paris"}',
-                },
-              },
-            ],
+            tool_calls: ids.map((id) => ({ id, function: fn })),
           },
         ],
       },
@@ -365,6 +437,25 @@ describe("OpenInference message mapping", () => {
       id: "openinference-output-fallback-0",
       blocks: [{ blockType: "text", props: { children: "Raw answer" } }],
     });
+  });
+
+  it("does not synthesize a user message from canonical configuration", () => {
+    const result = mapOpenInferenceMessages(
+      {
+        invocation_parameters: { temperature: 0.2 },
+        prompt_template: {
+          template: "Answer {{question}}",
+          variables: { question: "Why?" },
+        },
+      },
+      {
+        fieldType: "input",
+        formatHint: "openinference",
+        formatHintIsAuthoritative: true,
+      },
+    );
+
+    expect(result.messages).toEqual([]);
   });
 
   it("rejects unsafe media URLs while preserving safe media and transcripts", () => {

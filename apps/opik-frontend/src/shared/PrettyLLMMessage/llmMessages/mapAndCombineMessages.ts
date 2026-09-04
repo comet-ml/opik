@@ -20,6 +20,16 @@ export function mapAndCombineMessages(
   config: MapAndCombineMessagesConfig = {},
 ): LLMMapperResult {
   const { formatHint, formatHintIsAuthoritative = false, spanUsage } = config;
+  const withSpanUsage = (result: LLMMapperResult): LLMMapperResult => {
+    if (!spanUsage) return result;
+    const populatedSpanUsage = Object.fromEntries(
+      Object.entries(spanUsage).filter(([, value]) => value != null),
+    );
+    return {
+      ...result,
+      usage: { ...result.usage, ...populatedSpanUsage },
+    };
+  };
   const inputDetection = detectLLMMessages(
     input,
     { fieldType: "input", formatHintIsAuthoritative },
@@ -65,7 +75,7 @@ export function mapAndCombineMessages(
           }),
         },
       );
-      return { ...mapped, usage: spanUsage ?? mapped.usage };
+      return withSpanUsage(mapped);
     }
   }
 
@@ -92,9 +102,11 @@ export function mapAndCombineMessages(
   ) {
     const format = getFormat(inputDetection.format);
     if (format?.combiner && inputResult && outputResult) {
-      return format.combiner(
-        { raw: input, mapped: inputResult },
-        { raw: output, mapped: outputResult },
+      return withSpanUsage(
+        format.combiner(
+          { raw: input, mapped: inputResult },
+          { raw: output, mapped: outputResult },
+        ),
       );
     }
   }
@@ -102,7 +114,7 @@ export function mapAndCombineMessages(
   const messages: LLMMessageDescriptor[] = [];
   if (inputResult) messages.push(...inputResult.messages);
   if (outputResult) messages.push(...outputResult.messages);
-  return { messages, usage: spanUsage ?? outputResult?.usage };
+  return withSpanUsage({ messages, usage: outputResult?.usage });
 }
 
 function mapForDetection(

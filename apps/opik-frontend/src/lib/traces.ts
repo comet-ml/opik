@@ -635,7 +635,7 @@ const extractTextFieldFromTruncatedJson = (
 };
 
 export const prettifyMessage = (
-  message: object | string | undefined,
+  message: object | string | number | boolean | undefined,
   config: PrettifyMessageConfig = {
     type: "input",
   },
@@ -649,6 +649,10 @@ export const prettifyMessage = (
       message: recoveredOpenInferenceOutput,
       prettified: true,
     };
+  }
+
+  if (typeof message === "number" || typeof message === "boolean") {
+    return { message: String(message), prettified: true };
   }
 
   if (isString(message)) {
