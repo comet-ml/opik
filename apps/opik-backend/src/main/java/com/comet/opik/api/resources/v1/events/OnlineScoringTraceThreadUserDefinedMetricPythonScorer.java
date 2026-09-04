@@ -115,8 +115,11 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                 .flatMap(threadId -> processThreadScores(message, threadId)
                         .then(Mono.<Throwable>empty())
                         .onErrorResume(Mono::just))
-                .collectList()
-                .flatMap(errors -> errors.isEmpty() ? Mono.<Void>empty() : Mono.error(representativeError(errors)))
+                // Reduced pairwise, not collected: fan-out is unchunked, so a provider outage across many
+                // thread ids would otherwise retain every sibling Throwable just to discard all but one.
+                // An empty Flux yields an empty Mono here, which is the no-failures case.
+                .reduce(OnlineScoringBaseScorer::preferRetryable)
+                .flatMap(Mono::<Void>error)
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName())
                         .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
