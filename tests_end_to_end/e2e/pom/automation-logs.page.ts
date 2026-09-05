@@ -74,6 +74,22 @@ export class AutomationLogsPage {
   }
 
   /**
+   * Rows whose Message cell contains `text`, optionally narrowed to one level.
+   *
+   * `text` is matched as a substring on purpose: every line the scorer writes
+   * embeds a trace id and a rule name, so callers identify a line by the
+   * fragment that names it. The level, when given, is still matched exactly
+   * through `rowsAtLevel`, because `WARN` must never satisfy a check for
+   * `ERROR`.
+   */
+  rowsWithMessage(text: string, level?: AutomationLogLevel): Locator {
+    const base = level === undefined ? this.rows() : this.rowsAtLevel(level);
+    return base.filter({
+      has: this.page.locator('td[data-cell-id$="_message"]', { hasText: text }),
+    });
+  }
+
+  /**
    * Rows at `level` whose message names `threadId '<threadId>'`.
    *
    * The quotes the backend puts around the id are part of the match, and they
