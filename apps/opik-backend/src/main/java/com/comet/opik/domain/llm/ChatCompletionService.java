@@ -3,9 +3,9 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.exception.AuthenticationException;
@@ -40,7 +40,6 @@ import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -150,31 +149,28 @@ public class ChatCompletionService {
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
 
-            // Deliberately NOT failHandlingLLMProviderError here, unlike create() and the streaming handler:
-            // those answer an HTTP caller and want the status verbatim, whereas this answers the online-
-            // scoring subscribers, where the thrown TYPE decides retryability. BaseRedisSubscriber matches
-            // ClientErrorException by class, so recovering the status here would make the whole 4xx family
-            // non-retryable, transient 408s and 429s included.
+            // Report the status the provider actually sent, same as create() and the streaming handler.
+            // BaseRedisSubscriber classifies a ClientErrorException by that status, so a truthful 429 is
+            // redelivered and a truthful 400 is retired; this no longer has to misreport either.
             //
-            // Permanence is decided only from a status the provider actually sent. The mappers synthesize
-            // one when they cannot parse the body (CustomLlm 400, OpenAi 500) and nothing downstream can
-            // tell that apart from a real 400, so consulting them would drop every unparseable CustomLlm
-            // failure on its first delivery. Retrying a permanent error costs maxRetries attempts; dropping
-            // an unknown one loses the evaluation, so an absent status stays retryable.
-            var wireStatus = findProviderHttpStatus(runtimeException);
+            // Only a wire status is used. The provider mappers synthesize one when they cannot parse the body
+            // (CustomLlm 400, OpenAi 500) and nothing downstream can tell that from a real 400, so consulting
+            // them would retire every unparseable CustomLlm failure on its first delivery. An absent status
+            // falls through to 500 and stays retryable: burning maxRetries on a doomed request costs attempts,
+            // losing an unknown failure costs the evaluation.
+            var status = findProviderHttpStatus(runtimeException)
+                    .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
 
-            if (wireStatus.filter(ChatCompletionService::isPermanentFailure).isPresent()) {
-                // The subscriber acks and removes on the first delivery rather than burning
-                // maxRetries x pendingMessageDuration on a request whose outcome cannot change.
-                throw new ClientErrorException(buildDetailedErrorMessage(runtimeException), wireStatus.get(),
-                        runtimeException);
+            var detail = buildDetailedErrorMessage(runtimeException);
+            // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
+            // cause is carried through, unlike failHandlingLLMProviderError, because this exception is logged
+            // rather than serialized to an HTTP caller and the provider stack is the diagnostic.
+            if (familyOf(status) == Response.Status.Family.CLIENT_ERROR) {
+                throw new ClientErrorException(detail, status, runtimeException);
             }
-            // Everything else stays a blanket 500 so it lands outside NON_RETRYABLE_EXCEPTIONS and honours
-            // onlineScoring.maxRetries -- including transient 4xx, a distinction ClientErrorException
-            // cannot express on its own while the subscriber matches it by class.
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
+            throw new ServerErrorException(detail, status, runtimeException);
         } finally {
             // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
             if (languageModelClient instanceof AutoCloseable closeable) {
@@ -208,7 +204,7 @@ public class ChatCompletionService {
     private <T> T failFastOnPermanentFailure(Callable<T> action) throws Exception {
         return failFastWhen(action,
                 runtimeException -> findProviderHttpStatus(runtimeException)
-                        .filter(ChatCompletionService::isPermanentFailure)
+                        .filter(HttpStatusRetryability::isPermanent)
                         .isPresent());
     }
 
@@ -358,31 +354,6 @@ public class ChatCompletionService {
         return Optional.ofNullable(apiException.getStatusCode())
                 .map(StatusCode::getCode)
                 .map(StatusCode.Code::getHttpStatusCode);
-    }
-
-    /** 425 Too Early has no {@link Response.Status} constant; 408 and 429 do and are used directly. */
-    private static final int TOO_EARLY_STATUS = 425;
-
-    /**
-     * 4xx statuses that say "not now", not "not ever", so family alone can't decide retryability.
-     * langchain4j agrees on 408 and 429 but maps 425 to a non-retriable {@code InvalidRequestException};
-     * we diverge deliberately per RFC 8470, which is safe because retryability is read from the wire
-     * status, not the mapped type.
-     */
-    private static final Set<Integer> TRANSIENT_CLIENT_ERRORS = Set.of(
-            Response.Status.REQUEST_TIMEOUT.getStatusCode(),
-            TOO_EARLY_STATUS,
-            Response.Status.TOO_MANY_REQUESTS.getStatusCode());
-
-    /**
-     * Whether this exact request can never succeed, so the caller should give up rather than retry.
-     * Server errors are excluded: a 5xx is the textbook retry case. Anything unrecognised is retryable,
-     * matching {@code BaseRedisSubscriber}'s "unknown defaults to retryable for safety".
-     */
-    @VisibleForTesting
-    static boolean isPermanentFailure(int status) {
-        return familyOf(status) == Response.Status.Family.CLIENT_ERROR
-                && !TRANSIENT_CLIENT_ERRORS.contains(status);
     }
 
     /**
