@@ -185,6 +185,14 @@ export interface AutomationRuleDetail {
 export interface AutomationRuleLogRef {
   level: string;
   message: string;
+  /**
+   * The line's `trace_id` marker — what `/automation-logs` renders as its
+   * "Trace Id" column. Null rather than defaulted for a line the engine did
+   * not scope to a trace: "this line is about no trace" and "this line is
+   * about some other trace" are different answers, and a caller counting a
+   * rule's attempts on one trace must not conflate them.
+   */
+  traceId: string | null;
 }
 
 /**
@@ -1546,6 +1554,77 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return id;
     },
 
+    /**
+     * Create an LLM-as-judge online-evaluation rule and return its id.
+     *
+     * The `llm_as_judge` sibling of `createAutomationRule`, kept separate
+     * rather than folded in behind a `type` switch: the two evaluator types
+     * share no part of their `code` payload, and a single builder would have to
+     * accept both halves as optional — which type-checks a rule that carries
+     * neither.
+     *
+     * `model` is the fully-qualified model string exactly as the provider key's
+     * `configuration.models` declares it (`custom-llm/<provider-name>/<model>`).
+     * The backend resolves the provider from that string verbatim, so a rule
+     * whose model differs by even a character silently finds no provider.
+     *
+     * Same `Location`-header contract as `createAutomationRule` — see there for
+     * why the id is not recovered by a name lookup.
+     */
+    async createLlmJudgeRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      model: string;
+      /** Judge prompt; `{{name}}` placeholders resolve through `variables`. */
+      prompt: string;
+      /** Placeholder name -> extraction path (e.g. `output.output`). */
+      variables: Record<string, string>;
+      schema: Array<{
+        name: string;
+        type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+        description: string;
+      }>;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            code: {
+              // temperature 0 so a rule that DOES reach a provider is as close
+              // to reproducible as the provider allows.
+              model: { name: args.model, temperature: 0 },
+              messages: [{ role: 'USER', content: args.prompt }],
+              variables: args.variables,
+              schema: args.schema,
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createLlmJudgeRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createLlmJudgeRule: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
     /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
     async getAutomationRule(ruleId: string): Promise<AutomationRuleDetail> {
       const { status, message, json } = await rawFetch(
@@ -1597,6 +1676,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return (page.content ?? []).map((item) => ({
         level: String(item.level ?? ''),
         message: String(item.message ?? ''),
+        traceId: item.markers?.trace_id ?? null,
       }));
     },
 

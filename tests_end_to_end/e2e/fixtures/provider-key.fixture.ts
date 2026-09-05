@@ -7,10 +7,17 @@ import {
   mockTokenUrlForBackend,
 } from '../core/mock-auth';
 import { createProviderKey, deleteProviderKeyByName } from '../core/provider-keys';
+import { permanentFailureBaseUrl } from '../core/failing-provider';
 
 export interface OauthProviderSeed {
   providerName: string;
   /** Model the mock gateway will echo; unique per test so parallel specs never collide. */
+  modelName?: string;
+}
+
+export interface FailingProviderSeed {
+  providerName: string;
+  /** Model name; unique per test so parallel specs never collide. */
   modelName?: string;
 }
 
@@ -20,6 +27,21 @@ export interface ProviderKeysFixture {
    * token service; registered for teardown deletion.
    */
   createOauth(seed: OauthProviderSeed): Promise<void>;
+  /**
+   * REST-seeds a Custom provider whose base URL answers a permanent 4xx (see
+   * `core/failing-provider.ts`); registered for teardown deletion.
+   *
+   * Returns the fully-qualified model string — `custom-llm/<provider>/<model>` —
+   * that a rule's `code.model.name` must carry byte-for-byte, because the
+   * backend resolves the provider from that string verbatim. Returning it
+   * rather than leaving the caller to rebuild it removes the one way this seed
+   * can silently produce a rule that finds no provider at all.
+   *
+   * Gate the spec on `permanentFailureSkipReason()` before calling: on a
+   * topology where the backend cannot reach the destination this seeds a
+   * provider that fails for an entirely different reason.
+   */
+  createPermanentFailure(seed: FailingProviderSeed): Promise<string>;
   /**
    * Registers a provider name for teardown deletion without seeding — for tests where
    * UI creation is itself the behavior under test. Cleanup runs even when the test fails.
@@ -58,6 +80,17 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
             ],
           },
         });
+      },
+      async createPermanentFailure({ providerName, modelName = 'permanent-4xx-model' }) {
+        registered.push(providerName);
+        const model = `custom-llm/${providerName}/${modelName}`;
+        await createProviderKey({
+          provider: 'custom-llm',
+          provider_name: providerName,
+          base_url: permanentFailureBaseUrl(),
+          configuration: { models: model },
+        });
+        return model;
       },
       register(providerName) {
         registered.push(providerName);
