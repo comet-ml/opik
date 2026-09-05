@@ -109,8 +109,14 @@ test.describe('Online Evaluation — automation logs page', { tag: ['@t2-cuj', '
       // toHaveCount(1) rather than .first(): an ambiguous match must fail loudly
       // instead of silently asserting about whichever row came back first.
       await expect(errorRow, 'exactly one row is the failure').toHaveCount(1);
-      await expect(logsPage.cell(errorRow, 'level')).toHaveText('ERROR');
-      await expect(logsPage.cell(errorRow, 'traceId')).toHaveText(trace.id);
+      await expect(
+        logsPage.cell(errorRow, 'level'),
+        'the Level column is how a user finds the failure among the informational lines',
+      ).toHaveText('ERROR');
+      await expect(
+        logsPage.cell(errorRow, 'traceId'),
+        'the Trace Id column is what ties the failure back to the trace it was judging',
+      ).toHaveText(trace.id);
     });
 
     await test.step('Expanding the ERROR row reveals the provider error body', async () => {
@@ -136,7 +142,11 @@ test.describe('Online Evaluation — automation logs page', { tag: ['@t2-cuj', '
         message,
         'the collapsed cell must show the summary line, not the provider body',
       ).not.toContainText(providerDetail);
-      await expect(logsPage.expandButton(errorRow)).toBeVisible();
+      await expect(
+        logsPage.expandButton(errorRow),
+        'the cell renders the Expand control only for a multi-line message, so its absence ' +
+          'means the provider body never reached the log line',
+      ).toBeVisible();
 
       await logsPage.expandRow(errorRow);
 
