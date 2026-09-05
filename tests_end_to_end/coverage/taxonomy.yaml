@@ -668,7 +668,13 @@ areas:
       # An API read of GET /automations/evaluators/{id}/logs does NOT cover this key —
       # it names the page, and that distinction is why it stayed false while
       # online-evaluation-python-metric-errors.spec.ts asserted the same stream.
-      automation-logs:         { covered: true,  tier: t2-cuj, note: "Evaluating / Sending / ERROR rows rendered for one seeded trace id on a failed LLM-judge rule; deliberately silent on refresh, expand-all and marker columns" }
+      #
+      # Scope worth knowing before trusting this flag: the only spec carrying the tag
+      # needs the backend to reach the host-run mock gateway, so it skips on any
+      # deployment other than oss (mockAuthSkipReason). Same gate as configuration's
+      # ai-provider-add / ai-provider-token-refetch, which are flagged covered on the
+      # same basis — but those have UI neighbours here and this key does not.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "Evaluating / Sending / ERROR rows rendered for one seeded trace id on a failed LLM-judge rule; deliberately silent on refresh, expand-all and marker columns; runs on the oss deployment only" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
