@@ -36,7 +36,7 @@ from . import (
 from . import resume as resume_module
 from .resume import integration as resume_integration
 from .resume import merge as resume_merge
-from .metrics import base_metric
+from .metrics import base_metric, score_result
 from .suite_evaluators.llm_judge import (
     metric as suite_evaluators_llm_judge_metric,
     strategy_selector as suite_evaluators_strategy,
@@ -59,6 +59,29 @@ LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
     "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
 )
+
+
+def _deduplicate_experiment_scores(
+    scores: List[object],
+) -> List[score_result.ScoreResult]:
+    deduplicated: List[score_result.ScoreResult] = []
+    score_positions: Dict[str, int] = {}
+    for raw_score in scores:
+        if not isinstance(raw_score, score_result.ScoreResult):
+            LOGGER.warning(
+                "Experiment scoring function returned %s; marking the score as failed.",
+                type(raw_score).__name__,
+            )
+        score = evaluation_result.normalize_experiment_score(
+            raw_score, default_name="invalid_experiment_score"
+        )
+        position = score_positions.get(score.name)
+        if position is None:
+            score_positions[score.name] = len(deduplicated)
+            deduplicated.append(score)
+        else:
+            deduplicated[position] = score
+    return deduplicated
 
 
 def _try_notifying_about_experiment_completion(
@@ -630,6 +653,7 @@ def _evaluate_task(
     experiment_scoring_functions: List[ExperimentScoreFunction],
     source: TraceSource,
     error_tolerance: ErrorTolerance,
+    log_experiment_scores: bool = True,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -661,9 +685,11 @@ def _evaluate_task(
     total_time = time.time() - start_time
 
     # Compute experiment scores
-    computed_experiment_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=test_results,
+    computed_experiment_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=test_results,
+        )
     )
 
     if verbose >= 1:
@@ -682,7 +708,7 @@ def _evaluate_task(
     _try_notifying_about_experiment_completion(experiment)
 
     # Log experiment scores to backend
-    if computed_experiment_scores:
+    if computed_experiment_scores and log_experiment_scores:
         experiment.log_experiment_scores(score_results=computed_experiment_scores)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -938,9 +964,11 @@ def evaluate_experiment(
     client.flush()
 
     # Compute experiment scores
-    computed_experiment_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=test_results,
+    computed_experiment_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=test_results,
+        )
     )
 
     if verbose >= 1:
@@ -960,8 +988,18 @@ def evaluate_experiment(
     _try_notifying_about_experiment_completion(experiment)
 
     # Log experiment scores to backend
+    effective_experiment_scores = computed_experiment_scores
     if computed_experiment_scores:
-        experiment.log_experiment_scores(score_results=computed_experiment_scores)
+        has_fabricated_scores = any(
+            evaluation_result._is_fabricated_score(score)
+            for score in computed_experiment_scores
+        )
+        persisted_scores = experiment.log_experiment_scores(
+            score_results=computed_experiment_scores,
+            preserve_unrelated=not has_fabricated_scores,
+        )
+        if isinstance(persisted_scores, list):
+            effective_experiment_scores = persisted_scores
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset_.id,
@@ -970,7 +1008,7 @@ def evaluate_experiment(
         test_results=test_results,
         experiment_url=experiment_url,
         trial_count=1,
-        experiment_scores=computed_experiment_scores,
+        experiment_scores=effective_experiment_scores,
     )
 
     if verbose >= 2:
@@ -1248,9 +1286,11 @@ def evaluate_prompt(
     total_time = time.time() - start_time
 
     # Compute experiment scores
-    computed_experiment_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=test_results,
+    computed_experiment_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=test_results,
+        )
     )
 
     if verbose >= 1:
@@ -1620,12 +1660,16 @@ def evaluate_resume(
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
         trial_count=context.default_runs_per_item,
-        experiment_scoring_functions=experiment_scoring_functions,
+        # Aggregates are computed once, after merging: running them over the
+        # pending slice would display a value that disagrees with the merged one
+        # and would execute side-effecting functions twice.
+        experiment_scoring_functions=[],
         source="experiment",
         # The tolerance the original evaluation call ran with, read back from the
         # resume state, so a resumed run does not silently become stricter than
         # the run it continues.
         error_tolerance=context.error_tolerance,
+        log_experiment_scores=False,
     )
 
     merged = evaluation_result.merge_resume_results(
@@ -1633,19 +1677,28 @@ def evaluate_resume(
         previous_test_results=previous_test_results,
     )
 
-    # ``_evaluate_task`` already logged ``experiment_scoring_functions``
-    # over the freshly-replayed slice. Recompute over the merged set and
-    # overwrite — the final write reflects the whole experiment, which
-    # is what the user (and downstream readers) actually want. We're OK
-    # with a brief slice-only window on the backend between the two
-    # writes; rate-limit / concurrent-read risk is negligible here.
-    merged_scores = evaluation_result.compute_experiment_scores(
-        experiment_scoring_functions=experiment_scoring_functions,
-        test_results=merged.test_results,
+    # Log merged aggregates while preserving persisted scores not recomputed here.
+    merged_scores = _deduplicate_experiment_scores(
+        evaluation_result.compute_experiment_scores(
+            experiment_scoring_functions=experiment_scoring_functions,
+            test_results=merged.test_results,
+        )
     )
     if merged_scores:
-        context.experiment.log_experiment_scores(score_results=merged_scores)
-    merged.experiment_scores = merged_scores
+        if verbose >= 1:
+            report.display_experiment_scores(merged_scores)
+        has_fabricated_scores = any(
+            evaluation_result._is_fabricated_score(score) for score in merged_scores
+        )
+        persisted_scores = context.experiment.log_experiment_scores(
+            score_results=merged_scores,
+            preserve_unrelated=not has_fabricated_scores,
+        )
+        merged.experiment_scores = (
+            persisted_scores if isinstance(persisted_scores, list) else merged_scores
+        )
+    else:
+        merged.experiment_scores = merged_scores
 
     return merged
 
