@@ -25,6 +25,9 @@ def aggregate(
             )
         ]
 
+        if not completed_event:
+            return None
+
         response = completed_event[0].response
         return response
     except Exception as exception:
