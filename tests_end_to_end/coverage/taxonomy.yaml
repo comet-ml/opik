@@ -738,11 +738,19 @@ areas:
       # behind it. That distinction is why this key stayed false while
       # online-evaluation-python-metric-errors.spec.ts asserted the same stream.
       #   - thread-judge-provider-failure.spec.ts: ERROR rows, one per failed
-      #     thread and no others — the row set is pinned by exhaustion.
+      #     thread and no others — the row set is pinned by exhaustion. Its
+      #     provider is the backend's own discard port, so it needs nothing from
+      #     the test runner and runs on EVERY deployment.
       #   - provider-error-classification.spec.ts: the INFO Evaluating / Sending
       #     rows as well as the ERROR one, matched on a seeded TRACE id, so the
-      #     non-error half of the stream is rendered-and-asserted too.
-      automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders: one ERROR row per failed thread and no others (thread-judge-provider-failure); and Evaluating / Sending / ERROR rows for one seeded trace id on a failed LLM-judge rule (provider-error-classification). Both are deliberately silent on refresh, expand-all and marker columns" }
+      #     non-error half of the stream is rendered-and-asserted too. This one
+      #     needs the backend to reach the host-run mock gateway, so it skips on
+      #     any deployment other than oss (mockAuthSkipReason) — the same gate as
+      #     configuration's ai-provider-add / ai-provider-token-refetch.
+      #
+      # So the flag itself is not oss-only: the thread-judge spec holds it up
+      # everywhere, and the classification spec deepens it on oss.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders: one ERROR row per failed thread and no others (thread-judge-provider-failure, every deployment); and Evaluating / Sending / ERROR rows for one seeded trace id on a failed LLM-judge rule (provider-error-classification, oss only — it needs the host-run mock gateway). Both are deliberately silent on refresh, expand-all and marker columns" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
