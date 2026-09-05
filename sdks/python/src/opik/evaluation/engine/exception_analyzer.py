@@ -1,14 +1,22 @@
 def is_llm_provider_rate_limit_error(exception: Exception) -> bool:
-    import openai
-    import litellm.exceptions
+    known_rate_limit_error_types = []
 
-    rate_limit_error_known_types = (
-        openai.RateLimitError,
-        litellm.exceptions.RateLimitError,
-    )
+    try:
+        import openai
 
-    is_rate_limit_error = isinstance(exception, rate_limit_error_known_types) or (
-        hasattr(exception, "status_code") and exception.status_code == 429
-    )
+        known_rate_limit_error_types.append(openai.RateLimitError)
+    except ImportError:
+        pass
+
+    try:
+        import litellm.exceptions
+
+        known_rate_limit_error_types.append(litellm.exceptions.RateLimitError)
+    except ImportError:
+        pass
+
+    is_rate_limit_error = isinstance(
+        exception, tuple(known_rate_limit_error_types)
+    ) or (hasattr(exception, "status_code") and exception.status_code == 429)
 
     return is_rate_limit_error
