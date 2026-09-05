@@ -487,6 +487,37 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
+  /**
+   * POST an automation-rule payload and return the created rule's id.
+   *
+   * Shared by the python and LLM-judge creators: both answer 201 with an empty body, so
+   * the id exists only in the `Location` header. It is parsed from there rather than
+   * recovered by listing the project's rules by name, which would silently pick up a rule
+   * left behind by an earlier run under the same namespace.
+   */
+  const postEvaluatorRule = async (
+    caller: string,
+    ruleName: string,
+    body: unknown,
+  ): Promise<string> => {
+    const { status, message, location } = await rawFetch(
+      'POST',
+      '/v1/private/automations/evaluators/',
+      { body },
+    );
+    if (status !== 201) {
+      throw new Error(`${caller}: expected 201 for '${ruleName}', got ${status}: ${message}`);
+    }
+    const id = location?.split('/').filter(Boolean).pop();
+    if (!id) {
+      throw new Error(
+        `${caller}: 201 for '${ruleName}' carried no usable Location header ` +
+          `(got '${location}') — cannot address the rule.`,
+      );
+    }
+    return id;
+  };
+
   /** Authorization + workspace headers, for calls that bypass `rawFetch`. */
   const workspaceHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Comet-Workspace': env.workspace };
@@ -1515,35 +1546,60 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       triggerScope?: 'production' | 'experiment' | 'both';
       enabled?: boolean;
     }): Promise<string> {
-      const { status, message, location } = await rawFetch(
-        'POST',
-        '/v1/private/automations/evaluators/',
-        {
-          body: {
-            type: 'user_defined_metric_python',
-            action: 'evaluator',
-            name: args.name,
-            project_ids: [args.projectId],
-            sampling_rate: args.samplingRate,
-            enabled: args.enabled ?? true,
-            ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
-            code: { metric: args.metric, arguments: args.arguments },
-          },
+      return postEvaluatorRule('createAutomationRule', args.name, {
+        type: 'user_defined_metric_python',
+        action: 'evaluator',
+        name: args.name,
+        project_ids: [args.projectId],
+        sampling_rate: args.samplingRate,
+        enabled: args.enabled ?? true,
+        ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+        code: { metric: args.metric, arguments: args.arguments },
+      });
+    },
+
+    /**
+     * Create an LLM-as-judge online-evaluation rule and return its id.
+     *
+     * Separate from `createAutomationRule` because the two rule types share only
+     * their envelope: `code` is a prompt + output schema here, python source
+     * there, and the backend rejects a payload that mixes them.
+     *
+     * `model` is the full provider-qualified identifier the model selector shows
+     * — for a Custom provider that is `custom-llm/<providerName>/<modelName>`,
+     * and the backend strips both prefixes before putting `<modelName>` in the
+     * outgoing request body.
+     */
+    async createLlmJudgeAutomationRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      model: string;
+      /** Prompt sent to the judge; `{{var}}` placeholders resolve from `variables`. */
+      prompt: string;
+      /** Template variable name -> trace extraction path (e.g. `output.output`). */
+      variables: Record<string, string>;
+      /** Output schema the judge must answer with; each entry becomes a score name. */
+      schema: Array<{ name: string; type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE' | 'STRING'; description: string }>;
+      triggerScope?: 'production' | 'experiment' | 'both';
+      enabled?: boolean;
+    }): Promise<string> {
+      return postEvaluatorRule('createLlmJudgeAutomationRule', args.name, {
+        type: 'llm_as_judge',
+        action: 'evaluator',
+        name: args.name,
+        project_ids: [args.projectId],
+        sampling_rate: args.samplingRate,
+        enabled: args.enabled ?? true,
+        ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+        code: {
+          model: { name: args.model, temperature: 0.0 },
+          messages: [{ role: 'USER', content: args.prompt }],
+          variables: args.variables,
+          schema: args.schema,
         },
-      );
-      if (status !== 201) {
-        throw new Error(
-          `createAutomationRule: expected 201 for '${args.name}', got ${status}: ${message}`,
-        );
-      }
-      const id = location?.split('/').filter(Boolean).pop();
-      if (!id) {
-        throw new Error(
-          `createAutomationRule: 201 for '${args.name}' carried no usable Location header ` +
-            `(got '${location}') — cannot address the rule.`,
-        );
-      }
-      return id;
+      });
     },
 
     /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
