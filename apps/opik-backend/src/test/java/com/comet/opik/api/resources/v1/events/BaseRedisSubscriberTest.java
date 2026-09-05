@@ -346,8 +346,12 @@ class BaseRedisSubscriberTest {
                             new NullPointerException("Non-retryable")),
                     Arguments.of("NumberFormatException (subclass of IllegalArgumentException)",
                             new NumberFormatException("Non-retryable")),
-                    Arguments.of("ClientErrorException (4xx)",
+                    Arguments.of("ClientErrorException (401)",
                             new ClientErrorException("Unauthorized", 401)),
+                    Arguments.of("ClientErrorException (400)",
+                            new ClientErrorException("Bad Request", 400)),
+                    Arguments.of("ClientErrorException (403)",
+                            new ClientErrorException("Forbidden", 403)),
                     Arguments.of("NotFoundException (subclass of ClientErrorException)",
                             new NotFoundException()));
         }
@@ -369,6 +373,50 @@ class BaseRedisSubscriberTest {
             // Non-retryable errors should be removed from the stream
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        /**
+         * OPIK-8262. {@code ClientErrorException} used to be matched by class, which made every 4xx permanent
+         * — including the statuses that mean "not now" rather than "not ever". That is why
+         * {@code ChatCompletionService.scoreTrace} could not report a truthful 429: it would have been acked
+         * and dropped here. These drive the real subscriber against real Redis, so the distinction is proved
+         * where it actually takes effect rather than in a unit test of the predicate.
+         */
+        @ParameterizedTest(name = "{0} is retried, not dropped")
+        @MethodSource("transientClientErrors")
+        void shouldRetainTransientClientErrorsForRetry(String description, RuntimeException exception) {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(
+                    config, redissonClient, exception));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(
+                            () -> assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size()));
+            // Asserted with during(), not a single poll: ack-and-remove lands slightly after the failure is
+            // counted, so a one-shot size check could pass in that window and a wrongly acknowledged entry
+            // would go unnoticed. Requiring the entry to STAY in the stream, and stay pending for the group,
+            // closes that gap — a permanent classification removes it and both assertions then fail.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .during(Duration.ofSeconds(1))
+                    .untilAsserted(() -> {
+                        assertThat(stream.size().block())
+                                .as("a transient status must leave the entry in the stream for redelivery")
+                                .isEqualTo((long) messages.size());
+                        assertThat(pendingCount())
+                                .as("and it must still be pending for the group, i.e. never acknowledged")
+                                .isEqualTo((long) messages.size());
+                    });
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        static Stream<Arguments> transientClientErrors() {
+            return Stream.of(
+                    Arguments.of("408 Request Timeout", new ClientErrorException("Request Timeout", 408)),
+                    Arguments.of("425 Too Early", new ClientErrorException("Too Early", 425)),
+                    Arguments.of("429 Too Many Requests", new ClientErrorException("Too Many Requests", 429)));
         }
 
         /**
@@ -694,6 +742,12 @@ class BaseRedisSubscriberTest {
     private void waitForMessagesProcessed(TestRedisSubscriber subscriber, int expectedCount) {
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(expectedCount));
+    }
+
+    /** Entries delivered but not yet acknowledged. A wrongly acked entry drops out of this count. */
+    private long pendingCount() {
+        var pending = stream.getPendingInfo(config.getConsumerGroupName()).block();
+        return pending == null ? 0L : pending.getTotal();
     }
 
     private void waitForMessagesAckedAndRemoved() {
