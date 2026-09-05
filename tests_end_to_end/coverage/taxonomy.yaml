@@ -648,9 +648,11 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-llm-judge-provider-errors.spec.ts
+      - online-evaluation/online-evaluation-automation-logs.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
-      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
+      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers the permanent-4xx provider failure — one call, one terminal ERROR carrying the provider's own status, and no score written" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
@@ -662,12 +664,7 @@ areas:
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
-      # Deliberately still false. online-evaluation-python-metric-errors.spec.ts
-      # asserts a rule's log stream through GET /automations/evaluators/{id}/logs,
-      # but this key names the /$workspaceName/automation-logs PAGE, which no spec
-      # opens. Flipping it on the strength of an API read would mark a UI nobody
-      # tested as tested for good.
-      automation-logs:         { covered: false }
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "opens the /$workspaceName/automation-logs PAGE, not just the logs endpoint: the seeded stream renders row-for-row with its Level and Trace Id, the collapsed message hides the provider body until Expand reveals it, and the bare route (no rule_id) shows its empty state rather than another rule's lines" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
