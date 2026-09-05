@@ -70,6 +70,7 @@
     "msw": "^2.11.6",
     "prettier": "^3.4.1",
     "tsup": "^8.3.6",
+    "tsx": "~4.21.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.24.0",
     "vite-tsconfig-paths": "^5.1.3",
