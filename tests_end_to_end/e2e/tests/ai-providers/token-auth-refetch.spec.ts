@@ -33,7 +33,7 @@ test.describe('AI Providers — OAuth2 reactive token refetch', { tag: ['@t1-smo
     // unique model name so parallel specs can't collide in the model selector
     const modelName = `${testNamespace}-mock-model`;
 
-    await providerKeys.createOauth({ providerName, modelName });
+    await providerKeys.createOauth({ providerName, modelNames: [modelName] });
 
     const playground = new PlaygroundPage(page, project.id);
 

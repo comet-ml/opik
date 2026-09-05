@@ -3,6 +3,8 @@ import { shouldLeaveArtifacts } from '../core/artifacts';
 import {
   MOCK_AUTH_CLIENT_ID,
   MOCK_AUTH_CLIENT_SECRET,
+  mockAuthClearChatStatus,
+  mockAuthForceChatStatus,
   mockGatewayUrlForBackend,
   mockTokenUrlForBackend,
 } from '../core/mock-auth';
@@ -10,8 +12,15 @@ import { createProviderKey, deleteProviderKeyByName } from '../core/provider-key
 
 export interface OauthProviderSeed {
   providerName: string;
-  /** Model the mock gateway will echo; unique per test so parallel specs never collide. */
-  modelName?: string;
+  /**
+   * Models the mock gateway will echo; unique per test so parallel specs never collide.
+   *
+   * A list rather than a single name because the mock's counters and its forced-status
+   * hook are both keyed on the model in the request body, so several models on ONE
+   * provider is how a spec gets several gateway behaviours over one trace without
+   * changing anything else about the rule.
+   */
+  modelNames?: string[];
 }
 
 export interface ProviderKeysFixture {
@@ -20,6 +29,15 @@ export interface ProviderKeysFixture {
    * token service; registered for teardown deletion.
    */
   createOauth(seed: OauthProviderSeed): Promise<void>;
+  /**
+   * Makes the mock gateway answer `status` for every chat request naming `modelName`,
+   * and clears it at teardown.
+   *
+   * The hook lives on the mock process, which outlives the test, so it is registered
+   * here rather than reset in the test body — a trailing reset step is skipped exactly
+   * when an assertion has already failed.
+   */
+  forceChatStatus(modelName: string, status: number): Promise<void>;
   /**
    * Registers a provider name for teardown deletion without seeding — for tests where
    * UI creation is itself the behavior under test. Cleanup runs even when the test fails.
@@ -39,15 +57,18 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
   // eslint-disable-next-line no-empty-pattern
   providerKeys: async ({}, use, testInfo) => {
     const registered: string[] = [];
+    const forcedStatusModels: string[] = [];
 
     await use({
-      async createOauth({ providerName, modelName = 'mock-model' }) {
+      async createOauth({ providerName, modelNames = ['mock-model'] }) {
         registered.push(providerName);
         await createProviderKey({
           provider: 'custom-llm',
           provider_name: providerName,
           base_url: mockGatewayUrlForBackend,
-          configuration: { models: `custom-llm/${providerName}/${modelName}` },
+          configuration: {
+            models: modelNames.map((model) => `custom-llm/${providerName}/${model}`).join(','),
+          },
           auth_config: {
             token_url: mockTokenUrlForBackend,
             send_as: 'basic',
@@ -58,6 +79,10 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
             ],
           },
         });
+      },
+      async forceChatStatus(modelName, status) {
+        forcedStatusModels.push(modelName);
+        await mockAuthForceChatStatus(modelName, status);
       },
       register(providerName) {
         registered.push(providerName);
@@ -70,6 +95,13 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
           await deleteProviderKeyByName(name);
         } catch (err) {
           console.warn(`[provider-key fixture] delete warning for ${name}:`, err);
+        }
+      }
+      for (const modelName of forcedStatusModels) {
+        try {
+          await mockAuthClearChatStatus(modelName);
+        } catch (err) {
+          console.warn(`[provider-key fixture] status-hook reset warning for ${modelName}:`, err);
         }
       }
     }
