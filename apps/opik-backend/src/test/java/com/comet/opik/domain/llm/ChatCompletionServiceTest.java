@@ -636,10 +636,11 @@ class ChatCompletionServiceTest {
         /**
          * The statuses the subscriber must retire, spelled out as a literal and used both to partition the
          * shared rows below and to assert every retryability outcome. Deliberately NOT
-         * {@link ChatCompletionService#isPermanentFailure}: a test that derives its expectation from the
-         * predicate under test agrees with that predicate even when it is wrong, so production and tests
-         * would regress together silently. The predicate's own mapping is pinned against its own literals
-         * by {@link #isPermanentFailure__whenStatus__thenMatchLiteralTable()}.
+         * {@link com.comet.opik.utils.HttpStatusRetryability#isPermanent}: a test that derives its
+         * expectation from the predicate under test agrees with that predicate even when it is wrong, so
+         * production and tests would regress together silently. That predicate's own mapping is pinned
+         * against its own literals by {@code HttpStatusRetryabilityTest}, which lives beside it because it
+         * is now the contract between this service and {@code BaseRedisSubscriber}.
          */
         private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 402, 403, 404, 413, 422, 499);
 
@@ -712,7 +713,7 @@ class ChatCompletionServiceTest {
             var thrown = whenScoreTraceFails(new RuntimeException(new HttpException(status, label)),
                     Optional.empty());
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, status);
         }
 
         /**
@@ -780,33 +781,6 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * Pins the status-to-retryability mapping of {@link ChatCompletionService#isPermanentFailure}, the
-         * predicate production consults to decide whether a request can never succeed and so must be
-         * retired rather than retried.
-         *
-         * <p>This is the companion test {@link #PERMANENT_STATUSES} refers to. The expectations are the
-         * hand-written table below rather than {@code PERMANENT_STATUSES} itself: that set records which
-         * statuses the subscriber must retire, and deriving either from the other is exactly what would let
-         * production and tests regress together.
-         */
-        @ParameterizedTest(name = "isPermanentFailure({0}) == {1}")
-        @CsvSource({
-                // Client errors with nothing transient about them: this exact request can never succeed.
-                "400, true", "401, true", "402, true", "403, true", "404, true",
-                "413, true", "422, true", "499, true",
-                // 4xx by numbering, "not now" by meaning -- the whole reason family alone cannot decide.
-                "408, false", "425, false", "429, false",
-                // Server errors are the textbook retry case.
-                "500, false", "502, false", "503, false", "504, false",
-                // Outside the error families, so never permanent.
-                "200, false", "302, false",
-        })
-        @DisplayName("isPermanentFailure classifies each status, pinned independently of the suite's own table")
-        void isPermanentFailure__whenStatus__thenMatchLiteralTable(int status, boolean expectedPermanent) {
-            assertThat(ChatCompletionService.isPermanentFailure(status)).isEqualTo(expectedPermanent);
-        }
-
-        /**
          * Regression for the precedence bug caught in review of OPIK-8240.
          *
          * <p>The provider mappers synthesize a status when they cannot read one off the body:
@@ -828,7 +802,7 @@ class ChatCompletionServiceTest {
             var thrown = whenScoreTraceFails(providerFailure,
                     Optional.of(new ErrorMessage(syntheticStatus, "synthetic mapper fallback")));
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, wireStatus);
         }
 
         /** The harmless direction of the same precedence rule, kept so the rule is pinned both ways. */
@@ -867,7 +841,7 @@ class ChatCompletionServiceTest {
             assertNonRetryable(thrown, expectedStatus);
         }
 
-        @ParameterizedTest(name = "scoreTrace: when {0}, then retryable")
+        @ParameterizedTest(name = "scoreTrace: when {0}, then retryable as {2}")
         @MethodSource("transientProviderStatuses")
         @DisplayName("Online scoring keeps a transient provider status retryable, honouring maxRetries")
         void scoreTrace__whenTransientProviderErrorUnparsed__thenRetryable(
@@ -875,7 +849,7 @@ class ChatCompletionServiceTest {
             var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
 
             assertThat(thrown).hasMessageContaining(expectedMessagePart);
-            assertRetryable(thrown);
+            assertRetryable(thrown, expectedStatus);
         }
 
         /**
@@ -957,13 +931,19 @@ class ChatCompletionServiceTest {
             assertNonRetryable(thrown, expectedStatus);
         }
 
-        @ParameterizedTest(name = "GAX {0} stays retryable")
-        @CsvSource({"RESOURCE_EXHAUSTED", "DEADLINE_EXCEEDED", "UNAVAILABLE", "INTERNAL", "UNKNOWN"})
+        @ParameterizedTest(name = "GAX {0} stays retryable as HTTP {1}")
+        @CsvSource({
+                "RESOURCE_EXHAUSTED, 429",
+                "DEADLINE_EXCEEDED, 504",
+                "UNAVAILABLE, 503",
+                "INTERNAL, 500",
+                "UNKNOWN, 500",
+        })
         @DisplayName("A transient VertexAI GAX failure still honours maxRetries")
-        void scoreTrace__whenTransientGaxStatus__thenRetryable(StatusCode.Code code) {
+        void scoreTrace__whenTransientGaxStatus__thenRetryable(StatusCode.Code code, int expectedStatus) {
             var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, false)), Optional.empty());
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, expectedStatus);
         }
 
         /**
@@ -1036,13 +1016,13 @@ class ChatCompletionServiceTest {
             assertNonRetryable(thrown, status);
         }
 
-        @ParameterizedTest(name = "Responses SDK {0} -> retryable")
+        @ParameterizedTest(name = "Responses SDK {0} -> retryable, status preserved")
         @CsvSource({"408", "429", "500", "503"})
-        @DisplayName("A transient OpenAI Responses failure stays retryable")
+        @DisplayName("A transient OpenAI Responses failure keeps its status and stays retryable")
         void scoreTrace__whenTransientResponsesSdkStatus__thenRetryable(int status) {
             var thrown = whenScoreTraceFails(new RuntimeException(responsesException(status)), Optional.empty());
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, status);
         }
 
         /**
@@ -1171,17 +1151,27 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * Every retryable failure is flattened to a blanket 500 on this path: BaseRedisSubscriber matches
-         * ClientErrorException by class, so a truthful 429 would be acked and dropped. The status is
-         * therefore deliberately NOT the provider's own here — that only becomes safe once the subscriber
-         * classifies by status.
+         * For a failure that carried a real wire status: the status must be reported verbatim, not
+         * flattened. Without this, reintroducing the blanket-500 workaround would pass every retryability
+         * assertion — a 500 is retryable too, so "not permanent" alone cannot see the lie.
+         */
+        private void assertRetryable(Throwable thrown, int expectedStatus) {
+            assertRetryable(thrown);
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus())
+                    .as("a transient provider status must reach the subscriber verbatim, not as a blanket 500")
+                    .isEqualTo(expectedStatus);
+        }
+
+        /**
+         * Retryable is asserted against the literal permanent set, not the production predicate, so a
+         * regression in {@code HttpStatusRetryability} cannot make these tests agree with broken behaviour.
          */
         private void assertRetryable(Throwable thrown) {
-            assertThat(thrown)
-                    .as("a status that may clear on retry must stay outside NON_RETRYABLE_EXCEPTIONS")
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .isNotInstanceOf(ClientErrorException.class);
-            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
+            assertThat(thrown).isInstanceOf(WebApplicationException.class);
+            var status = ((WebApplicationException) thrown).getResponse().getStatus();
+            assertThat(PERMANENT_STATUSES)
+                    .as("status %d must stay retryable so the subscriber redelivers it", status)
+                    .doesNotContain(status);
         }
 
         @ParameterizedTest(name = "streaming: when {0}, then stream status {2}")

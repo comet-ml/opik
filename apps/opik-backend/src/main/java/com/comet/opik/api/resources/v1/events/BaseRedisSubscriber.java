@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.infrastructure.redis.UndecodablePayloadException;
 import com.comet.opik.infrastructure.redis.UndecodableStreamMessage;
+import com.comet.opik.utils.HttpStatusRetryability;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -58,14 +59,17 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private static final String NOGROUP = "NOGROUP";
 
     /**
-     * Non-retryable exception types that won't succeed on retry. Checked via {@code instanceof} in
-     * {@link #isRetryableException(Throwable)}, so subclasses are automatically covered.
-     * These are usually programming, validation, client etc. exceptions.
+     * Exception types that mean the code has a bug, so retrying would just rerun the bug. Checked via
+     * {@code instanceof} in {@link #isRetryableException(Throwable)}, so subclasses are covered too.
+     *
+     * <p>{@code ClientErrorException} used to be listed here and no longer is. It is a transport type, not a
+     * bug signal, and matching it by class made the whole 4xx family permanent — including 408, 425 and 429,
+     * which are transient by definition. It is now classified by the status it carries; see
+     * {@link #isRetryableException(Throwable)}.
      */
     private static final Set<Class<? extends RuntimeException>> NON_RETRYABLE_EXCEPTIONS = Set.of(
             ArithmeticException.class,
             ClassCastException.class,
-            ClientErrorException.class,
             IllegalArgumentException.class,
             IllegalStateException.class,
             IndexOutOfBoundsException.class,
@@ -828,13 +832,19 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Non-retryable exceptions are checked via {@code instanceof} against {@link #NON_RETRYABLE_EXCEPTIONS},
-     * so both exact types and their subclasses are covered.
-     * Non-retryable exceptions are usually programming, validation, client errors that won't succeed on retry.
-     * All other exceptions are considered retryable (transient errors like network issues, timeouts, server errors, etc.)
-     * Unknown exceptions default to retryable for safety.
+     * Whether the entry is worth redelivering. A {@link ClientErrorException} is decided from the status it
+     * carries, so a 408/425/429 is retried and the rest of the 4xx family is retired on first delivery;
+     * everything else is matched by class against {@link #NON_RETRYABLE_EXCEPTIONS}, whose members all mean
+     * the code has a bug. Anything unrecognised is retryable, so an unknown failure is never silently lost.
+     *
+     * <p>Classifying by class alone is what forced {@code ChatCompletionService.scoreTrace} to report every
+     * provider failure as a blanket 500: a truthful 429 would have been dropped here. With the status
+     * consulted, that workaround is gone and the provider's real status is reported.
      */
-    private boolean isRetryableException(Throwable exception) {
+    private static boolean isRetryableException(Throwable exception) {
+        if (exception instanceof ClientErrorException clientError) {
+            return !HttpStatusRetryability.isPermanent(clientError.getResponse().getStatus());
+        }
         return NON_RETRYABLE_EXCEPTIONS.stream()
                 .noneMatch(nonRetryable -> nonRetryable.isInstance(exception));
     }
