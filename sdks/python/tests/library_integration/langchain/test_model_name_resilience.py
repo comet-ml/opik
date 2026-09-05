@@ -157,3 +157,47 @@ def test_try_get_streaming_token_usage__usage_metadata_on_message__returns_usage
     assert isinstance(result, langchain_usage.LangChainUsage)
     assert result.input_tokens == 5
     assert result.output_tokens == 8
+
+
+def _anthropic_vertexai_run_with_usage() -> Dict[str, Any]:
+    """Valid Anthropic VertexAI invocation shape with streaming usage_metadata."""
+    return {
+        "serialized": {},
+        "extra": {
+            "invocation_params": {
+                "_type": "ChatAnthropicVertexAI",
+                "model_name": "claude-3-5-sonnet@20241022",
+            }
+        },
+        "outputs": {
+            "llm_output": None,
+            "generations": [
+                [
+                    {
+                        "message": {
+                            "usage_metadata": {
+                                "input_tokens": 15,
+                                "output_tokens": 25,
+                                "total_tokens": 40,
+                            }
+                        }
+                    }
+                ]
+            ],
+        },
+    }
+
+
+def test_try_extract_provider_usage_data__anthropic_vertexai__returns_usage_and_model() -> None:
+    """Full public-API path: AnthropicVertexAIUsageExtractor reached, usage and model extracted."""
+    import opik
+
+    run_dict = _anthropic_vertexai_run_with_usage()
+    info = usage_extractor.try_extract_provider_usage_data(run_dict)
+
+    assert info is not None, "Anthropic VertexAI run must yield usage info"
+    assert info.provider == opik.LLMProvider.ANTHROPIC_VERTEXAI
+    assert info.model == "claude-3-5-sonnet@20241022"
+    assert info.usage is not None
+    assert info.usage.prompt_tokens == 15
+    assert info.usage.completion_tokens == 25
