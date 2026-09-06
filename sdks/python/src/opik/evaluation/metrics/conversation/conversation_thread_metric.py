@@ -79,6 +79,4 @@ class ConversationThreadMetric(base_metric.BaseMetric):
             A ScoreResult object or list of ScoreResult objects containing the evaluation score,
             metric name, and optional reasoning.
         """
-        raise NotImplementedError(
-            "Please use concrete metric classes instead of this one."
-        )
+        return self.score(conversation, **kwargs)
