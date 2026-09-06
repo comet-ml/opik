@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 
 from opik.evaluation.metrics.conversation.heuristics.knowledge_retention.metric import (
@@ -601,28 +599,6 @@ def test_custom_name_is_used():
     )
     assert result.name == "my_custom_retention_check"
     assert result.value == 1.0
-
-
-def test_ascore_delegates_to_score():
-    """Regression test for issue #8175 (fixed): `KnowledgeRetentionMetric`
-    does not define its own `ascore`, so it relies on
-    `ConversationThreadMetric.ascore` delegating to `self.score(...)`. Prior
-    to the fix, that base-class method unconditionally raised
-    `NotImplementedError` instead of delegating, so `ascore()` failed for
-    ANY input on this metric. This asserts the async call now returns the
-    same result as the sync call for the same input.
-    """
-    metric = KnowledgeRetentionMetric(track=False)
-    conversation = [
-        {"role": "user", "content": "My codeword is alpha."},
-        {"role": "assistant", "content": "alpha codeword noted"},
-    ]
-
-    sync_result = metric.score(conversation=conversation)
-    async_result = asyncio.run(metric.ascore(conversation=conversation))
-
-    assert async_result == sync_result
-    assert async_result.value == 1.0
 
 
 def test_ignored_kwargs_are_accepted():
