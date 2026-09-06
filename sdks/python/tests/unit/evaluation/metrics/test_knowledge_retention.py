@@ -108,12 +108,13 @@ def test_no_facts_to_retain_scores_one(conversation):
 
 
 # ---------------------------------------------------------------------------
-# B. `_is_user_request` filtering.
+# B. User turns phrased as questions or requests are excluded from scoring.
 # ---------------------------------------------------------------------------
 def test_question_mark_suppresses_otherwise_rich_facts():
-    """Minimal pair: identical facts, phrased as a question vs a statement.
-    A single "?" anywhere in the turn drops it entirely from fact
-    extraction, even though it names real, extractable terms.
+    """A user turn phrased as a question scores identically to one with no
+    facts at all, even though it names the same real, specific terms as the
+    statement version below. Phrasing the same content as a statement
+    instead lets those terms count toward the score.
     """
     metric = KnowledgeRetentionMetric(track=False)
 
@@ -148,9 +149,10 @@ def test_question_mark_suppresses_otherwise_rich_facts():
 
 
 def test_request_keyword_suppresses_entire_turn():
-    """Minimal pair: identical facts, with vs without a leading request
-    keyword ("please"/"tell"). The keyword drops the WHOLE turn, not just
-    the keyword token itself.
+    """A user turn phrased as a request ("please tell me...") scores as if
+    it had no facts at all, even though it names the same specific terms
+    as the plainly-stated version below - none of that turn's terms count
+    toward the score, not just the request wording itself.
     """
     metric = KnowledgeRetentionMetric(track=False)
 
@@ -181,11 +183,11 @@ def test_request_keyword_suppresses_entire_turn():
     )
 
 
-# Request-keyword membership uses exact per-token set matching (the turn's
-# text is split on whitespace, then each token is checked for membership in
-# `_REQUEST_KEYWORDS`) rather than substring matching. Verified empirically
-# before writing this test: "cannot"/"shallow"/"helpful" do NOT match the
-# keywords "can"/"shall"/"help" merely because they contain them.
+# Words that merely contain a request word as a substring - "cannot"
+# ("can"), "shallow" ("shall"), "helpful" ("help") - do not cause their
+# turn to be treated as a request. Verified empirically before writing
+# this test: each turn below is scored as ordinary fact-bearing content,
+# not excluded the way a genuine request turn would be.
 _REQUEST_KEYWORD_SUBSTRING_NON_TRIGGER_CASES = [
     (
         "cannot",
@@ -289,7 +291,8 @@ def test_bare_request_keyword_does_trigger_exclusion():
 
 
 # ---------------------------------------------------------------------------
-# C. `_extract_terms`: minimum token length and stopword filtering.
+# C. Which words in a turn count as facts: short words and common words are
+# excluded from scoring.
 # ---------------------------------------------------------------------------
 def test_min_token_length_boundary_four_chars_kept_three_dropped():
     metric = KnowledgeRetentionMetric(track=False)
@@ -323,11 +326,11 @@ def test_min_token_length_boundary_four_chars_kept_three_dropped():
 
 
 def test_stopword_filtered_even_when_long_enough_and_turn_not_a_request():
-    """Isolates stopword filtering (inside `_extract_terms`) from request
-    filtering (inside `_is_user_request`): this sentence contains no "?"
-    and no `_REQUEST_KEYWORDS` token, so the whole turn is retained, but
-    "number" - a 6-character word - is still dropped because it is in
-    `_STOPWORDS`.
+    """This user turn is plainly stated (no question, no request wording),
+    so it is scored as ordinary fact-bearing content. Even so, the common
+    word "number" - despite being long enough to otherwise qualify - never
+    shows up among the scored terms, while the other, more specific words
+    in the same sentence do.
     """
     metric = KnowledgeRetentionMetric(track=False)
 
@@ -413,9 +416,10 @@ def test_turns_to_consider_custom_small_value():
 
 
 def test_turns_to_consider_zero_yields_no_facts_to_retain():
-    """Boundary: `turns_to_consider=0` slices the qualifying user-turn list
-    down to empty, so the metric takes the "No facts to retain" (1.0)
-    shortcut even though qualifying user turns exist in the conversation.
+    """Boundary: with `turns_to_consider=0`, the conversation still has
+    real, fact-bearing user turns, but the metric scores it exactly as if
+    there were no facts to retain at all (1.0, reason "No facts to
+    retain").
     """
     metric = KnowledgeRetentionMetric(track=False, turns_to_consider=0)
     conversation = _codeword_conversation(["alpha", "bravo"])
@@ -426,9 +430,10 @@ def test_turns_to_consider_zero_yields_no_facts_to_retain():
 
 
 def test_turns_to_consider_slices_only_qualifying_turns():
-    """A request-turn interleaved between two qualifying turns does not
-    consume a slice slot: with `turns_to_consider=2`, both fact-bearing
-    turns' terms are used even though a request turn sits between them.
+    """A request-phrased turn placed between two fact-bearing turns is
+    skipped rather than counted: with `turns_to_consider=2`, both
+    fact-bearing turns' terms still show up in the score even though a
+    request turn sits between them in the conversation.
     """
     metric = KnowledgeRetentionMetric(track=False, turns_to_consider=2)
     conversation = [
@@ -455,8 +460,9 @@ def test_turns_to_consider_slices_only_qualifying_turns():
 # E. Only the final assistant turn is scored.
 # ---------------------------------------------------------------------------
 def test_only_final_assistant_turn_is_scored():
-    """An earlier assistant turn "remembering" the fact does not help: only
-    `assistant_turns[-1]` is compared against the reference facts.
+    """An earlier assistant reply that correctly references the fact does
+    not affect the score: only the most recent assistant reply is checked,
+    and here it omits the fact entirely.
     """
     metric = KnowledgeRetentionMetric(track=False)
     conversation = [
@@ -480,9 +486,9 @@ def test_only_final_assistant_turn_is_scored():
 
 
 # ---------------------------------------------------------------------------
-# F. Retention-ratio boundary values, on the real computation path (not the
-# "No facts to retain" 1.0 shortcut) - distinguished via `reason` and
-# non-empty `metadata` in every case above and reiterated explicitly here.
+# F. Retention-ratio boundary values: a score of 1.0 from full retention
+# reads differently (reason, metadata) than a score of 1.0 from having no
+# facts to retain at all, even though the numeric value is the same.
 # ---------------------------------------------------------------------------
 def test_retention_ratio_can_reach_exact_zero_and_exact_one_via_real_computation():
     metric = KnowledgeRetentionMetric(track=False)
