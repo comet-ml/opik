@@ -98,13 +98,13 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND workspace_id = :workspace_id
                       <if(project_ids)> AND project_id IN :project_ids <endif>
                 )
-                ORDER BY last_updated_at DESC
+                ORDER BY last_updated_at DESC, entity_id DESC
                 LIMIT 1 BY project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
-                SELECT entity_id, name,
+                SELECT entity_id, name, project_id,
                        if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
                 FROM feedback_scores_deduped
-                GROUP BY entity_id, name
+                GROUP BY entity_id, name, project_id
             )
             SELECT
                 AVGIf(fs.value, t.id >= :id_start AND t.id \\<= :id_end) AS current,
@@ -113,7 +113,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             FROM feedback_scores_final fs
             JOIN (
                 SELECT
-                    id
+                    id, project_id
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
@@ -121,7 +121,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                   AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
                   AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
-            ) t ON t.id = fs.entity_id
+            ) t ON t.id = fs.entity_id AND t.project_id = fs.project_id
             GROUP BY fs.name;
             """;
 
@@ -160,7 +160,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND project_id IN :project_ids
                       AND name = :name
                 )
-                ORDER BY last_updated_at DESC
+                ORDER BY last_updated_at DESC, entity_id DESC
                 LIMIT 1 BY project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT entity_id, name, project_id,
@@ -219,7 +219,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND workspace_id = :workspace_id
                       AND name = :name
                 )
-                ORDER BY last_updated_at DESC
+                ORDER BY last_updated_at DESC, entity_id DESC
                 LIMIT 1 BY project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT entity_id, name,
@@ -312,7 +312,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // Shared with ProjectMetricsDAO via SpanMetricsQueries. Workspace aggregation queries an explicit set of
     // projects: WorkspaceMetricsService resolves the "all projects" request into every project id up front, so the
     // predicate is always a bounded `project_id IN :project_ids` list that prunes on the spans primary key
-    // (workspace_id, project_id, ...) — never an unconstrained workspace-wide scan.
+    // (workspace_id, project_id, ...) � never an unconstrained workspace-wide scan.
     // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
     // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
     // a groupArray(tuple(bucket, value)). No breakdown => one series per usage key; with a provider/model breakdown =>
