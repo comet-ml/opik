@@ -32,31 +32,31 @@ on:
   # https://docs.zizmor.sh/audits/#dangerous-triggers
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, synchronize, ready_for_review]
-  # A reply to a review comment lands as pull_request_review_comment.created —
-  # that is the event that clears the label as soon as someone engages, without
-  # waiting for the scheduled sweep.
+  # Review submission is the batch boundary: a reviewer posting a review with N
+  # inline comments emits one pull_request_review plus N
+  # pull_request_review_comment events. Subscribing to both meant N+1 runs per
+  # review, of which concurrency cancelled N — 26 runs in one minute during this
+  # PR's own review, 60 cancelled out of 72 overall. Listening only to the review
+  # event collapses each batch to a single run that sees the settled state.
   #
-  # These two have no _target variant, and on a fork-originated PR they run with
-  # a read-only GITHUB_TOKEN, so the label write would 403. The job therefore
-  # skips fork PRs on these events (see the `if:` below) and leaves them to the
-  # hourly sweep, which runs on a schedule and always holds a writable token.
-  # Net effect: same-repo PRs relabel within seconds of a review, fork PRs within
-  # the hour. Making forks fast too would need a privileged relay
-  # (workflow_run on a fork-safe artifact), which is more machinery than the
-  # latency saves.
+  # The trade-off is a lone reply to an existing thread, which posts no review and
+  # so emits only pull_request_review_comment. That no longer clears the label
+  # immediately; the hourly sweep picks it up instead. Acceptable because the
+  # sweep already owns the other no-event case (clicking "Resolve conversation"),
+  # so worst-case latency for clearing a label is unchanged at one hour.
+  #
+  # This event has no _target variant, and on a fork-originated PR it runs with a
+  # read-only GITHUB_TOKEN, so the label write would 403. The job skips fork PRs
+  # here (see the `if:` below) and leaves them to the sweep, which always holds a
+  # writable token.
   pull_request_review:
     types: [submitted, dismissed]
-  pull_request_review_comment:
-    types: [created, deleted]
 
-# Keyed on the PR, so a reviewer posting a review plus several inline comments at
-# once collapses to a single run instead of a stampede of racing label writes.
+# Keyed on the PR so overlapping runs for the same PR serialize into one lane.
 #
-# cancel-in-progress is safe here because a run holds no state: each one
-# recomputes the verdict from scratch against the live API, so cancelling the
-# superseded runs loses nothing and the last one to start writes the final,
-# settled answer. Expect to see cancelled runs after a review burst — that is
-# the mechanism working, not a failure.
+# cancel-in-progress is safe because a run holds no state: each one recomputes the
+# verdict from scratch against the live API, so cancelling a superseded run loses
+# nothing and the last one to start writes the final, settled answer.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -67,9 +67,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
-    # Skip fork PRs on the review events, which would carry a read-only token and
+    # Skip fork PRs on the review event, which would carry a read-only token and
     # fail the label write. pull_request_target always has a writable token, so it
-    # runs for forks too. Fork PRs on review events fall through to the sweep.
+    # runs for forks too. Fork PRs on the review event fall through to the sweep.
     if: >-
       github.event_name == 'pull_request_target' ||
       github.event.pull_request.head.repo.full_name == github.repository
