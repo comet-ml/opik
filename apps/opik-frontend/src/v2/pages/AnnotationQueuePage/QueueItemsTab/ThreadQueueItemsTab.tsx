@@ -61,6 +61,9 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
+import useAnnotationQueueItems from "@/api/annotation-queues/useAnnotationQueueItems";
+import QueueItemSourceCell from "@/v2/pages-shared/annotation-queues/QueueItemSourceCell";
+import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -143,6 +146,15 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
   },
 ];
 
+// Outside SHARED_COLUMNS on purpose: queue membership is not a thread field, so the threads API can
+// neither filter nor sort on it, and SHARED_COLUMNS is what FILTER_COLUMNS is built from.
+const QUEUE_ITEM_SOURCE_COLUMN: ColumnData<Thread> = {
+  id: "queue_item_source",
+  label: "Source",
+  type: COLUMN_TYPE.string,
+  cell: QueueItemSourceCell as never,
+};
+
 const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
   {
     id: COLUMN_ID_ID,
@@ -180,6 +192,7 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
+  QUEUE_ITEM_SOURCE_COLUMN,
 ];
 
 const FILTER_COLUMNS: ColumnData<Thread>[] = [
@@ -204,6 +217,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "first_message",
   "last_message",
   "number_of_messages",
+  QUEUE_ITEM_SOURCE_COLUMN.id,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -212,6 +226,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "first_message",
   "last_message",
   "number_of_messages",
+  QUEUE_ITEM_SOURCE_COLUMN.id,
   COLUMN_COMMENTS_ID,
   "start_time",
   "end_time",
@@ -226,6 +241,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+const SELECTED_COLUMNS_KEY_V3 = `${SELECTED_COLUMNS_KEY}-v3`;
 const COLUMNS_WIDTH_KEY = "queue-thread-columns-width";
 const COLUMNS_ORDER_KEY = "queue-thread-columns-order";
 const COLUMNS_SORT_KEY = "queue-thread-columns-sort";
@@ -373,18 +389,41 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
 
+  // Queue membership for the visible rows only, joined by thread model id — a thread knows nothing
+  // about annotation queues, so the threads API cannot carry this.
+  const visibleItemIds = useMemo(
+    () => rows.map(getAnnotationQueueItemId).filter(Boolean),
+    [rows],
+  );
+
+  const { data: queueItemsData } = useAnnotationQueueItems({
+    annotationQueueId: annotationQueue.id,
+    itemIds: visibleItemIds,
+  });
+
+  const sourceById = useMemo(
+    () =>
+      Object.fromEntries(
+        (queueItemsData?.content ?? []).map((item) => [item.id, item.source]),
+      ),
+    [queueItemsData],
+  );
+
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY_V3,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_ID_ID],
+        SELECTED_COLUMNS_KEY_V2,
+        migrateSelectedColumns(SELECTED_COLUMNS_KEY, DEFAULT_SELECTED_COLUMNS, [
+          COLUMN_ID_ID,
+          QUEUE_ITEM_SOURCE_COLUMN.id,
+        ]),
+        [QUEUE_ITEM_SOURCE_COLUMN.id],
       ),
     },
   );
@@ -419,7 +458,11 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
-      DEFAULT_COLUMNS,
+      DEFAULT_COLUMNS.map((column) =>
+        column.id === QUEUE_ITEM_SOURCE_COLUMN.id
+          ? { ...column, customMeta: { sourceById } }
+          : column,
+      ),
       {
         columnsOrder,
         selectedColumns,
@@ -449,6 +492,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     scoresColumnsData,
     scoresColumnsOrder,
     annotationQueue.id,
+    sourceById,
   ]);
 
   const sortConfig = useMemo(
