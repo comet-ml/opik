@@ -11,7 +11,8 @@ import lombok.Builder;
  * <ul>
  *   <li>{@code false} (default) — the R2DBC bulk path, which renders one placeholder per column per row
  *       and binds each by name. The driver resolves every bind with a linear scan over the statement's
- *       parameter names, so a 1000-row span batch carries ~26k names and binding is O(n²).</li>
+ *       parameter names, so a 1000-row span batch carries ~27k names (27 row-indexed
+ *       binds plus the shared workspace bind) and binding is O(n²).</li>
  *   <li>{@code true} — rows serialized to {@code JSONEachRow} and streamed through the ClickHouse Java
  *       client v2: one HTTP body, compressed once, parsed server-side. No parameter binding at all.</li>
  * </ul>

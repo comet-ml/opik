@@ -138,7 +138,7 @@ public interface TraceDAO {
      * {@code TransactionTemplateAsync#nonTransaction} does not close what it hands out. Allocating one
      * per batch and never using it is waste on a path whose whole point is to remove per-batch overhead.
      */
-    Mono<Long> batchInsert(List<Trace> traces);
+    Mono<Long> batchInsert(@NonNull List<Trace> traces);
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 

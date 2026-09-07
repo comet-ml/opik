@@ -5,6 +5,11 @@ import com.clickhouse.client.api.insert.InsertResponse;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.io.SerializedString;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -16,7 +21,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.BufferedOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
@@ -56,6 +60,12 @@ import java.util.function.Function;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class JsonEachRowBulkInsert {
 
+    private static final SerializedString EMPTY_ROOT_SEPARATOR = new SerializedString("");
+
+    private static final ObjectWriter ROW_WRITER = JsonUtils.getMapper()
+            .writer()
+            .without(SerializationFeature.FLUSH_AFTER_WRITE_VALUE);
+
     private final @NonNull Client clickHouseClient;
 
     /**
@@ -93,13 +103,30 @@ public class JsonEachRowBulkInsert {
             // onRetry) replays an identical body rather than resuming a half-written stream.
             try (InsertResponse response = clickHouseClient.insert(table, out -> {
                 var buffered = new BufferedOutputStream(out);
-                for (T item : items) {
-                    buffered.write(rowMapper.apply(item).toString().getBytes(StandardCharsets.UTF_8));
-                    buffered.write('\n');
+                // Straight from the node into the stream: an intermediate toString() plus getBytes()
+                // would hold each row twice more, which for trace input/output of hundreds of KiB is
+                // the allocation cost this streaming path exists to avoid.
+                try (JsonGenerator generator = JsonUtils.getMapper().getFactory().createGenerator(buffered)) {
+                    // The generator writes into, but does not own, the client's stream.
+                    generator.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
+                    // JSONEachRow rows are newline-separated; Jackson's default root separator is a
+                    // space, which would prepend one to every row after the first.
+                    generator.setRootValueSeparator(EMPTY_ROOT_SEPARATOR);
+                    for (T item : items) {
+                        // A writer without FLUSH_AFTER_WRITE_VALUE, or the BufferedOutputStream would
+                        // be flushed once per row and buffer nothing.
+                        ROW_WRITER.writeValue(generator, rowMapper.apply(item));
+                        generator.writeRaw('\n');
+                    }
                 }
                 buffered.flush();
             }, ClickHouseFormat.JSONEachRow, settings).get()) {
                 return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
+            } catch (InterruptedException e) {
+                // get() clears the flag when it throws; restore it so the shutdown that interrupted
+                // this worker is not swallowed and reported as an insert failure.
+                Thread.currentThread().interrupt();
+                throw e;
             } catch (ExecutionException e) {
                 // Future.get() wraps the client's failure in ExecutionException. The resource-layer
                 // retry filter (RetryUtils.handleConnectionError) matches on the throwable's own class,

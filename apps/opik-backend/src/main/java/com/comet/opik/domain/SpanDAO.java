@@ -1839,7 +1839,7 @@ public class SpanDAO {
 
     /**
      * The {@link #BULK_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
-     * 26 named parameters per row — the widest of the three bulk write paths, and so the one where the
+     * 27 named parameters per row — the widest of the three bulk write paths, and so the one where the
      * driver's per-name linear scan costs most.
      *
      * <p>Values come from the same helpers the R2DBC binder uses, including the batch-wide
