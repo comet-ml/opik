@@ -82,6 +82,7 @@ jobs:
         run: uv sync
 
       - name: Install allurectl
+        if: ${{ env.ALLURE_TOKEN != '' }}
         uses: allure-framework/setup-allurectl@v1
 
       - name: Install Opik (Local)
@@ -116,7 +117,12 @@ jobs:
           # Point both the allure-playwright reporter and allurectl at the same
           # absolute results dir, then stream results to TestOps via allurectl watch.
           export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/e2e/allure-results"
-          allurectl watch -- npm run "test:${TIER}"
+          if [[ -n "${ALLURE_TOKEN:-}" ]]; then
+            allurectl watch -- npm run "test:${TIER}"
+          else
+            echo "Allure token unavailable; running tests without TestOps upload."
+            npm run "test:${TIER}"
+          fi
 
       - name: Upload Allure Results
         if: always()
