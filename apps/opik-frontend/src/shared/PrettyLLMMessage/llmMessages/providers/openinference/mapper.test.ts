@@ -6,6 +6,76 @@ import {
 } from "./mapper";
 
 describe("OpenInference message mapping", () => {
+  it.each([
+    { messages: [{ role: "assistant", content: "Current" }] },
+    { choices: [{ text: "Current" }] },
+  ])("prefers current semantic output over historical output: %j", (output) => {
+    const result = mapAndCombineMessages(
+      {
+        "llm.output_messages.0.message.content": "Stale",
+        "llm.choices.0.completion.text": "Stale completion",
+        "llm.function_call": '{"name":"stale_call"}',
+        "llm.finish_reason": "length",
+      },
+      output,
+      { formatHint: "openinference" },
+    );
+
+    expect(result.messages).toMatchObject([
+      { blocks: [{ blockType: "text", props: { children: "Current" } }] },
+    ]);
+    expect(result.messages[0].blocks).toHaveLength(1);
+    expect(result.messages[0].finishReason).toBeUndefined();
+  });
+
+  it("keeps scalar content alongside ordered content and tool calls", () => {
+    const result = mapAndCombineMessages(
+      undefined,
+      {
+        messages: [
+          {
+            role: "assistant",
+            content: "Scalar",
+            contents: [
+              { type: "text", text: "Block" },
+              {
+                type: "tool_use",
+                tool_call: {
+                  id: "call-1",
+                  function: { name: "search", arguments: "{}" },
+                },
+              },
+            ],
+            tool_calls: [
+              { id: "call-1", function: { name: "search", arguments: "{}" } },
+            ],
+          },
+        ],
+      },
+      { formatHint: "openinference" },
+    );
+
+    expect(result.messages[0].blocks).toMatchObject([
+      { blockType: "text", props: { children: "Scalar" } },
+      { blockType: "text", props: { children: "Block" } },
+      { blockType: "code", props: { label: "search" } },
+    ]);
+  });
+
+  it.each([{}, { completion_tokens: undefined }, { completion_tokens: NaN }])(
+    "does not create usage from absent or invalid values: %j",
+    (spanUsage) => {
+      const result = mapAndCombineMessages(
+        undefined,
+        {
+          messages: [{ role: "assistant", content: "Answer" }],
+        },
+        { formatHint: "openinference", spanUsage },
+      );
+      expect(result.usage).toBeUndefined();
+    },
+  );
+
   it.each(["canonical", "legacy", "both"])(
     "preserves repeated turns in %s messages",
     (representation) => {
@@ -519,6 +589,9 @@ describe("OpenInference message mapping", () => {
         "openinference.span.kind": "LLM",
         "llm.input_messages.0.message.role": "user",
         "llm.input_messages.0.message.content": "Question",
+        "llm.output_messages.0.message.content": "Stale answer",
+        "llm.function_call": '{"name":"stale_call"}',
+        "llm.finish_reason": "length",
       },
       {
         id: "chatcmpl-1",
@@ -537,5 +610,7 @@ describe("OpenInference message mapping", () => {
     expect(result.messages[1].blocks[0].props).toMatchObject({
       children: "OpenAI answer",
     });
+    expect(result.messages[1].blocks).toHaveLength(1);
+    expect(result.messages[1].finishReason).toBeUndefined();
   });
 });

@@ -344,10 +344,10 @@ public class OpenTelemetryMapper {
                 case null, default -> null;
             };
             if (exclusiveInputKey != null) {
-                long uncachedTokens = (long) usage.get("prompt_tokens")
-                        - usage.getOrDefault("cache_read_input_tokens", 0)
-                        - usage.getOrDefault("cache_creation_input_tokens", 0);
-                usage.put(exclusiveInputKey, (int) Math.max(0, uncachedTokens));
+                long uncachedTokens = Math.max(0L, usage.get("prompt_tokens"))
+                        - Math.max(0L, usage.getOrDefault("cache_read_input_tokens", 0))
+                        - Math.max(0L, usage.getOrDefault("cache_creation_input_tokens", 0));
+                usage.put(exclusiveInputKey, Math.clamp(uncachedTokens, 0, Integer.MAX_VALUE));
             }
         }
 

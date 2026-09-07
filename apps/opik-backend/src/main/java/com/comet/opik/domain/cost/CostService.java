@@ -67,7 +67,8 @@ public class CostService {
     // Vertex for online evaluation. Canonical names (and any not listed) pass through unchanged.
     private static final Map<String, String> RUNTIME_PROVIDER_MAPPING = Map.of(
             "gemini", "google_ai",
-            "vertex-ai", "google_vertexai");
+            "vertex-ai", "google_vertexai",
+            "bedrock_converse", "bedrock");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -140,7 +141,7 @@ public class CostService {
             return DEFAULT_COST;
         }
 
-        // Normalize runtime provider names ("gemini", "vertex-ai") to the canonical price-table provider
+        // Normalize runtime provider names to the canonical price-table provider
         // so callers holding an LlmProvider value hit the same rows as callers passing the canonical name.
         provider = RUNTIME_PROVIDER_MAPPING.getOrDefault(provider, provider);
 

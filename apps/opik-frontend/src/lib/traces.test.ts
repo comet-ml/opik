@@ -664,6 +664,70 @@ describe("prettifyMessage", () => {
     });
   });
 
+  it.each([
+    [{ messages: [{ role: "assistant", content: "Current" }] }, "Current"],
+    [{ messages: [{ content: "Current" }] }, "Current"],
+    [{ choices: [{ text: "Current" }] }, "Current"],
+    [
+      { choices: [{ message: { role: "assistant", content: "Current" } }] },
+      "Current",
+    ],
+    ["Current", "Current"],
+    [0, "0"],
+    [false, "false"],
+  ])(
+    "prefers current output over stale legacy output: %j",
+    (output, expected) => {
+      const result = prettifyMessage(output, {
+        type: "output",
+        openInferenceHint: true,
+        openInferenceInput: {
+          "llm.output_messages.0.message.role": "assistant",
+          "llm.output_messages.0.message.content": "Stale",
+        },
+      });
+
+      expect(result).toEqual({ message: expected, prettified: true });
+    },
+  );
+
+  it("does not replace a current image-only message with stale text", () => {
+    const output = {
+      messages: [
+        {
+          role: "assistant",
+          contents: [
+            { type: "image", image: { url: "https://example.test/a.png" } },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      prettifyMessage(output, {
+        type: "output",
+        openInferenceHint: true,
+        openInferenceInput: {
+          "llm.output_messages.0.message.content": "Stale",
+        },
+      }).message,
+    ).not.toBe("Stale");
+  });
+
+  it.each([undefined, {}, { messages: [{ role: "assistant" }] }])(
+    "recovers legacy output when current output has no content: %j",
+    (output) => {
+      expect(
+        prettifyMessage(output, {
+          type: "output",
+          openInferenceInput: {
+            "llm.output_messages.0.message.content": "Recovered",
+          },
+        }),
+      ).toEqual({ message: "Recovered", prettified: true });
+    },
+  );
+
   it("does not apply OpenInference extraction to unmarked role messages", () => {
     const message = {
       messages: [{ role: "assistant", content: "Keep the existing shape" }],

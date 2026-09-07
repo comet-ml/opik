@@ -578,6 +578,10 @@ class OpenTelemetryResourceTest {
             assertThat(persistedOpenInferenceSpan.input().path("request_id").asText()).isEqualTo("request-7");
             assertThat(persistedOpenInferenceSpan.input().path("messages").get(0).path("role").asText())
                     .isEqualTo("user");
+            assertThat(persistedOpenInferenceSpan.input().path("llm.input_messages.2.message.content").asText())
+                    .isEqualTo("Hello");
+            assertThat(persistedOpenInferenceSpan.input().path("llm.output_messages.4.message.content").asText())
+                    .isEqualTo("Hello from Opik");
             assertThat(persistedOpenInferenceSpan.output().path("response_id").asText()).isEqualTo("response-7");
             assertThat(persistedOpenInferenceSpan.output().path("messages").get(0).path("content").asText())
                     .isEqualTo("Hello from Opik");

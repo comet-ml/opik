@@ -48,7 +48,15 @@ export type ParsedOpenInferenceFields = {
 };
 
 const MEDIA_PLACEHOLDER_RE = /^\[(image|audio)_\d+\]$/;
-const MEDIA_DATA_URI_RE = /^data:(image|audio)\/[a-z0-9.+-]+(?:;[^,]*)?,/i;
+const MEDIA_DATA_URI_RE = /^data:(image|audio)\/([a-z0-9.+-]+)(?:;[^,]*)?,/i;
+const INLINE_IMAGE_TYPES = new Set([
+  "png",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+  "bmp",
+]);
 
 export const isSafeOpenInferenceMediaUrl = (
   url: string,
@@ -58,7 +66,11 @@ export const isSafeOpenInferenceMediaUrl = (
   const placeholderMatch = MEDIA_PLACEHOLDER_RE.exec(url);
   if (placeholderMatch?.[1] === type) return true;
   const dataUriMatch = MEDIA_DATA_URI_RE.exec(url);
-  if (dataUriMatch?.[1].toLowerCase() === type) return true;
+  if (dataUriMatch?.[1].toLowerCase() === type) {
+    return (
+      type === "audio" || INLINE_IMAGE_TYPES.has(dataUriMatch[2].toLowerCase())
+    );
+  }
   try {
     const protocol = new URL(url).protocol.toLowerCase();
     return protocol === "http:" || protocol === "https:";
@@ -383,11 +395,17 @@ const acceptLegacyAttribute = (
   }
 };
 
-const collectLegacy = (accumulator: LegacyAccumulator, data: unknown): void => {
+const collectLegacy = (
+  accumulator: LegacyAccumulator,
+  data: unknown,
+  includeOutput: boolean = true,
+): void => {
   if (!isRecord(data)) return;
-  Object.entries(data).forEach(([key, value]) =>
-    acceptLegacyAttribute(accumulator, key, value),
-  );
+  Object.entries(data).forEach(([key, value]) => {
+    if (includeOutput || !isLegacyOutputKey(key)) {
+      acceptLegacyAttribute(accumulator, key, value);
+    }
+  });
 };
 
 const parseCanonicalToolCall = (
@@ -538,15 +556,32 @@ const extractFallback = (data: unknown): unknown => {
   return hasUnwrappedRawObject(data) ? data : undefined;
 };
 
+const semanticFingerprint = (value: unknown): string | undefined => {
+  try {
+    return JSON.stringify(value, (key, nestedValue: unknown) => {
+      // Historical storage parsed JSON message content and arguments into objects.
+      const semanticValue =
+        key === "content" || key === "arguments"
+          ? parseMaybeJson(nestedValue)
+          : nestedValue;
+      return isRecord(semanticValue)
+        ? Object.fromEntries(
+            Object.keys(semanticValue)
+              .sort()
+              .map((key) => [key, semanticValue[key]]),
+          )
+        : semanticValue;
+    });
+  } catch {
+    return undefined;
+  }
+};
+
 const dedupe = <T>(values: T[]): T[] => {
   const fingerprints = new Set<string>();
   return values.filter((value) => {
-    let fingerprint: string;
-    try {
-      fingerprint = JSON.stringify(value) ?? String(value);
-    } catch {
-      return true;
-    }
+    const fingerprint = semanticFingerprint(value);
+    if (fingerprint === undefined) return true;
     if (fingerprints.has(fingerprint)) return false;
     fingerprints.add(fingerprint);
     return true;
@@ -556,15 +591,17 @@ const dedupe = <T>(values: T[]): T[] => {
 // Match each legacy occurrence at most once against the canonical representation.
 // Identical turns within one conversation are still separate messages.
 const mergeRepresentations = <T>(canonical: T[], legacy: T[]): T[] => {
-  const remaining = new Map<string | undefined, number>();
+  const remaining = new Map<string, number>();
   canonical.forEach((value) => {
-    const fingerprint = JSON.stringify(value);
+    const fingerprint = semanticFingerprint(value);
+    if (fingerprint === undefined) return;
     remaining.set(fingerprint, (remaining.get(fingerprint) ?? 0) + 1);
   });
   return [
     ...canonical,
     ...legacy.filter((value) => {
-      const fingerprint = JSON.stringify(value);
+      const fingerprint = semanticFingerprint(value);
+      if (fingerprint === undefined) return true;
       const count = remaining.get(fingerprint) ?? 0;
       if (count === 0) return true;
       remaining.set(fingerprint, count - 1);
@@ -582,17 +619,17 @@ export const hasLegacyOpenInferenceAttributes = (data: unknown): boolean => {
   );
 };
 
+const isLegacyOutputKey = (key: string): boolean =>
+  key.startsWith("llm.output_messages.") ||
+  key.startsWith("llm.choices.") ||
+  key === "llm.finish_reason" ||
+  key === "llm.function_call";
+
 export const hasLegacyOpenInferenceOutputAttributes = (
   data: unknown,
 ): boolean => {
   if (!isRecord(data)) return false;
-  return Object.keys(data).some(
-    (key) =>
-      key.startsWith("llm.output_messages.") ||
-      key.startsWith("llm.choices.") ||
-      key === "llm.finish_reason" ||
-      key === "llm.function_call",
-  );
+  return Object.keys(data).some(isLegacyOutputKey);
 };
 
 export const hasOpenInferenceMarker = (
@@ -630,51 +667,73 @@ export const hasOpenInferenceHint = (
   output?: unknown,
 ): boolean => resolveOpenInferenceHint(metadata, input, output).detected;
 
+const buildLegacyMessages = (
+  messages: Map<number, MessageBuilder>,
+): OpenInferenceMessage[] =>
+  sortedValues(messages)
+    .map((message) => message.build())
+    .filter((message): message is OpenInferenceMessage => Boolean(message));
+
 export const parseOpenInferenceFields = (
   input: unknown,
   output: unknown,
 ): ParsedOpenInferenceFields => {
   const legacy = createLegacyAccumulator();
-  collectLegacy(legacy, input);
   collectLegacy(legacy, output);
 
   const canonicalInputMessages = parseCanonicalMessages(input);
   const canonicalOutputMessages = parseCanonicalMessages(output);
-  const legacyInputMessages = sortedValues(legacy.inputMessages)
-    .map((message) => message.build())
-    .filter((message): message is OpenInferenceMessage => Boolean(message));
-  const legacyOutputMessages = sortedValues(legacy.outputMessages)
-    .map((message) => message.build())
-    .filter((message): message is OpenInferenceMessage => Boolean(message));
-
   const inputRecord = isRecord(input) ? input : undefined;
   const outputRecord = isRecord(output) ? output : undefined;
+  const canonicalChoices = extractTexts(output, "choices");
+  const currentMessages = mergeRepresentations(
+    canonicalOutputMessages,
+    buildLegacyMessages(legacy.outputMessages),
+  );
+  const currentChoices = mergeRepresentations(
+    canonicalChoices,
+    sortedValues(legacy.choices),
+  );
+  const currentFunctionCall =
+    outputRecord?.function_call ?? legacy.functionCall ?? undefined;
+  const currentFinishReason =
+    toStringValue(outputRecord?.finish_reason) ?? legacy.finishReason;
+  const hasCurrentOutput =
+    currentMessages.some(hasRenderableMessage) ||
+    currentChoices.length > 0 ||
+    currentFunctionCall != null;
+
+  // Actual semantic output wins over output attributes stored in historical input.
+  collectLegacy(legacy, input, !hasCurrentOutput);
+
   const prompts = mergeRepresentations(
     extractTexts(input, "prompts"),
     sortedValues(legacy.prompts),
   );
-  const choices = mergeRepresentations(
-    extractTexts(output, "choices"),
-    sortedValues(legacy.choices),
-  );
+  const choices = hasCurrentOutput
+    ? currentChoices
+    : mergeRepresentations(canonicalChoices, sortedValues(legacy.choices));
   const canonicalTools =
     inputRecord && Array.isArray(inputRecord.tools) ? inputRecord.tools : [];
   const tools = dedupe([...canonicalTools, ...sortedValues(legacy.tools)]);
-  const finishReason =
-    (outputRecord && toStringValue(outputRecord.finish_reason)) ??
-    legacy.finishReason;
-  const functionCall =
-    (outputRecord && outputRecord.function_call) ?? legacy.functionCall;
+  const finishReason = hasCurrentOutput
+    ? currentFinishReason
+    : currentFinishReason ?? legacy.finishReason;
+  const functionCall = hasCurrentOutput
+    ? currentFunctionCall
+    : legacy.functionCall ?? undefined;
 
   return {
     inputMessages: mergeRepresentations(
       canonicalInputMessages,
-      legacyInputMessages,
+      buildLegacyMessages(legacy.inputMessages),
     ),
-    outputMessages: mergeRepresentations(
-      canonicalOutputMessages,
-      legacyOutputMessages,
-    ),
+    outputMessages: hasCurrentOutput
+      ? currentMessages
+      : mergeRepresentations(
+          canonicalOutputMessages,
+          buildLegacyMessages(legacy.outputMessages),
+        ),
     prompts,
     choices,
     tools,

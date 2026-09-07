@@ -173,6 +173,20 @@ const mapMessage = (
   const role = normalizeRole(message.role, fieldType);
   const blocks: LLMBlockDescriptor[] = [];
 
+  if (
+    message.content !== undefined &&
+    message.content !== null &&
+    message.content !== ""
+  ) {
+    blocks.push(
+      role === "tool"
+        ? codeBlock(message.content, message.name ?? "Tool result")
+        : typeof message.content === "string"
+          ? textBlock(message.content, role)
+          : codeBlock(message.content, "Content"),
+    );
+  }
+
   if (message.contents) {
     const mappedContents = contentBlocks(message.contents, role);
     blocks.push(...mappedContents.blocks);
@@ -190,19 +204,6 @@ const mapMessage = (
         }
       });
   } else {
-    if (
-      message.content !== undefined &&
-      message.content !== null &&
-      message.content !== ""
-    ) {
-      blocks.push(
-        role === "tool"
-          ? codeBlock(message.content, message.name ?? "Tool result")
-          : typeof message.content === "string"
-            ? textBlock(message.content, role)
-            : codeBlock(message.content, "Content"),
-      );
-    }
     message.tool_calls
       ?.filter(isRenderableOpenInferenceToolCall)
       .forEach((toolCall) => blocks.push(toolCallBlock(toolCall)));
@@ -264,7 +265,10 @@ const toolLabel = (tool: unknown, index: number): string => {
   return `Tool ${index + 1}`;
 };
 
-const mapParsed = (parsed: ParsedOpenInferenceFields): LLMMapperResult => {
+const mapParsed = (
+  parsed: ParsedOpenInferenceFields,
+  fieldType?: "input" | "output",
+): LLMMapperResult => {
   const mappedInputMessages = parsed.inputMessages
     .map((message, index) => mapMessage(message, index, "input"))
     .filter((message) => message.blocks.length > 0);
@@ -293,6 +297,10 @@ const mapParsed = (parsed: ParsedOpenInferenceFields): LLMMapperResult => {
       ),
     });
   }
+
+  // The pair-aware combiner recovers historical output from input. A standalone input
+  // mapper must not append it beside an output handled by another provider's mapper.
+  if (fieldType === "input") return { messages };
 
   const outputStart = messages.length;
   const mappedOutputMessages = parsed.outputMessages
@@ -352,6 +360,7 @@ export const mapOpenInferenceMessages: FormatMapper = (
       fieldType === "input" ? data : undefined,
       fieldType === "output" ? data : undefined,
     ),
+    fieldType,
   );
 };
 
