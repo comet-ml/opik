@@ -7,8 +7,14 @@ import opik.llm_usage as llm_usage
 import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
 from opik import config as opik_config
-from opik.types import ErrorInfoDict, SpanType, LLMProvider, TraceSource
-from .. import constants, helpers, span
+from opik.types import (
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+    SpanType,
+    LLMProvider,
+    TraceSource,
+)
+from .. import constants, helpers, span, validation_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -256,6 +262,22 @@ class Trace:
         Returns:
             None
         """
+        score_dict: BatchFeedbackScoreDict = {
+            "id": self.id,
+            "name": name,
+            "value": value,
+            "category_name": category_name,
+            "reason": reason,
+            "metadata": metadata,
+        }
+
+        # Validate here rather than in the background streamer: the batch entrypoints
+        # already run this check, and an invalid payload that reaches jsonable_encoder
+        # fails outside the handled ApiError/ValidationError cases and silently drops
+        # the score.
+        if validation_helpers.validate_feedback_score(score_dict, LOGGER) is None:
+            return
+
         add_trace_feedback_batch_message = messages.AddTraceFeedbackScoresBatchMessage(
             batch=[
                 messages.FeedbackScoreMessage(
