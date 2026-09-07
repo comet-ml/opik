@@ -60,4 +60,51 @@ interface AnnotationQueueAutomationDAO {
             """)
     void deleteByQueueIds(@Bind("workspaceId") String workspaceId,
             @BindList("queueIds") List<UUID> queueIds);
+
+    /**
+     * Enabled automations for specific projects — the authoritative scope, since an automation belongs to a
+     * queue and a queue belongs to a project. The consumer derives the project ids from the entities' own
+     * scores, so it never has to consider automations from projects the event has nothing to do with.
+     */
+    @SqlQuery("""
+            SELECT * FROM annotation_queue_automations
+            WHERE workspace_id = :workspaceId
+              AND project_id IN (<projectIds>)
+              AND enabled = TRUE
+              AND scope = :scope
+            """)
+    List<AnnotationQueueAutomationModel> findEnabledByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") List<UUID> projectIds,
+            @Bind("scope") String scope);
+
+    /**
+     * Guard for the event listener when the event names its project. Only a yes/no, so it avoids returning
+     * and deserialising conditions JSON on an event that will be dropped.
+     */
+    @SqlQuery("""
+            SELECT EXISTS (
+                SELECT 1 FROM annotation_queue_automations
+                WHERE workspace_id = :workspaceId
+                  AND project_id = :projectId
+                  AND enabled = TRUE
+                  AND scope = :scope
+            )
+            """)
+    boolean existsEnabledByProject(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("scope") String scope);
+
+    /**
+     * Coarser fallback guard, used only when the event carries no project id — which the batch score path
+     * cannot, because one batch may span several projects. This is a pre-filter to avoid publishing for
+     * workspaces that have no automation at all; it is <strong>not</strong> the feature's scope. The
+     * project scope is enforced by {@link #findEnabledByProjects} in the consumer.
+     */
+    @SqlQuery("""
+            SELECT EXISTS (
+                SELECT 1 FROM annotation_queue_automations
+                WHERE workspace_id = :workspaceId AND enabled = TRUE AND scope = :scope
+            )
+            """)
+    boolean existsEnabledByWorkspace(@Bind("workspaceId") String workspaceId, @Bind("scope") String scope);
 }

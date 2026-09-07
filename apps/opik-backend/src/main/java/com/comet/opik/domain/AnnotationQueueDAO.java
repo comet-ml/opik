@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
@@ -66,6 +67,8 @@ public interface AnnotationQueueDAO {
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Flux<AnnotationQueueItem> findItemsByIds(UUID queueId, UUID projectId, Set<UUID> itemIds);
+
+    Mono<Set<UUID>> findPreviouslyAddedItems(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
     Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, String entityType,
             UUID queueId,
@@ -230,6 +233,17 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             DELETE FROM annotation_queue_item_history
             WHERE workspace_id = :workspace_id
             AND queue_id IN :ids
+            """;
+
+    // Which of these items have ever been in this queue. The caller supplies a bounded id set, so
+    // fetching the intersection and subtracting is simpler than a NOT IN subquery and does the same job.
+    private static final String SELECT_PREVIOUSLY_ADDED_ITEMS = """
+            SELECT DISTINCT item_id
+            FROM annotation_queue_item_history
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND queue_id = :queue_id
+            AND item_id IN :item_ids
             """;
 
     // Lookup, not a listing: the caller renders the queue-items table from the traces/threads API with
@@ -591,6 +605,27 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         .id(UUID.fromString(row.get("item_id", String.class)))
                         .source(AnnotationQueueItemSource.fromString(row.get("source", String.class)))
                         .build()));
+    }
+
+    @Override
+    public Mono<Set<UUID>> findPreviouslyAddedItems(@NonNull UUID queueId, @NonNull UUID projectId,
+            @NonNull Set<UUID> itemIds) {
+        if (itemIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_PREVIOUSLY_ADDED_ITEMS)
+                            .bind("project_id", projectId.toString())
+                            .bind("queue_id", queueId.toString())
+                            .bind("item_ids", itemIds.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map(
+                        (row, metadata) -> UUID.fromString(row.get("item_id", String.class))))
+                .collect(Collectors.toSet());
     }
 
     private Publisher<? extends Result> recordItemHistory(UUID queueId, Set<UUID> itemIds, UUID projectId,

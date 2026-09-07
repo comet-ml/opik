@@ -15,6 +15,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -88,6 +89,51 @@ public class AnnotationQueueAutomationService {
                 handle -> handle.attach(AnnotationQueueAutomationDAO.class).findByQueueIds(workspaceId, queueIds))
                 .stream()
                 .collect(Collectors.toMap(AnnotationQueueAutomationModel::queueId, this::toApi));
+    }
+
+    /**
+     * Enabled automations for the given projects — the scope routing actually runs at, since an automation
+     * belongs to a queue and a queue belongs to a project.
+     */
+    public List<QueueAutomation> findEnabledByProjects(@NonNull String workspaceId,
+            @NonNull Set<UUID> projectIds, @NonNull AnnotationQueue.AnnotationScope scope) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AnnotationQueueAutomationDAO.class)
+                        .findEnabledByProjects(workspaceId, List.copyOf(projectIds), scope.getValue()))
+                .stream()
+                .map(model -> new QueueAutomation(
+                        model.queueId(),
+                        model.projectId(),
+                        JsonUtils.readValue(model.conditions(), AnnotationQueueAutomation.Conditions.class)))
+                .toList();
+    }
+
+    /**
+     * Whether anything could route for this event, as the listener's guard.
+     *
+     * <p>Checks the specific project when the event names one. The batch score path cannot name one — a
+     * batch may span several projects — so there it falls back to the workspace. That fallback is only a
+     * pre-filter against publishing for workspaces with no automation at all; the project scope itself is
+     * enforced by {@link #findEnabledByProjects} once the consumer knows the entities' projects.
+     */
+    public boolean hasEnabledAutomation(@NonNull String workspaceId, UUID projectId,
+            @NonNull AnnotationQueue.AnnotationScope scope) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AnnotationQueueAutomationDAO.class);
+            return projectId != null
+                    ? dao.existsEnabledByProject(workspaceId, projectId, scope.getValue())
+                    : dao.existsEnabledByWorkspace(workspaceId, scope.getValue());
+        });
+    }
+
+    /**
+     * An enabled automation reduced to what routing needs: which queue, which project, and what to match.
+     */
+    public record QueueAutomation(UUID queueId, UUID projectId, AnnotationQueueAutomation.Conditions conditions) {
     }
 
     public void deleteByQueueIds(@NonNull String workspaceId, @NonNull List<UUID> queueIds) {

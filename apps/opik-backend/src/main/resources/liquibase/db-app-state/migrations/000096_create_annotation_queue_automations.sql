@@ -28,7 +28,10 @@ CREATE TABLE IF NOT EXISTS annotation_queue_automations (
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(255) NOT NULL DEFAULT 'admin',
     CONSTRAINT annotation_queue_automations_pk PRIMARY KEY (workspace_id, queue_id),
-    INDEX annotation_queue_automations_enabled_idx (enabled)
+    -- Routing looks automations up by the projects an event touches, which the primary key cannot serve
+    -- because it leads with queue_id after workspace_id. enabled is included so the common
+    -- "enabled automations for these projects" lookup is answered from the index alone.
+    INDEX annotation_queue_automations_project_idx (workspace_id, project_id, enabled)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

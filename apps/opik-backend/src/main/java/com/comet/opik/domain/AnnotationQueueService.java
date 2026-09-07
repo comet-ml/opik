@@ -202,10 +202,42 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
-                .flatMap(queue -> annotationQueueDAO.addItems(queueId, itemIds, queue.projectId(), source))
+                .flatMap(queue -> eligibleItems(queueId, queue.projectId(), itemIds, source)
+                        .flatMap(eligible -> eligible.isEmpty()
+                                ? Mono.just(0L)
+                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source)))
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
                         addedCount, queueId))
                 .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
+    }
+
+    /**
+     * Automation never re-adds an item this queue has held before; a person may.
+     *
+     * <p>The asymmetry is deliberate. A manual re-add is an explicit act by someone who can see the queue,
+     * and it is the escape hatch for recovering an item removed by mistake. Automation re-adding something
+     * a reviewer deliberately removed is the loop the history table exists to prevent, so the check lives
+     * here rather than in the routing listener — no automated caller can forget it.
+     */
+    private Mono<Set<UUID>> eligibleItems(UUID queueId, UUID projectId, Set<UUID> itemIds,
+            AnnotationQueueItemSource source) {
+
+        if (source != AnnotationQueueItemSource.AUTOMATED) {
+            return Mono.just(itemIds);
+        }
+
+        return annotationQueueDAO.findPreviouslyAddedItems(queueId, projectId, itemIds)
+                .map(alreadyAdded -> {
+                    if (alreadyAdded.isEmpty()) {
+                        return itemIds;
+                    }
+                    Set<UUID> eligible = itemIds.stream()
+                            .filter(itemId -> !alreadyAdded.contains(itemId))
+                            .collect(Collectors.toSet());
+                    log.debug("Skipping '{}' items already routed to annotation queue '{}'",
+                            alreadyAdded.size(), queueId);
+                    return eligible;
+                });
     }
 
     @Override

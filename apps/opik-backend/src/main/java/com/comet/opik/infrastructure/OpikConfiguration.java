@@ -92,6 +92,9 @@ public class OpikConfiguration extends JobConfiguration {
     private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
 
     @Valid @NotNull @JsonProperty
+    private AnnotationQueueRoutingConfig annotationQueueRouting = new AnnotationQueueRoutingConfig();
+
+    @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
     @Valid @NotNull @JsonProperty
