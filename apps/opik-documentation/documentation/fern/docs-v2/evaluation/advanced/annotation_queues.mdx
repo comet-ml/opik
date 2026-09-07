@@ -58,6 +58,28 @@ You can add items to your queue in several ways:
   <img src="/img/evaluation/add_to_annotation_queue.png" />
 </Frame>
 
+### Populating a Queue Automatically
+
+A queue can also collect items on its own, so low-quality output reaches reviewers without anyone
+watching the traces list. Turn on **Automation** when creating or editing a queue, then describe what
+is worth reviewing as conditions on feedback scores:
+
+- Conditions inside a group are combined with **AND** — all of them must hold
+- Groups are combined with **OR** — an item matching any group is added
+- An item with no value for a score in the condition never matches it
+
+Conditions are evaluated whenever a score is written, so an item is added as soon as it qualifies —
+whether that is seconds after the trace, when an online evaluation rule scores it, or days later when
+someone scores it by hand. The source of the score does not matter.
+
+<Note>
+  Automation never adds an item a queue has already held. If a reviewer removes an item, a later score
+  will not bring it back — but you can always add it again yourself. Manual additions keep working on
+  an automated queue, and the queue's items table shows how each item arrived under **Source**.
+</Note>
+
+Automation works the same way for thread queues, matching on thread scores instead of trace scores.
+
 ### Sharing with Subject Matter Experts
 
 Once your queue is set up, you can share it with SMEs:
