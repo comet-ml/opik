@@ -92,13 +92,20 @@ test.describe('Dataset item read — version pinning', { tag: ['@area:datasets']
         // Without this the assertions below would hold just as well for a read
         // that had already finished before the write started — which is the
         // scenario every implementation passes.
+        //
+        // What rules that out is the bridge rather than the echo below: it 422s
+        // if the read ran out of chunks before the pause, so a 200 carrying
+        // EXPECTED_CHUNKS chunks means the insert ran with
+        // EXPECTED_CHUNKS - PAUSE_AFTER_CHUNKS pages still unfetched.
         expect(result.inserted, 'the write was issued').toBe(INSERT_SIZE);
-        expect(result.chunks_before_insert).toBe(PAUSE_AFTER_CHUNKS);
         expect(
-          result.chunk_sizes.length,
-          `pages remained to be fetched after chunk ${PAUSE_AFTER_CHUNKS}`,
-        ).toBe(EXPECTED_CHUNKS);
-        expect(result.chunk_sizes.every((size) => size === CHUNK_SIZE)).toBe(true);
+          result.chunks_before_insert,
+          'the bridge paused where it was asked to',
+        ).toBe(PAUSE_AFTER_CHUNKS);
+        expect(
+          result.chunk_sizes,
+          `every page came back full, and pages remained to be fetched after chunk ${PAUSE_AFTER_CHUNKS}`,
+        ).toEqual(new Array(EXPECTED_CHUNKS).fill(CHUNK_SIZE));
       });
 
       await test.step('The read returned exactly the pre-insert dataset, in order', async () => {
