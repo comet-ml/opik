@@ -109,6 +109,19 @@ def my_function(input: str) -> str:
 
 Cada llamada a `my_function` ahora se registra en Opik, incluidas las llamadas anidadas, por lo que esto funciona para trazas completas de agentes y canalizaciones, no solo para llamadas individuales a LLM. Consulta la [guía de inicio rápido](https://www.comet.com/docs/opik/quickstart?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_hero_link&utm_campaign=opik) para el SDK de TypeScript y otras opciones de configuración.
 
+### Conecta tu agente de programación
+
+Permite que Claude Code, Cursor, VS Code Copilot, Codex u opencode lean tus trazas, puntúen las salidas y ejecuten evaluaciones desde el chat. Un solo comando lo configura. Solo necesita [`uv`](https://docs.astral.sh/uv/), sin SDK:
+
+```bash
+uvx opik mcp configure
+```
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D)
+
+Otros clientes MCP: `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`. Detalles, resolución de problemas y preguntas frecuentes en la [guía del servidor MCP](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik).
+
 <br>
 
 <a id="-how-opik-compares"></a>

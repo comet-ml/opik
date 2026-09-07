@@ -110,6 +110,19 @@ def my_function(input: str) -> str:
 
 现在，每次对 `my_function` 的调用都会被记录到 Opik，包括嵌套调用，因此它适用于完整的智能体和流水线追踪，而不仅仅是单次 LLM 调用。有关 TypeScript SDK 和其他设置选项，请参阅[快速开始指南](https://www.comet.com/docs/opik/quickstart?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_hero_link&utm_campaign=opik)。
 
+### 连接你的编码智能体
+
+让 Claude Code、Cursor、VS Code Copilot、Codex 或 opencode 直接在聊天中读取你的追踪、为输出打分并运行评估。一条命令即可完成设置，只需要 [`uv`](https://docs.astral.sh/uv/)，无需安装 SDK：
+
+```bash
+uvx opik mcp configure
+```
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D)
+
+其他 MCP 客户端：`npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`。详细说明、故障排除和常见问题请参阅 [MCP 服务器指南](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik)。
+
 <br>
 
 <a id="-how-opik-compares"></a>

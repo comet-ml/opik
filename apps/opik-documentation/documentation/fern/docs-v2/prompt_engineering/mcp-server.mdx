@@ -72,13 +72,15 @@ own configuration, so it never happens on a run that did not ask for it — but
 naming what you want is asking, and that works without a terminal:
 
 ```bash
-OPIK_API_KEY=<your-key> OPIK_WORKSPACE=<your-workspace> \
-  uvx opik mcp configure --ai-client cursor --skills
+uvx opik mcp configure --ai-client cursor --skills
 ```
 
-`--ai-client` takes `claude-code`, `cursor`, `vscode`, `codex`, `opencode`, or
-`all` for every client detected on the machine; repeat it for several. `--skills`
-installs the skill pack without asking, `--no-skills` skips it.
+Credentials come from `~/.opik.config` (written by an earlier `opik configure`) or
+from `OPIK_API_KEY` and `OPIK_WORKSPACE` already present in the environment, such
+as a CI secret. Do not paste the key into the command line; it ends up in shell
+history. `--ai-client` takes `claude-code`, `cursor`, `vscode`, `codex`,
+`opencode`, or `all` for every client detected on the machine; repeat it for
+several. `--skills` installs the skill pack without asking, `--no-skills` skips it.
 
 A run that names nothing and has no terminal — a CI job, a Docker build — writes
 nothing, which is the behaviour you want there.
@@ -216,6 +218,10 @@ you know what it can reach for:
 | `write` | Log traces and spans, score, comment, save prompt versions, manage test suites and experiments. |
 | `schema` | Look up the exact payload shape for a write, so it constructs valid ones. |
 | `read_skill` | Load one of the Opik skills on demand, when the skill pack is not installed in the client. |
+
+Running an evaluation end to end is the skill pack's job, not a tool's: the
+`opik-evaluate` skill drives the Opik SDK, and the MCP tools record and read the
+results. That is why the command above installs both.
 
 To see a payload shape yourself, ask **"show me the schema for trace.create"** —
 or read the [full list](https://github.com/comet-ml/opik-mcp#tools).
@@ -595,11 +601,12 @@ your client.
   </Accordion>
   <Accordion title='"Opik is not configured yet" or "needs either a terminal or an explicit client"'>
     You ran it from an agent, a script or CI, so there was nothing to ask in.
-    Name the client and pass credentials through the environment:
+    Name the client, and make sure `OPIK_API_KEY` and `OPIK_WORKSPACE` are set in
+    the environment (a CI secret store, or a `~/.opik.config` from an earlier
+    `opik configure`) rather than typed into the command:
 
     ```bash
-    OPIK_API_KEY=<your-key> OPIK_WORKSPACE=<your-workspace> \
-      uvx opik mcp configure --ai-client cursor --skills
+    uvx opik mcp configure --ai-client cursor --skills
     ```
   </Accordion>
   <Accordion title="The agent sees no data, or the wrong data">
