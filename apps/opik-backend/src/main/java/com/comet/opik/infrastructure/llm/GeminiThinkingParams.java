@@ -98,11 +98,8 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
     }
 
     /**
-     * The level to put on the wire, present only when the model accepts one and a level was actually asked for.
-     * <p>
-     * {@code OFF} is never a wire level — there is no such level to send — so it falls through to a budget, where it
-     * lands on 0. An explicit budget also wins: it takes the caller at their word rather than overriding them with a
-     * level.
+     * The level to put on the wire. There is no {@code off} level to send, and an explicit budget takes the caller at
+     * their word, so both fall through to a budget instead.
      */
     public Optional<String> wireLevelFor(String model) {
         if (level == null || level == Level.OFF || budgetTokens != null || !modelAcceptsLevel(model)) {
@@ -112,14 +109,16 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
     }
 
     /**
-     * The budget to put on the wire, for everything {@link #wireLevelFor(String)} does not cover.
+     * The budget to put on the wire, for everything {@link #wireLevelFor(String)} does not cover — empty when a level
+     * is going instead, so a caller reading both cannot set two fields the API rejects together.
      * <p>
-     * Empty for an {@code off} level on a Gemini 3+ model: those models cannot disable thinking, so a zero budget would
-     * claim something the model will not honour — better to send no thinking config at all. The UI never offers
-     * {@code off} there, but the judge path takes {@code custom_parameters} verbatim. An explicit budget is still
-     * honoured; only the unusable level is dropped.
+     * Also empty for an {@code off} level on Gemini 3+: those models cannot disable thinking, so a zero budget would
+     * claim something they will not honour. An explicit budget is still honoured; only the unusable level is dropped.
      */
     public Optional<Integer> wireBudgetFor(String model) {
+        if (wireLevelFor(model).isPresent()) {
+            return Optional.empty();
+        }
         if (level == Level.OFF && budgetTokens == null && modelAcceptsLevel(model)) {
             return Optional.empty();
         }

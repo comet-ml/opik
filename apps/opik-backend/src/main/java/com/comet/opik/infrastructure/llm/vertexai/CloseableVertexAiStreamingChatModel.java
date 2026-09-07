@@ -52,8 +52,7 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
         } catch (Exception e) {
             log.warn("Failed to close Vertex AI streaming client", e);
         }
-        // Symmetry with the non-streaming wrapper: the delegate owns nothing closeable today, but it is the
-        // only thing that could release resources it may own.
+        // A no-op with today's delegate, but only it can release anything it owns.
         try {
             if (delegate instanceof AutoCloseable closeable) {
                 closeable.close();

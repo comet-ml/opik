@@ -73,10 +73,9 @@ class VertexAIClientGeneratorTest {
     private OkHttpClient httpClient;
 
     /**
-     * WireMock serves a self-signed certificate and everything here talks TLS, so its certificate has to be trusted in
-     * two places: the SDK sends the API request through OkHttp, so that needs an OkHttp client built to trust it, while
-     * the OAuth token exchange goes through Google's auth library on {@code HttpsURLConnection}, which only honours the
-     * JVM-wide defaults. Trusting one and not the other fails the request at whichever step was missed.
+     * WireMock's self-signed certificate has to be trusted twice over: the SDK sends the request through OkHttp, while
+     * the OAuth token exchange goes through Google's auth library on {@code HttpsURLConnection}. Trusting only one
+     * fails at whichever step was missed.
      */
     @BeforeAll
     void trustWireMockCertificate() throws Exception {
@@ -162,9 +161,8 @@ class VertexAIClientGeneratorTest {
     }
 
     /**
-     * Starts from the shipped {@code config-test.yml} rather than a hand-built config, so the generator is exercised
-     * against the same block the app boots with. Only the endpoints are overridden: every multi-region location is
-     * remapped onto WireMock, which makes the endpoint the generator resolves observable as the host it actually calls.
+     * Starts from the shipped {@code config-test.yml} so the generator is exercised against the block the app boots
+     * with, with every multi-region location remapped onto WireMock.
      */
     private LlmProviderClientConfig clientConfig() {
         var endpoint = "https://" + wireMockHost() + "/";
@@ -268,15 +266,22 @@ class VertexAIClientGeneratorTest {
     class SdkDerivedEndpoints {
 
         /**
-         * Single-region locations are absent from the endpoint map, so the SDK keeps deriving the endpoint from the
-         * location itself rather than using a configured multi-region one. Asserting on the location the client was
-         * built with keeps this off the network: actually calling one of those endpoints would mean real egress and
-         * multi-second DNS timeouts in CI.
+         * Asserted on the endpoint rather than the location: a configured endpoint wrongly applied to a single-region
+         * location misroutes the request while the location still reads correctly. Read back rather than called, since
+         * calling these hosts would mean real egress and DNS timeouts in CI.
          */
         @ParameterizedTest
         @ValueSource(strings = {"europe-west4", "us-central1", "asia-northeast1"})
         void areNotRedirectedToTheMultiRegionEndpoint(String location) {
-            assertThat(resolvedLocation(location)).isEqualTo(location);
+            assertThat(resolvedEndpoint(location))
+                    .isEqualTo("https://%s-aiplatform.googleapis.com".formatted(location));
+        }
+
+        /** The counterpart to the above, pinning the other side of the lookup. */
+        @Test
+        @DisplayName("a multi-region location takes its configured endpoint")
+        void multiRegionLocationsTakeTheConfiguredEndpoint() {
+            assertThat(resolvedEndpoint("global")).isEqualTo("https://" + wireMockHost() + "/");
         }
 
         /**
@@ -287,14 +292,11 @@ class VertexAIClientGeneratorTest {
         @ParameterizedTest
         @ValueSource(strings = {"", "   "})
         void blankLocationsBehaveLikeAnUnsetOne(String location) {
-            assertThat(resolvedLocation(location)).isEqualTo(resolvedLocation(null));
+            assertThat(resolvedEndpoint(location)).isEqualTo(resolvedEndpoint(null));
         }
 
-        /**
-         * Builds a client without calling it, so the location the SDK settled on can be read back. A blank location
-         * that reached the builder would surface here as an exception instead of a location.
-         */
-        private String resolvedLocation(String location) {
+        /** A blank location that reached the builder would surface here as an exception instead of an endpoint. */
+        private String resolvedEndpoint(String location) {
             var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
@@ -303,7 +305,7 @@ class VertexAIClientGeneratorTest {
                     .build();
 
             try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                return VertexAITestClients.clientOf(client).location();
+                return VertexAITestClients.apiEndpointOf(client);
             }
         }
     }
@@ -313,10 +315,8 @@ class VertexAIClientGeneratorTest {
     class ClientOwnership {
 
         /**
-         * The generated wrapper owns the genai {@link com.google.genai.Client} because the langchain4j model keeps it
-         * private and is not closeable itself: nothing else can release its HTTP dispatcher and connection pool, and a
-         * client is built per request. Closing twice must stay safe, since the streaming path closes on the stream
-         * terminal and callers also close the wrapper.
+         * Closing twice must stay safe: the streaming path closes on the stream terminal and callers close the
+         * wrapper too.
          */
         @Test
         @DisplayName("closing the returned client is idempotent")
@@ -354,10 +354,7 @@ class VertexAIClientGeneratorTest {
             }).doesNotThrowAnyException();
         }
 
-        /**
-         * A client built for a model the generator cannot resolve must not outlive the failure. The model is looked up
-         * before the client is created, so this also pins that ordering.
-         */
+        /** A client built for an unresolvable model must not outlive the failure. */
         @Test
         @DisplayName("an unsupported model fails without leaving a client behind")
         void unsupportedModelFailsWithoutLeavingAClientBehind() {
@@ -446,14 +443,14 @@ class VertexAIClientGeneratorTest {
         }
 
         @ParameterizedTest
-        @CsvSource({"minimal,minimal", "low,low", "medium,medium", "high,high"})
+        @ValueSource(strings = {"minimal", "low", "medium", "high"})
         @DisplayName("Gemini 3 sends the level natively rather than a translated budget")
-        void gemini3SendsLevelNatively(String requested, String expectedLevel) {
-            completeWithCustomParameters(GEMINI_3_MODEL, Map.of("thinking", Map.of("level", requested)));
+        void gemini3SendsLevelNatively(String level) {
+            completeWithCustomParameters(GEMINI_3_MODEL, Map.of("thinking", Map.of("level", level)));
 
             var thinkingConfig = sentGenerationConfig().get("thinkingConfig");
             assertThat(thinkingConfig).isNotNull();
-            assertThat(thinkingConfig.path("thinkingLevel").asText()).isEqualToIgnoringCase(expectedLevel);
+            assertThat(thinkingConfig.path("thinkingLevel").asText()).isEqualToIgnoringCase(level);
             // The two fields are mutually exclusive upstream, so the budget must be absent entirely.
             assertThat(thinkingConfig.has("thinkingBudget")).isFalse();
         }

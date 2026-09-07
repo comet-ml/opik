@@ -10,23 +10,16 @@ import java.util.Map;
 /**
  * Configuration for the Vertex AI client.
  * <p>
- * {@code multiRegionApiEndpoints} maps a multi-region location to the endpoint that serves it. The SDK derives the
- * endpoint from the location as {@code %s-aiplatform.googleapis.com}, which only holds for single-region locations, so
- * multi-region locations have to be listed here or the client targets a name that does not exist (e.g.
- * {@code global-aiplatform.googleapis.com}). Single-region locations are deliberately absent and keep the SDK default.
+ * {@code multiRegionApiEndpoints} pins the endpoint for a multi-region location, overriding what the SDK would resolve
+ * itself. Single-region locations are deliberately absent and keep the SDK-derived endpoint.
  * <p>
- * The map is mandatory and has no counterpart in code: the configuration file is the only place these endpoints are
- * defined, so what an operator reads there is always what the client uses.
+ * Keys must already be in the canonical lower-case form locations are looked up by, so a configured {@code Global:}
+ * is rejected at startup rather than silently never matching.
  * <p>
- * Locations are looked up canonicalised (stripped and lower-cased), hence the pattern on the keys: a configured
- * {@code Global:} would never be matched and would silently fall back to the derived endpoint, so it is rejected at
- * startup instead.
- * <p>
- * The values must be absolute {@code http(s)} URLs, scheme included. The SDK concatenates this value with the API
- * version and path and re-parses the result, so a bare host lands in the path component instead of the authority and
- * the request is silently sent somewhere else entirely; {@code localhost:8443} is worse still, parsing {@code localhost}
- * as the scheme. Requiring the scheme turns both into a startup failure. A port and a trailing slash are accepted,
- * which is what lets the tests point every location at a local stub.
+ * Values must be absolute URLs, scheme included: the SDK concatenates the value into a URL and re-parses it, so a bare
+ * host lands in the path and the request goes somewhere else entirely, while {@code localhost:8443} parses
+ * {@code localhost} as the scheme. Requiring the scheme turns both into a startup failure. A port and trailing slash
+ * are accepted, which is what lets the tests point a location at a local stub.
  */
 @Builder(toBuilder = true)
 public record VertexAIClientConfig(

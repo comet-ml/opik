@@ -37,10 +37,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     private final @NonNull LlmProviderClientConfig clientConfig;
 
-    /**
-     * Only set by the tests, which need a client trusting the local stub's self-signed certificate: the SDK talks
-     * through OkHttp, so the JVM-wide {@code HttpsURLConnection} defaults a test sets never reach it.
-     */
+    // Only set by the tests, to trust the local stub's certificate: the SDK sends requests through OkHttp,
+    // which ignores the JVM-wide HttpsURLConnection defaults.
     private final OkHttpClient httpClient;
 
     public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig) {
@@ -94,31 +92,22 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     /**
-     * Gemini 3 and later take {@code thinking_level}; earlier models take the budget it translates to, and reject a
-     * level outright. The two are mutually exclusive — the SDK throws if both are set — so exactly one is applied.
-     * <p>
      * Takes the setters rather than a builder because the chat and streaming builders share these methods but no
-     * supertype.
+     * supertype. At most one of level and budget is ever present — the SDK throws if both are set.
      * <p>
-     * {@code include_thoughts} is deliberately not forwarded. The module keeps thought parts out of the answer text
-     * unless {@code returnThinking} is set, so asking for them would bill thinking tokens and surface nothing. Wire it
-     * up only alongside a way to display them.
+     * {@code include_thoughts} is deliberately not forwarded: the module drops thought parts unless
+     * {@code returnThinking} is set, so asking for them would bill thinking tokens and surface nothing.
      */
     private static void applyThinking(Consumer<String> level, Consumer<Integer> budget, String model,
             Map<String, Object> customParameters) {
         var params = GeminiThinkingParams.from(customParameters);
-        if (params.isAbsent()) {
-            return;
-        }
 
-        params.wireLevelFor(model).ifPresentOrElse(
-                level,
-                () -> params.wireBudgetFor(model).ifPresent(budget));
+        params.wireLevelFor(model).ifPresent(level);
+        params.wireBudgetFor(model).ifPresent(budget);
     }
 
     // Fresh Client per call, handed to the wrapper that owns and closes it; closed here if setup fails first.
-    // The model builder keeps its client private with no accessor, so ownership is only possible by building
-    // the Client here and passing it in.
+    // Built here rather than by the model builder, which keeps its client private and is not closeable.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
         var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
@@ -152,9 +141,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     /**
-     * The location is free-text in the provider configuration but ends up in the {@code locations/%s} resource path as
-     * well as driving the endpoint lookup, so it has to be canonicalised before either is derived from it. The
-     * configured endpoint keys are constrained to the same lower-case form, so both sides of the lookup agree.
+     * The location is free-text in the configuration but reaches both the {@code locations/%s} resource path and the
+     * endpoint lookup, whose keys are constrained to this same lower-case form.
      */
     private static String canonicalLocation(String location) {
         return location.strip().toLowerCase(Locale.ROOT);
@@ -180,14 +168,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             location.ifPresent(builder::location);
 
-            // Only multi-region locations are remapped; single-region ones keep the endpoint the SDK derives
-            // from the location itself. Note this goes through httpOptions rather than Client.Builder#baseUrl:
-            // the latter is only honoured when no project/location is set, which Vertex always has.
+            // Only multi-region locations are remapped; single-region ones keep the SDK-derived endpoint.
+            // Must go through httpOptions: Client.Builder#baseUrl is ignored once project/location is set.
             var httpOptions = HttpOptions.builder();
             location.flatMap(this::apiEndpointFor).ifPresent(httpOptions::baseUrl);
 
-            // The SDK disables the HTTP client's own timeouts and applies one only if asked, so an unset
-            // timeout means a request can hang indefinitely.
+            // The SDK disables its HTTP client's timeouts, so without this a request can hang indefinitely.
             Optional.ofNullable(clientConfig.getCallTimeout())
                     .ifPresent(timeout -> httpOptions.timeout((int) timeout.toMilliseconds()));
 
