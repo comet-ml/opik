@@ -6,6 +6,7 @@ import io.r2dbc.spi.Wrapped;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.reactivestreams.Publisher;
@@ -242,6 +243,46 @@ class FastBindStatementTest {
         var original = statement.get();
 
         assertThat(FastBindStatement.wrap(original)).isSameAs(original);
+    }
+
+    /** A second driver class, so the field cache has to switch owners rather than reuse one entry. */
+    static class OtherFakeStatement extends FakeClickHouseStatement {
+        OtherFakeStatement(List<String> rendered) {
+            super(rendered);
+        }
+    }
+
+    /**
+     * The cache holds one owner/field pair. Published as two separate writes it could be read as a
+     * mismatched pair, and the bad {@code Field.get} would drop that class onto named binding for
+     * the rest of the run. Alternating owners is the observable form of that.
+     */
+    @Test
+    void alternatingOwnerClasses_keepBindingByIndex() {
+        for (int round = 0; round < 4; round++) {
+            var first = new FakeClickHouseStatement(bulkParameters(100));
+            FastBindStatement.wrap(first).bind("id7", "v");
+            assertThat(first.boundByIndex).containsExactly(first.parameters().indexOf("id7"));
+            assertThat(first.boundByName).isEmpty();
+
+            var second = new OtherFakeStatement(bulkParameters(100));
+            FastBindStatement.wrap(second).bind("id7", "v");
+            assertThat(second.boundByIndex).containsExactly(second.parameters().indexOf("id7"));
+            assertThat(second.boundByName).isEmpty();
+        }
+    }
+
+    private static List<String> distinctParameters(int count) {
+        return IntStream.range(0, count).mapToObj(i -> "p" + i).toList();
+    }
+
+    /** Pins MIN_PARAMETERS, which is otherwise only exercised well below the boundary. */
+    @ParameterizedTest(name = "{0} parameters -> wrapped={1}")
+    @CsvSource({"63, false", "64, true"})
+    void wrapsOnlyAtOrAboveTheThreshold(int parameters, boolean wrapped) {
+        var fake = new FakeClickHouseStatement(distinctParameters(parameters));
+
+        assertThat(FastBindStatement.wrap(fake) != fake).isEqualTo(wrapped);
     }
 
     private static Statement foreignStatement() {
