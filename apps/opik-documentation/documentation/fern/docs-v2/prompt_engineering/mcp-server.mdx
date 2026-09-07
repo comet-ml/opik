@@ -14,41 +14,6 @@ Opik SDK:
 uvx opik mcp configure
 ```
 
-Or let your coding agent do it. On Opik Cloud this needs no API key and no
-terminal: paste this into the agent you use. It finds the coding agents on your
-machine, asks which ones to set up, installs the server and the skills, and
-verifies with a real call.
-
-```text title="Installer prompt for your coding agent"
-Connect my coding agents to Opik so they can read my traces and experiments and
-fix code from them. Reference: https://www.comet.com/docs/opik/mcp-server
-
-1. Detect which coding agents are installed on this machine (check for their
-   binaries and config directories), and which one you are running in.
-2. Ask me one question, then wait: set up only you, or every agent you found?
-3. Register the Opik MCP server for the chosen agents. Name `opik-mcp`, transport
-   Streamable HTTP, URL https://www.comet.com/opik/api/v1/mcp, no headers, no
-   credentials; sign-in happens in my browser on first connect. Prefer each
-   client's own add command (for example `claude mcp add --transport http opik-mcp <url>`
-   or `codex mcp add opik-mcp --url <url>`); otherwise
-   `npx add-mcp <url> --name opik-mcp -g -a <agent>` (or `--all`). User-level
-   config, never this repo.
-4. Install the Opik skills for the same agents:
-   `npx skills add comet-ml/opik-skills -g -y -a <agent>` (or `-a '*'`).
-5. Verify with a real call, not by reading config. Reload your MCP servers if
-   your client can, then call the Opik `list` tool for projects and show me the
-   result. If you cannot reach the new server in this session, confirm the
-   endpoint answers (`curl -s -o /dev/null -w '%{http_code}' <url>` returns 401),
-   then tell me to start a new session and ask you to "list my Opik projects".
-6. Report: which agents you configured and where each config lives, the skills
-   installed, and the verification result. Say plainly whether it is verified or
-   still waiting for a restart and the browser sign-in.
-
-Do not change anything else on my machine or in this repo. If I use a self-hosted
-Opik, use my deployment's API base plus /v1/mcp; if it returns 404, fall back to
-`uvx opik mcp configure`.
-```
-
 One-click for Cursor and VS Code, hosted server only, sign-in in the browser:
 
 <div className="mcp-clients no-external-icon">
@@ -133,6 +98,28 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
     </Note>
   </Step>
 </Steps>
+
+### Or let your coding agent do it
+
+On Opik Cloud this needs no API key and no terminal. Paste this into the agent
+you use:
+
+```text title="Installer prompt"
+Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server) so
+they can read my traces and experiments and fix code from them. Detect which
+coding agents are installed here and which one you are; ask me whether to set up
+only you or all of them, then wait. Register the Opik MCP server for the chosen
+agents in their user-level config: name `opik-mcp`, Streamable HTTP, URL
+https://www.comet.com/opik/api/v1/mcp, no credentials (sign-in happens in my
+browser), using each client's own add command or `npx add-mcp <url> --name opik-mcp`.
+Install the Opik skills for the same agents with `npx skills add comet-ml/opik-skills -g -y`.
+Verify with a real call: reload your MCP servers if you can and call the Opik
+`list` tool for projects; if the server is not reachable until a restart, confirm
+`curl -s -o /dev/null -w '%{http_code}' <url>` returns 401 and tell me what to run
+after restarting. Report what you configured, where, and whether it is verified.
+Change nothing else. For self-hosted Opik use my API base plus /v1/mcp, and fall
+back to `uvx opik mcp configure` if it returns 404.
+```
 
 ## Check your setup
 
