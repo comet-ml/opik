@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
+import { Eye, MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,11 +15,13 @@ import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
 import { useHasDraft, useClearDraft } from "@/store/TestSuiteDraftStore";
 import EditVersionDialog from "./EditVersionDialog";
+import ViewVersionDataDialog from "./ViewVersionDataDialog";
 
 type CustomMeta = {
   datasetId: string;
 };
 
+const VIEW_KEY = 0;
 const EDIT_KEY = 1;
 const RESTORE_KEY = 2;
 
@@ -54,6 +56,13 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
       className="justify-end p-0"
       stopClickPropagation
     >
+      <ViewVersionDataDialog
+        open={open === VIEW_KEY}
+        setOpen={setOpen}
+        version={version}
+        datasetId={datasetId}
+      />
+
       <EditVersionDialog
         key={`edit-${resetKeyRef.current}`}
         open={open === EDIT_KEY}
@@ -85,6 +94,14 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(VIEW_KEY);
+            }}
+          >
+            <Eye className="mr-2 size-4" />
+            View data
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
               setOpen(EDIT_KEY);
