@@ -6,6 +6,7 @@ export {
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
+  type DatasetSummaryRef,
   type DatasetVersionRef,
   type RawApiResult,
   type BackendSort,
