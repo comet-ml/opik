@@ -652,17 +652,19 @@ class CostServiceTest {
     }
 
     /**
-     * Covers both branches of registering {@code xai} as a canonical provider so that the 40
-     * xai-tagged entries in {@code model_prices_and_context_window.json} (the full grok-2, grok-3,
-     * grok-4 and grok-code families) are no longer silently dropped at load time:
-     * <ul>
-     *   <li>xai model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
-     *   <li>xai model with cache rates routes through
-     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
-     *       LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
-     *       {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic
-     *       used for OpenAI/Azure applies unchanged here.</li>
-     * </ul>
+     * Covers registering {@code xai} as a canonical provider so that the xai-tagged entries in
+     * {@code model_prices_and_context_window.json} (the grok-3, grok-4 and grok-code families) are
+     * no longer silently dropped at load time, and that they route through
+     * {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     * LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     * {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic used for
+     * OpenAI/Azure applies unchanged here.
+     * <p>
+     * Both cases take that calculator, because every xai row carrying token rates also publishes
+     * {@code cache_read_input_token_cost}. They differ only in whether the usage payload reports
+     * cached tokens, which pins down that the subtraction leaves an uncached prompt billed in full.
+     * The cache-free {@link SpanCostCalculator#textGenerationCost} route is covered for this same
+     * usage shape by the {@code deepinfra} and {@code snowflake} cases.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("provideXaiProviderCases")
@@ -674,19 +676,22 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideXaiProviderCases() {
-        // xai/grok-2: input 2e-6, output 1e-5 (no cache rates) -> textGenerationCost
-        // 1000 * 2e-6 + 200 * 1e-5 = 0.002 + 0.002 = 0.004
-        // xai/grok-3: input 3e-6, output 1.5e-5, cache_read 7.5e-7 -> textGenerationWithCacheCostOpenAI
-        // non-cached input = 1000 - 300 = 700
-        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 7.5e-7 = 0.0021 + 0.003 + 0.000225 = 0.005325
+        // xai/grok-4.3: input 1.25e-6, output 2.5e-6, cache_read 2e-7. Pinned to this row because its
+        // rates have held while the grok-2 generation was retired upstream and grok-3 / grok-4 were
+        // re-priced; the above_200k tier rates it also publishes stay inactive at a 1000-token prompt.
+        // No cached tokens in usage -> the whole prompt bills at the input rate
+        // 1000 * 1.25e-6 + 200 * 2.5e-6 = 0.00125 + 0.0005 = 0.00175
+        // With cached tokens -> non-cached input = 1000 - 300 = 700
+        // 700 * 1.25e-6 + 200 * 2.5e-6 + 300 * 2e-7 = 0.000875 + 0.0005 + 0.00006 = 0.001435
         return Stream.of(
-                Arguments.of("plain text-generation route", "xai/grok-2",
-                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.004"),
-                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-3",
+                // Bare usage keys, as logged by SDKs below 1.6.0.
+                Arguments.of("cache-aware route, no cached tokens in usage", "xai/grok-4.3",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00175"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-4.3",
                         Map.of("original_usage.prompt_tokens", 1000,
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
-                        "0.005325"));
+                        "0.001435"));
     }
 
     /**
@@ -1127,16 +1132,18 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideDeepinfraProviderCases() {
-        // deepinfra/Gryphe/MythoMax-L2-13b: input 8e-8, output 9e-8 (no cache) -> textGenerationCost
-        // 1000 * 8e-8 + 200 * 9e-8 = 0.00008 + 0.000018 = 0.000098
+        // deepinfra/anthropic/claude-4-sonnet: input 3.3e-6, output 1.65e-5 (no cache) -> textGenerationCost
+        // 1000 * 3.3e-6 + 200 * 1.65e-5 = 0.0033 + 0.0033 = 0.0066
+        // Pinned to one of DeepInfra's Anthropic-hosted rows: it re-prices its open-weights catalog
+        // in bulk, while none of the anthropic-hosted rows has been re-priced.
         // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7
         // -> textGenerationWithCacheCostOpenAI
         // non-cached input = 1000 - 300 = 700
         // 700 * 3.3e-6 + 200 * 1.65e-5 + 300 * 3.3e-7 = 0.00231 + 0.0033 + 0.000099 = 0.005709
         return Stream.of(
                 Arguments.of("plain text-generation route",
-                        "deepinfra/Gryphe/MythoMax-L2-13b",
-                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.000098"),
+                        "deepinfra/anthropic/claude-4-sonnet",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0066"),
                 Arguments.of("cache-aware route via OpenAI calc",
                         "deepinfra/anthropic/claude-3-7-sonnet-latest",
                         Map.of("original_usage.prompt_tokens", 1000,
