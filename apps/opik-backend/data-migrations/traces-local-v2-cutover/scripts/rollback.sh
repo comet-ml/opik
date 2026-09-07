@@ -581,7 +581,10 @@ run_file() {
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
     sql="${sql//'${SENTINEL_WINDOW_FROM}'/$SENTINEL_WINDOW_FROM}"
     sql="${sql//'${SENTINEL_WINDOW_TO}'/$SENTINEL_WINDOW_TO}"
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
+    # --time prints each statement's elapsed seconds to stderr. Every mutating rollback statement runs through here,
+    # and the reverse replay's duration is the one that scales with the bridge window -- the figure to record against
+    # the parked-table window, as delta_replay.sh already prints for the forward replay.
+    clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 }
 
 # Un-wrap mode: reverse the Distributed wrap and stop, leaving the partitioned successor live (see
