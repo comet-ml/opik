@@ -348,8 +348,8 @@ class BulkInsertV2ClientIntegrationTest {
     }
 
     @Test
-    @DisplayName("a dataset item batch writes each row exactly once and server-stamps created_at")
-    void datasetItemBatchWritesEachRowOnceAndStampsCreatedAt() {
+    @DisplayName("a dataset item batch writes each row exactly once and server-stamps created_at and last_updated_at")
+    void datasetItemBatchWritesEachRowOnceAndServerStampsCreatedAndLastUpdatedAt() {
         var datasetId = newDataset();
         var items = List.of(
                 newDatasetItem(Map.of("input", JsonUtils.getJsonNodeFromString("\"one\""))),

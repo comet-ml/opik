@@ -1078,11 +1078,16 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      * client-supplied one would change which duplicate wins.
      */
     private Mono<Long> insertJsonEachRow(UUID datasetId, List<DatasetItem> items) {
+        // mapAndInsert opens and closes this segment, so without it a v2 save disappears from the
+        // dataset-item instrumentation stream instead of showing up as a fast insert.
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
+
         return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
                 "dataset_items",
                 getLogComment("save_dataset_items", workspaceId, userName, items.size()),
                 items,
-                item -> toJsonRow(item, datasetId, userName, workspaceId)));
+                item -> toJsonRow(item, datasetId, userName, workspaceId)))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private ObjectNode toJsonRow(DatasetItem item, UUID datasetId, String userName, String workspaceId) {

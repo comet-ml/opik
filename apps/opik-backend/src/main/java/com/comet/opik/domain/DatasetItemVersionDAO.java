@@ -3974,6 +3974,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
      * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
      */
+    private static String formatTimestamp(Instant timestamp) {
+        if (timestamp == null) {
+            return Instant.now().toString().replace("Z", "");
+        }
+        return timestamp.toString().replace("Z", "");
+    }
+
     /**
      * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 15 named
      * parameters per row plus 5 shared ones. This is the widest bulk write in the codebase — 23
@@ -4000,15 +4007,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      */
     private Mono<Long> insertItemsJsonEachRow(UUID datasetId, UUID newVersionId, List<DatasetItem> items,
             String workspaceId, String userName) {
+        // One fallback instant for the whole batch, resolved BEFORE serialization. The helper
+        // re-serializes from `items` on every invocation so the client's onRetry replays an identical
+        // body; calling formatTimestamp(null) inside the mapper would instead mint a fresh
+        // Instant.now() per attempt, so a retried row would carry different timestamp bytes under the
+        // same id. TraceDAO's v2 path takes a nowForBatch for the same reason.
+        Instant nowForBatch = Instant.now();
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
+
         return jsonBulkInsert.insert(
                 DATASET_ITEM_VERSIONS,
                 getLogComment("insert_delta_items", workspaceId, userName, items.size()),
                 items,
-                item -> toJsonRow(item, datasetId, newVersionId, workspaceId, userName));
+                item -> toJsonRow(item, datasetId, newVersionId, workspaceId, userName, nowForBatch))
+                // The R2DBC path opens and closes this segment, so without it a v2 insert vanishes
+                // from the dataset-item instrumentation stream rather than showing as fast.
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private ObjectNode toJsonRow(DatasetItem item, UUID datasetId, UUID newVersionId, String workspaceId,
-            String userName) {
+            String userName, Instant nowForBatch) {
         var node = JsonUtils.createObjectNode();
 
         node.put("id", item.id().toString());
@@ -4032,8 +4050,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         node.put("evaluators", serializeEvaluators(item.evaluators()));
         node.put("execution_policy", serializeExecutionPolicy(item.executionPolicy()));
-        node.put("item_created_at", formatTimestamp(item.createdAt()));
-        node.put("item_last_updated_at", formatTimestamp(item.lastUpdatedAt()));
+        node.put("item_created_at", formatTimestamp(
+                item.createdAt() != null ? item.createdAt() : nowForBatch));
+        node.put("item_last_updated_at", formatTimestamp(
+                item.lastUpdatedAt() != null ? item.lastUpdatedAt() : nowForBatch));
         node.put("item_created_by", item.createdBy() != null ? item.createdBy() : userName);
         node.put("item_last_updated_by", item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName);
 
@@ -4042,13 +4062,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         node.put("workspace_id", workspaceId);
 
         return node;
-    }
-
-    private static String formatTimestamp(Instant timestamp) {
-        if (timestamp == null) {
-            return Instant.now().toString().replace("Z", "");
-        }
-        return timestamp.toString().replace("Z", "");
     }
 
     private static String base64Encode(String value) {
