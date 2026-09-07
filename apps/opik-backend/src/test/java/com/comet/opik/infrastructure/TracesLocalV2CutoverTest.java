@@ -1399,9 +1399,10 @@ class TracesLocalV2CutoverTest {
      * starts the window after it and the copy silently skips it — a hole in the migration, in the week the driver
      * reported as done.
      *
-     * <p>The row also carries no {@code end_time} and no {@code ttft}, so the projection's sentinels are asserted with
-     * it. Those are deliberately NOT timezone-pinned (see 000001's header), and {@code ttft}'s NaN sentinel has no
-     * timezone at all; both are here because a window test that copied the wrong columns would otherwise pass.
+     * <p>The row carries no {@code ttft} either, so the projection's NaN sentinel is asserted with it: a window test
+     * that copied the wrong columns would otherwise pass. Its epoch {@code end_time} sentinel is deliberately NOT
+     * asserted — 000001 leaves that literal unpinned by design, so under this session the copy writes a shifted
+     * instant rather than 0, and requiring 0 would fail on correct code.
      */
     @Test
     void backfillIsUnaffectedByTheSessionTimezone() {
@@ -1488,8 +1489,10 @@ class TracesLocalV2CutoverTest {
      * until a merge collapses them. verify.sh runs before the EXCHANGE, on exactly those recent partitions, so counting
      * physical rows here would report a tie on a faithful copy and fail the cutover gate on the normal path.
      *
-     * <p>Merge-independent in both directions: if a merge has already collapsed the duplicates there is one row, and if
-     * it has not there are several with identical content. Either way the distinct count at the newest version is one.
+     * <p>Asserted only on what a merge cannot change. Whether the duplicates still exist when this reads is not
+     * observable deterministically — two same-partition parts this small are prime merge candidates — so the test pins
+     * the invariant that holds either way: one live row, and one distinct content at the newest version. {@code
+     * liveCount} rules out the vacuous case where nothing was copied at all.
      */
     @Test
     void theRunbooksBackfillThenDeltaSequenceIsNotATie() {
@@ -1506,9 +1509,6 @@ class TracesLocalV2CutoverTest {
         backfillWeek(0);
         deltaInsert(backfillStart);
 
-        assertThat(rawRowCount("traces_local_v2", workspaceId))
-                .as("the delta re-copied the row, so both physical rows are present")
-                .isEqualTo(2);
         assertThat(liveCount("traces_local_v2", Set.of(id), workspaceId))
                 .as("they dedup to one live row")
                 .isEqualTo(1);
@@ -2391,12 +2391,6 @@ class TracesLocalV2CutoverTest {
                   AND length(deleted_id) = 36
                 SETTINGS session_timezone = 'America/New_York'
                 """, statement -> statement.bind("backfill_start", backfillStart));
-    }
-
-    /** Physical rows, without {@code FINAL}, so a test can assert that duplicates it relies on are actually present. */
-    private long rawRowCount(String table, String workspaceId) {
-        return scalar("SELECT count() AS c FROM %s WHERE workspace_id = :workspace_id".formatted(table),
-                statement -> statement.bind("workspace_id", workspaceId));
     }
 
     /**

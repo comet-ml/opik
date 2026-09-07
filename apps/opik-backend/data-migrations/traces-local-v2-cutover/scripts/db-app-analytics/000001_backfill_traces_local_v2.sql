@@ -23,10 +23,14 @@
 -- ${BACKFILL_START} in 000002.
 --
 -- The epoch sentinel below is the deliberate exception: it stays unpinned, matching the destination table's own
--- DEFAULT and duration expression and every end_time comparison in the application. Those are what read the value
--- back, so the sentinel is only correct while it agrees with them; pinning it here alone would give migrated rows a
--- sentinel no other reader matches. On a non-UTC server the whole set is wrong together, which is a real latent
--- defect but not one a single statement can fix -- it has to move as one change across the schema and the app.
+-- DEFAULT and duration expression and the application's embedded SQL comparisons. Pinning it here alone would give
+-- migrated rows a sentinel none of those match -- duration would read a large number instead of NaN.
+--
+-- What remains is asymmetric. Those readers all shift with the server; the Java one does not, comparing against an
+-- absolute Instant.EPOCH. So on a non-UTC server the API stops recognising the value this writes and returns an
+-- instant for a trace that never ended, while rows the app inserts later carry absolute 0 -- two encodings of
+-- "absent", each matched by only some readers. The design assumes a UTC server, and removing that assumption means
+-- pinning the schema and the embedded SQL together.
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:

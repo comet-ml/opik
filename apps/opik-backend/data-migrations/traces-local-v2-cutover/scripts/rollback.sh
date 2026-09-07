@@ -414,10 +414,11 @@ assert_single_shard() {
     shards="$(ch "SELECT uniqExact(shard_num) FROM system.clusters
                   WHERE cluster = (SELECT substitution FROM system.macros WHERE macro = 'cluster')" 2>/dev/null || true)"
     if [[ "$shards" =~ ^[0-9]+$ ]] && (( shards > 1 )); then
-        echo "ERROR: this cluster reports $shards shards. The repair reaches only the shard you are connected to, while" >&2
-        echo "       its postcondition reads every shard, so it would rewrite one shard and then report failure." >&2
-        echo "       Run it once per shard, connecting to a replica of each with --host, and treat the postcondition as" >&2
-        echo "       satisfied only after the last one clears." >&2
+        echo "ERROR: this cluster reports $shards shards. These modes mutate only the shard you are connected to while" >&2
+        echo "       their postcondition reads every shard, so no single run can satisfy it -- and this guard refuses a" >&2
+        echo "       per-shard run too, since the count is still above 1. There is no driver path here: apply the" >&2
+        echo "       statements from $SQL_DIR by hand, one shard at a time, then check the postcondition once." >&2
+        echo "       Stages B and C promote with a single ON CLUSTER RENAME, so only the replay after it is per-shard." >&2
         exit 1
     fi
     # Unreadable is fatal unless the operator asserts the topology. Assuming the safe case defeats the point of the

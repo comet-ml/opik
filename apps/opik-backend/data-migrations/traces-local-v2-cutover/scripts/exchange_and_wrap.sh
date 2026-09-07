@@ -38,11 +38,10 @@
 #                             healthy. In this driver it also sets distributed_ddl_task_timeout, which is the binding
 #                             limit here — see the CH_ARGS comment below, and ../README.md for the trade-off.
 #   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
-#                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
-#                             UTC, so without it the zone it was captured in is unknown.
 #                     before the swap this runs a final deletion replay from that anchor, so deletes bridged since the
 #                     last delta_replay.sh don't leak live across the EXCHANGE (they'd be covered by neither the forward
-#                     replay nor the rollback reverse-replay otherwise).
+#                     replay nor the rollback reverse-replay otherwise). Must carry an explicit ' UTC' marker, as the
+#                     drivers print it; the value is parsed as UTC, so without it its zone is unknown.
 #   (default)         run ONLY the EXCHANGE (the data cutover), then stop — leaves `traces` a MergeTree where deletes
 #                     still work. The Distributed wrap is deferred (see above).
 #   --with-wrap       also apply the Distributed wrap in the same run (EXCHANGE + wrap). Use only once

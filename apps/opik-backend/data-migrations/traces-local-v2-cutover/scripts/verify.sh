@@ -157,9 +157,11 @@ compare_window() {
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
+# Returns rather than exits on a render failure: the call site treats a failed drill-down as non-fatal, and an exit
+# here would abort a run whose verdicts were already decided.
 drill_down_window() {
     local sql
-    sql="$(render_block drill-down "$1" "$2")" || exit 2
+    sql="$(render_block drill-down "$1" "$2")" || return 1
     clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
@@ -168,7 +170,9 @@ drill_down_window() {
 # only). 0 means the window's difference is a superseded-version artifact, not a data difference — provided no
 # key's newest version is tied, which version_ties_window answers next.
 confirm_keys_window() {
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block confirm-keys "$1" "$2")"
+    local sql
+    sql="$(render_block confirm-keys "$1" "$2")" || exit 2
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Per side, how many keys in one window carry MORE THAN ONE DISTINCT ROW at their newest last_updated_at — i.e. where
@@ -257,7 +261,10 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
         if [[ "$unresolved" == "0" ]]; then
             # The artifact reading holds only where FINAL had a forced winner for every key. Ask now, where it decides
             # the verdict, rather than on every differing window.
-            ties_out="$(version_ties_window "$LO" "$HI")"
+            # Read failure feeds the UNCERTIFIABLE branch below rather than aborting: that verdict exists for exactly
+            # this case, and a mid-loop abort would lose the remaining windows and the summary. Unlike confirm-keys
+            # above, where an infra blip is meant to stop the run before any verdict is drawn.
+            ties_out="$(version_ties_window "$LO" "$HI")" || ties_out=""
             read -r src_ties dst_ties <<< "$ties_out"
             # Output that is not two counts cannot certify the window, but it is not a tie either: encoding it as one
             # would print a tie diagnosis, and a triage procedure, for what is a client or infrastructure failure.
