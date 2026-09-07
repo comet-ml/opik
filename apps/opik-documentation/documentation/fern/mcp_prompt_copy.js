@@ -1,16 +1,15 @@
 // MCP server page: the "Install prompt" chip copies the installer prompt.
+// Feedback is icon-only: the copy icon turns into a check for a moment.
 (function () {
   var timers = new WeakMap();
 
-  function flash(chip, text) {
-    var label = chip.querySelector("span");
-    if (!label) return;
-    if (!chip.dataset.opikLabel) chip.dataset.opikLabel = label.textContent;
-    label.textContent = text;
+  function mark(chip, state) {
+    chip.classList.remove("is-copied", "is-failed");
+    chip.classList.add(state);
     clearTimeout(timers.get(chip));
     timers.set(chip, setTimeout(function () {
-      label.textContent = chip.dataset.opikLabel;
-    }, 2500));
+      chip.classList.remove("is-copied", "is-failed");
+    }, 2000));
   }
 
   // When the clipboard is unavailable or refused, show the prompt as selectable
@@ -32,11 +31,8 @@
     if (!chip) return;
     event.preventDefault();
     var text = chip.getAttribute("data-opik-copy");
-    var done = function () { flash(chip, "Copied. Paste it into your agent"); };
-    var fail = function () {
-      flash(chip, "Copy blocked. The prompt is shown below");
-      showFallback(chip, text);
-    };
+    var done = function () { mark(chip, "is-copied"); };
+    var fail = function () { mark(chip, "is-failed"); showFallback(chip, text); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fail);
     } else {

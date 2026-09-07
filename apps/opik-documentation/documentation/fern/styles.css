@@ -71,3 +71,17 @@
   border-radius: 8px;
   margin: 8px 0 0;
 }
+
+/* Copy chip feedback: swap the icon, never the label */
+.mcp-clients a.mcp-client svg[icon="check"],
+.mcp-clients a.mcp-client svg[icon="xmark"] {
+  display: none;
+}
+.mcp-clients a.mcp-client.is-copied svg[icon="copy"],
+.mcp-clients a.mcp-client.is-failed svg[icon="copy"] {
+  display: none;
+}
+.mcp-clients a.mcp-client.is-copied svg[icon="check"],
+.mcp-clients a.mcp-client.is-failed svg[icon="xmark"] {
+  display: inline-block;
+}
