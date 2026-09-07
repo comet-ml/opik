@@ -3,6 +3,7 @@
 Install: uv pip install --require-hashes --only-binary :all: -r tests/unit/requirements-workflow.txt
 Run: python tests/unit/test_e2e_allure_workflow.py
 Requires Bash on PATH (as on the workflow's Ubuntu runner).
+These are regression checks, not a trust boundary against changes to the tests themselves.
 """
 
 import os
@@ -16,6 +17,11 @@ import yaml
 
 
 class AllureWorkflowTest(unittest.TestCase):
+    def unique_step(self, steps, name):
+        matches = [step for step in steps if step.get("name") == name]
+        self.assertEqual(len(matches), 1, f"Expected exactly one {name!r} step")
+        return matches[0]
+
     def test_validator_has_no_application_credentials(self):
         root = Path(__file__).resolve().parents[2]
         workflow = yaml.safe_load(
@@ -24,7 +30,7 @@ class AllureWorkflowTest(unittest.TestCase):
         self.assertNotIn("secrets.", yaml.dump(workflow.get("env", {})))
         validator = workflow["jobs"]["validate_workflow"]
         self.assertNotIn("secrets.", yaml.dump(validator))
-        checkout = next(s for s in validator["steps"] if s.get("name") == "Checkout repo")
+        checkout = self.unique_step(validator["steps"], "Checkout repo")
         self.assertIs(checkout["with"]["persist-credentials"], False)
         suite = workflow["jobs"]["run_suite"]
         self.assertEqual(suite["needs"], "validate_workflow")
@@ -37,9 +43,9 @@ class AllureWorkflowTest(unittest.TestCase):
             (root / ".github/workflows/end2end_suites_v2.yml").read_text()
         )
         steps = workflow["jobs"]["run_suite"]["steps"]
-        install = next(s for s in steps if s.get("name") == "Install allurectl")
+        install = self.unique_step(steps, "Install allurectl")
         self.assertEqual(install["if"], "${{ env.ALLURE_TOKEN != '' }}")
-        runner = next(s for s in steps if s.get("name") == "Run v2 E2E suite")
+        runner = self.unique_step(steps, "Run v2 E2E suite")
         self.assertLess(steps.index(install), steps.index(runner))
         # Substitute only the runner-provided workspace expression. Everything
         # else is the actual checked-in shell block, not a copy of its logic.
