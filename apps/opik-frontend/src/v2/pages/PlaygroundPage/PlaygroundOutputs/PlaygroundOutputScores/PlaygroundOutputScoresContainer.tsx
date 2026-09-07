@@ -110,6 +110,9 @@ const PlaygroundOutputScoresContainer: React.FC<
   const awaitedScoreNamesRef = useRef(awaitedScoreNames);
   awaitedScoreNamesRef.current = awaitedScoreNames;
 
+  const rulesTruncatedRef = useRef(rulesTruncated);
+  rulesTruncatedRef.current = rulesTruncated;
+
   const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
@@ -122,7 +125,9 @@ const PlaygroundOutputScoresContainer: React.FC<
         const receivedScores = query.state.data?.feedback_scores ?? [];
         const awaitedNames = awaitedScoreNamesRef.current;
 
-        if (awaitedNames.size > 0) {
+        // Those names come from page one of the rules list. When the list is capped, a rule
+        // beyond it may still score this trace, so they are not a complete stop condition.
+        if (awaitedNames.size > 0 && !rulesTruncatedRef.current) {
           const receivedNames = new Set(receivedScores.map((s) => s.name));
           if ([...awaitedNames].every((name) => receivedNames.has(name))) {
             return false;
