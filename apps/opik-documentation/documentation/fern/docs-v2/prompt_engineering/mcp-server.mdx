@@ -91,7 +91,8 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
   </Step>
   <Step title="Restart your AI client">
     Assistants read their configuration at startup, so **start a new session**
-    before trying the prompts in [Start using it](#start-using-it).
+    before trying the prompts in [Start using it](#start-using-it). In Claude Code,
+    `/mcp` and **Reconnect** picks the server up without leaving the session.
 
     <Note>
     If your client isn't detected, see [Manual setup](#manual-setup).
@@ -113,10 +114,12 @@ agents in their user-level config: name `opik-mcp`, Streamable HTTP, URL
 https://www.comet.com/opik/api/v1/mcp, no credentials (sign-in happens in my
 browser), using each client's own add command or `npx add-mcp <url> --name opik-mcp`.
 Install the Opik skills for the same agents with `npx skills add comet-ml/opik-skills -g -y`.
-Verify with a real call: reload your MCP servers if you can and call the Opik
-`list` tool for projects; if the server is not reachable until a restart, confirm
-`curl -s -o /dev/null -w '%{http_code}' <url>` returns 401 and tell me what to run
-after restarting. Report what you configured, where, and whether it is verified.
+Verify with a real call: call the Opik `list` tool for projects and show me the
+result. If you cannot see the new server yet, ask me to reload MCP servers in my
+client (`/mcp` and Reconnect in Claude Code) and try again; only if it still does
+not appear, confirm `curl -s -o /dev/null -w '%{http_code}' <url>` returns 401 and
+tell me to start a new session. Report what you configured, where, and whether it
+is verified.
 Change nothing else. For self-hosted Opik use my API base plus /v1/mcp, and fall
 back to `uvx opik mcp configure` if it returns 404.
 ```
