@@ -486,10 +486,32 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             // regardless of their active/inactive status. The status concept is kept only
                             // for online scoring cooling period.
                             .flatMap(
-                                    validatedProjectDto -> dao.scoreBatchOfThreads(validatedProjectDto.scores(),
-                                            author));
+                                    validatedProjectDto -> dao
+                                            .scoreBatchOfThreads(validatedProjectDto.scores(), author)
+                                            .flatMap(count -> postThreadScoresCreated(validatedProjectDto)
+                                                    .thenReturn(count)));
                 })
                 .reduce(0L, Long::sum);
+    }
+
+    /**
+     * Posted per project rather than per batch: the event carries a project id, and one batch may span
+     * several projects. The entity ids are the resolved thread <em>model</em> ids, which is what
+     * {@code feedback_scores.entity_id} holds for threads, so a consumer can read the scores back by them.
+     */
+    private Mono<Void> postThreadScoresCreated(ProjectDto<FeedbackScoreBatchItemThread> projectDto) {
+        return Mono.deferContextual(ctx -> {
+            Set<UUID> threadModelIds = projectDto.scores()
+                    .stream()
+                    .map(FeedbackScoreItem::id)
+                    .collect(Collectors.toSet());
+
+            eventBus.post(new FeedbackScoresCreated(threadModelIds, EntityType.THREAD,
+                    ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.USER_NAME),
+                    projectDto.project().id()));
+
+            return Mono.empty();
+        });
     }
 
     private ProjectDto<FeedbackScoreBatchItemThread> bindThreadModelId(

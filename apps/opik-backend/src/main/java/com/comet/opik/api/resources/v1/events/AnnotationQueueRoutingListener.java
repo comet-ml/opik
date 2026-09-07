@@ -44,12 +44,12 @@ public class AnnotationQueueRoutingListener {
 
     @Subscribe
     public void onFeedbackScoresCreated(@NonNull FeedbackScoresCreated event) {
+        var scope = scopeOf(event.entityType());
+
         // Spans are never annotation queue items, so they cannot route.
-        if (event.entityType() != EntityType.TRACE || event.entityIds().isEmpty()) {
+        if (scope == null || event.entityIds().isEmpty()) {
             return;
         }
-
-        var scope = AnnotationQueue.AnnotationScope.TRACE;
 
         Mono.fromCallable(
                 () -> automationService.hasEnabledAutomation(event.workspaceId(), event.projectId(), scope))
@@ -61,5 +61,13 @@ public class AnnotationQueueRoutingListener {
                         },
                         error -> log.error("Failed to enqueue annotation queue routing, workspace '{}'",
                                 event.workspaceId(), error));
+    }
+
+    private AnnotationQueue.AnnotationScope scopeOf(EntityType entityType) {
+        return switch (entityType) {
+            case TRACE -> AnnotationQueue.AnnotationScope.TRACE;
+            case THREAD -> AnnotationQueue.AnnotationScope.THREAD;
+            default -> null;
+        };
     }
 }
