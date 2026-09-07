@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -122,5 +123,40 @@ class JsonUtilsTest {
     @DisplayName("merge: null base with scalar overrides never yields a non-object")
     void mergeNullBaseScalarOverride() {
         assertThat(JsonUtils.merge(null, node("\"scalar\""))).isNull();
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: a null value never exceeds the limit")
+    void exceedsSerializedLengthNullNeverExceeds() {
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(null, 0L)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"a\":1}", "{\"a\":\"ünïcödé\"}", "[1,2,3]"})
+    @DisplayName("exceedsSerializedLengthInBytes: agrees with the exact UTF-8 byte length at the boundary")
+    void exceedsSerializedLengthAgreesWithExactLength(String json) {
+        var node = node(json);
+        long exact = JsonUtils.getSerializedLengthInBytes(node);
+
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(node, exact)).isFalse();
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(node, exact - 1)).isTrue();
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: works for maps, not only JsonNode")
+    void exceedsSerializedLengthSupportsMaps() {
+        var map = java.util.Map.<String, Object>of("payload", "x".repeat(1_000));
+
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(map, 2_000L)).isFalse();
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(map, 100L)).isTrue();
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: rejects an oversized payload without serializing it in full")
+    void exceedsSerializedLengthShortCircuits() {
+        // ~40 MB of JSON; a non-streaming check would materialize the whole string plus a byte[] copy
+        var huge = java.util.Map.<String, Object>of("payload", "x".repeat(40 * 1024 * 1024));
+
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(huge, 1_024L)).isTrue();
     }
 }
