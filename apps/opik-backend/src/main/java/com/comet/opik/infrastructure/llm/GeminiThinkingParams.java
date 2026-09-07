@@ -13,14 +13,9 @@ import java.util.regex.Pattern;
  * Gemini thinking configuration decoded from {@code custom_parameters.thinking}, shared by the Google AI Studio and
  * Vertex AI providers.
  * <p>
- * A level reaches the wire as a level only on AI Studio with Gemini 3 or later. Everything else takes the budget it
- * translates to, which is what {@link #budgetForLevel()} is for:
- * <ul>
- * <li>Vertex, at any version — its {@code GenerationConfig.ThinkingConfig} protobuf carries only
- * {@code thinking_budget} and {@code include_thoughts}, with no level field at all.</li>
- * <li>Gemini 2.5 on either provider — {@code thinking_level} is Gemini 3+ only and earlier models reject it
- * outright, so 2.5 is level-driven in the UI but budget-driven on the wire.</li>
- * </ul>
+ * A level reaches the wire as a level only on AI Studio with Gemini 3+. Everything else takes the budget it
+ * translates to ({@link #budgetForLevel()}): Vertex at any version, whose protobuf has no level field, and Gemini 2.5
+ * on either provider, which rejects a level. So 2.5 is level-driven in the UI but budget-driven on the wire.
  */
 public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean includeThoughts) {
 
@@ -63,20 +58,12 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
     }
 
     /**
-     * Whether a model takes {@code thinking_level} rather than the legacy {@code thinking_budget}.
+     * Whether a model takes {@code thinking_level} rather than the legacy {@code thinking_budget}. Only Gemini 3+
+     * does; earlier models reject a level outright.
      * <p>
-     * Only Gemini 3 and later do: "If you use the thinking_level parameter with a model earlier than Gemini 3, the
-     * model returns an error." Gemini 2.5 is level-capable in the product sense — the UI offers levels for it — but on
-     * the wire a level has to be translated into a budget, exactly as it is for Vertex.
-     * <p>
-     * Matched on the model id rather than an allowlist so a newly synced Gemini 3+ model is not silently treated as
-     * 2.5. Ids look like {@code gemini-3.7-flash} or {@code vertex_ai/gemini-2.5-pro}, so the major version is the
-     * digits following the first {@code gemini-} in the id.
-     * <p>
-     * An id carrying no version — {@code gemini-omni-flash-preview}, {@code gemini-flash-latest} — reads as pre-3 and
-     * therefore gets a translated budget rather than a level. That is the safe direction of the two: a budget is
-     * accepted on every Gemini generation, while a level on a pre-3 model is rejected outright. Erring towards the
-     * budget degrades the request; erring the other way would break it.
+     * Read from the model id rather than an allowlist, so a newly synced Gemini 3+ model is not treated as 2.5. An id
+     * with no readable version ({@code gemini-flash-latest}) reads as pre-3 and gets a budget — the safe direction,
+     * since a budget is accepted on every generation while a level on a pre-3 model is not.
      */
     public static boolean modelAcceptsLevel(String model) {
         if (StringUtils.isBlank(model)) {

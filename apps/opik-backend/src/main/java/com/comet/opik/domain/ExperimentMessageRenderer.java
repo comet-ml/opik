@@ -150,14 +150,12 @@ class ExperimentMessageRenderer {
             builder.presencePenalty(presencePenalty.doubleValue());
         }
 
-        // Provider-specific parameters the flat config above cannot express — today that means Gemini
-        // and Vertex thinking. Only an object converts to a Map; Jackson throws on an array or scalar.
+        // Provider-specific parameters the flat config cannot express — today Gemini and Vertex thinking.
+        // Only an object converts to a Map; Jackson throws on an array or scalar.
         //
-        // Not Anthropic extended thinking: LlmProviderAnthropicMapper declares no mapping for
-        // thinking/customParameters, so the block never reaches AnthropicCreateMessageRequest, while
-        // its thinkingEnabled(request) does read custom_parameters — so forwarding a thinking block
-        // on that path gates temperature/top_p off without turning thinking on. Wiring that up is its
-        // own change; until then an Anthropic experiment should not carry the block.
+        // Not Anthropic: its mapper never forwards the block, yet its thinkingEnabled() reads
+        // custom_parameters — so a thinking block there gates temperature/top_p off without enabling
+        // thinking. Wiring that up is its own change.
         var customParameters = configs.get("custom_parameters");
         if (customParameters != null && customParameters.isObject()) {
             builder.customParameters(JsonUtils.getMapper()

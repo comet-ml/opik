@@ -16,27 +16,20 @@ class GeminiThinkingConfigMapper {
     /**
      * Builds the Google AI Studio thinking config for a model.
      * <p>
-     * {@code thinking_level} is Gemini 3+ only — "If you use the thinking_level parameter with a model earlier than
-     * Gemini 3, the model returns an error" — so on 2.5 a level is translated into the budget it maps to, the same
-     * translation Vertex needs at every version. A level of {@code off} is always a zero budget: there is no "off"
-     * level to send, and zero is how Gemini 2.5 Flash Lite already represents thinking being disabled.
+     * {@code thinking_level} is Gemini 3+ only and earlier models reject it, so on 2.5 a level is translated into
+     * its budget — the same translation Vertex needs at every version. {@code off} is always a zero budget.
      * <p>
-     * {@code thinking_level} and the legacy {@code thinking_budget} are mutually exclusive — sending both returns a
-     * 400 — so exactly one is ever set.
+     * Level and the legacy {@code thinking_budget} are mutually exclusive (sending both is a 400), so exactly one
+     * is ever set.
      */
     static Optional<GeminiThinkingConfig> toThinkingConfig(String model, GeminiThinkingParams params) {
         if (params.isAbsent()) {
             return Optional.empty();
         }
 
-        // Gemini 3+ cannot disable thinking, so an "off" level there is meaningless: prefer sending no
-        // thinking config over a zero budget that claims something the model will not honour. The UI
-        // never offers "off" for those models, but the judge path takes custom_parameters verbatim.
-        //
-        // Note this is about "off" specifically, not budgets in general — a Gemini 3 model does accept
-        // thinking_budget (verified live on both providers), which is what the Vertex path relies on
-        // since its protobuf has no level field.
-        // An explicit budget still wins, exactly as it does on 2.5 — only the unusable level is dropped.
+        // Gemini 3+ cannot disable thinking, so "off" there is meaningless: send nothing rather than a
+        // zero budget the model will not honour. Only the level is dropped — an explicit budget still
+        // wins, as on 2.5. Unreachable from the UI, but the judge path takes custom_parameters as-is.
         if (params.level() == Level.OFF
                 && params.budgetTokens() == null
                 && GeminiThinkingParams.modelAcceptsLevel(model)) {
@@ -56,11 +49,9 @@ class GeminiThinkingConfigMapper {
             Optional.ofNullable(params.budgetForLevel()).ifPresent(builder::thinkingBudget);
         }
 
-        // include_thoughts is deliberately not forwarded. returnThinking is pinned to FALSE above this
-        // mapper (Gemma 4 returns thought parts unconditionally and they would otherwise be
-        // concatenated into the answer), and langchain4j's PartsAndContentsMapper drops thought parts
-        // outright at FALSE — so asking the API for them would bill thinking tokens and return
-        // nothing. Wire it up only alongside a way to surface the thoughts.
+        // include_thoughts is deliberately not forwarded: returnThinking is pinned FALSE on the model,
+        // and at FALSE langchain4j discards thought parts — we would be billed for nothing. Wire it up
+        // only alongside a way to surface the thoughts.
 
         return Optional.of(builder.build());
     }

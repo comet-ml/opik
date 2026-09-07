@@ -79,15 +79,12 @@ export const getDefaultTemperatureForModel = (
   return isReasoningModel(model) ? 1 : 0;
 };
 
-// Which thinking levels each Gemini model accepts, per Google's own support table
-// (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
-// has no "minimal", 3.1 Flash Lite has only "minimal" and "high" — and sending a level a model does
-// not accept is rejected upstream, so this cannot be collapsed into one list per family.
+// Levels each model accepts, per https://ai.google.dev/gemini-api/docs/thinking. The sets differ per
+// model and an unaccepted level is rejected upstream, so they cannot be collapsed per family. Both
+// provider spellings share a row: level support belongs to the model, not the provider.
 //
-// Keep both provider spellings of a model on the same row: the level support is a property of the
-// underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
-// the automated `sync provider model definitions` PRs, which cannot know about this table — so a
-// newly synced thinking model shows no control until it is added here.
+// Models arrive via the automated `sync provider model definitions` PRs, which do not know about this
+// table — a newly synced thinking model shows no control until a row is added here.
 const MINIMAL_TO_HIGH: readonly GeminiThinkingLevel[] = [
   "minimal",
   "low",
@@ -114,12 +111,8 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH],
-  // The Flash Lite models do not think by default — verified live: zero thinking tokens on both a
-  // trivial and a deliberately hard prompt, on both providers. So they lead with "none", which sends
-  // no thinkingConfig and keeps their latency where it was. Asking for a level here switches thinking
-  // ON, which measurably slows them (~2.5s -> ~5s at budget 2048 on 3.1 Flash Lite).
-  //
-  // 3.1 Flash Lite also has no low/medium: minimal and high only.
+  // Flash Lite does not think by default, so it leads with "none" — asking for a level here switches
+  // thinking on and slows it. 3.1 also has no low/medium: minimal and high only.
   [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", "minimal", "high"]],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
@@ -137,13 +130,10 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, ["low", "high"]],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"]],
-  // Gemini 2.5 takes a numeric thinking_budget rather than a level, so these levels are translated
-  // server-side. They lead with "auto" because a budget left unset is how Google's own default works
-  // — "the model automatically controls how much it thinks up to a maximum of 8,192 tokens" — and
-  // without it, merely opening the control would pin a hard budget over that default.
-  //
-  // Only Flash Lite gets "off": it is the one 2.5 model Google ships with thinking already off, and
-  // 2.5 Pro cannot disable thinking at all.
+  // Gemini 2.5 takes a numeric budget, so these levels are translated server-side. They lead with
+  // "auto" — an unset budget is Google's dynamic default, and pinning a level would override it.
+  // Only Flash Lite gets "off": it is the one 2.5 model shipped with thinking off, and Pro cannot
+  // disable thinking at all.
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
@@ -206,14 +196,9 @@ export const getThinkingLevelOptions = (
     (value) => ({ label: THINKING_LEVEL_LABELS[value], value }),
   );
 
-// Each model's own default thinking level. Measured against the live API rather than taken from
-// Google's docs table, which disagrees with it: the docs list 3.5 Flash Lite as defaulting to
-// "minimal", but every Flash Lite model returns zero thinking tokens by default on both providers.
-// Preselecting the
-// documented default keeps the control from silently changing a model's behaviour just by being
-// shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
-// ("auto"), 3.7/3.6/3.5 Flash default to medium, and 3.5 Flash Lite to minimal — none of which is
-// "high". Models absent here default to "high", which is what the Gemini 3 Pro rows document.
+// Each model's own default, so showing the control does not change how the model behaves. Measured
+// against the live API, not Google's docs table — the docs call 3.5 Flash Lite "minimal" while it
+// actually returns zero thinking tokens. Models absent here default to "high".
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
   PROVIDER_MODEL_TYPE,
   GeminiThinkingLevel
@@ -505,30 +490,15 @@ export const sanitizeConfigForRequest = (
     delete sanitized.topP;
   }
 
-  // The request body is a flat spread of the config, and the backend deserializes it into
-  // langchain4j's ChatCompletionRequest, which ignores unknown top-level fields. A flat
-  // thinking_level is therefore silently dropped, so it has to be nested under
-  // custom_parameters — the only free-form slot the request actually captures. This holds for
-  // every caller: the playground proxy, experiment runs, and the optimizer, which all render the
-  // same Gemini config panel and reach the model through the same request shape.
+  // The body is a flat spread of the config into langchain4j's ChatCompletionRequest, which ignores
+  // unknown top-level fields — so a flat thinking_level is dropped and the level has to be nested
+  // under custom_parameters, the only free-form slot the request captures.
   const thinkingLevelOptions = getThinkingLevelOptions(model);
 
   if (sanitized.thinkingLevel != null || thinkingLevelOptions.length > 0) {
-    // Fall back to the model's default when the config holds no level. The control displays that
-    // same default, so without this a prompt persisted before the level existed shows one value and
-    // sends none — the reconciler only fills the config in on a model change, and a stored prompt
-    // whose model is still valid is never reconciled at all.
-    // Both stale cases resolve the same way, to the model's default: a config with no level (persisted
-    // before the control existed) and a config holding a level this model does not offer (carried over
-    // from another model outside the reconciler). Either way the dropdown displays the default, so the
-    // request has to send it rather than nothing.
-    // A level already nested under custom_parameters counts as stored. Callers that persist the
-    // sanitized output and feed it back — the optimizer form reloads a saved run's `parameters`
-    // blob wholesale — have no flat thinkingLevel to offer, and substituting the model default
-    // there would silently reset the user's saved choice on every re-run.
-    // A nested level the model still offers is a real past choice and is honoured — including on the
-    // Flash Lite models, where an explicitly saved "minimal" keeps thinking on. Only the *default*
-    // changed to "none"; a level someone chose is not overridden.
+    // The control always displays a level, so the request has to send one. A stored level counts
+    // whether it is flat or already nested (the optimizer reloads its saved `parameters` wholesale);
+    // anything the model does not offer falls back to the default.
     const nested = (
       (sanitized.custom_parameters as Record<string, unknown> | undefined)
         ?.thinking as Record<string, unknown> | undefined
@@ -542,8 +512,7 @@ export const sanitizeConfigForRequest = (
         : getDefaultThinkingLevel(model)
     ) as GeminiThinkingLevel;
 
-    // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
-    // level, so leaving it on the payload can only be dead weight.
+    // Opik's own field: no provider accepts it at the top level.
     delete sanitized.thinkingLevel;
 
     // "none" is an explicit "do not think": it has to remove any persisted thinking block, not merely
@@ -561,9 +530,8 @@ export const sanitizeConfigForRequest = (
       }
     }
 
-    // "auto" also sends no thinkingConfig, but it is a weaker statement — "let the model decide" —
-    // so it leaves a persisted block alone rather than deleting fields the form cannot represent.
-    // `level` is already known to be one this model offers.
+    // "auto" also sends nothing, but it is the weaker "let the model decide": it leaves a persisted
+    // block alone rather than deleting fields the form cannot represent.
     if (
       level !== "auto" &&
       level !== "none" &&

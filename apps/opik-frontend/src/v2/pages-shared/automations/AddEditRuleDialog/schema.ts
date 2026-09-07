@@ -610,30 +610,15 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
         }
       : undefined;
 
-  // On a model whose level control owns `thinking`, drop the persisted copy before re-adding the
-  // current selection: otherwise a level rejected above survives in the spread, and a stale "off"
-  // reaches a model that cannot disable thinking.
-  //
-  // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
-  // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
-  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
-  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
   const persistedCustomParameters = (custom_parameters ?? {}) as Record<
     string,
     unknown
   >;
-  // Strip the persisted `thinking` when the form is putting one back, and also when the form held a
-  // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
-  // to go, which is what the level check above is for.
-  //
-  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
-  // level of its own here", not "delete whatever else was in there": budget_tokens and
-  // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
-  // this same key for extended thinking.
-  // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
-  // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide" and leaves the block alone, since it may hold fields the form cannot
-  // represent (budget_tokens, include_thoughts, or Anthropic's type).
+  // Strip the persisted `thinking` only when the form has something to say about it: it is putting a
+  // level back, it holds one this model rejects (a stale "off" must not reach a model that cannot
+  // disable thinking), or it says "none". Otherwise leave the block alone — "auto" and no-level mean
+  // the form has no opinion, and the block may hold fields it cannot represent: budget_tokens,
+  // include_thoughts, or Anthropic's `type` for extended thinking.
   const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
