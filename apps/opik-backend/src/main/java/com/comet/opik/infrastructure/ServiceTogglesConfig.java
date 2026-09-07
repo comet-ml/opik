@@ -58,8 +58,6 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
-    @NotNull boolean agenticToolsEnabled;
-    @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
 
     @JsonProperty

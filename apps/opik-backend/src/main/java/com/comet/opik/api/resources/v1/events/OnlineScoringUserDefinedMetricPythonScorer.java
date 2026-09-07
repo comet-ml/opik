@@ -43,7 +43,6 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
-    private final SpanService spanService;
     private final Logger userFacingLogger;
 
     @Inject
@@ -54,10 +53,9 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull TraceService traceService,
             @NonNull SpanService spanService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
+        super(config, redisson, feedbackScoreService, traceService, spanService, USER_DEFINED_METRIC_PYTHON,
                 Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
-        this.spanService = spanService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }

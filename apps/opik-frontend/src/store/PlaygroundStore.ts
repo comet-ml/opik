@@ -529,31 +529,6 @@ export const useFirstOutputUsageByPromptId = (promptId: string) =>
       : undefined;
   });
 
-export const useOutputValueByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return useOutputByPromptDatasetItemId(promptId, datasetItemId)?.value ?? null;
-};
-
-export const useOutputLoadingByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return (
-    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.isLoading ?? false
-  );
-};
-
-export const useOutputStaleStatusByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return (
-    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.stale ?? false
-  );
-};
-
 export const useIsPromptOutputStale = (promptId: string) =>
   usePlaygroundStore((state) => {
     const entry = state.outputMap?.[promptId];
@@ -594,23 +569,6 @@ export const useUpdateOutput = () =>
 
 export const useUpdateOutputTraceId = () =>
   usePlaygroundStore((state) => state.updateOutputTraceId);
-
-export const useTraceIdByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return (
-    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.traceId ?? null
-  );
-};
-
-export const useSelectedRuleIdsByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-): string[] | null | undefined => {
-  return useOutputByPromptDatasetItemId(promptId, datasetItemId)
-    ?.selectedRuleIds;
-};
 
 export const useDatasetVariables = () =>
   usePlaygroundStore((state) => state.datasetVariables);

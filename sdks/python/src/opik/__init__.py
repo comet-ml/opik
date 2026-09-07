@@ -1,4 +1,4 @@
-from . import _logging, environment, error_tracking, package_version
+from . import _logging, analytics, environment, error_tracking, package_version
 from .api_objects.annotation_queue import (
     TracesAnnotationQueue,
     ThreadsAnnotationQueue,
@@ -66,6 +66,7 @@ _logging.setup()
 __version__ = package_version.VERSION
 __all__ = [
     "__version__",
+    "analytics",
     "TracesAnnotationQueue",
     "ThreadsAnnotationQueue",
     "Attachment",

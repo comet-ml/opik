@@ -1,4 +1,4 @@
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a> | <a href="readme_JA.md">日本語</a></b></div>
 
 > Remarque : Ce fichier a été traduit automatiquement. Les améliorations de la traduction sont bienvenues !
 
@@ -333,6 +333,7 @@ La façon la plus simple de journaliser des traces est d'utiliser l'une de nos i
 | Spring AI             | Journalise les traces des appels du framework Spring AI | [Documentation](https://www.comet.com/docs/opik/integrations/spring-ai?utm_source=opik&utm_medium=github&utm_content=spring_ai_link&utm_campaign=opik)                         |
 | Strands Agents        | Journalise les traces des appels Strands agents        | [Documentation](https://www.comet.com/docs/opik/integrations/strands-agents?utm_source=opik&utm_medium=github&utm_content=strands_agents_link&utm_campaign=opik)               |
 | Together AI           | Journalise les traces des appels LLM Together AI        | [Documentation](https://www.comet.com/docs/opik/integrations/together-ai?utm_source=opik&utm_medium=github&utm_content=together_ai_link&utm_campaign=opik)                     |
+| TrueFoundry           | Journalise les traces des appels LLM TrueFoundry AI Gateway | [Documentation](https://www.comet.com/docs/opik/integrations/truefoundry?utm_source=opik&utm_medium=github&utm_content=truefoundry_link&utm_campaign=opik)                     |
 | Vercel AI SDK         | Journalise les traces des appels Vercel AI SDK         | [Documentation](https://www.comet.com/docs/opik/integrations/vercel-ai-sdk?utm_source=opik&utm_medium=github&utm_content=vercel_ai_sdk_link&utm_campaign=opik)                 |
 | VoltAgent             | Journalise les traces des appels du framework d'agents VoltAgent | [Documentation](https://www.comet.com/docs/opik/integrations/voltagent?utm_source=opik&utm_medium=github&utm_content=voltagent_link&utm_campaign=opik)                         |
 | WatsonX               | Journalise les traces des appels LLM IBM watsonx       | [Documentation](https://www.comet.com/docs/opik/integrations/watsonx?utm_source=opik&utm_medium=github&utm_content=watsonx_link&utm_campaign=opik)                             |
@@ -389,7 +390,12 @@ Opik vous permet d'évaluer votre application LLM pendant le développement grâ
 
 Si vous trouvez Opik utile, envisagez de nous donner une étoile ! Votre soutien nous aide à faire grandir notre communauté et à continuer d'améliorer le produit.
 
-[![Graphique de l'historique des étoiles](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+<a href="https://github.com/comet-ml/opik">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.comet.com/opik/star-history/star-history-dark.svg" />
+    <img alt="Graphique de l'historique des étoiles" src="https://cdn.comet.com/opik/star-history/star-history-light.svg" />
+  </picture>
+</a>
 
 <a id="-contributing"></a>
 ## 🤝 Contribuer

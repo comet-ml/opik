@@ -4,6 +4,7 @@ from typing import Any, Dict, List, TypeVar
 from langchain_core.runnables import base as runnables_base
 
 from . import opik_tracer as opik_tracer_module
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def track_langgraph(
           `extract_current_langgraph_span_data()` to propagate context to @track-decorated
           functions within async nodes.
     """
+    analytics.track_event("integration", "langgraph")
     graph_structure = graph.get_graph(xray=True)
     opik_tracer.set_graph(graph_structure)
 

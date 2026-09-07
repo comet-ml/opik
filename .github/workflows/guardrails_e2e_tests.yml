@@ -28,6 +28,7 @@ concurrency:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   OPIK_URL_OVERRIDE: http://localhost:8080
@@ -84,7 +85,7 @@ jobs:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Run latest Opik server with guardrails
         env:

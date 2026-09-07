@@ -64,9 +64,9 @@ export interface CustomProviderConfig {
 export class ConfigurationPage {
   constructor(private readonly page: Page) {}
 
-  async gotoAiProviders(): Promise<void> {
+  async gotoAiProviders(workspaceName?: string): Promise<void> {
     const env = loadEnvConfig();
-    await this.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=ai-provider`);
+    await this.page.goto(`${env.baseUrl}/${workspaceName ?? env.workspace}/configuration?tab=ai-provider`);
     await this.page
       .getByRole('tab', { name: 'AI Providers', selected: true })
       .waitFor({ state: 'visible' });

@@ -43,10 +43,10 @@ def test_truncate_span_write__within_limit__returned_unchanged():
     assert result.input == {"prompt": "small"}
 
 
-def test_truncate_span_write__oversized_output__truncated(caplog):
+def test_truncate_span_write__oversized_output__truncated(capture_log):
     span = _span_write(input={"prompt": "small"}, output=_big_value(1.5))
 
-    with caplog.at_level("WARNING"):
+    with capture_log.at_level("WARNING"):
         result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     # the oversized field is replaced with a marker, the small one is untouched
@@ -54,7 +54,7 @@ def test_truncate_span_write__oversized_output__truncated(caplog):
     assert result.output["reason"].startswith("<omitted_due_to_size_")
     assert result.input == {"prompt": "small"}
     # a warning naming the span + field was logged
-    assert "span-id" in caplog.text and "output" in caplog.text
+    assert "span-id" in capture_log.text and "output" in capture_log.text
 
 
 def test_truncate_span_write__each_oversized_field_truncated_independently():
@@ -123,15 +123,16 @@ def test_truncate_span_write__non_positive_limit__disables():
     assert payload_truncation.truncate_write_if_needed(span, -1) is span
 
 
-def test_truncate_span_kwargs__oversized__truncated_in_place(caplog):
+def test_truncate_span_kwargs__oversized__truncated_in_place(capture_log):
     kwargs = {"id": "span-id", "output": _big_value(1.5), "input": {"prompt": "small"}}
 
-    with caplog.at_level("WARNING"):
+    with capture_log.at_level("WARNING"):
         payload_truncation.truncate_kwargs_if_needed(kwargs, LIMIT_MB)
 
     assert kwargs["output"]["opik_truncated"] is True
     assert kwargs["input"] == {"prompt": "small"}
-    assert "span-id" in caplog.text
+    # names the field too, so logging the wrong one cannot pass
+    assert "span-id" in capture_log.text and "output" in capture_log.text
 
 
 def test_truncate_span_kwargs__within_limit__untouched():

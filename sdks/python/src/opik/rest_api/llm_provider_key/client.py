@@ -6,6 +6,9 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.provider_api_key_page_public import ProviderApiKeyPagePublic
 from ..types.provider_api_key_public import ProviderApiKeyPublic
+from ..types.provider_auth_config import ProviderAuthConfig
+from ..types.provider_auth_config_write import ProviderAuthConfigWrite
+from ..types.result import Result
 from .raw_client import AsyncRawLlmProviderKeyClient, RawLlmProviderKeyClient
 from .types.provider_api_key_write_provider import ProviderApiKeyWriteProvider
 
@@ -89,6 +92,7 @@ class LlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfigWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -111,6 +115,8 @@ class LlmProviderKeyClient:
 
         base_url : typing.Optional[str]
 
+        auth_config : typing.Optional[ProviderAuthConfigWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -132,6 +138,7 @@ class LlmProviderKeyClient:
             headers=headers,
             configuration=configuration,
             base_url=base_url,
+            auth_config=auth_config,
             request_options=request_options,
         )
         return _response.data
@@ -173,10 +180,11 @@ class LlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Update LLM Provider's ApiKey
+        Update LLM Provider's ApiKey. api_key and auth_config are mutually exclusive: setting a valid auth_config on a provider that holds a static api_key clears the stored key; send auth_config as an empty object to clear the recipe and switch back to a static key
 
         Parameters
         ----------
@@ -194,6 +202,8 @@ class LlmProviderKeyClient:
         configuration : typing.Optional[typing.Dict[str, str]]
 
         base_url : typing.Optional[str]
+
+        auth_config : typing.Optional[ProviderAuthConfig]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -216,7 +226,44 @@ class LlmProviderKeyClient:
             headers=headers,
             configuration=configuration,
             base_url=base_url,
+            auth_config=auth_config,
             request_options=request_options,
+        )
+        return _response.data
+
+    def test_llm_provider_auth_config(
+        self,
+        *,
+        provider_id: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> Result:
+        """
+        Runs the token fetch once, backend-side, and reports the token lifetime. The token itself is never returned. Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.
+
+        Parameters
+        ----------
+        provider_id : typing.Optional[str]
+            Test the stored auth config of this provider; also the sentinel-resolution target when auth_config is sent
+
+        auth_config : typing.Optional[ProviderAuthConfig]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Result
+            Token fetched
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.llm_provider_key.test_llm_provider_auth_config()
+        """
+        _response = self._raw_client.test_llm_provider_auth_config(
+            provider_id=provider_id, auth_config=auth_config, request_options=request_options
         )
         return _response.data
 
@@ -303,6 +350,7 @@ class AsyncLlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfigWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -324,6 +372,8 @@ class AsyncLlmProviderKeyClient:
         configuration : typing.Optional[typing.Dict[str, str]]
 
         base_url : typing.Optional[str]
+
+        auth_config : typing.Optional[ProviderAuthConfigWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -349,6 +399,7 @@ class AsyncLlmProviderKeyClient:
             headers=headers,
             configuration=configuration,
             base_url=base_url,
+            auth_config=auth_config,
             request_options=request_options,
         )
         return _response.data
@@ -393,10 +444,11 @@ class AsyncLlmProviderKeyClient:
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Update LLM Provider's ApiKey
+        Update LLM Provider's ApiKey. api_key and auth_config are mutually exclusive: setting a valid auth_config on a provider that holds a static api_key clears the stored key; send auth_config as an empty object to clear the recipe and switch back to a static key
 
         Parameters
         ----------
@@ -414,6 +466,8 @@ class AsyncLlmProviderKeyClient:
         configuration : typing.Optional[typing.Dict[str, str]]
 
         base_url : typing.Optional[str]
+
+        auth_config : typing.Optional[ProviderAuthConfig]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -439,6 +493,46 @@ class AsyncLlmProviderKeyClient:
             headers=headers,
             configuration=configuration,
             base_url=base_url,
+            auth_config=auth_config,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def test_llm_provider_auth_config(
+        self,
+        *,
+        provider_id: typing.Optional[str] = OMIT,
+        auth_config: typing.Optional[ProviderAuthConfig] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> Result:
+        """
+        Runs the token fetch once, backend-side, and reports the token lifetime. The token itself is never returned. Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.
+
+        Parameters
+        ----------
+        provider_id : typing.Optional[str]
+            Test the stored auth config of this provider; also the sentinel-resolution target when auth_config is sent
+
+        auth_config : typing.Optional[ProviderAuthConfig]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Result
+            Token fetched
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.llm_provider_key.test_llm_provider_auth_config()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.test_llm_provider_auth_config(
+            provider_id=provider_id, auth_config=auth_config, request_options=request_options
         )
         return _response.data

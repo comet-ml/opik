@@ -3,6 +3,7 @@ import { ConfigurationPage } from '@e2e/pom/configuration.page';
 import {
   MOCK_AUTH_CLIENT_ID,
   MOCK_AUTH_CLIENT_SECRET,
+  mockAuthSkipReason,
   mockGatewayUrlForBackend,
   mockTokenUrlForBackend,
 } from '@e2e/core/mock-auth';
@@ -20,6 +21,13 @@ const SECRET_SENTINEL = '__SECRET__';
  * seeded and torn down by the providerKeys fixture.
  */
 test.describe('AI Providers — OAuth2 token auth', { tag: ['@t1-smoke', '@area:configuration'] }, () => {
+  // Every test here needs the backend itself to reach the mock; without that they would all
+  // fail on a missing success toast, hiding a deployment misconfiguration behind a UI symptom.
+  test.beforeAll(async () => {
+    const reason = await mockAuthSkipReason();
+    test.skip(reason !== null, reason ?? '');
+  });
+
   test('configure with test connection, persist the recipe masked', { tag: ['@cap:configuration.ai-provider-add'] }, async ({
     page,
     testNamespace,

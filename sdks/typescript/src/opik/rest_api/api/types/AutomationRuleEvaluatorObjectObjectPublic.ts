@@ -50,6 +50,7 @@ export namespace AutomationRuleEvaluatorObjectObjectPublic {
         /** Projects assigned to this rule (unique, sorted alphabetically by name) */
         projects?: OpikApi.ProjectReferencePublic[];
         name: string;
+        /** Fraction of production (SDK-logged) items this rule scores, from 0 to 1. Trace rules ignore this value for experiment, playground and optimization traces and score them in full; span and thread rules only ever evaluate SDK-logged data. */
         samplingRate?: number;
         enabled?: boolean;
         /** Controls whether the rule fires on production traces, experiment traces, or both. Defaults to 'production' if omitted. */

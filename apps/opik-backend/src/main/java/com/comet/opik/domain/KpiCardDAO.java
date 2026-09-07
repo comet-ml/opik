@@ -170,8 +170,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     AND workspace_id = :workspace_id
                     AND id >= :uuid_from_time
                     AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -364,8 +366,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND id >= :uuid_from_time AND id \\<= :uuid_to_time
-                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
-                  AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))
                   AND thread_id \\<> ''
             ), trace_threads_final AS (
                 SELECT

@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { ExperimentDetailPage } from './experiment-detail.page';
 
@@ -54,6 +54,35 @@ export class ExperimentsPage {
       );
     });
     return new ExperimentDetailPage(this.page, experimentId);
+  }
+
+  /**
+   * The dialog heading and its confirm button share the name "Delete
+   * experiment", so scope by heading first, then resolve the button inside.
+   */
+  async deleteExperimentById(experimentId: string): Promise<void> {
+    return test.step(`delete experiment ${experimentId} via row actions`, async () => {
+      const row = this.rowById(experimentId);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const confirm = this.deleteExperimentConfirmDialog;
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Delete experiment' }).click();
+
+      await confirm.waitFor({ state: 'hidden' });
+      // Refetch, not optimistic update, and a cached placeholder renders
+      // meanwhile — so wait on the row, not the table.
+      await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /** The destructive confirm dialog raised by the row's Delete action. */
+  get deleteExperimentConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Delete experiment' }),
+    });
   }
 
   get rows(): Locator {

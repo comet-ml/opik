@@ -6,6 +6,7 @@ from . import messages_create_decorator
 from . import messages_batch_decorator
 from typing import TypeVar, Dict, Any
 from opik.types import LLMProvider
+from ... import analytics
 
 AnthropicClient = TypeVar(
     "AnthropicClient",
@@ -51,6 +52,7 @@ def track_anthropic(
     Returns:
         Anthropic client with integrated Opik tracking logic.
     """
+    analytics.track_event("integration", "anthropic")
     if hasattr(anthropic_client, "opik_tracked"):
         return anthropic_client
 

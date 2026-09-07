@@ -1,5 +1,6 @@
 import functools
 import getpass
+import hashlib
 import logging
 import os
 import platform
@@ -34,6 +35,43 @@ def get_user() -> str:
             "Unknown exception getting the user from the system", exc_info=True
         )
         return "unknown"
+
+
+@functools.lru_cache
+def get_user_identifier() -> str:
+    """
+    Approximates "who is running this SDK", for grouping error reports and usage
+    analytics by user.
+
+    The workspace name serves as the identifier. If the workspace is the default one,
+    or is not really set at all, the identifier is derived from a hash of the hostname
+    and username instead. It is not a strict relation - the host machine might change,
+    or the user might pass an incorrect workspace - but it is good enough to see how
+    many users something affects.
+
+    Blank workspaces fall back rather than being used as-is. Returning "" would put
+    every install that has one under a single identifier, making them look like one
+    very busy user; surrounding whitespace is stripped for the same reason, so that
+    " acme" and "acme" are not two different people.
+    """
+    workspace = (opik.config.OpikConfig().workspace or "").strip()
+
+    if workspace and workspace != opik.config.OPIK_WORKSPACE_DEFAULT_NAME:
+        return workspace
+
+    hashed_part = _hash(get_hostname() + get_user())
+
+    return f"{opik.config.OPIK_WORKSPACE_DEFAULT_NAME}_{hashed_part}"
+
+
+def is_default_user_identifier(identifier: str) -> bool:
+    """True when `get_user_identifier` fell back to the hostname/username hash."""
+    return identifier.startswith(f"{opik.config.OPIK_WORKSPACE_DEFAULT_NAME}_")
+
+
+@functools.lru_cache
+def _hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 @functools.lru_cache

@@ -1,15 +1,24 @@
 import * as vscode from 'vscode';
-import { findAndReturnNewTraces } from './sessionManager';
-import { logTracesToOpik } from '../opik';
+import { findAndReturnNewTraces, resolveStateDbPath } from './sessionManager';
+import { applyTurnUsage, logTracesToOpik } from '../opik';
 import { getSessionInfo, updateSessionInfo, getLastSyncedAt, updateLastSyncedAt } from '../state';
 import { captureException } from '../sentry';
+import { UsageEnricher } from './usage';
 
 export class CursorService {
   private context: vscode.ExtensionContext;
   private isProcessing: boolean = false;
+  private usageEnricher: UsageEnricher;
+  private apiKey: string | undefined;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    this.usageEnricher = new UsageEnricher(context, async (pending, usage) => {
+      if (!this.apiKey) {
+        throw new Error('No API key available to patch span usage');
+      }
+      await applyTurnUsage(this.apiKey, pending, usage);
+    });
   }
 
   /**
@@ -23,6 +32,7 @@ export class CursorService {
     }
 
     this.isProcessing = true;
+    this.apiKey = apiKey;
     let numberOfTracesLogged = 0;
     let sessionInfo = getSessionInfo(this.context);
     const lastSyncedAt = getLastSyncedAt(this.context);
@@ -53,14 +63,8 @@ export class CursorService {
         if (tracesData.length > 0) {
           console.log(`📤 Logging ${tracesData.length} cursor traces to Opik`);
           
-          // Use a generic session ID for BI logging since we now have multiple composer sessions
-          const biSessionId = 'cursor-multi-session';
-          
-          try {
-            await logTracesToOpik(apiKey, tracesData);
-          } catch (opikError) {
-            throw opikError;
-          }
+          const loggedTurns = await logTracesToOpik(apiKey, tracesData);
+          this.usageEnricher.track(loggedTurns);
           
           // Update session info for each composer session
           Object.entries(updatedSessionInfo).forEach(([sessionId, sessionData]) => {
@@ -111,8 +115,23 @@ export class CursorService {
       
       throw error; // Re-throw to let the caller handle it
     } finally {
-      // Always reset the processing flag, even if an error occurs
-      this.isProcessing = false;
+      // Runs even when the upload above failed, so pending turns from earlier
+      // cycles still get their usage.
+      try {
+        const stateDbPath = resolveStateDbPath(vsInstallationPath);
+        if (stateDbPath) {
+          await this.usageEnricher.tick(stateDbPath);
+        }
+      } catch (usageError) {
+        captureException(usageError);
+        console.error('Error enriching cursor usage:', usageError);
+      } finally {
+        // Held through enrichment, not released before it. Two overlapping
+        // interval callbacks would otherwise run tick() at the same time, and a
+        // late write of the pending list would drop turns that track() queued
+        // in between, leaving those spans without usage forever.
+        this.isProcessing = false;
+      }
     }
 
     return numberOfTracesLogged;

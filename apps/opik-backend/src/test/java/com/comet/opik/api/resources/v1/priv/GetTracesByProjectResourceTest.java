@@ -4422,6 +4422,56 @@ class GetTracesByProjectResourceTest {
             }
         }
 
+        /**
+         * The cursor is whatever id the previous page ended on, so it can carry a far-future timestamp: a UUIDv7 minted
+         * by a broken clock (litellm BerriAI/litellm#31294) sorts above every real id, so it comes back first under
+         * {@code ORDER BY id DESC} and becomes the cursor for page two.
+         *
+         * <p>Each id-range bound in the read path carries a parallel week-start bound on {@code id_at}, a pruning hint
+         * that must never exclude a row the id-range admits. When that bound was {@code toMonday} it broke exactly here
+         * (OPIK-7456): {@code toMonday} returns a 16-bit {@code Date} that wraps past 2149, so a far-future cursor
+         * folded into a past week and every ordinary trace — whose week is later — failed {@code <=}. The page came
+         * back empty and pagination stopped dead.
+         *
+         * <p>No far-future trace is needed to reach it, which is why this belongs here rather than in a schema-level
+         * suite: {@code lastRetrievedId} is an unvalidated cursor on the request, so passing one is enough, and
+         * ingestion — which would reject such an id — is not involved. Asserts every seeded trace still streams back.
+         */
+        @Test
+        void whenStreamCursorCarriesAFarFutureTimestamp__thenTracesAreStillReturned() {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Sorts above every seeded id, so `id < :cursor` admits all of them and only the week bound can drop them.
+            var farFutureCursor = idGenerator.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .lastRetrievedId(farFutureCursor)
+                            .limit(traces.size())
+                            .build());
+
+            var expectedTraces = traces.stream()
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
+
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
+        }
+
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void whenFilterByVisibilityScoreEqual__thenReturnTracesFiltered(boolean stream) {

@@ -83,6 +83,51 @@ export class TracePanelPage {
     return this.root.getByText(value);
   }
 
+  // --- Attachments ---
+
+  /**
+   * The "Attachments" collapsible section header.
+   *
+   * The section renders nothing at all when the trace carries no media, so its
+   * presence is itself an assertion and not just a scoping step.
+   */
+  get attachmentsSection(): Locator {
+    return this.root.getByRole('button', { name: 'Attachments' });
+  }
+
+  /**
+   * One attachment thumbnail, addressed by the download link it stamps with its
+   * own file name.
+   *
+   * By name rather than by position: the list is re-sorted by media type before
+   * it renders (`ATTACHMENT_ORDER_MAP`), so the upload order is not the display
+   * order and any index-based locator would be asserting on the sort instead of
+   * on the attachment. `download="<file name>"` is the one attribute unique to
+   * a single thumbnail — a thumbnail carries no `data-testid`, and its visible
+   * label is plain text that a matching input/output payload could also
+   * produce. The link only *becomes visible* on hover, so assert on its count,
+   * not its visibility; `attachmentLabel` covers what the user actually sees.
+   */
+  attachmentThumbnail(fileName: string): Locator {
+    return this.root.locator(`a[download="${fileName}"]`);
+  }
+
+  /** The file name as the thumbnail renders it. */
+  attachmentLabel(fileName: string): Locator {
+    return this.root.getByText(fileName, { exact: true });
+  }
+
+  /** Opens the Attachments section if it is collapsed. Idempotent. */
+  async openAttachments(): Promise<void> {
+    return test.step('Open the Attachments section', async () => {
+      const header = this.attachmentsSection;
+      await header.waitFor({ state: 'visible', timeout: 30_000 });
+      if ((await header.getAttribute('aria-expanded')) !== 'true') {
+        await header.click();
+      }
+    });
+  }
+
   // --- Tags ---
 
   get addTagButton(): Locator {

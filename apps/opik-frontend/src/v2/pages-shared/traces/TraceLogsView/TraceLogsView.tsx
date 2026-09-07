@@ -660,7 +660,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       filters: effectiveFilters,
       page: page as number,
       size: size as number,
-      search: searchText,
+      search: trimmedSearch,
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,

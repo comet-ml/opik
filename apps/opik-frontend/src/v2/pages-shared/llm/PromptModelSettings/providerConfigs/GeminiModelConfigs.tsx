@@ -2,18 +2,18 @@ import React from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import {
-  DEFAULT_GEMINI_CONFIGS,
-  THINKING_LEVEL_OPTIONS_PRO,
-  THINKING_LEVEL_OPTIONS_FLASH,
-} from "@/constants/llm";
+import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
 import { GeminiThinkingLevel } from "@/types/providers";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { supportsGeminiThinkingLevel } from "@/lib/modelUtils";
+import {
+  getDefaultThinkingLevel,
+  getThinkingLevelOptions,
+  supportsGeminiThinkingLevel,
+} from "@/lib/modelUtils";
 
 interface geminiModelConfigsProps {
   configs: LLMGeminiConfigsType;
@@ -27,16 +27,8 @@ const GeminiModelConfigs = ({
   onChange,
 }: geminiModelConfigsProps) => {
   const hasThinkingLevel = supportsGeminiThinkingLevel(model);
-  const isGemini3Flash = model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH;
-
-  // Get appropriate options based on model
-  // Flash supports all 4 levels (minimal, low, medium, high)
-  // Pro supports only 2 levels (low, high)
-  // Both default to "high" (dynamic reasoning)
-  const thinkingLevelOptions = isGemini3Flash
-    ? THINKING_LEVEL_OPTIONS_FLASH
-    : THINKING_LEVEL_OPTIONS_PRO;
-  const defaultThinkingLevel = "high";
+  const thinkingLevelOptions = getThinkingLevelOptions(model);
+  const defaultThinkingLevel = getDefaultThinkingLevel(model);
 
   return (
     <div className="flex w-72 flex-col gap-6">

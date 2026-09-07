@@ -132,5 +132,8 @@ tests_end_to_end/visual-tests/screenshots/
 # `opik migrate` audit logs (runtime artifacts written to CWD by default)
 opik-migrate-*.json
 
+# traces cutover backfill anchor (runtime artifact written to CWD by backfill.sh)
+traces_cutover_backfill_start
+
 # private opik plugin
 apps/opik-frontend/src/plugins/ai-spend

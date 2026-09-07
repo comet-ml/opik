@@ -61,6 +61,7 @@ env:
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 
 jobs:
   has_needed_secrets:

@@ -7,6 +7,7 @@ import crewai
 import opik.semantic_version
 
 from . import crewai_decorator, patchers
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ def track_crewai(
         project_name: The name of the project to associate with the tracking.
         crew: The Crew instance to track. Required for CrewAI v1.0.0+ to properly track LLM calls.
     """
+    analytics.track_event("integration", "crewai")
 
     decorator_factory = crewai_decorator.CrewAITrackDecorator()
 

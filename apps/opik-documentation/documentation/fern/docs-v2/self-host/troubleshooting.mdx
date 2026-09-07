@@ -79,6 +79,76 @@ You should see a row with the macro name and value.
 
 After restarting ClickHouse, retry the backend deployment or migration. The backend should automatically retry after ClickHouse is ready.
 
+### Backend Not Ready: `clickhouse-traces-topology`
+
+#### Problem Description
+
+The backend refuses readiness and the `clickhouse-traces-topology` health check reports unhealthy with a message about `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`.
+
+**This check failing is intentional, not a bug.** It means the `tracesDistributedWrapEnabled` setting disagrees with the actual shape of the `traces` table in ClickHouse. Trace deletion cannot work in that state, so the backend takes itself out of rotation at startup instead of accepting traffic and failing on the first delete.
+
+**Symptoms:**
+
+- Readiness probe (`/health-check?name=all&type=ready`) returns `503`; pods never become Ready
+- `GET /health-check?name=clickhouse-traces-topology` reports `"healthy": false`
+- Backend logs: `A critical dependency is now unhealthy: name=clickhouse-traces-topology, type=READY`
+
+#### Cause
+
+`tracesDistributedWrapEnabled` tells the backend where to send trace deletions. It has to match the table:
+
+| Setting | Required `traces` engine |
+| --- | --- |
+| `false` (the default) | `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` |
+| `true` | `Distributed`, with a `traces_local` table present |
+
+A default self-hosted or open-source install has the setting `false` and a `ReplicatedMergeTree` `traces` table, so this check passes and there is nothing to do. It only fails if the setting was turned on, or if the table was converted to a `Distributed` wrapper without turning it on.
+
+#### Resolution
+
+Read the health check message — it names both the setting and the engine it actually found. Then make the two agree.
+
+Check what the table really is. Substitute `<database_name>` with your `ANALYTICS_DB_DATABASE_NAME` — `opik` is only the default, and querying the wrong database returns no rows, which looks like the tables are missing:
+
+```sql
+SELECT name, engine FROM system.tables
+WHERE database = '<database_name>' AND name IN ('traces', 'traces_local');
+```
+
+<Callout intent="info">
+  `system.tables` is node-local, and so is the health check: both answer for the **one replica that served the query**. The backend reaches ClickHouse through a load-balanced service, so if the failure is intermittent — some probes healthy, some not, pods flapping rather than all staying unready — the replicas disagree with each other and the flag is not what is wrong. Confirm with the cluster-wide form below, and fix the lagging replica rather than the flag.
+</Callout>
+
+```sql
+-- Same lookup, every replica. Compare down each table separately: one table's engine must be
+-- the same on every host. The two tables are expected to differ from each other: after the
+-- wrap `traces` is `Distributed` and `traces_local` is a `(Replicated)MergeTree`, which is the
+-- healthy shape, not a mismatch.
+SELECT name, hostName() AS host, engine
+FROM clusterAllReplicas('{cluster}', system.tables)
+WHERE database = '<database_name>' AND name IN ('traces', 'traces_local')
+ORDER BY name, host;
+```
+
+Substitute `{cluster}` here as well — your cluster macro, from `SELECT * FROM system.macros`; on a single-node install drop the `clusterAllReplicas(...)` wrapper instead. If a **single table's** engine differs between hosts, an `ON CLUSTER` DDL has not finished propagating or failed on a host — let it settle, or re-run it there. Changing the flag would only move the failure to the other replicas.
+
+Then set the flag to match:
+
+- `traces` is a `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` → set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled: false` (Helm) or `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=false` (Docker Compose or plain environment), then restart the backend.
+- `traces` is `Distributed` and `traces_local` exists → set the same key to `true` and restart.
+
+<Callout intent="warning">
+  **On Helm, an explicit env entry wins over the chart value.** The chart derives `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` from `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` **only when that key is not already set under `component.backend.env`** — an explicit entry there takes precedence. So if you change the top-level value, restart, and the check still reports the old expectation, you have a stale override: update or remove the `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` entry under `component.backend.env`. Confirm what the backend actually receives with `kubectl get configmap <release-name>-backend -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED}'`.
+</Callout>
+
+The check re-evaluates on every probe, so readiness returns on its own once the two sides agree — no further action beyond the restart that picks up the new setting.
+
+<Callout intent="warning">
+  Do not work around this by removing the check. The setting is the source of truth for where deletions are routed, and the check only reports what it observes — leaving the two mismatched means every trace deletion fails (`Code: 36` / `Code: 48` one way, `Code: 60` the other).
+</Callout>
+
+If `traces` does not exist at all, the check says so instead: the analytics migrations have not run. See the migration sections above.
+
 ### Fresh Multi-Replica Install Migration Failures
 
 #### Problem Description

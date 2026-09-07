@@ -12,6 +12,7 @@ from opik.decorator import error_info_collector
 
 from .graph import build_mermaid_graph_from_module
 from .parsers import LMHistoryInfo, extract_lm_info_from_history, get_span_type
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         project_name: Optional[str] = None,
         log_graph: bool = False,
     ):
+        analytics.track_event("integration", "dspy")
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
         # Store (lm_instance, expected_messages) for extracting usage and verifying correct history entry

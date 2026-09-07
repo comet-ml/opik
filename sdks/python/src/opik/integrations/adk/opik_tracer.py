@@ -27,6 +27,7 @@ from .patchers import (
 )
 from .patchers.adk_otel_tracer import llm_span_helpers
 from .graph import mermaid_graph_builder
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class OpikTracer:
             project_name: The name of the project for tracing.
             distributed_headers: The distributed trace headers.
         """
+        analytics.track_event("integration", "adk")
         self.name = name
         self.tags = tags
         self.metadata = metadata or {}

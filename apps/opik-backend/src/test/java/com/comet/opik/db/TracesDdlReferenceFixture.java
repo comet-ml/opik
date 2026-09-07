@@ -26,7 +26,7 @@ import java.sql.SQLException;
  *   {@code applyingTheFixtureLeavesTheShippedChangelogIntact} in both gates.</li>
  * </ul>
  *
- * <p>See {@code guides/traces-schema-ddl.md} for the playbook the reference implements.
+ * <p>See {@code apps/opik-backend/docs/traces-schema-ddl.md} for the playbook the reference implements.
  */
 @UtilityClass
 class TracesDdlReferenceFixture {

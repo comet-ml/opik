@@ -34,6 +34,8 @@ OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
 
 CONFIG_FILE_PATH_DEFAULT: Final[str] = "~/.opik.config"
 
+ANALYTICS_URL_DEFAULT: Final[str] = "https://stats.comet.com/notify/event/"
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -196,6 +198,20 @@ class OpikConfig(pydantic_settings.BaseSettings):
     In case there is a need to update reporting rules and stop receiving events from existing users,
     current DSN should disabled in Sentry project settings, a new DSN should be created and placed here
     instead of the old one.
+    """
+
+    analytics_enable: bool = True
+    """
+    If set to True, Opik reports product analytics (BI) events describing which SDK
+    features are used - never their payloads. Setting it to False is the way to switch
+    reporting off. See `opik.analytics`.
+    """
+
+    analytics_url: str = ANALYTICS_URL_DEFAULT
+    """
+    Where usage analytics are sent. Comet's stats collector, which forwards them to the
+    same pipeline the Opik backend reports through. It takes no credentials. Set this to
+    an empty value to stop analytics being reported at all.
     """
 
     enable_litellm_models_monitoring: bool = True

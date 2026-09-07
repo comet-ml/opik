@@ -9,6 +9,7 @@ from . import (
     stream_wrappers,
     encoder_extension,
 )
+from ... import analytics
 
 
 def _get_provider(client: genai.Client) -> str:
@@ -52,6 +53,7 @@ def track_genai(
     Returns:
         The modified genai.Client with Opik tracking enabled.
     """
+    analytics.track_event("integration", "genai")
     if hasattr(client, "opik_tracked"):
         return client
     encoder_extension.register()

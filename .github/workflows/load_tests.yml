@@ -16,6 +16,7 @@ on:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_CONSOLE_LOGGING_LEVEL: WARNING
 
@@ -38,7 +39,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Run latest Opik server
         env:

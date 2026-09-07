@@ -1,29 +1,28 @@
 ---
 name: explore-feature
-description: Use when a developer wants a release-gate test for a change before merge — e.g. "explore this feature", "add a release-gate test for my PR", "gate this branch", "cover the feature in PR #7303", "release-gate test for these tickets". Reads a ticket + changed code, writes a happy-path test-plan.md (posted to Jira), and commits one staging-ready @release-gate Playwright test that gates that change's own release. Delegates the actual test authoring to writing-e2e-tests.
+description: Use when a developer wants an e2e test covering a change they just made — e.g. "explore this feature", "add a test for my PR", "cover the feature in PR #7303", "test my branch". Reads a ticket + changed code to work out the one flow worth covering, then delegates authoring to writing-e2e-tests, which writes a normal tiered spec under tests/<area>/.
 ---
 
 # Explore Feature
 
-This skill produces the two dev-side artifacts of the dev-driven testing workflow: a happy-path
-`test-plan.md` (the dev↔QA handoff, posted to Jira) and one staging-ready `@release-gate`
-Playwright test committed with the PR. The test gates *that change's own release* and is later
-triaged by QA.
+Turns "here's my change, cover it" into one committed, locally-green Playwright spec.
 
-It is a **thin orchestrator**: it owns three phases — resolve scope, plan→Jira, stamp+place — and
-**delegates the actual test authoring** (analyze FE, discover live UI, write POM/spec, run green)
-to the `writing-e2e-tests` skill via a fixed contract.
+It is a **thin orchestrator**: it owns two phases — resolve what to cover, and confirm the result —
+and **delegates the actual authoring** (analyze FE, discover live UI, write POM/spec, run green) to
+the `writing-e2e-tests` skill.
 
-**Announce at start:** "I'm using the explore-feature skill to build a release-gate test for X."
+**Announce at start:** "I'm using the explore-feature skill to add an e2e test for X."
 
 ## What this does — and doesn't
 
-- **Does:** resolve what to gate → write & post the plan → hand `writing-e2e-tests` a staging-ready
-  contract → confirm the committed `@release-gate` spec is green locally.
-- **Doesn't:** deep bug-hunting or edge-case coverage (that's a separate QA activity); CI wiring
-  (staging gate, the move to `shipped/`, age-expiry — not this skill); moving or deleting gate
-  tests (the skill only creates/appends).
+- **Does:** resolve the change surface → pick the one flow worth covering → hand it to
+  `writing-e2e-tests` → confirm the spec is tagged, in the taxonomy, and green.
+- **Doesn't:** deep bug-hunting or edge-case coverage (that's a separate QA activity); CI wiring.
 - **Cheap per-PR happy-path only.** One flow, green locally in minutes.
+
+The output is an ordinary spec: `tests/<area>/<name>.spec.ts`, a tier tag, an `@area:`, a `@cap:`
+per test — exactly what every other spec in the estate looks like, and picked up by the same
+suites. There is no separate lane and no version stamp.
 
 ## The loop
 
@@ -31,15 +30,13 @@ to the `writing-e2e-tests` skill via a fixed contract.
 digraph explore_feature {
     rankdir=TB;
     "1. Resolve scope (GATE)" [shape=box];
-    "2. Write plan + post to Jira" [shape=box];
-    "3. Local-run gate (GATE)" [shape=box];
-    "4. Delegate authoring to writing-e2e-tests" [shape=box];
-    "5. Confirm @release-gate spec green + stamped" [shape=box];
+    "2. Local-run gate (GATE)" [shape=box];
+    "3. Delegate authoring to writing-e2e-tests" [shape=box];
+    "4. Confirm tagged + green" [shape=box];
 
-    "1. Resolve scope (GATE)" -> "2. Write plan + post to Jira";
-    "2. Write plan + post to Jira" -> "3. Local-run gate (GATE)";
-    "3. Local-run gate (GATE)" -> "4. Delegate authoring to writing-e2e-tests";
-    "4. Delegate authoring to writing-e2e-tests" -> "5. Confirm @release-gate spec green + stamped";
+    "1. Resolve scope (GATE)" -> "2. Local-run gate (GATE)";
+    "2. Local-run gate (GATE)" -> "3. Delegate authoring to writing-e2e-tests";
+    "3. Delegate authoring to writing-e2e-tests" -> "4. Confirm tagged + green";
 }
 ```
 
@@ -52,8 +49,8 @@ Normalize whatever the dev pointed at into one **ScopeSpec** before authoring an
 | Mode | Trigger | Resolve |
 |---|---|---|
 | Local diff | no arg / dirty tree / "my branch" / "my changes" | see **Local-diff mode** below — this is the default when no PR is named, incl. "I haven't opened a PR yet" |
-| A PR | `#<n>` or a PR URL | PR diff + linked ticket via `gh pr view <n> --json …` (or the GitHub MCP); detect an existing gate spec to append to |
-| Multi-PR / multi-ticket | a list | union of the diffs; the **last** PR is the merge/stamp point |
+| A PR | `#<n>` or a PR URL | PR diff + linked ticket via `gh pr view <n> --json …` (or the GitHub MCP) |
+| Multi-PR / multi-ticket | a list | union of the diffs |
 
 **Local-diff mode** — a dev running this on their branch before (or without) a PR. Capture the
 **full** change surface, not just committed work — pre-PR work is often uncommitted:
@@ -66,101 +63,78 @@ git diff --name-only --cached                 # staged but uncommitted
 git ls-files --others --exclude-standard      # new untracked files
 ```
 
-Union those for `changedFiles`. If all four are empty, there's nothing to gate — say so and stop.
-
-Deriving the ticket (for naming/stamp/Jira) when there's no PR to read it from:
-- Prefer a key in the **branch name** (`andreic/OPIK-1234-…` → `OPIK-1234`).
-- If the branch name has no key, **ask the dev** for the ticket rather than guessing; if they
-  genuinely have none, fall back to a slug from the branch/summary for `targetPath`
-  (`_release-gate/<slug>.spec.ts`), skip the Jira post, and note it in the plan. Never invent a
-  ticket key.
+Union those for `changedFiles`. If all four are empty, there's nothing to cover — say so and stop.
 
 Produce the **ScopeSpec**:
 
-- `tickets[]` — the lead ticket drives naming; others referenced by key.
+- `tickets[]` — for naming and the PR description, if there are any. A ticket key in the branch
+  name (`andreic/OPIK-1234-…` → `OPIK-1234`) is the usual source. Never invent one; the spec name
+  should describe the behaviour anyway, not the ticket.
 - `changedFiles[]` — the FE/BE change surface.
-- `targetPath` = `tests_end_to_end/e2e/tests/_release-gate/<lead-ticket>.spec.ts` — new, or existing → append.
-- `versionStamp` — see **Version stamp** below.
-- `happyPath` — the one end-to-end flow to gate. Multi-PR → the **combined assembled-feature
-  flow, as one test** (earlier PRs don't each get a gate).
+- `area` — the taxonomy area the change belongs to, from
+  `tests_end_to_end/coverage/taxonomy.yaml`. This decides the directory: `tests/<area>/`.
+- `targetPath` = `tests_end_to_end/e2e/tests/<area>/<name>.spec.ts` — new, or an existing spec in
+  that directory to extend. **Prefer extending**: a new `test()` in the area's existing spec beats
+  a new file when the setup is the same.
+- `capabilities[]` — the `@cap:` keys this will cover, grepped from the taxonomy. They usually
+  already exist as `covered: false`. If nothing fits, add the entry — a kebab-case name for the
+  user-facing capability.
+- `tier` — `@t1-smoke` for fast deterministic core checks, `@t2-cuj` for multi-step journeys and
+  anything destructive, `@t3-nightly` for slower/broader. Tier is chosen by **how often it should
+  run**, not by importance; anything spending real LLM budget is not t1.
+- `happyPath` — the one end-to-end flow to cover. Multi-PR → the **combined assembled-feature
+  flow, as one test**.
 
-Three things to resolve while shaping the happy path — each caught a false or unbuildable gate in piloting:
+Three things to resolve while shaping the happy path — each caught a false or unbuildable test in
+piloting:
 
-- **Fix PRs — gate the repro, not the easy path.** For a `fix:`, the happy path must exercise the
+- **Fix PRs — cover the repro, not the easy path.** For a `fix:`, the happy path must exercise the
   exact condition the bug needed. If the state can be reached two ways and only one triggered the
   bug (e.g. a trace shows the bug only when `source=sdk` via manual reference-linking, not via
   `evaluate()`), seeding the easy way makes the test pass against the *pre-fix* code too — a
-  vacuous gate. Identify the repro condition from the PR's root-cause description and seed that shape.
-- **N equivalent surfaces — gate the most representative one.** If the change fixes the same
+  vacuous test. Identify the repro condition from the PR's root-cause description and seed that shape.
+- **N equivalent surfaces — cover the most representative one.** If the change fixes the same
   behavior in several places (e.g. experiment "Go to logs", a shared sidebar, and a Playground
-  cell link), don't try to cover them all — pick the single most representative entry point for
-  the gate and list the rest under the plan's "Not covered" for QA. Keeps it cheap.
+  cell link), don't try to cover them all — pick the single most representative entry point and
+  tell the dev which ones you left. Keeps it cheap.
 - **Seeding is part of the deliverable, not a precondition.** Work out early how the happy path's
   state gets created — an existing fixture, an SDK client, or the bridge (`services/opik-sdk-driver`).
   If the shape the repro needs isn't reachable through the current surface (e.g. the bridge only
   exposes `evaluate()` but the bug needs a manual `client.trace(source=...)` +
   `ExperimentItemReferences` shape), **that seeding support is yours to add as part of authoring** —
-  extend the bridge route / add a fixture / use the SDK client directly — then write the gate on
-  top of it. Doing this early (here, not mid-Phase-4) just means you scope the seed work before the
-  browser work. The only real stop is if the state cannot be produced through *any* public SDK /
-  bridgeable path at all (rare) — then flag it, because it likely means the feature isn't
-  end-to-end testable yet.
+  extend the bridge route / add a fixture / use the SDK client directly — then write the test on
+  top of it. Adding a fixture is normal, not scope creep. The only real stop is if the state cannot
+  be produced through *any* public SDK / bridgeable path at all (rare) — then flag it, because it
+  likely means the feature isn't end-to-end testable yet.
 
 **Two gates here, before expensive authoring:**
 
-1. **Scope gate** — state the resolved happy path + repro seed shape + target path + stamp back to
-   the dev and get a yes. If seeding the repro needs new bridge/fixture support, say so here so the
-   dev knows this PR's gate work also touches `services/opik-sdk-driver` or the fixtures.
-   Multi-PR especially: "One combined test `<lead>.spec.ts` covering X→Y→Z, stamped `<version>`. OK?"
-2. **Skip check** — if the change is pure refactor / infra / docs with no user-facing behavior,
-   say so, point at the skip label, and stop. This is the escape hatch for the "every user-facing
-   PR" policy. Note two cases that *are* user-facing even though they look like config: a
+1. **Scope gate** — state the resolved happy path + repro seed shape + target path + tier + the
+   `@cap:` keys back to the dev and get a yes. If seeding the repro needs new bridge/fixture
+   support, say so here so the dev knows this work also touches `services/opik-sdk-driver` or the
+   fixtures. Multi-PR especially: "One test in `<area>/<name>.spec.ts` covering X→Y→Z, `@t2-cuj`. OK?"
+2. **Skip check** — if the change is pure refactor / infra / docs with no user-facing behavior, say
+   so and stop. Note two cases that *are* user-facing even though they look like config: a
    capability-map / constants change that adds a user-visible option (e.g. a new model in a
-   dropdown → happy path: "open the page, the option is selectable"), and a backend-dominant
-   change whose only visible effect is subtle (e.g. a trace that should *not* appear in a default
-   list) — find the user-observable effect and gate that, don't skip. The opposite case also
-   happens: a perf / internals change with **no behavior delta by design** (e.g. swapping a slow
-   probe for a fast one, same rendered result). There's no PR-specific happy path to gate — so
-   either gate a *generic* regression on the affected page and label it as such in the plan, or
-   skip-with-a-note if QA's regression suite already covers that page. Don't dress a generic
-   regression up as a PR-specific gate. **Two things to get right here:** (a) *skip vs gate* turns
-   on coverage of the **specific state/decision the change governs, not the page as a whole** — grep
-   the existing suite (`tests_end_to_end/e2e/tests`) for that exact state. A page whose *populated*
-   path is covered but whose *empty/onboarding* path (the branch a probe like this actually drives)
-   is not is **not** "already covered" — gate the uncovered half. Skip-with-a-note only when the
-   specific state is genuinely already asserted somewhere. (b) This *is* a `fix:` PR, so the plan's
-   "Repro condition" mandate seems to apply — but a no-behavior-delta fix has no repro that renders
-   differently pre/post. The perf-fix escape hatch **overrides** the repro mandate: write "N/A — no
-   behavior delta; generic regression" there and label the gate generic. A generic gate that passes
-   on both the pre- and post-fix build is correct, not a bug — say so in the plan's Open questions.
+   dropdown → happy path: "open the page, the option is selectable"), and a backend-dominant change
+   whose only visible effect is subtle (e.g. a trace that should *not* appear in a default list) —
+   find the user-observable effect and cover that, don't skip. The opposite case also happens: a
+   perf / internals change with **no behavior delta by design** (e.g. swapping a slow probe for a
+   fast one, same rendered result). There's no PR-specific happy path — so either cover a *generic*
+   regression on the affected page and say so, or skip-with-a-note if the suite already covers that
+   page. Don't dress a generic regression up as PR-specific coverage. **Two things to get right
+   here:** (a) *skip vs cover* turns on coverage of the **specific state/decision the change
+   governs, not the page as a whole** — grep the existing suite (`tests_end_to_end/e2e/tests`) for
+   that exact state. A page whose *populated* path is covered but whose *empty/onboarding* path (the
+   branch a probe like this actually drives) is not is **not** "already covered" — cover the
+   uncovered half. Skip-with-a-note only when the specific state is genuinely already asserted
+   somewhere. (b) This *is* a `fix:` PR, so the "repro condition" mandate seems to apply — but a
+   no-behavior-delta fix has no repro that renders differently pre/post. The perf-fix escape hatch
+   **overrides** the repro mandate: say "N/A — no behavior delta; generic regression" and label it
+   generic. A generic test that passes on both the pre- and post-fix build is correct, not a bug —
+   say so when you report back.
 
-### Version stamp
-
-The stamp is the release this PR targets — the next in-development version, read from **trunk**,
-not the local tree (a branch can be stale):
-
-```bash
-git fetch origin main --quiet
-git show origin/main:version.txt   # the stamp
-```
-
-- Fetch first (the local `origin/main` ref can be stale). If fetch fails (offline), fall back to
-  the cached ref and **warn** the stamp may be behind trunk — never silently use a stale value.
-- If the change set itself edits `version.txt` (release PRs), prefer the PR's new value.
-- **Append reconciliation:** when appending to an existing gate spec, keep the earliest un-shipped
-  `@release-gate:<v>` across the describe block.
-
-## Phase 2 — Write the plan and post it to Jira
-
-- Fill `test-plan-template.md` (read it) from the ScopeSpec.
-- Write it to a scratch path (e.g. the session scratchpad) to drive Phase 4. **Never commit it.**
-- **Post to Jira, auto with manual fallback:** if the Jira MCP is connected, add the plan as a
-  comment on the **lead** ticket (`addCommentToJiraIssue`, `contentFormat=markdown`, **real
-  newlines** — a literal `\n` renders as text in ADF). If the MCP isn't connected, print the plan
-  and the exact call for the dev to run. Never block on this.
-- In any Jira text, use the underscore form (`OPIK_7168`) for tickets this PR does not resolve.
-
-## Phase 3 — Local-run gate
+## Phase 2 — Local-run gate
 
 Before authoring can be verified, confirm the dev has a local stack **with their changes**:
 
@@ -198,32 +172,38 @@ Before authoring can be verified, confirm the dev has a local stack **with their
    - Point the suite at it: `OPIK_BASE_URL=http://localhost:5174 OPIK_DEPLOYMENT=oss`. OSS needs no
      auth. Tear down the socat container when done.
 
-## Phase 4 — Delegate authoring to `writing-e2e-tests`
+## Phase 3 — Delegate authoring to `writing-e2e-tests`
 
-Invoke the `writing-e2e-tests` skill to do the analyze → discover-live-UI → write → run-green
-loop, handing it the **release-gate authoring contract** (read `release-gate-contract.md` and pass
-it verbatim): the target path, the `@release-gate` + `@release-gate:<version>` + feature tags, the
-deployment-agnostic requirement, the reuse-or-inline POM policy, and "verify green against the
-dev's local stack."
+Invoke the `writing-e2e-tests` skill to do the analyze → discover-live-UI → write → run-green loop.
+Hand it the ScopeSpec: the target path, the tier + `@area:` + `@cap:` tags, the happy path and its
+seed shape, and "verify green against the dev's local stack."
 
-## Phase 5 — Confirm
+That skill owns the conventions — `test.step()` wrapping, UI-first assertions, selector preference,
+SDK-only seeding, fixture-owned teardown, and the taxonomy update. Don't restate them here; read
+`.agents/skills/writing-e2e-tests/conventions.md` if you need them.
 
-- The spec exists at `targetPath`, tagged `@release-gate` + `@release-gate:<version>` +
-  `@area:<area>`, with a `@cap:` per test.
+## Phase 4 — Confirm
+
+- The spec exists at `targetPath`, tagged with one tier + `@area:<area>`, with a `@cap:` per test.
 - Those `@area:`/`@cap:` values resolve in `tests_end_to_end/coverage/taxonomy.yaml`, and the
   taxonomy was updated in the same change (spec added to `specs:`, covered capabilities flipped to
-  `covered: true`).
+  `covered: true` with the tier).
 - `tag_lint.py` reports `0 problem(s)` — this is the CI `tag-lint` job, so a miss here is a red
   build:
   ```bash
   python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/coverage/taxonomy.yaml --estate tests_end_to_end
   ```
-- It runs green locally: `cd tests_end_to_end/e2e && npm run test:release-gate`.
-- The plan was posted to Jira (or printed for manual posting).
-- Report the committed spec path and the Jira comment link back to the dev.
+- It runs green locally, and so does the rest of its feature directory — a shared POM or fixture is
+  used by sibling specs:
+  ```bash
+  cd tests_end_to_end/e2e && npx playwright test tests/<area>/ --reporter=list
+  npx tsc --noEmit
+  ```
+- Report the committed spec path back to the dev, plus anything you deliberately left uncovered
+  (the other N surfaces, edge cases) so they know the boundary.
 
 ## Ownership
 
-QA owns this skill. When a generated plan or test misses something, the fix lands in this skill's
-files — this is the feedback loop. Edit in `.agents/skills/explore-feature/`, then `make claude`
-to mirror for local testing.
+QA owns this skill. When a generated test misses something, the fix lands in this skill's files —
+this is the feedback loop. Edit in `.agents/skills/explore-feature/`, then `make claude` to mirror
+for local testing.

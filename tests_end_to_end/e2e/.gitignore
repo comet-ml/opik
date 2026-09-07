@@ -7,6 +7,7 @@ core/backend/generated/
 .test-scratch/
 .runners/
 .e2e-run-id
+.e2e-workspace-role-pending-users
 
 # Local credentials (templates checked in, real values gitignored)
 .env.local

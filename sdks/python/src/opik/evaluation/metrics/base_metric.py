@@ -1,9 +1,33 @@
-from typing import Any, List, Optional, Union
+import sys
+from typing import Any, List, Optional, Type, Union
 
 import opik
 import opik.config as opik_config
 import _opik._base_metric as _opik_base_metric
+from ... import analytics
 from ..metrics import score_result
+
+
+def _is_opik_metric(metric_class: Type["BaseMetric"]) -> bool:
+    """
+    True only for a class Opik actually ships. `__module__` alone would not do: a
+    subclass can set it to anything, and a name the user chose would then be
+    reported as one of ours - which is the one thing these payloads must never
+    carry. Looking the class back up in the module it claims closes that.
+    """
+    if not metric_class.__module__.startswith("opik."):
+        return False
+
+    module = sys.modules.get(metric_class.__module__)
+    return getattr(module, metric_class.__name__, None) is metric_class
+
+
+def _track_metric_creation(metric_class: Type["BaseMetric"]) -> None:
+    # A user-defined metric class can be named anything, so only the names of
+    # Opik's own metrics are reported.
+    name = metric_class.__name__ if _is_opik_metric(metric_class) else "custom"
+
+    analytics.track_event("evaluation", "metric_created", metric=name)
 
 
 class BaseMetric(_opik_base_metric.BaseMetric):
@@ -40,6 +64,11 @@ class BaseMetric(_opik_base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
+        # First, before any of the setup below: a metric whose construction goes on
+        # to fail was still a metric the user reached for, and reporting is meant to
+        # count that. Only needs the class.
+        _track_metric_creation(type(self))
+
         super().__init__(name=name, track=track, project_name=project_name)
 
         config = opik_config.OpikConfig()

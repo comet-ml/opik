@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
+import com.comet.opik.infrastructure.bundle.JsonUtilsConfigurationBundle;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.cache.CacheModule;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
@@ -31,6 +32,7 @@ import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
+import com.comet.opik.infrastructure.redaction.RedactionModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
@@ -93,6 +95,10 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .migrationsFileName(DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME)
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
+        // MUST be registered before the GuiceBundle below: the Redisson codecs capture JsonUtils'
+        // mapper while the Guice injector is built, and configure() replaces that mapper rather than
+        // mutating it. See JsonUtilsConfigurationBundle for the full reasoning.
+        bootstrap.addBundle(new JsonUtilsConfigurationBundle());
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle
                         .<OpikConfiguration>forDatabase(
@@ -132,13 +138,19 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                         .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
+        // Read-time redaction, registered only when switched on: with the flag off there is no serializer in
+        // the chain at all, so responses are written exactly as before.
+        if (configuration.getRedaction().isEnabled()) {
+            environment.getObjectMapper().registerModule(new RedactionModule());
+        }
+
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
         long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();
 
-        // Apply the same stream-read limits to both the HTTP (Dropwizard) and internal (JsonUtils) mappers,
-        // so an oversized batch aborts mid-parse before a huge node tree is built.
+        // Apply the same stream-read limits to the HTTP (Dropwizard) mapper, so an oversized batch aborts
+        // mid-parse before a huge node tree is built. JsonUtils itself is configured earlier, from the
+        // bundle registered in initialize() — it has to happen before the Guice injector captures it.
         JsonUtils.applyStreamReadConstraints(environment.getObjectMapper(), maxStringLength, maxDocumentLength);
-        JsonUtils.configure(maxStringLength, maxDocumentLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

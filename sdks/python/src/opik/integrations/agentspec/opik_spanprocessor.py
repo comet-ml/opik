@@ -16,6 +16,7 @@ import opik.datetime_helpers as datetime_helpers
 import opik.id_helpers as id_helpers
 import opik.llm_usage as llm_usage
 from opik.api_objects import opik_client
+from ... import analytics
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,7 @@ class OpikSpanProcessor:
                 conversation thread. Can be overridden per-trace via
                 :meth:`AgentSpecInstrumentor.instrument_context`.
         """
+        analytics.track_event("integration", "agentspec")
         self.mask_sensitive_information = mask_sensitive_information
         # Reuse the shared Opik client unless caller explicitly customizes it.
         # Building a fresh ``opik.Opik`` per processor instance is expensive

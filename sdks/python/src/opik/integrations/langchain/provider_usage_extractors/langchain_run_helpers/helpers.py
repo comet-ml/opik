@@ -37,7 +37,10 @@ def try_get_streaming_token_usage(
 
 
 def try_get_ls_metadata(run_dict: Dict[str, Any]) -> Optional[LSMetadata]:
-    if metadata := run_dict["extra"].get("metadata"):
+    extra = run_dict.get("extra")
+    if not isinstance(extra, dict):
+        return None
+    if metadata := extra.get("metadata"):
         model = metadata.get("ls_model_name")
         provider = metadata.get("ls_provider")
         model_type = metadata.get("ls_model_type")

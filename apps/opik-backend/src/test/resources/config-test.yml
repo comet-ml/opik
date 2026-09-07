@@ -96,6 +96,13 @@ databaseAnalyticsDataModel:
   #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
   #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
   #   Flip in lockstep with the cutover EXCHANGE.
+  #   Also gates partition-scoped trace deletes: that same EXCHANGE puts the weekly-partitioned successor behind the
+  #   name mutations target, so true additionally means a delete may scope itself with IN PARTITION instead of being
+  #   registered against every part of the table. The two facts have only ever flipped together, which is why this
+  #   gates both rather than there being a second flag. IN PARTITION against an unpartitioned table is a hard error
+  #   (code 248), not a lost optimisation, so setting this true ahead of the EXCHANGE breaks deletes - as it already
+  #   breaks writes, which bind sentinels a Nullable column has no use for. Off falls back to the unbounded delete:
+  #   correct, merely slower.
   traceColumnsNonNullable: false
   #  Default: false
   #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable
@@ -129,19 +136,6 @@ databaseAnalyticsDataModel:
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
   tracesDistributedWrapEnabled: false
   #  Default: false
-  #  Description: Enables partition-aware PRUNING of trace deletes - it does NOT create or activate any partitioning.
-  #   With it on, a trace DELETE bounds itself to the weekly partitions its own ids resolve to instead of being planned
-  #   against every part of the table. Turning it on therefore ASSERTS a schema fact rather than causing one: that the
-  #   live mutation target already IS the weekly partitioned successor, id_at as DateTime64(0,'UTC') under
-  #   PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))). Installing that schema is the
-  #   EXCHANGE step of the cutover, never this flag. Purely an optimisation: false keeps the unbounded mutation, which
-  #   is always correct and merely slower. A third flag on purpose - the partitioning appears at the EXCHANGE, and
-  #   neither sibling marks it:
-  #   traceColumnsNonNullable must be rolled out BEFORE the EXCHANGE, tracesDistributedWrapEnabled flips at the wrap,
-  #   which may be deferred long after it. Leave false at deploy time; set true once the EXCHANGE is confirmed, and back
-  #   to false BEFORE a rollback promotes the original `traces` (legacy `traces` has no PARTITION BY and a 32-bit
-  #   DateTime id_at that overflows past 2106, so the predicate would silently match zero rows for a far-future id).
-  tracesWeeklyPartitionPruningEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -222,6 +216,11 @@ health:
       type: ready
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-traces-topology
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: mysql
       critical: true
       type: ready
@@ -268,6 +267,14 @@ authentication:
   reactService:
     url: ''
 
+  # Per-call read timeout for auth requests to the React service (overrides jerseyClient.timeout for this hop).
+  requestTimeout: 3s
+  # Maximum retry attempts for a failed auth request. Transport failures only; HTTP error statuses are not retried.
+  requestMaxRetries: 1
+  # Minimum backoff between auth request attempts.
+  requestRetryMinBackoff: 250ms
+  # Upper bound on the backoff between auth request attempts.
+  requestRetryMaxBackoff: 1s
 sharedHttpClientHealthCheck:
   timeout: 1s
 
@@ -413,6 +420,17 @@ cors:
   # Default: false
   # Description: Whether or not to allow cross site scripting
   enabled: false
+
+# Read-time redaction configuration
+redaction:
+  # Default: false
+  # Description: Master switch. Off here so the suite exercises the shipped default; the tests that need it on
+  # override redaction.enabled and redaction.rules per application, which is what keeps this file honest about
+  # the keys existing.
+  enabled: false
+  # Default: [] - valid only while enabled=false, since an empty set with enabled=true fails startup.
+  # Description: JSON array of {"regex", "replace"} applied to every string in a response.
+  rules: '[]'
 
 # Encryption related configuration
 encryption:
@@ -840,9 +858,6 @@ serviceToggles:
   #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
-  # Default: false
-  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
-  agenticToolsEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"

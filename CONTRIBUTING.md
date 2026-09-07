@@ -61,6 +61,9 @@ Workflows are also scanned for **security** issues with [zizmor](https://github.
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
+## SQL query construction (Java backend)
+Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`

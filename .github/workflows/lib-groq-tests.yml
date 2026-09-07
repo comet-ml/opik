@@ -10,6 +10,7 @@ env:
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 on:
   workflow_call:
 
@@ -37,7 +38,7 @@ jobs:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Install opik
         run: uv pip install --system .

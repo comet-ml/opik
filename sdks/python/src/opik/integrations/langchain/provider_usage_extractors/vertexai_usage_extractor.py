@@ -99,7 +99,9 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     if (ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)) is not None:
         model = ls_metadata.model
 
-    elif (invocation_params := run_dict["extra"].get("invocation_params")) is not None:
+    elif (
+        invocation_params := (run_dict.get("extra") or {}).get("invocation_params")
+    ) is not None:
         model = invocation_params.get("model_name")
 
     if model is not None:

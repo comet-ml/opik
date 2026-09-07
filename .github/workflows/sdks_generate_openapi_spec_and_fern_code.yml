@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           java-version: '25'
           distribution: 'corretto'
@@ -38,7 +38,7 @@ jobs:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Install Opik Optimizer SDK (for Fern docs)
         run: |

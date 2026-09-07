@@ -4,6 +4,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
@@ -50,8 +51,9 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, SPAN_USER_DEFINED_METRIC_PYTHON,
+        super(config, redisson, feedbackScoreService, traceService, spanService, SPAN_USER_DEFINED_METRIC_PYTHON,
                 Constants.SPAN_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;

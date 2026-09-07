@@ -233,12 +233,13 @@ class TracesSchemaParityPreCutoverTest {
     @Order(14)
     @DisplayName("drift is caught: same-named projections with different queries")
     void projectionQueryDriftIsCaught() throws Exception {
-        allowProjections(TRACES);
-        allowProjections(SHADOW);
-
         assertDriftIsCaught(
-                List.of("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
+                List.of("ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
                         .formatted(DATABASE_NAME, TRACES),
+                        "ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
+                                .formatted(DATABASE_NAME, SHADOW),
+                        "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
+                                .formatted(DATABASE_NAME, TRACES),
                         "ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
                                 .formatted(DATABASE_NAME, SHADOW)),
                 List.of("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES),
@@ -248,15 +249,6 @@ class TracesSchemaParityPreCutoverTest {
                         "ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode"
                                 .formatted(DATABASE_NAME, SHADOW)),
                 "proj_drift");
-    }
-
-    private void allowProjections(String table) throws Exception {
-        execute("ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
-                .formatted(DATABASE_NAME, table));
-    }
-
-    private void restoreProjectionMode(String table) throws Exception {
-        execute("ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode".formatted(DATABASE_NAME, table));
     }
 
     /**
@@ -396,22 +388,66 @@ class TracesSchemaParityPreCutoverTest {
      */
     private void assertDriftIsCaught(List<String> inject, List<String> restore, String... expectedInMessage)
             throws Exception {
-        for (var sql : inject) {
-            execute(sql);
-        }
+        // Injection sits inside the protected region: a multi-statement injection that fails partway used to skip
+        // cleanup entirely, leaving the statements that did apply behind — the exact contamination this helper exists
+        // to prevent, reintroduced by where the loop sat.
+        Throwable primary = null;
         try {
+            for (var sql : inject) {
+                execute(sql);
+            }
             var thrown = assertThatThrownBy(
                     () -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
                     .isInstanceOf(AssertionError.class);
             for (var expected : expectedInMessage) {
                 thrown.hasMessageContaining(expected);
             }
-        } finally {
-            for (var sql : restore) {
-                execute(sql);
+        } catch (Throwable t) {
+            primary = t;
+        }
+
+        try {
+            restoreAll(restore);
+        } catch (Exception e) {
+            // Never let a cleanup failure replace the real one: the assertion result is what the reader needs.
+            if (primary == null) {
+                primary = e;
+            } else {
+                primary.addSuppressed(e);
             }
         }
+
+        if (primary instanceof Error error) {
+            throw error;
+        }
+        if (primary != null) {
+            throw (Exception) primary;
+        }
+
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * Runs every restore even if an earlier one fails, so a partially applied injection is undone as far as it can be —
+     * a statement that never applied simply has nothing to undo. Failures are collected and rethrown rather than
+     * swallowed: a cleanup that quietly did not happen is how the next test fails for the wrong reason.
+     */
+    private void restoreAll(List<String> restore) throws Exception {
+        Exception failure = null;
+        for (var sql : restore) {
+            try {
+                execute(sql);
+            } catch (Exception e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     private boolean tableExists(String table) throws Exception {

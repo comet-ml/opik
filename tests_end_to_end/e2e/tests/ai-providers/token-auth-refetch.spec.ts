@@ -1,6 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
-import { mockAuthRevokeAll, mockAuthStats } from '@e2e/core/mock-auth';
+import { mockAuthRevokeAll, mockAuthSkipReason, mockAuthStats } from '@e2e/core/mock-auth';
 
 /**
  * Reactive token refetch (OPIK-7940): when the gateway rejects a cached bearer
@@ -14,6 +14,13 @@ import { mockAuthRevokeAll, mockAuthStats } from '@e2e/core/mock-auth';
  * exercises the same transparent retry and still passes.
  */
 test.describe('AI Providers — OAuth2 reactive token refetch', { tag: ['@t1-smoke', '@area:configuration'] }, () => {
+  // The refetch is asserted through the mock's own counters, so a backend that cannot reach
+  // the mock would report zero refusals rather than a connectivity problem.
+  test.beforeAll(async () => {
+    const reason = await mockAuthSkipReason();
+    test.skip(reason !== null, reason ?? '');
+  });
+
   test('a revoked token is transparently refetched and the request retried', { tag: ['@cap:configuration.ai-provider-token-refetch'] }, async ({
     page,
     project,

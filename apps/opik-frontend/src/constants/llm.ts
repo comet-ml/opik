@@ -60,6 +60,19 @@ export const RESERVED_TRACE_EVALUATOR_VARIABLES: Readonly<
 });
 
 /**
+ * Python-metric span-scope reserved variables: there are none. `spans` is
+ * trace-scope only (a span has no sub-spans to inject), and
+ * `PythonCodeDetailsSpanFormSchema` accepts only `input`/`output`/`metadata`
+ * paths. Auto-filling `spans → spans` here would produce a mapping the user
+ * cannot see — `LLMPromptMessagesVariables` hides a variable whose value equals
+ * its sentinel — and cannot submit, because the schema rejects it. An explicit
+ * empty set keeps that pairing visible at the call site.
+ */
+export const RESERVED_SPAN_EVALUATOR_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({});
+
+/**
  * LLM-as-judge trace-scope reserved variables. Superset of
  * {@link RESERVED_TRACE_EVALUATOR_VARIABLES}: adds `{{trace}}`, which injects the
  * trace skeleton (trace id, span ids, attachment file_names) into the prompt and
@@ -306,32 +319,6 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
-
-// Thinking level options for Gemini 3 Pro models (low, high)
-export const THINKING_LEVEL_OPTIONS_PRO: Array<{
-  label: string;
-  value: "low" | "high";
-}> = [
-  { label: "Low", value: "low" },
-  { label: "High (Default)", value: "high" },
-];
-
-// Thinking level options for Gemini 3 Flash models (all 4 levels)
-// Flash supports: minimal, low, medium, high
-export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
-  label: string;
-  value: "minimal" | "low" | "medium" | "high";
-}> = [
-  { label: "Minimal", value: "minimal" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-];
-
-// Legacy export for backwards compatibility.
-// Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
-/** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
-export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

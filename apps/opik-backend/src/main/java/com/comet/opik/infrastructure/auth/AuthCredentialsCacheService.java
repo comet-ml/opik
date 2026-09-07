@@ -5,6 +5,7 @@ import com.comet.opik.utils.JsonUtils;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RBatchReactive;
 import org.redisson.api.RBucketsReactive;
 import org.redisson.api.RMapReactive;
@@ -34,12 +35,16 @@ class AuthCredentialsCacheService implements CacheService {
     private static final String WORKSPACE_ID_KEY = "workspaceId";
     private static final String WORKSPACE_NAME_KEY = "workspaceName";
     private static final String QUOTAS_KEY = "quotas";
+    private static final String PERMISSIONS_KEY = "permissions";
+    private static final String DEVICE_ID_KEY = "deviceId";
 
     private static final Set<String> V2_MAP_FIELDS = Set.of(
             USER_NAME_KEY,
             WORKSPACE_ID_KEY,
             WORKSPACE_NAME_KEY,
-            QUOTAS_KEY);
+            QUOTAS_KEY,
+            PERMISSIONS_KEY,
+            DEVICE_ID_KEY);
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
@@ -65,6 +70,10 @@ class AuthCredentialsCacheService implements CacheService {
                         .workspaceId(m.get(WORKSPACE_ID_KEY))
                         .workspaceName(m.get(WORKSPACE_NAME_KEY))
                         .quotas(getQuotas(m))
+                        .permissions(getPermissions(m))
+                        // Blank for every credential that is not a CIPX device token, and absent for entries
+                        // written before device ids; both mean no device, so they read back the same.
+                        .deviceId(StringUtils.trimToNull(m.get(DEVICE_ID_KEY)))
                         .build());
     }
 
@@ -98,7 +107,10 @@ class AuthCredentialsCacheService implements CacheService {
                 USER_NAME_KEY, credentials.userName(),
                 WORKSPACE_ID_KEY, credentials.workspaceId(),
                 WORKSPACE_NAME_KEY, Optional.ofNullable(credentials.workspaceName()).orElse(requestWorkspaceName),
-                QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(credentials.quotas()).orElse(List.of())));
+                QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(credentials.quotas()).orElse(List.of())),
+                PERMISSIONS_KEY,
+                JsonUtils.writeValueAsString(Optional.ofNullable(credentials.permissions()).orElse(List.of())),
+                DEVICE_ID_KEY, StringUtils.defaultString(credentials.deviceId()));
 
         RBatchReactive batch = redissonClient.createBatch();
         RMapReactive<String, String> v2Map = batch.getMap(v2Key);
@@ -126,5 +138,14 @@ class AuthCredentialsCacheService implements CacheService {
     private List<Quota> getQuotas(Map<String, String> redisMap) {
         var rawQuotas = Optional.ofNullable(redisMap.get(QUOTAS_KEY)).orElse("[]");
         return JsonUtils.readCollectionValue(rawQuotas, List.class, Quota.class);
+    }
+
+    /**
+     * Absent for entries written before permissions were cached, which read back as no permissions until the
+     * entry expires — the same answer an unpermitted caller gets, so a stale entry withholds rather than grants.
+     */
+    private List<String> getPermissions(Map<String, String> redisMap) {
+        var rawPermissions = Optional.ofNullable(redisMap.get(PERMISSIONS_KEY)).orElse("[]");
+        return JsonUtils.readCollectionValue(rawPermissions, List.class, String.class);
     }
 }

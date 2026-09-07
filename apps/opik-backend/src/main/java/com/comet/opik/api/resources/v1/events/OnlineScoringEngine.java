@@ -279,12 +279,10 @@ public class OnlineScoringEngine {
      * See {@link #injectSpecialVariable} for the shared substitution mechanics; the tree is serialized
      * lazily, only when the sentinel is actually referenced.
      *
-     * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}).
-     * <strong>Intentionally not gated by {@code isAgenticToolsEnabled}</strong>: when the toggle is off,
-     * the scorer skips the spans fetch and threads an empty list here, which still rewrites
-     * sentinel-mapped variables to {@code "[]"}. Gating this would resurrect the bare-word leak for rules
-     * whose variables map still carries the sentinel from before the toggle flipped. See
-     * {@code OnlineScoringLlmAsJudgeScorer.shouldFetchSpans} for the full toggle-semantics rationale.
+     * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}). The rewrite is
+     * deliberately unconditional: skipping it would let the sentinel value {@code "spans"} leak through
+     * {@code toReplacements}' literal-value fallback and render the bare word in the prompt. See
+     * {@code OnlineScoringLlmAsJudgeScorer.shouldFetchSpans} for when the fetch itself is skipped.
      */
     private static void injectSpansIntoReplacements(
             Map<String, String> replacements, Map<String, String> variables,
@@ -405,25 +403,6 @@ public class OnlineScoringEngine {
             @NonNull Span span,
             @NonNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), span);
-        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
-    }
-
-    /**
-     * Inline variant that injects the pre-built {@code {{span}}} structure (span id + the span's own
-     * attachment {@code file_name}s) without capping — used by the span scorer when a rule references
-     * {@code {{span}}} but the provider can't call tools, so the variable still renders the structure
-     * instead of the bare word "span". Span templates always render with {@link PromptType#MUSTACHE}.
-     */
-    public static ChatRequest prepareSpanLlmRequest(
-            @NonNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
-            @NonNull Span span,
-            @NonNull StructuredOutputStrategy structuredOutputStrategy,
-            String spanStructureJson) {
-        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), span);
-        injectSpanIntoReplacements(replacements, evaluatorCode.variables(),
-                evaluatorCode.messages(), PromptType.MUSTACHE, spanStructureJson);
-        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements,
-                PromptType.MUSTACHE);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
@@ -590,9 +569,10 @@ public class OnlineScoringEngine {
         Map<String, String> replacements = variablesMap.keySet().stream()
                 .map(variableName -> switch (variableName) {
                     case TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME -> {
-                        // Always use the enriched shape — when `spans` is empty (toggle off),
-                        // the `spans` field is omitted via @JsonInclude(NON_NULL) and the
-                        // JSON is wire-identical to today's [{role, content}, ...] shape.
+                        // Always use the enriched shape — when `spans` is empty (the tools path
+                        // renders no inline spans), the `spans` field is omitted via
+                        // @JsonInclude(NON_NULL) and the JSON is wire-identical to the legacy
+                        // [{role, content}, ...] shape.
                         try {
                             yield MessageVariableMapping.builder()
                                     .variableName(variableName)

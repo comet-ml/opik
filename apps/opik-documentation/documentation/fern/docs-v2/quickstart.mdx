@@ -262,7 +262,7 @@ stack and follow the three steps to log your first trace:
       <Step title="Run the integration">
         Once the skill is installed, you can integrate with Opik using the following prompt:
         ```
-        Instrument my agent with Opik using the /instrument command.
+        Instrument my agent with Opik using the /opik-instrument command.
         ```
       </Step>
     </Steps>
@@ -301,6 +301,13 @@ After running your application, you will start seeing your traces in Opik and yo
 
 If you don't see traces appearing, reach out to us on [Slack](https://chat.comet.com) or raise an issue on [GitHub](https://github.com/comet-ml/opik/issues) and we'll help you troubleshoot.
 
+<Tip>
+  **Recommended if you build with an AI coding assistant.** Connect your assistant (Claude Code,
+  Codex, Cursor and more) to Opik and it can read these traces, score outputs and run evaluations
+  from chat — keeping observability where you are already working. One command — `opik configure` —
+  installs both the MCP server and the Opik skills; see [MCP server](/mcp-server).
+</Tip>
+
 ## Next steps
 
 Now that you have logged your first traces, here's what to explore next:
@@ -312,3 +319,5 @@ Now that you have logged your first traces, here's what to explore next:
 3. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation
    metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your
    LLM responses.
+4. [Opik's MCP server](/mcp-server): Connect your AI coding assistant to Opik so it can read traces,
+   log scores and run evaluations without you leaving your editor.

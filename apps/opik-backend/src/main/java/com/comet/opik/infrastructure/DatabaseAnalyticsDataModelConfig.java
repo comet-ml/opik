@@ -15,6 +15,13 @@ import lombok.Builder;
  * epoch end time round-trips unchanged rather than being read as {@code null}. Flip this in lockstep with the EXCHANGE
  * step of the cutover.</p>
  *
+ * <p>It also gates partition-scoped deletes (OPIK-8230): the EXCHANGE that makes these columns non-nullable is the
+ * same one that puts the weekly-partitioned successor behind the name mutations target, so this flag being
+ * {@code true} is equally what says a delete may scope itself with {@code IN PARTITION}. One flag for two facts
+ * because they have only ever flipped together; a second would have to be threaded through the cutover runbook and
+ * tooling to track no independent state. The name says only the first duty and is deliberately not renamed - the env
+ * var is exposed.</p>
+ *
  * <p>{@code spanColumnsNonNullable}: the {@code spans} sibling of {@code traceColumnsNonNullable}, gating the same
  * sentinel wiring for {@code spans.end_time}→epoch and {@code spans.duration}/{@code spans.ttft}→{@code NaN}. Default
  * {@code false} while the {@code spans} table still has {@code Nullable(...)} columns; set {@code true} in lockstep with
@@ -51,25 +58,11 @@ import lombok.Builder;
  * (the wrapper accepts them as metadata-only, and targeting only {@code traces_local} leaves the wrapper without the
  * column, so reads fail with code 47).</p>
  *
- * <p>{@code tracesWeeklyPartitionPruningEnabled}: enables partition-aware <b>pruning</b> of trace deletes — a trace
- * {@code DELETE} bounds itself to the weekly partitions its own ids resolve to instead of being planned against every
- * part of the table (OPIK-6901). It does <b>not</b> create or activate any partitioning; installing the partitioned
- * schema is the EXCHANGE step of the cutover. Turning it on therefore <b>asserts</b> a schema fact rather than causing
- * one: that the live mutation target already is the weekly partitioned successor — {@code id_at} as
- * {@code DateTime64(0, 'UTC')} under
- * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}. Purely an optimisation:
- * {@code false} keeps the unbounded mutation, which is always correct and merely slower, and only {@code true} asserts
- * anything about the schema.</p>
- *
- * <p>It is deliberately a third flag rather than a reuse of the two above, because the partitioning appears at the
- * <b>EXCHANGE</b> and neither of them marks that moment. {@code traceColumnsNonNullable} must be rolled out
- * <b>before</b> the EXCHANGE (a rolling restart cannot be atomic with a metadata swap), and
- * {@code tracesDistributedWrapEnabled} flips at the wrap, a separate step that may be deferred long after it — so one
- * flag would be true too early and the other true too late. Emitting the predicate too early is the harmful direction:
- * legacy {@code traces} has no {@code PARTITION BY} at all and declares {@code id_at} as a 32-bit {@code DateTime} that
- * overflows past 2106, so a far-future id is stored under a wrapped timestamp the derived partition cannot match and
- * the delete would silently affect zero rows. Left {@code false} at deploy time; set {@code true} once the EXCHANGE is
- * confirmed on the target, and back to {@code false} <b>before</b> a rollback promotes the original {@code traces}.</p>
+ * <p>This flag is asserted against the live topology at readiness by
+ * {@code ClickHouseTracesTopologyHealthCheck}: either direction of mismatch fails the
+ * {@code clickhouse-traces-topology} probe with a message naming the flag and the observed engine, so an install whose
+ * flag and database disagree is pulled from rotation instead of discovering it on its first trace delete. The flag
+ * stays the source of truth — the probe only reports, it never re-routes.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -78,6 +71,5 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
-        boolean tracesDistributedWrapEnabled,
-        boolean tracesWeeklyPartitionPruningEnabled) {
+        boolean tracesDistributedWrapEnabled) {
 }

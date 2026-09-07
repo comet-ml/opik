@@ -95,6 +95,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -126,9 +127,6 @@ class ExperimentAggregatesIntegrationTest {
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final RandomGenerator random = new Random();
-
-    public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
 
     public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "executionPolicy"};
@@ -1506,11 +1504,15 @@ class ExperimentAggregatesIntegrationTest {
     void assertDatasetItemsWithExperimentItems(List<DatasetItem> expectedDatasetItem,
             List<DatasetItem> actualDatasetItems) {
 
-        assertThat(actualDatasetItems)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                .isEqualTo(expectedDatasetItem);
+        assertDatasetItems(actualDatasetItems, expectedDatasetItem);
 
         for (var i = 0; i < actualDatasetItems.size(); i++) {
+            // The shared helper ignores runSummariesByExperiment, but parity between the two read paths is
+            // exactly what this test exists to prove: the aggregates query omits assertions_array, so a
+            // divergence here means the aggregates path silently lost its assertion summaries.
+            assertThat(actualDatasetItems.get(i).runSummariesByExperiment())
+                    .isEqualTo(expectedDatasetItem.get(i).runSummariesByExperiment());
+
             var actualExperiments = actualDatasetItems.get(i).experimentItems();
             var expectedExperiments = expectedDatasetItem.get(i).experimentItems();
 

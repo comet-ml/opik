@@ -2744,6 +2744,51 @@ class ProjectMetricsResourceTest {
                     .build(), marker, List.of("spans"), Integer.class, emptySpans, emptySpans, emptySpans);
         }
 
+        /**
+         * Guards the project predicate in {@link com.comet.opik.domain.SpanMetricsQueries}' shared span-filtering CTE,
+         * which is selected by a StringTemplate {@code <if(project_id)>} flag rather than spliced into the query text.
+         * An unset flag renders the conditional as empty and only logs a warning, so a render path that forgets to set
+         * it would silently drop the predicate and aggregate every project in the workspace.
+         * <p>
+         * Seeding a second project in the SAME workspace with a different span count is what makes that visible: with
+         * the predicate present the counts below are returned as-is, and without it every bucket would also include the
+         * other project's spans.
+         */
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void spanCountExcludesOtherProjectsInTheSameWorkspace(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            String otherProjectName = RandomStringUtils.secure().nextAlphabetic(10);
+            projectResourceClient.createProject(otherProjectName, API_KEY, WORKSPACE_NAME);
+
+            var expected = List.of(3, 2, 1);
+            createSpansForCount(projectName, subtract(marker, TIME_BUCKET_3, interval), expected.getFirst());
+            createSpansForCount(projectName, subtract(marker, TIME_BUCKET_1, interval), expected.get(1));
+            createSpansForCount(projectName, marker, expected.getLast());
+
+            // Same buckets, different counts — so a dropped predicate changes every bucket, not just the total.
+            createSpansForCount(otherProjectName, subtract(marker, TIME_BUCKET_3, interval), 7);
+            createSpansForCount(otherProjectName, subtract(marker, TIME_BUCKET_1, interval), 5);
+            createSpansForCount(otherProjectName, marker, 4);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of("spans"), Integer.class,
+                    Map.of("spans", expected.getFirst()),
+                    Map.of("spans", expected.get(1)),
+                    Map.of("spans", expected.getLast()));
+        }
+
         private List<Span> createSpansForCount(String projectName, Instant marker, int count) {
             List<Span> spans = IntStream.range(0, count)
                     .mapToObj(i -> {
@@ -3023,6 +3068,45 @@ class ProjectMetricsResourceTest {
             var usageMinus3 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
             var usageMinus1 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
             var usage = createSpansWithTokenUsage(projectName, marker, names);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, names, Long.class, usageMinus3, usageMinus1, usage);
+        }
+
+        /**
+         * Token-usage counterpart to
+         * {@code SpanCountTest#spanCountExcludesOtherProjectsInTheSameWorkspace}, covering the second template whose
+         * project predicate became a StringTemplate conditional. The other project uses DISTINCT usage key names, so a
+         * dropped predicate would surface extra series rather than only inflating the existing ones — and
+         * {@code getMetricsAndAssert} compares the full result set, so either failure mode trips it.
+         */
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void spanTokenUsageExcludesOtherProjectsInTheSameWorkspace(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            String otherProjectName = RandomStringUtils.secure().nextAlphabetic(10);
+            projectResourceClient.createProject(otherProjectName, API_KEY, WORKSPACE_NAME);
+            List<String> otherNames = names.stream().map(name -> "other_" + name).toList();
+
+            var usageMinus3 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var usageMinus1 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var usage = createSpansWithTokenUsage(projectName, marker, names);
+
+            createSpansWithTokenUsage(otherProjectName, subtract(marker, TIME_BUCKET_3, interval), otherNames);
+            createSpansWithTokenUsage(otherProjectName, subtract(marker, TIME_BUCKET_1, interval), otherNames);
+            createSpansWithTokenUsage(otherProjectName, marker, otherNames);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.SPAN_TOKEN_USAGE)

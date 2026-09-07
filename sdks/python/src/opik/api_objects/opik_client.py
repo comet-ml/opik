@@ -96,7 +96,7 @@ from ..types import (
     SpanType,
     TraceSource,
 )
-from .. import context_storage
+from .. import analytics, context_storage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -135,6 +135,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "init")
 
         config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
@@ -270,6 +271,7 @@ class Opik:
         """
         Checks if current API key user has an access to the configured workspace and its content.
         """
+        analytics.track_event("client", "auth_check")
         self._rest_client.check.access(
             request={}  # empty body for future backward compatibility
         )
@@ -436,6 +438,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "copy_traces")
 
         if not self._use_batching:
             raise exceptions.OpikException(
@@ -706,6 +709,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "update_span")
         helpers.warn_if_batching_update(
             use_batching=self._use_batching,
             suppress_warning=self._config.suppress_batching_update_warning,
@@ -776,6 +780,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "update_trace")
         helpers.warn_if_batching_update(
             use_batching=self._use_batching,
             suppress_warning=self._config.suppress_batching_update_warning,
@@ -828,6 +833,7 @@ class Opik:
             >>> ]
             >>> client.log_spans_feedback_scores(scores=scores)
         """
+        analytics.track_event("client", "log_spans_feedback_scores")
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
             project_name=self._resolve_project_name(project_name),
@@ -877,6 +883,7 @@ class Opik:
             >>> ]
             >>> client.log_traces_feedback_scores(scores=scores)
         """
+        analytics.track_event("client", "log_traces_feedback_scores")
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
             project_name=self._resolve_project_name(project_name),
@@ -916,6 +923,7 @@ class Opik:
             project_name: The project the traces belong to. If not provided, falls
                 back to the active project context, then to the client's default.
         """
+        analytics.track_event("client", "log_assertion_results")
         resolved_project_name = self._resolve_project_name(project_name)
 
         valid_items = []
@@ -983,6 +991,7 @@ class Opik:
             >>> ]
             >>> client.log_threads_feedback_scores(scores=scores)
         """
+        analytics.track_event("client", "log_threads_feedback_scores")
         self.get_threads_client().log_threads_feedback_scores(
             scores=scores, project_name=project_name
         )
@@ -1038,6 +1047,7 @@ class Opik:
             >>>     max_results=10,
             >>> )
         """
+        analytics.track_event("client", "search_threads")
         return self.get_threads_client().search_threads(
             project_name=project_name,
             filter_string=filter_string,
@@ -1058,6 +1068,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "delete_trace_feedback_score")
         self._rest_client.traces.delete_trace_feedback_score(
             id=trace_id,
             name=name,
@@ -1076,6 +1087,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "delete_span_feedback_score")
         self._rest_client.spans.delete_span_feedback_score(
             id=span_id,
             name=name,
@@ -1097,6 +1109,7 @@ class Opik:
         Returns:
             The created environment.
         """
+        analytics.track_event("client", "create_environment")
         new_id = id_helpers.generate_id()
         try:
             self._rest_client.environments.create_environment(
@@ -1116,6 +1129,7 @@ class Opik:
 
         The backend caps the response at the workspace limit (default 20).
         """
+        analytics.track_event("client", "get_environments")
         page = self._rest_client.environments.find_environments()
         return list(page.content or [])
 
@@ -1131,6 +1145,7 @@ class Opik:
 
         Returns the updated environment.
         """
+        analytics.track_event("client", "update_environment")
         if color is not None and name in self._BUILTIN_ENVIRONMENT_NAMES:
             raise exceptions.EnvironmentConfigurationError(
                 f"Cannot change the colour of the built-in environment {name!r}. "
@@ -1148,6 +1163,7 @@ class Opik:
 
     def delete_environment(self, name: str) -> None:
         """Delete an environment by name. No-op if no matching environment exists."""
+        analytics.track_event("client", "delete_environment")
         existing = self._find_environment_by_name(name)
         if existing is None:
             return
@@ -1174,6 +1190,7 @@ class Opik:
         Returns:
             dataset.Dataset: dataset object associated with the name passed.
         """
+        analytics.track_event("client", "get_dataset")
         project_name = self._resolve_project_name(project_name)
         dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
             dataset_name=name, project_name=project_name
@@ -1207,6 +1224,7 @@ class Opik:
         Returns:
             List[dataset.Dataset]: A list of dataset objects that match the filter string.
         """
+        analytics.track_event("client", "get_datasets")
         datasets = dataset_rest_operations.get_datasets(
             project_name=self._resolve_project_name(project_name),
             rest_client=self._rest_client,
@@ -1233,6 +1251,7 @@ class Opik:
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
         """
+        analytics.track_event("client", "get_dataset_experiments")
         project_name = self._resolve_project_name(project_name)
         dataset_id = dataset_rest_operations.get_dataset_id(
             self._rest_client, dataset_name=dataset_name, project_name=project_name
@@ -1257,6 +1276,7 @@ class Opik:
             name: The name of the dataset
             project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
         """
+        analytics.track_event("client", "delete_dataset")
         project_name = self._resolve_project_name(project_name)
         self._rest_client.datasets.delete_dataset_by_name(
             dataset_name=name, project_name=project_name
@@ -1279,6 +1299,7 @@ class Opik:
         Returns:
             dataset.Dataset: The created dataset object.
         """
+        analytics.track_event("client", "create_dataset")
         project_name = self._resolve_project_name(project_name)
         self._rest_client.datasets.create_dataset(
             name=name,
@@ -1326,6 +1347,7 @@ class Opik:
         Returns:
             dataset.Dataset: The dataset object.
         """
+        analytics.track_event("client", "get_or_create_dataset")
         try:
             return self.get_dataset(name, project_name=project_name)
         except ApiError as e:
@@ -1365,6 +1387,7 @@ class Opik:
         Returns:
             dashboard.Dashboard: The created dashboard object.
         """
+        analytics.track_event("client", "create_dashboard")
         if sections is None:
             section_dicts: List[Dict[str, Any]] = [
                 dashboard_types.DashboardSection(title="Overview").to_jsonable()
@@ -1418,6 +1441,7 @@ class Opik:
         Returns:
             dashboard.Dashboard: The dashboard object.
         """
+        analytics.track_event("client", "get_dashboard")
         response = self._rest_client.dashboards.get_dashboard_by_id(dashboard_id)
         return dashboard.Dashboard.from_public(
             dashboard_public=response,
@@ -1446,6 +1470,7 @@ class Opik:
         Returns:
             List[dashboard.Dashboard]: The matching dashboards.
         """
+        analytics.track_event("client", "get_dashboards")
         return dashboard_rest_operations.find_dashboards(
             rest_client=self._rest_client,
             client=self,
@@ -1463,6 +1488,7 @@ class Opik:
         Args:
             dashboard_id: The id of the dashboard.
         """
+        analytics.track_event("client", "delete_dashboard")
         self._rest_client.dashboards.delete_dashboard(dashboard_id)
 
     def create_test_suite(
@@ -1514,6 +1540,7 @@ class Opik:
             >>>
             >>> results = suite.run(task=my_llm_function)
         """
+        analytics.track_event("client", "create_test_suite")
         from .dataset import validators, rest_operations
 
         if global_execution_policy is not None:
@@ -1581,6 +1608,7 @@ class Opik:
         Raises:
             ApiError: If no dataset with the given name exists (404).
         """
+        analytics.track_event("client", "get_test_suite")
         project_name = self._resolve_project_name(project_name)
         dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
             dataset_name=name,
@@ -1630,6 +1658,7 @@ class Opik:
         Returns:
             TestSuite: The test suite object.
         """
+        analytics.track_event("client", "get_or_create_test_suite")
         try:
             return self.get_test_suite(name, project_name=project_name)
         except ApiError as e:
@@ -1652,6 +1681,7 @@ class Opik:
             name: The name of the test suite.
             project_name: The name of the project the suite belongs to.
         """
+        analytics.track_event("client", "delete_test_suite")
         project_name = self._resolve_project_name(project_name)
         self._rest_client.datasets.delete_dataset_by_name(
             dataset_name=name, project_name=project_name
@@ -1674,6 +1704,7 @@ class Opik:
         Returns:
             List[TestSuite]: A list of test suite objects.
         """
+        analytics.track_event("client", "get_test_suites")
         from .dataset import rest_operations
 
         return rest_operations.get_test_suites(
@@ -1700,6 +1731,7 @@ class Opik:
         Returns:
             List[Experiment]: A list of experiment objects.
         """
+        analytics.track_event("client", "get_test_suite_experiments")
         from .dataset import rest_operations as dataset_rest_operations
 
         project_name = self._resolve_project_name(project_name)
@@ -1753,6 +1785,7 @@ class Opik:
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
+        analytics.track_event("client", "create_experiment")
         id = experiment_id or id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
@@ -1812,6 +1845,7 @@ class Opik:
         Raises:
             ValueError: if id is None or empty, or if both name and experiment_config are None
         """
+        analytics.track_event("client", "update_experiment")
         if not id:
             raise ValueError(
                 f"id must be provided and can not be None or empty, id: {id}"
@@ -1844,6 +1878,7 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        analytics.track_event("client", "get_experiment_by_name")
         LOGGER.warning(
             "Deprecated, use `get_experiments_by_name` or `get_experiment_by_id` instead."
         )
@@ -1877,6 +1912,7 @@ class Opik:
         Returns:
             List[experiment.Experiment]: List of existing experiments.
         """
+        analytics.track_event("client", "get_experiments_by_name")
         project_name = self._resolve_project_name(project_name)
         experiments_public = experiment_rest_operations.get_experiments_data_by_name(
             rest_client=self._rest_client, name=name, project_name=project_name
@@ -1908,6 +1944,7 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        analytics.track_event("client", "get_experiment_by_id")
         try:
             experiment_public = self._rest_client.experiments.get_experiment_by_id(
                 id=id
@@ -1970,6 +2007,7 @@ class Opik:
             The flush outcome (including any data-loss detail) when ``flush`` is
             True; ``None`` when ``flush`` is False (nothing was flushed).
         """
+        analytics.track_event("client", "end")
         timeout = timeout if timeout is not None else self._flush_timeout
         marker = self._flush_reporter.marker()
         # Explicit teardown on a user thread, so close on the last reference
@@ -2013,6 +2051,7 @@ class Opik:
             True if all messages were delivered within the timeout with no data
             loss; False if the timeout was hit or any message was dropped.
         """
+        analytics.track_event("client", "flush")
         timeout = timeout if timeout is not None else self._flush_timeout
         try:
             marker = self._flush_reporter.marker()
@@ -2059,6 +2098,7 @@ class Opik:
         The sender is shared across clients with a matching configuration, so
         the report may include drops from sibling clients on the same connection.
         """
+        analytics.track_event("client", "get_errors_report")
         return self._flush_reporter.build_errors_report()
 
     def __internal_api__drain_to_processors__(
@@ -2153,6 +2193,7 @@ class Opik:
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
+        analytics.track_event("client", "search_traces")
         filters_ = helpers.parse_filter_expressions(
             filter_string,
             parsed_item_class=trace_filter_public.TraceFilterPublic,
@@ -2265,6 +2306,7 @@ class Opik:
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
+        analytics.track_event("client", "search_spans")
         filters = helpers.parse_filter_expressions(
             filter_string,
             parsed_item_class=span_filter_public.SpanFilterPublic,
@@ -2309,6 +2351,7 @@ class Opik:
             trace_public.TracePublic: pydantic model object with all the data associated with the trace found.
             Raises an error if trace was not found.
         """
+        analytics.track_event("client", "get_trace_content")
         return self._rest_client.traces.get_trace_by_id(id)
 
     def get_span_content(self, id: str) -> span_public.SpanPublic:
@@ -2319,6 +2362,7 @@ class Opik:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
         """
+        analytics.track_event("client", "get_span_content")
         return self._rest_client.spans.get_span_by_id(id)
 
     def get_project(self, id: str) -> project_public.ProjectPublic:
@@ -2332,6 +2376,7 @@ class Opik:
             project_public.ProjectPublic: pydantic model object with all the data associated with the project found.
             Raises an error if project was not found
         """
+        analytics.track_event("client", "get_project")
         return self._rest_client.projects.get_project_by_id(id)
 
     def get_project_url(self, project_name: Optional[str] = None) -> str:
@@ -2347,6 +2392,7 @@ class Opik:
         Returns:
             str: URL
         """
+        analytics.track_event("client", "get_project_url")
 
         project_name = self._resolve_project_name(project_name)
 
@@ -2417,6 +2463,7 @@ class Opik:
             file_name: Name to assign the attachment. Defaults to the file's basename.
             mime_type: MIME type of the file. Auto-detected from the file name if not provided.
         """
+        analytics.track_event("client", "queue_attachment_upload")
         attachment_data = Attachment(
             data=file_path,
             file_name=file_name,
@@ -2467,6 +2514,7 @@ class Opik:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
+        analytics.track_event("client", "create_prompt")
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
         prompt_version = prompt_client_.create_prompt(
@@ -2518,6 +2566,7 @@ class Opik:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
+        analytics.track_event("client", "create_chat_prompt")
         validator = ChatPromptMessagesValidator(messages)
         validator.validate()
         validator.raise_if_validation_failed()
@@ -2575,6 +2624,7 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
             ValueError: If both ``version`` and ``environment`` are provided.
         """
+        analytics.track_event("client", "get_prompt")
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
@@ -2620,6 +2670,7 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
             ValueError: If both ``version`` and ``environment`` are provided.
         """
+        analytics.track_event("client", "get_chat_prompt")
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
@@ -2663,6 +2714,7 @@ class Opik:
             EnvironmentNotFoundError: One of ``environments`` is not registered in the
                 workspace.
         """
+        analytics.track_event("client", "set_prompt_environments")
         resolved_project_name = self._resolve_project_name(project_name)
         try:
             resolved_version = self._rest_client.prompts.retrieve_prompt_version(
@@ -2766,6 +2818,7 @@ class Opik:
                     filter_string='tags contains "production"'
                 )
         """
+        analytics.track_event("client", "get_prompt_history")
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
 
@@ -2860,6 +2913,7 @@ class Opik:
                     filter_string='tags contains "production"'
                 )
         """
+        analytics.track_event("client", "get_chat_prompt_history")
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
 
@@ -2902,6 +2956,7 @@ class Opik:
         Returns:
             List[prompt_module.Prompt]: A list of Prompt instances for the given name.
         """
+        analytics.track_event("client", "get_all_prompts")
         LOGGER.warning(
             "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
         )
@@ -2945,6 +3000,7 @@ class Opik:
         Returns:
             List[Union[Prompt, ChatPrompt]]: A list of Prompt and/or ChatPrompt instances found.
         """
+        analytics.track_event("client", "search_prompts")
         oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string or "")
         parsed_filters = oql.get_filter_expressions()
 
@@ -2986,6 +3042,7 @@ class Opik:
         optimization_id: Optional[str] = None,
         project_name: Optional[str] = None,
     ) -> optimization.Optimization:
+        analytics.track_event("client", "create_optimization")
         id = optimization_id or id_helpers.generate_id()
 
         project_name = self._resolve_project_name(project_name)
@@ -3006,9 +3063,11 @@ class Opik:
         return optimization_client
 
     def delete_optimizations(self, ids: List[str]) -> None:
+        analytics.track_event("client", "delete_optimizations")
         self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
 
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
+        analytics.track_event("client", "get_optimization_by_id")
         result = self._rest_client.optimizations.get_optimization_by_id(id)
         try:
             project = self.get_project(result.project_id)
@@ -3121,6 +3180,7 @@ class Opik:
         Returns:
             TracesAnnotationQueue: The created traces annotation queue object.
         """
+        analytics.track_event("client", "create_traces_annotation_queue")
         return self._create_annotation_queue(
             name=name,
             queue_class=TracesAnnotationQueue,
@@ -3154,6 +3214,7 @@ class Opik:
         Returns:
             ThreadsAnnotationQueue: The created threads annotation queue object.
         """
+        analytics.track_event("client", "create_threads_annotation_queue")
         return self._create_annotation_queue(
             name=name,
             queue_class=ThreadsAnnotationQueue,
@@ -3177,6 +3238,7 @@ class Opik:
         Raises:
             OpikException: If the queue is not found or is not a traces queue.
         """
+        analytics.track_event("client", "get_traces_annotation_queue")
         return annotation_queue_rest_operations.get_traces_annotation_queue_by_id(
             rest_client=self._rest_client,
             queue_id=queue_id,
@@ -3195,6 +3257,7 @@ class Opik:
         Raises:
             OpikException: If the queue is not found or is not a threads queue.
         """
+        analytics.track_event("client", "get_threads_annotation_queue")
         return annotation_queue_rest_operations.get_threads_annotation_queue_by_id(
             rest_client=self._rest_client,
             queue_id=queue_id,
@@ -3215,6 +3278,7 @@ class Opik:
         Returns:
             List[TracesAnnotationQueue]: A list of traces annotation queue objects.
         """
+        analytics.track_event("client", "get_traces_annotation_queues")
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, self._resolve_project_name(project_name)
         )
@@ -3240,6 +3304,7 @@ class Opik:
         Returns:
             List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
         """
+        analytics.track_event("client", "get_threads_annotation_queues")
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, self._resolve_project_name(project_name)
         )
@@ -3257,6 +3322,7 @@ class Opik:
         Args:
             queue_id: The ID of the annotation queue to delete.
         """
+        analytics.track_event("client", "delete_annotation_queue")
         self._rest_client.annotation_queues.delete_annotation_queue_batch(
             ids=[queue_id]
         )
@@ -3336,6 +3402,7 @@ class Opik:
                 the cache continues refreshing in the background; without one,
                 the timeout is raised. Pass ``None`` to wait indefinitely.
         """
+        analytics.track_event("client", "get_or_create_config")
         if fallback is not None and (
             not isinstance(fallback, Config) or type(fallback) is Config
         ):
@@ -3400,6 +3467,7 @@ class Opik:
         Returns:
             The version name of the newly written blueprint.
         """
+        analytics.track_event("client", "create_config")
         if not isinstance(config, Config) or type(config) is Config:
             raise TypeError(
                 "config must be an instance of a Config subclass, "
@@ -3429,6 +3497,7 @@ class Opik:
             version: Version name of the blueprint to tag.
             env: Environment name (e.g. ``"prod"``, ``"staging"``).
         """
+        analytics.track_event("client", "set_config_env")
         resolved_project = self._resolve_project_name(project_name)
         manager = ConfigManager(
             project_name=resolved_project,
@@ -3468,6 +3537,7 @@ def get_current_client_raw() -> Optional[Opik]:
     return _global_singleton
 
 
+@analytics.internal
 def get_global_client() -> Opik:
     """Get the active Opik client, creating one if needed.
 
