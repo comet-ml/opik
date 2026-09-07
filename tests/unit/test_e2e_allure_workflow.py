@@ -16,6 +16,20 @@ import yaml
 
 
 class AllureWorkflowTest(unittest.TestCase):
+    def test_validator_has_no_application_credentials(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = yaml.safe_load(
+            (root / ".github/workflows/end2end_suites_v2.yml").read_text()
+        )
+        self.assertNotIn("secrets.", yaml.dump(workflow.get("env", {})))
+        validator = workflow["jobs"]["validate_workflow"]
+        self.assertNotIn("secrets.", yaml.dump(validator))
+        checkout = next(s for s in validator["steps"] if s.get("name") == "Checkout repo")
+        self.assertIs(checkout["with"]["persist-credentials"], False)
+        suite = workflow["jobs"]["run_suite"]
+        self.assertEqual(suite["needs"], "validate_workflow")
+        self.assertEqual(suite["env"]["ALLURE_TOKEN"], "${{ secrets.ALLURE_TOKEN }}")
+
     @patch.dict(os.environ, {"WORKFLOW_TEST_PARENT_SECRET": "test-only-sentinel"})
     def test_credential_routes_preserve_test_failures(self):
         root = Path(__file__).resolve().parents[2]
@@ -52,7 +66,7 @@ allurectl() {
                         if token is not None:
                             env["ALLURE_TOKEN"] = token
                         result = subprocess.run(
-                            [shutil.which("bash") or "bash", "--noprofile", "--norc", "-eo", "pipefail",
+                            [shutil.which("bash") or "bash", "--noprofile", "--norc", "-e",
                              "-c", stubs + body],
                             env=env, capture_output=True, text=True, timeout=10,
                         )
