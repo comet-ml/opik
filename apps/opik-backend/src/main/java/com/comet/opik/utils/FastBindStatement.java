@@ -6,6 +6,8 @@ import io.r2dbc.spi.Wrapped;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
+import org.slf4j.helpers.FormattingTuple;
+import org.slf4j.helpers.MessageFormatter;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
@@ -103,9 +105,20 @@ public final class FastBindStatement implements Statement {
     private static final AtomicBoolean ANNOUNCED = new AtomicBoolean();
 
     /** Each distinct fallback reason once, at WARN - otherwise this switches itself off silently. */
-    private static void warnOnce(String key, String message, Object... args) {
-        if (WARNED.add(key)) {
-            log.warn("Positional bind disabled, falling back to the driver's named binding - " + message, args);
+    private static void warnOnce(String key, String reason, Object... args) {
+        if (!WARNED.add(key)) {
+            return;
+        }
+        // The reason is rendered first so the log call keeps a constant format string rather than
+        // building one per call. arrayFormat also peels off a trailing Throwable, which is passed
+        // on separately so the stack trace still reaches the log.
+        FormattingTuple formatted = MessageFormatter.arrayFormat(reason, args);
+        if (formatted.getThrowable() == null) {
+            log.warn("Positional bind disabled, falling back to the driver's named binding - {}",
+                    formatted.getMessage());
+        } else {
+            log.warn("Positional bind disabled, falling back to the driver's named binding - {}",
+                    formatted.getMessage(), formatted.getThrowable());
         }
     }
 
