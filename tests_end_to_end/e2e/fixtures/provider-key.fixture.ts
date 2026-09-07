@@ -137,19 +137,25 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
     });
 
+    // Cleared unconditionally, unlike the provider keys below. Retention exists so a
+    // failed run leaves INSPECTABLE state in the workspace; a forced status is not that.
+    // It is mutable global state on the mock process, which outlives this test and
+    // serves every other spec in the run, so leaving one set turns one failure into a
+    // second, unrelated one that is very hard to read.
+    for (const modelName of forcedStatusModels) {
+      try {
+        await mockAuthClearChatStatus(modelName);
+      } catch (err) {
+        console.warn(`[provider-key fixture] status-hook reset warning for ${modelName}:`, err);
+      }
+    }
+
     if (!shouldLeaveArtifacts(testInfo)) {
       for (const name of registered) {
         try {
           await deleteProviderKeyByName(name);
         } catch (err) {
           console.warn(`[provider-key fixture] delete warning for ${name}:`, err);
-        }
-      }
-      for (const modelName of forcedStatusModels) {
-        try {
-          await mockAuthClearChatStatus(modelName);
-        } catch (err) {
-          console.warn(`[provider-key fixture] status-hook reset warning for ${modelName}:`, err);
         }
       }
     }

@@ -145,22 +145,23 @@ test.describe('Online Evaluation — LLM provider error classification', { tag: 
           },
         )
         .toBeGreaterThan(0);
-      return backendClient.getAutomationRuleLogs(ruleId);
     };
 
-    const permanentLogs = await test.step('Both judges reach a terminal failure', async () => {
-      const logs = await waitForTerminalError(rules.permanent, permanentRuleName);
+    await test.step('Both judges reach a terminal failure', async () => {
+      await waitForTerminalError(rules.permanent, permanentRuleName);
       await waitForTerminalError(rules.transient, transientRuleName);
-      return logs;
     });
 
     await test.step(
       `A ${PERMANENT_STATUS} costs exactly one call; a ${TRANSIENT_STATUS} costs the whole retry budget`,
       async () => {
         // Polled, not read once: the transient rule's last attempts can still be in flight
-        // when its ERROR line lands, so a single read would race the retry loop. The
-        // permanent count is re-asserted afterwards on the same settled snapshot, which is
-        // what proves it did not merely lag behind.
+        // when its ERROR line lands, so a single read would race the retry loop.
+        //
+        // The permanent count is then read from a FRESH snapshot taken once that poll has
+        // settled. Order matters: by the time a sibling rule has spent four attempts on the
+        // same gateway, a permanent rule that was quietly retrying would have registered
+        // its extra calls, so a 1 here is a settled 1 rather than one that merely lagged.
         await expect
           .poll(
             async () => mockAuthChatRequests(await mockAuthStats(), transientModel),
@@ -186,6 +187,14 @@ test.describe('Online Evaluation — LLM provider error classification', { tag: 
       // Complements the call count from the other side: the call count would also read 1 if
       // the rule had been dropped before the request, and these lines would also read 1 if
       // it had silently retried. Together they pin one delivery that made one call.
+      //
+      // Re-read rather than reusing the snapshot that ended the wait above. That one was
+      // taken the instant the FIRST error line landed, so a redelivery arriving moments
+      // later would still count as one — an "exactly once" claim proved against a stream
+      // that had not finished. This read happens after the transient rule has spent its
+      // whole budget, by which point a duplicate delivery of the permanent rule would
+      // long since have been written.
+      const permanentLogs = await backendClient.getAutomationRuleLogs(rules.permanent);
       expect(
         permanentLogs.filter((l) => l.message.includes(EVALUATING_LINE)),
         `rule '${permanentRuleName}' must be delivered exactly once`,
