@@ -89,12 +89,20 @@ public record AnnotationQueueAutomation(
                     AnnotationQueue.View.Write.class}) @NotNull Double value) {
     }
 
+    /**
+     * {@code EQUAL} is for categorical scores — a boolean written as 0/1, or a rating coded as an integer.
+     * Note what it compares: the <em>effective</em> score, which is averaged across authors, so an equality
+     * that matches while one annotator has scored an item can stop matching once a second one disagrees
+     * (1 and 0 average to 0.5). Exact matching is dependable where a single author writes the score, which
+     * is the case for LLM judges and SDK-written scores.
+     */
     @Getter
     @RequiredArgsConstructor
     public enum Operator {
 
         GREATER_THAN(">"),
-        LESS_THAN("<");
+        LESS_THAN("<"),
+        EQUAL("=");
 
         @JsonValue
         private final String value;

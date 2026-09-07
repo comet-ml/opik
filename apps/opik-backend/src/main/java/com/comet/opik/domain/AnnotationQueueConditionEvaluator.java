@@ -54,11 +54,14 @@ public class AnnotationQueueConditionEvaluator {
             return false;
         }
 
+        // compareTo, not equals: the effective score is a Decimal64(9), so 1 arrives as 1.000000000 and
+        // BigDecimal.equals would reject it on scale alone.
         int comparison = actual.compareTo(BigDecimal.valueOf(condition.value()));
 
         return switch (condition.operator()) {
             case GREATER_THAN -> comparison > 0;
             case LESS_THAN -> comparison < 0;
+            case EQUAL -> comparison == 0;
         };
     }
 }
