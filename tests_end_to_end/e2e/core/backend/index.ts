@@ -30,6 +30,7 @@ export {
   type JudgeMessageRef,
   type JudgeMessageContentPartRef,
   type JudgeMessageWrite,
+  type JudgeMessageContentPartWrite,
   type TraceJsonSection,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,

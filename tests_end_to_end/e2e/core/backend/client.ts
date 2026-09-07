@@ -216,16 +216,30 @@ export interface JudgeMessageRef {
   contentArray: JudgeMessageContentPartRef[] | null;
 }
 
-/** One judge message as the create endpoint accepts it — set exactly one of the two. */
-export interface JudgeMessageWrite {
-  role: 'SYSTEM' | 'USER';
-  content?: string;
-  contentArray?: Array<{
-    type: string;
-    text?: string;
-    image_url?: { url: string; detail?: string };
-  }>;
+/** One content part as the create endpoint accepts it — wire keys, not the read shape. */
+export interface JudgeMessageContentPartWrite {
+  type: string;
+  text?: string;
+  image_url?: { url: string; detail?: string };
 }
+
+/**
+ * One judge message as the create endpoint accepts it.
+ *
+ * A union rather than one interface with two optional fields, so "exactly one
+ * of `content` / `contentArray`" is a compiler guarantee instead of a comment:
+ * `LlmAsJudgeMessage` accepts one shape or the other, and a message carrying
+ * both — or neither — is a 4xx the caller only discovers at run time. The
+ * `?: never` arms keep both keys readable on the union, which is what lets
+ * `createLlmJudgeRule` serialize them without narrowing first.
+ */
+export type JudgeMessageWrite =
+  | { role: 'SYSTEM' | 'USER'; content: string; contentArray?: never }
+  | {
+      role: 'SYSTEM' | 'USER';
+      content?: never;
+      contentArray: JudgeMessageContentPartWrite[];
+    };
 
 /**
  * One page of `GET /automations/evaluators/`, status included rather than thrown.
@@ -240,6 +254,15 @@ export interface AutomationRuleEvaluatorPageRef {
   /** Server-reported total for the query, not the length of this page. */
   total: number;
   names: string[];
+  /**
+   * The server's own reason on a non-2xx, `null` on success.
+   *
+   * Carried because the failure this type exists to describe is a 500, and
+   * `expect(listing.status).toBe(200)` alone reports "expected 200, received
+   * 500" — true, and useless. The stack trace naming the unreadable rule is in
+   * the response body, so a spec that fails at 3am should print it.
+   */
+  message: string | null;
 }
 
 /**
@@ -1703,14 +1726,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       query.set('page', String(opts.page ?? 1));
       query.set('size', String(opts.size ?? 100));
 
-      const { status, json } = await rawFetch(
+      const { status, message, json } = await rawFetch(
         'GET',
         '/v1/private/automations/evaluators/',
         { query },
       );
       // A non-200 is a legitimate result here, not an error to translate: the
-      // caller asserts on it. Only the shape of a 200 is trusted.
-      if (status !== 200) return { status, total: 0, names: [] };
+      // caller asserts on it. Only the shape of a 200 is trusted. The message
+      // rides along so the assertion that fails can name the server's reason
+      // rather than just the number it did not want.
+      if (status !== 200) return { status, total: 0, names: [], message };
 
       const page = json as { total?: number; content?: Array<{ name?: string }> };
       const content = page.content ?? [];
@@ -1724,6 +1749,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         status,
         total: page.total,
         names: content.map((r) => String(r.name ?? '')),
+        message: null,
       };
     },
 
@@ -1785,6 +1811,24 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * truncation, so the prompt the user typed was gone even after the read was
      * fixed. Echoing the server's own `code` verbatim is the point — building a
      * fresh payload here would test this client's serializer instead.
+     *
+     * "Exactly what was read" is meant literally, and two fields make that
+     * harder than it looks:
+     *
+     *   - `filters` is `@JsonIgnore` on the evaluator base class but re-exposed
+     *     by each concrete subtype under `@JsonView({Public, Write})`, so it is
+     *     both returned by this GET and accepted by this PATCH. Omitting it
+     *     hands the update constructor a null and silently clears a filtered
+     *     rule's filters — a "no-op" that is not one.
+     *   - the write side wants `project_ids`, which the public read does NOT
+     *     return (it is `@JsonView(Write)`); the public read returns `projects`,
+     *     a sorted set of `{project_id, project_name}`. Echoing the caller's one
+     *     project id instead would detach a multi-project rule from every other
+     *     project it targets, because the PATCH replaces the association set
+     *     rather than adding to it.
+     *
+     * So both are derived from the read-back, and `projectId` is only the
+     * fallback for a response that carried no `projects`.
      */
     async resaveAutomationRuleFromReadBack(ruleId: string, projectId: string): Promise<void> {
       const read = await rawFetch('GET', `/v1/private/automations/evaluators/${ruleId}`);
@@ -1799,8 +1843,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         sampling_rate?: number;
         enabled?: boolean;
         trigger_scope?: string;
+        filters?: unknown;
+        projects?: Array<{ project_id?: string }>;
         code?: unknown;
       };
+      const readBackProjectIds = (rule.projects ?? [])
+        .map((p) => p.project_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const projectIds = readBackProjectIds.length > 0 ? readBackProjectIds : [projectId];
       const { status, message } = await rawFetch(
         'PATCH',
         `/v1/private/automations/evaluators/${ruleId}`,
@@ -1808,10 +1858,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           body: {
             type: rule.type,
             name: rule.name,
-            project_ids: [projectId],
+            project_ids: projectIds,
             sampling_rate: rule.sampling_rate,
             enabled: rule.enabled,
             trigger_scope: rule.trigger_scope,
+            ...(rule.filters === undefined ? {} : { filters: rule.filters }),
             code: rule.code,
           },
         },
