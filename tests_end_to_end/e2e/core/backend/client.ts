@@ -65,6 +65,28 @@ export interface RawApiResult {
   location?: string | null;
 }
 
+/**
+ * One row of `GET /v1/private/datasets`, as the Datasets list page reads it.
+ *
+ * `datasetItemsCount` is the "Item count" column, and the backend answers it
+ * two different ways in the same response: from the latest version's
+ * `items_total` where there is one, and from a `count(DISTINCT id)` scan over
+ * `dataset_items` where there is not. `latestVersionName` is what tells a test
+ * which of the two a given row took — the enrichment falls back exactly when it
+ * has no version to read `items_total` from.
+ *
+ * (One case the pair cannot distinguish: a version carrying the
+ * `ITEMS_TOTAL_NOT_MIGRATED` sentinel also falls back while still reporting a
+ * `latest_version`. It needs versions predating the `000046` backfill, so it is
+ * not reachable on a current deployment.)
+ */
+export interface DatasetSummaryRef {
+  id: string;
+  name: string;
+  datasetItemsCount: number;
+  latestVersionName: string | null;
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -732,6 +754,65 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
+    /**
+     * One page of `GET /v1/private/datasets` for a project, with the two fields
+     * the Datasets list renders its "Item count" column from — exactly the read
+     * the page issues.
+     *
+     * Through `rawFetch` rather than the pinned SDK because `latest_version` is
+     * the only signal for *which* branch of the count enrichment a row took, and
+     * the generated client drops it.
+     *
+     * `total` comes back alongside the rows so a caller can assert the whole
+     * project fitted in this single request: the enrichment mixes versioned and
+     * fallback rows per response, so a spec about that mix is only asserting it
+     * if every seeded dataset was on the one page.
+     *
+     * Both fields are required rather than defaulted. `dataset_items_count` is
+     * `@Nullable` in the API, and defaulting a missing count to 0 would read as
+     * "an empty dataset" — indistinguishable from the answer for a genuinely
+     * empty one, and so a count assertion that cannot fail.
+     */
+    async listDatasetSummaries(args: {
+      projectId: string;
+      size?: number;
+    }): Promise<{ rows: DatasetSummaryRef[]; total: number }> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        page: '1',
+        size: String(args.size ?? 100),
+      });
+      const { status, message, json } = await rawFetch('GET', '/v1/private/datasets', { query });
+      if (status !== 200) {
+        throw new Error(`listDatasetSummaries: GET /v1/private/datasets -> ${status}: ${message}`);
+      }
+      const page = json as {
+        content?: Array<{
+          id?: string;
+          name?: string;
+          dataset_items_count?: number | null;
+          latest_version?: { version_name?: string } | null;
+        }>;
+        total?: number;
+      };
+      const rows = (page.content ?? []).map((d) => {
+        if (typeof d.dataset_items_count !== 'number') {
+          throw new Error(
+            `listDatasetSummaries: dataset '${d.name}' came back without a ` +
+              `dataset_items_count (${JSON.stringify(d.dataset_items_count)}) — ` +
+              `there is no count to assert on.`,
+          );
+        }
+        return {
+          id: String(d.id),
+          name: String(d.name),
+          datasetItemsCount: d.dataset_items_count,
+          latestVersionName: d.latest_version?.version_name ?? null,
+        };
+      });
+      return { rows, total: Number(page.total ?? rows.length) };
+    },
+
     async findDatasetByName(name: string, projectName?: string): Promise<DatasetRef | null> {
       try {
         const dataset = await opik.api.datasets.getDatasetByIdentifier({
@@ -939,6 +1020,24 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       await opik.api.datasets.deleteDatasetItems({
         datasetId: args.datasetId,
         filters: args.filters as SdkDatasetItemFilters,
+      });
+    },
+
+    /**
+     * Delete named dataset items — `POST /v1/private/datasets/items/delete` in
+     * its id-scoped form, the counterpart to `deleteDatasetItemsByFilter`.
+     *
+     * Grouped: a `batch_group_id` is always sent, so the delete commits as a new
+     * dataset version rather than mutating the latest one in place. That is the
+     * path the UI's row/bulk delete takes, and the one that moves a version's
+     * `items_total` — which is what a caller asserting a rendered item count
+     * after a delete is reading.
+     */
+    async deleteDatasetItemsByIds(itemIds: string[]): Promise<void> {
+      if (itemIds.length === 0) return;
+      await opik.api.datasets.deleteDatasetItems({
+        itemIds,
+        batchGroupId: crypto.randomUUID(),
       });
     },
 

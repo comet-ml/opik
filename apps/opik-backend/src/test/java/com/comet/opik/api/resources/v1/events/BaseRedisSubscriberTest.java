@@ -44,6 +44,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
@@ -426,6 +427,108 @@ class BaseRedisSubscriberTest {
                             .isEqualTo(countAfterFirstBatch + newMessages.size()));
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+    }
+
+    /**
+     * OPIK-8240, against a real Redis PEL deeper than one {@code XAUTOCLAIM} scan window.
+     * <p>
+     * Redis caps each {@code XAUTOCLAIM} at {@code COUNT * 10} pending entries <em>examined</em> — not
+     * claimed — and answers with the position the next scan should resume from. Discarding that position
+     * and restarting every scan at {@link StreamMessageId#MIN} is invisible while the head of the PEL
+     * drains, because the entries that leave make room in the window. It stops being invisible as soon
+     * as the head stops draining: the budget is then spent re-examining the same first {@code COUNT * 10}
+     * entries and everything behind them is never looked at again, whatever the retry behaviour further
+     * down.
+     * <p>
+     * Both halves of the cursor contract are observable here, and only on a real Redis: the reply that
+     * this class consumes is produced by Redis's own PEL scan, not by anything the subscriber controls.
+     */
+    @Nested
+    class ClaimCursorTests {
+
+        // Gives XAUTOCLAIM a 100-entry examine budget per scan (COUNT * 10).
+        private static final int CLAIM_BATCH_SIZE = 10;
+        private static final int SCAN_WINDOW = CLAIM_BATCH_SIZE * 10;
+        // Deliberately deeper than one window: the last 50 are the entries a cursor-less scan strands.
+        private static final int BACKLOG_SIZE = SCAN_WINDOW + 50;
+        private static final int CLAIM_TIMEOUT_SECONDS = 30;
+
+        private TestStreamConfiguration deepBacklogConfig;
+        private RStreamReactive<String, String> deepBacklogStream;
+
+        @BeforeEach
+        void setUp() {
+            deepBacklogConfig = TestStreamConfiguration.create().toBuilder()
+                    .consumerBatchSize(CLAIM_BATCH_SIZE)
+                    // Every poll claims. Nothing is published after start(), so a read would only park the
+                    // concatMap on its long poll and stretch the run out for no coverage.
+                    .claimIntervalRatio(1)
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(100))
+                    // High enough that nothing retires mid-run. Retirement removes entries from the PEL,
+                    // which would let even a cursor-less scan crawl to the tail eventually and pass this
+                    // test for the wrong reason.
+                    .maxRetries(Integer.MAX_VALUE)
+                    .build();
+            deepBacklogStream = redissonClient.getStream(
+                    deepBacklogConfig.getStreamName(), deepBacklogConfig.getCodec());
+            deepBacklogStream.delete().block();
+        }
+
+        @Test
+        void shouldReachPendingEntriesBeyondTheFirstScanWindowAndThenWrap() {
+            var messages = IntStream.range(0, BACKLOG_SIZE)
+                    .mapToObj(index -> "backlog-%03d-%s".formatted(index, UUID.randomUUID()))
+                    .toList();
+            deepBacklogStream.createGroup(
+                    StreamCreateGroupArgs.name(deepBacklogConfig.getConsumerGroupName()).makeStream()).block();
+
+            // concatMap, not flatMap: stream ids must follow publication order for "the head of the PEL"
+            // to mean the first element of this list.
+            Flux.fromIterable(messages)
+                    .concatMap(message -> deepBacklogStream.add(
+                            StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, message)))
+                    .collectList()
+                    .block();
+
+            // Delivered to a consumer that never acks, which is the backlog a crashed or restarted pod
+            // leaves behind: XLEN and the PEL both hold the full depth.
+            var crashedConsumerId = "crashed-consumer-%s".formatted(UUID.randomUUID());
+            var delivered = deepBacklogStream.readGroup(
+                    deepBacklogConfig.getConsumerGroupName(), crashedConsumerId,
+                    StreamReadGroupArgs.neverDelivered()
+                            .count(BACKLOG_SIZE)
+                            .timeout(deepBacklogConfig.getLongPollingDuration().toJavaDuration()))
+                    .block();
+            assertThat(delivered).hasSize(BACKLOG_SIZE);
+
+            // Idle for longer than min-idle-time, so every entry is claimable rather than skipped.
+            waitForMillis(deepBacklogConfig.getPendingMessageDuration().toMilliseconds() + 100);
+
+            // Every delivery fails retryably, so nothing is acked and the PEL keeps its full depth for the
+            // whole run — the condition that makes the scan window a ceiling rather than a batch size.
+            var deliveries = new ConcurrentHashMap<String, AtomicInteger>();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(
+                    deepBacklogConfig, redissonClient, message -> {
+                        deliveries.computeIfAbsent(message, key -> new AtomicInteger()).incrementAndGet();
+                        return Mono.error(new RuntimeException("Retryable, so the entry stays pending"));
+                    }));
+            subscriber.start();
+
+            // The tail is reached. Without the cursor this stalls at the first SCAN_WINDOW entries: each
+            // scan restarts at MIN, spends its whole examine budget on the head, and returns having never
+            // looked further.
+            await().atMost(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(deliveries.keySet())
+                            .containsExactlyInAnyOrderElementsOf(messages));
+
+            // And the scan wraps instead of parking at the end of the PEL. Redis answers a completed pass
+            // with 0-0, which resets the cursor to the oldest entry; without that reset the oldest entry
+            // would never be delivered a second time and the subscriber would go quiet on a PEL that is
+            // still full.
+            await().atMost(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(deliveries.get(messages.getFirst()).get())
+                            .isGreaterThan(1));
         }
     }
 
