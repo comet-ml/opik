@@ -18,43 +18,29 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Binds named parameters by position instead of by name.
  *
- * <p>The ClickHouse R2DBC driver resolves every {@code bind(name, value)} with
- * {@code namedParameters.indexOf(name)} - a linear scan of the parameter list. Our bulk inserts
- * render one placeholder per column per row ({@code :id0 ... :id999}), so a 1000-row batch carries
- * ~25k distinct parameter names and binding becomes O(n^2): ~300M string comparisons per statement.
- * CPU profiling of a bulk experiment upload attributed 65-76% of all backend CPU to
- * {@code ArrayList.indexOfRange} reached from {@code ClickHouseStatement.bind}.
+ * <p>The ClickHouse driver resolves every {@code bind(name, value)} with
+ * {@code namedParameters.indexOf(name)}, a linear scan. A 1000-row bulk insert carries ~25k
+ * parameter names, making binding O(n^2); profiling attributed 65-76% of backend CPU to it. This
+ * wrapper reads that list once per statement and binds by index instead, which is O(1).
  *
- * <p>The driver's positional {@code bind(int, value)} is O(1), and the index it expects is exactly
- * the position of the name in {@code namedParameters}. This wrapper reads that list once per
- * statement, builds a {@link HashMap}, and turns every later named bind into a positional one.
- *
- * <p>The list is read from the driver rather than re-derived from the SQL, so the mapping is exact
- * by construction. If it cannot be reached - a driver upgrade, an unexpected proxy - the wrapper
- * falls back to the driver's own named binding, so behaviour is unchanged.
+ * <p>The list comes from the driver, so the mapping is exact. If it cannot be reached the wrapper
+ * falls back to named binding and behaviour is unchanged.
  */
 @Slf4j
 public final class FastBindStatement implements Statement {
 
     private static final String NAMED_PARAMETERS_FIELD = "namedParameters";
 
-    /**
-     * Below this many parameters the driver's linear scan is cheaper than building a map, so the
-     * statement is left alone. Bulk inserts render tens of thousands of parameters; ordinary
-     * queries bind a handful, and wrapping those was measured as a net loss.
-     */
+    /** Below this, the driver's linear scan beats building a map, so the statement is left alone. */
     private static final int MIN_PARAMETERS = 64;
 
-    /** The reflected field is the same for every statement; resolve it once, not per statement. */
-    private static volatile Field cachedField;
-    private static volatile Class<?> cachedFieldOwner;
+    /** Owner and field in one record, so a concurrent lookup cannot observe a mismatched pair. */
+    private record FieldCache(Class<?> owner, Field field) {
+    }
 
-    /**
-     * Escape hatch: anything other than an explicit "true" restores the driver's named binding.
-     * Deliberately fails closed - this is the control reached for mid-incident, and
-     * {@code -Dopik.fastBind=0} or {@code =off} silently leaving it enabled would send the
-     * investigation down the wrong path.
-     */
+    private static volatile FieldCache fieldCache;
+
+    /** Escape hatch. Fails closed: anything but "true" restores the driver's named binding. */
     private static final boolean ENABLED = Boolean.parseBoolean(System.getProperty("opik.fastBind", "true"));
 
     private final Statement delegate;
@@ -65,9 +51,7 @@ public final class FastBindStatement implements Statement {
         this.indexByName = indexByName;
     }
 
-    /**
-     * Wraps the statement when positional binding is possible, otherwise returns it untouched.
-     */
+    /** Wraps the statement when positional binding is possible, otherwise returns it untouched. */
     public static Statement wrap(@NonNull Statement statement) {
         if (!ENABLED) {
             return statement;
@@ -81,13 +65,13 @@ public final class FastBindStatement implements Statement {
             Object target = unwrap(statement);
             Field field = resolveField(target.getClass());
             if (field == null) {
-                warnOnce("noField", "field '{}' not found on {} - the driver's layout changed",
+                warnOnce("noField", "field '{}' not found on '{}' - the driver's layout changed",
                         NAMED_PARAMETERS_FIELD, target.getClass().getName());
                 return null;
             }
             Object value = field.get(target);
             if (!(value instanceof List<?> names)) {
-                warnOnce("badType", "field '{}' is {}, expected a List", NAMED_PARAMETERS_FIELD,
+                warnOnce("badType", "field '{}' is '{}', expected a List", NAMED_PARAMETERS_FIELD,
                         value == null ? "null" : value.getClass().getName());
                 return null;
             }
@@ -100,7 +84,7 @@ public final class FastBindStatement implements Statement {
             Map<String, Integer> index = HashMap.newHashMap(names.size());
             for (int i = 0; i < names.size(); i++) {
                 if (!(names.get(i) instanceof String name)) {
-                    warnOnce("badElement", "parameter list holds a non-String element at {}", i);
+                    warnOnce("badElement", "parameter list holds a non-String element at '{}'", i);
                     return null;
                 }
                 // First occurrence wins, mirroring List.indexOf.
@@ -109,7 +93,8 @@ public final class FastBindStatement implements Statement {
             announceOnce(names.size());
             return index;
         } catch (Exception e) {
-            warnOnce("exception", "reflective access failed: {}", e.toString());
+            // Throwable last, no placeholder for it: SLF4J logs the stack trace, not just toString.
+            warnOnce("exception", "reflective access failed", e);
             return null;
         }
     }
@@ -117,11 +102,7 @@ public final class FastBindStatement implements Statement {
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
     private static final AtomicBoolean ANNOUNCED = new AtomicBoolean();
 
-    /**
-     * Logs each distinct fallback reason once at WARN. Without this the optimization can switch
-     * itself off after a driver upgrade and give no signal at all: production runs at INFO, CI
-     * stays green, and the only symptom is the CPU regression coming back.
-     */
+    /** Each distinct fallback reason once, at WARN - otherwise this switches itself off silently. */
     private static void warnOnce(String key, String message, Object... args) {
         if (WARNED.add(key)) {
             log.warn("Positional bind disabled, falling back to the driver's named binding - " + message, args);
@@ -130,7 +111,7 @@ public final class FastBindStatement implements Statement {
 
     private static void announceOnce(int parameterCount) {
         if (ANNOUNCED.compareAndSet(false, true)) {
-            log.info("Positional bind active (first statement carried {} parameters, threshold {})",
+            log.info("Positional bind active (first statement carried '{}' parameters, threshold '{}')",
                     parameterCount, MIN_PARAMETERS);
         }
     }
@@ -150,15 +131,16 @@ public final class FastBindStatement implements Statement {
 
     /** Caches the reflected field per owning class, so setAccessible runs once rather than per statement. */
     private static Field resolveField(Class<?> owner) {
-        if (owner.equals(cachedFieldOwner)) {
-            return cachedField;
+        FieldCache cache = fieldCache;
+        if (cache != null && owner.equals(cache.owner())) {
+            return cache.field();
         }
         Field field = findField(owner);
         if (field != null) {
             field.setAccessible(true);
         }
-        cachedField = field;
-        cachedFieldOwner = owner;
+        // One publication. A null field is cached too, so a class without it is not re-scanned.
+        fieldCache = new FieldCache(owner, field);
         return field;
     }
 
