@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validation.MaxJsonSize;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -23,6 +24,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_METADATA_SIZE_IN_BYTES;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
@@ -54,6 +56,7 @@ public abstract sealed class FeedbackScoreItem {
 
     private final UUID sourceQueueId;
 
+    @MaxJsonSize(MAX_FEEDBACK_SCORE_METADATA_SIZE_IN_BYTES)
     private final Map<String, Object> metadata;
 
     public abstract UUID id();
