@@ -134,15 +134,15 @@ render_block() {
     sql="${sql//'${WINDOW_LO}'/$lo}"
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${SAMPLE_MOD}'/$SAMPLE_MOD}"
-    # A renamed, moved or split marker yields empty text, and an empty --query exits 0, so the caller would read "no
-    # output" as a verdict rather than as a failure to ask. Read-only here, unlike the drivers that mutate, but the
-    # verdicts gate the EXCHANGE, so refuse rather than let a window pass unasked.
+    # A renamed, moved or split marker yields text that is empty or only the block's own comments, and clickhouse-client
+    # exits 0 on either, so the caller would read "no output" as a verdict rather than as a failure to ask. Tested on
+    # comment-masked text because comments are not whitespace.
     #
     # RETURN, not exit: every caller invokes this inside a command substitution, where an exit ends only the subshell
     # and would leave the outer clickhouse-client running with an empty --query. The callers assign first, so a
     # non-zero return trips `set -e` there.
-    if [[ -z "${sql//[[:space:]]/}" ]]; then
-        log "ERROR: the '$block' block rendered empty from $VERIFY_SQL." >&2
+    if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
+        log "ERROR: the '$block' block from $VERIFY_SQL rendered no executable SQL (empty, or comments only)." >&2
         log "       Expected the exact marker lines '-- >>> BEGIN $block' and '-- >>> END $block'." >&2
         return 1
     fi

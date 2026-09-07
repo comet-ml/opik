@@ -333,27 +333,26 @@ extract() {
     awk -v begin="-- >>> BEGIN $1" -v end="-- >>> END $1" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$SQL_FILE"
 }
 
-# Refuse rendered SQL that is not what the caller asked for. A marker renamed, moved, indented or split yields EMPTY
-# text, and an empty --query is not an error the way a malformed statement is: clickhouse-client exits 0, so `set -e`
-# never fires and the step prints its success line having done nothing. The three checks catch different faults:
-#   * non-empty      -- the marker pair did not match at all;
-#   * must_contain   -- the markers matched, but around the wrong text. "Non-empty" cannot see this;
-#   * no placeholder -- a placeholder this driver does not substitute survived into the statement. Checked on
-#                       comment-masked text, as backfill.sh and delta_replay.sh do against these same files, so a
-#                       placeholder merely mentioned in a comment does not refuse a good file.
+# Refuse rendered SQL that is not what the caller asked for. A marker renamed, moved, indented or split yields text
+# that is empty or only the block's own comments, and clickhouse-client exits 0 on either, so `set -e` never fires and
+# the step prints its success line having done nothing.
+#
+# Masking comes first because every check needs the executable text: comments are not whitespace, and a block's prose
+# can contain the very phrase that identifies it. The identity check is not redundant with the emptiness one -- markers
+# can match around the wrong statement, which is plenty of text.
 require_rendered() {
     local sql="$1" what="$2" must_contain="$3" file="$4" masked
-    if [[ -z "${sql//[[:space:]]/}" ]]; then
-        echo "ERROR: the '$what' block rendered empty from $file." >&2
+    masked="$(sed 's/--.*$//' <<<"$sql")"
+    if [[ -z "${masked//[[:space:]]/}" ]]; then
+        echo "ERROR: the '$what' block from $file rendered no executable SQL (empty, or comments only)." >&2
         echo "       Expected the exact marker lines '-- >>> BEGIN $what' and '-- >>> END $what'." >&2
         exit 2
     fi
-    if ! grep -qF "$must_contain" <<<"$sql"; then
-        echo "ERROR: the '$what' block from $file does not contain '$must_contain', so the markers are around the" >&2
-        echo "       wrong text. Refusing to run it." >&2
+    if ! grep -qF "$must_contain" <<<"$masked"; then
+        echo "ERROR: the '$what' block from $file has no '$must_contain' outside its comments, so the markers are" >&2
+        echo "       around the wrong statement. Refusing to run it." >&2
         exit 2
     fi
-    masked="$(sed 's/--.*$//' <<<"$sql")"
     if grep -qF '${' <<<"$masked"; then
         echo "ERROR: the '$what' block from $file still holds an unsubstituted \${...} placeholder after rendering." >&2
         echo "       Refusing to send SQL containing a literal placeholder." >&2

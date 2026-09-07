@@ -643,9 +643,9 @@ weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITI
 touches them by accident, and vice versa. Once written, the extra partitions are benign at rest: they never tier to cold
 and are skipped by time-bounded reads.
 
-> **They are NOT few, and they break the backfill unless `max_partitions_per_insert_block` is raised.** The intuition to
-> distrust is that they are "bounded (few distinct far-future timestamps → few extra weeks) and harmless": the first half
-> is wrong on real data, and the second is only true *after* the copy succeeds. Measured on a production-shape
+> **They are NOT few, and they break the backfill unless `max_partitions_per_insert_block` is raised.** Do not trust the
+> reading that they are "bounded (few distinct far-future timestamps → few extra weeks) and harmless": the first half is
+> wrong on real data, and the second is only true *after* the copy succeeds. Measured on a production-shape
 > environment (2026-08-17):
 >
 > | Measure | Value |

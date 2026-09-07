@@ -104,10 +104,19 @@ $RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-s
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
 
 # 6. QA the copy BEFORE the swap: normalized fidelity compare of source vs destination.
-$RUNBOOK/scripts/verify.sh --database opik            # add --drill-down to list differing keys on a mismatch
+$RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the differing keys of ANY differing window
 #    Locally there is no async-insert buffer, so in-flight writes may still be settling: once traffic has stopped,
-#    re-run delta_replay.sh then verify.sh until it reports "PASSED: all N windows match" (convergence). In production
-#    the buffer holds writes during the cutover window instead.
+#    re-run delta_replay.sh then verify.sh until it reports "PASSED" (convergence). In production the buffer holds
+#    writes during the cutover window instead.
+#
+#    Re-running only converges a MISMATCH. The other two non-zero verdicts do not resolve by re-copying, so do not
+#    loop on them:
+#      * INCONCLUSIVE   a version tie left FINAL's choice arbitrary, so the re-check's "no genuine difference" cannot
+#                       be relied on, and copying again does not break the tie. Triage it per the runbook's "a version
+#                       tie"; in a rehearsal the usual cause is seeding two rows for one key at one last_updated_at.
+#      * UNCERTIFIABLE  the tie check did not return counts, so the window is neither certified nor shown to differ.
+#                       That is a read or client failure, not a data one: fix the cause and re-run those windows.
+#    "OK -- superseded-version artifact" is a PASS that differs, so it needs no action.
 
 # 7. MANDATORY CONFIG STEP, and the one most easily skipped in a rehearsal: roll out traceColumnsNonNullable=true
 #    BEFORE the EXCHANGE (runbook "The final cutover window"), and raise the buffer ceiling so the --confirm-buffer-raised
