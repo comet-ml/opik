@@ -464,7 +464,6 @@ class OnlineScoringEngineTest {
 
         var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
 
-        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
@@ -472,6 +471,9 @@ class OnlineScoringEngineTest {
 
         // Wait longer for async processing to complete (both evaluators need to process)
         Awaitility.await().untilAsserted(() -> {
+            // A captor keeps every value it captures, so a captor shared across attempts would grow
+            // by the whole call history on each retry and never match the expected size again.
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
             // Verify that evaluators were processed
             // We should have at least 1 call to scoreBatchOfTraces
             Mockito.verify(feedbackScoreService, Mockito.atLeastOnce()).scoreBatchOfTraces(captor.capture());
