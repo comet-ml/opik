@@ -26,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
@@ -36,6 +37,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +49,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -340,6 +344,105 @@ class TraceServiceImplTest {
          * Set equality is order-independent, so this matches whatever order the service iterates the ids in.
          */
         private Set<Pair<UUID, UUID>> pairs(UUID projectId, Set<UUID> ids) {
+            return ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
+        }
+
+        private Connection mockDeleteFlow() {
+            var connection = mock(Connection.class);
+            when(template.nonTransaction(any()))
+                    .thenAnswer(invocation -> {
+                        TransactionTemplateAsync.TransactionCallback<Void> callback = invocation.getArgument(0);
+                        return callback.execute(connection);
+                    });
+            return connection;
+        }
+
+        private void verifyTracesDeletedPosted(Set<UUID> ids, UUID projectId, String workspaceId) {
+            var eventCaptor = ArgumentCaptor.forClass(TracesDeleted.class);
+            verify(eventBus).post(eventCaptor.capture());
+            var event = eventCaptor.getValue();
+            assertThat(event.traceIds()).isEqualTo(ids);
+            assertThat(event.projectId()).isEqualTo(projectId);
+            assertThat(event.workspaceId()).isEqualTo(workspaceId);
+            assertThat(event.userName()).isEqualTo(DEFAULT_USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Traces By Project:")
+    class DeleteTracesByProject {
+
+        @Test
+        @DisplayName("when traces exist, then deletes them as (project, id) pairs and posts the TracesDeleted event")
+        void deleteByProjectId__whenTracesExist__thenDeletesPairsAndPostsEvent() {
+            var projectId = UUID.randomUUID();
+            var ids = List.of(idGenerator.generateId(), idGenerator.generateId());
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var expectedPairs = pairs(projectId, ids);
+            when(traceDao.getTraceIdsByProjectId(projectId, connection)).thenReturn(Flux.fromIterable(ids));
+            when(traceDao.delete(expectedPairs, connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectId(projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).delete(expectedPairs, connection);
+            verifyTracesDeletedPosted(Set.copyOf(ids), projectId, workspaceId);
+            // traceService is built with capture disabled (default config)
+            verifyNoInteractions(deletionEventDAO);
+        }
+
+        @Test
+        @DisplayName("when there are more traces than the batch size, then deletes them in sequential chunks")
+        void deleteByProjectId__whenMoreTracesThanBatchSize__thenDeletesInChunks() {
+            var projectId = UUID.randomUUID();
+            var ids = IntStream.range(0, 10001)
+                    .mapToObj(__ -> idGenerator.generateId())
+                    .toList();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            when(traceDao.getTraceIdsByProjectId(projectId, connection)).thenReturn(Flux.fromIterable(ids));
+            when(traceDao.delete(any(), eq(connection))).thenReturn(Mono.empty());
+            when(deletionEventDAO.insert(any(), eq(DEFAULT_USER))).thenReturn(Mono.empty());
+
+            var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
+                    .traceDeletionEventsCaptureEnabled(true)
+                    .build());
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectId(projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            // 10001 ids buffered in batches of 10000 -> one full chunk and one remainder chunk.
+            verify(traceDao).delete(pairs(projectId, ids.subList(0, 10000)), connection);
+            verify(traceDao).delete(pairs(projectId, ids.subList(10000, 10001)), connection);
+            verify(eventBus, times(2)).post(any(TracesDeleted.class));
+            verify(deletionEventDAO, times(2)).insert(any(), eq(DEFAULT_USER));
+        }
+
+        @Test
+        @DisplayName("when the project has no traces, then completes without deleting or posting events")
+        void deleteByProjectId__whenNoTraces__thenCompletesWithoutDeleting() {
+            var projectId = UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            when(traceDao.getTraceIdsByProjectId(projectId, connection)).thenReturn(Flux.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectId(projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao, never()).delete(any(), any());
+            verifyNoInteractions(eventBus, deletionEventDAO);
+        }
+
+        private Set<Pair<UUID, UUID>> pairs(UUID projectId, List<UUID> ids) {
             return ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
         }
 
