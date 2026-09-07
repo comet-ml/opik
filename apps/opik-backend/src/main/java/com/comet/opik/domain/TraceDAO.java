@@ -130,6 +130,16 @@ public interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
+    /**
+     * Batch insert without a caller-supplied connection.
+     *
+     * <p>Exists so the write-path choice is made BEFORE a connection is allocated: the JSONEachRow path
+     * uses the v2 client's own HTTP pool and needs no R2DBC connection at all, and
+     * {@code TransactionTemplateAsync#nonTransaction} does not close what it hands out. Allocating one
+     * per batch and never using it is waste on a path whose whole point is to remove per-batch overhead.
+     */
+    Mono<Long> batchInsert(List<Trace> traces);
+
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
@@ -4375,10 +4385,6 @@ class TraceDAOImpl implements TraceDAO {
 
         Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(traces);
-        }
-
         return Mono.from(insert(traces, connection))
                 .flatMapMany(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
@@ -4474,6 +4480,19 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         return node;
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> batchInsert(@NonNull List<Trace> traces) {
+
+        Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(traces);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
     }
 
     private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {

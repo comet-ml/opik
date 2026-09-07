@@ -15,12 +15,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayOutputStream;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -188,6 +190,42 @@ class JsonEachRowBulkInsertTest {
         assertThat(rows).isZero();
         verify(client, never()).insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
                 any(InsertSettings.class));
+    }
+
+    @Test
+    @DisplayName("the InsertResponse is closed on success")
+    void closesTheResponse() throws Exception {
+        var metric = mock(Metric.class);
+        when(metric.getLong()).thenReturn(1L);
+        var metrics = mock(OperationMetrics.class);
+        when(metrics.getMetric(ServerMetrics.NUM_ROWS_WRITTEN)).thenReturn(metric);
+        var response = mock(InsertResponse.class);
+        when(response.getMetrics()).thenReturn(metrics);
+        var client = mock(Client.class);
+        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+                any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
+
+        new JsonEachRowBulkInsert(client).insert("traces", "log-comment", List.of("a"), ROW_MAPPER).block();
+
+        // try-with-resources should release it; an unclosed response holds its stream, which over a
+        // few hundred batches per run would accumulate rather than fail loudly.
+        verify(response).close();
+    }
+
+    @Test
+    @DisplayName("a client failure surfaces its cause, not the ExecutionException wrapper")
+    void unwrapsTheClientFailure() {
+        var client = mock(Client.class);
+        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+                any(InsertSettings.class)))
+                .thenReturn(CompletableFuture.failedFuture(new SocketException("connection reset")));
+
+        // RetryUtils.handleConnectionError matches on the throwable's own class, so a SocketException
+        // still wrapped in ExecutionException would silently bypass the retry the R2DBC path gets.
+        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client)
+                .insert("traces", "log-comment", List.of("a"), ROW_MAPPER)
+                .block())
+                .hasRootCauseInstanceOf(SocketException.class);
     }
 
     @Test

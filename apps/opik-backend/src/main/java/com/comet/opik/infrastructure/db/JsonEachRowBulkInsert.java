@@ -11,12 +11,14 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.BufferedOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 
 /**
@@ -43,7 +45,8 @@ import java.util.function.Function;
  * which matters because trace {@code input}/{@code output} can be hundreds of KiB each, and a
  * 1000-row batch of those would otherwise be held in full (twice over, converting chars to UTF-8)
  * per concurrent request. Rows are built with Jackson, not string concatenation: the payload carries
- * user-supplied trace content, so escaping has to be correct by construction.
+ * user-supplied trace content, so escaping has to be correct by construction, and failures are
+ * logged as a bounded summary rather than a full message or stack.
  *
  * <p>The client is the shared Dropwizard-managed singleton from
  * {@link DatabaseAnalyticsModule#getClickHouseClient()}; this class never closes it.
@@ -97,12 +100,21 @@ public class JsonEachRowBulkInsert {
                 buffered.flush();
             }, ClickHouseFormat.JSONEachRow, settings).get()) {
                 return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
+            } catch (ExecutionException e) {
+                // Future.get() wraps the client's failure in ExecutionException. The resource-layer
+                // retry filter (RetryUtils.handleConnectionError) matches on the throwable's own class,
+                // so a wrapped SocketException would not be retried here even though the same failure
+                // is retried on the R2DBC path. Surface the cause so both paths retry alike.
+                throw e.getCause() instanceof Exception cause ? cause : e;
             }
         })
                 // The v2 client call is blocking; keep it off the reactive event loop.
                 .subscribeOn(Schedulers.boundedElastic())
-                // Log the count only — never the payload, which holds customer trace data.
-                .doOnError(err -> log.error("Failed JSONEachRow insert into '{}': rows='{}'", table, items.size(),
-                        err));
+                // Bounded on purpose. A ClickHouse parse error quotes the offending value, and the
+                // payload is customer trace content, so neither the stack nor the full message is
+                // safe to emit here: log the type and an abbreviated message, never the rows.
+                .doOnError(err -> log.error("Failed JSONEachRow insert into '{}': rows='{}', error='{} {}'",
+                        table, items.size(), err.getClass().getSimpleName(),
+                        StringUtils.abbreviate(err.getMessage(), 200)));
     }
 }
