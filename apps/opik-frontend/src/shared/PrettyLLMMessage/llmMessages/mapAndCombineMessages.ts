@@ -21,13 +21,19 @@ export function mapAndCombineMessages(
 ): LLMMapperResult {
   const { formatHint, formatHintIsAuthoritative = false, spanUsage } = config;
   const withSpanUsage = (result: LLMMapperResult): LLMMapperResult => {
-    if (!spanUsage) return result;
     const populatedSpanUsage = Object.fromEntries(
-      Object.entries(spanUsage).filter(([, value]) => value != null),
+      Object.entries(spanUsage ?? {}).filter(
+        ([, value]) => typeof value === "number" && Number.isFinite(value),
+      ),
+    );
+    const usage = Object.fromEntries(
+      Object.entries({ ...result.usage, ...populatedSpanUsage }).filter(
+        ([, value]) => typeof value === "number" && Number.isFinite(value),
+      ),
     );
     return {
       ...result,
-      usage: { ...result.usage, ...populatedSpanUsage },
+      usage: Object.keys(usage).length > 0 ? usage : undefined,
     };
   };
   const inputDetection = detectLLMMessages(

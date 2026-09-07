@@ -71,19 +71,24 @@ Spans with the `openinference.span.kind` attribute support the **Messages** tab 
 Previously stored spans with flattened OpenInference attributes remain readable in
 the UI; their stored data is not rewritten.
 
-<Warning>
-  If your online evaluation rules or custom consumers reference flattened
-  OpenInference fields, update their variable mappings for newly ingested spans.
-  Historical records retain their original paths.
-</Warning>
+<Note>
+  Existing online evaluation rules can keep using supported
+  `input.llm.input_messages.*` and `input.llm.output_messages.*` paths. Newly
+  ingested spans retain these original message attributes in `input` alongside
+  the structured messages, with their original indices. For new rules, use the
+  structured paths below. Historical records retain their original paths.
+</Note>
 
-| Historical variable mapping                   | Mapping for newly ingested spans |
+| Compatible historical variable mapping        | Structured variable mapping      |
 | --------------------------------------------- | -------------------------------- |
 | `input.llm.input_messages.0.message.content`  | `input.messages[0].content`      |
 | `input.llm.output_messages.0.message.content` | `output.messages[0].content`     |
 
-Message, content, and tool-call arrays are ordered by their original numeric indices
-and compacted, so inspect a new span before updating mappings that use sparse indices.
+Structured message, content, and tool-call arrays are ordered by their original
+numeric indices and compacted. For example, an original message index of `7` can
+become `messages[0]`, while its compatibility attribute keeps index `7`. Inspect a
+new span when switching a rule to structured paths. Other normalized OpenInference
+fields, such as prompts, choices, and invocation parameters, require their new paths.
 Raw `input.value` and `output.value` are parsed according to their MIME type. When a
 raw scalar or array is the only content, it becomes the entire input or output;
 when combined with structured fields, it remains under `value`.
