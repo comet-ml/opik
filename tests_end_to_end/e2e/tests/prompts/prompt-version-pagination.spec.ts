@@ -69,7 +69,11 @@ test.describe('Prompt version history — pagination', { tag: ['@t2-cuj', '@area
     });
   });
 
-  test('A version deep-linked past the first page renders its own template and can be compared against every other', { tag: ['@cap:prompts.compare-versions'] }, async ({
+  // Tagged `version-history`, not `compare-versions`: this asserts what the
+  // Compare-against menu *offers* — which is the paginated version list read
+  // through a second surface — and never selects an entry, so it would still
+  // pass if the comparison itself were broken.
+  test('A version deep-linked past the first page renders its own template and is offered every other version to compare against', { tag: ['@cap:prompts.version-history'] }, async ({
     versionedPrompt,
     project,
     page,
