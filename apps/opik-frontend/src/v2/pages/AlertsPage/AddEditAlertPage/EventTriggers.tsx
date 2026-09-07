@@ -30,7 +30,8 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn } from "@/lib/utils";
 import FeedbackScoreConditions, {
   DEFAULT_FEEDBACK_SCORE_CONDITION_GROUP,
-} from "./FeedbackScoreConditions";
+} from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
+import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
@@ -187,9 +188,15 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
     return (
       <FeedbackScoreConditions
         form={form}
-        triggerIndex={index}
-        eventType={eventType}
+        groupsPath={`triggers.${index}.groups`}
+        scoreSource={
+          eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
+            ? ScoreSource.THREADS
+            : ScoreSource.TRACES
+        }
         projectId={projectId}
+        showWindow
+        minimumMessage="Can't remove — every alert needs at least one group with at least one condition."
       />
     );
   };
