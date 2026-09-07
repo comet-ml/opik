@@ -130,6 +130,38 @@ export interface FeedbackScoreRef {
   source: string;
 }
 
+/**
+ * One commit of a prompt, as the versions endpoints answer.
+ *
+ * `versionNumber` is `string | null` and never defaulted: it is the `vN` label
+ * the prompt page renders, and the backend sends null for a mask. Collapsing
+ * that into a positional index is precisely the confusion a version-label
+ * assertion exists to rule out.
+ */
+export interface PromptVersionRef {
+  id: string;
+  promptId: string;
+  versionNumber: string | null;
+  template: string;
+}
+
+/**
+ * One span reduced to what a cost assertion needs.
+ *
+ * `totalEstimatedCost` is `number | null` rather than `?? 0`: for a model whose
+ * price the server resolved, an absent cost is a regression, and only the
+ * caller knows whether it is asserting a price or the deliberate absence of one
+ * (a model id the price table must NOT match). Defaulting here would erase that
+ * difference before either could be checked.
+ */
+export interface SpanCostRef {
+  id: string;
+  name: string;
+  model: string | null;
+  provider: string | null;
+  totalEstimatedCost: number | null;
+}
+
 export interface TraceDetail {
   id: string;
   name: string;
@@ -852,6 +884,70 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One `POST /v1/private/prompts/versions` — a new commit on `name`, or the
+     * prompt itself when it does not exist yet.
+     *
+     * Returns the backend's own `versionNumber` rather than letting a caller
+     * count creates: the label the prompt page renders comes from this field,
+     * so a spec asserting on labels must compare against what the server said,
+     * not against the order the fixture happened to write in.
+     */
+    async createPromptVersion(args: {
+      name: string;
+      template: string;
+      projectId?: string;
+      changeDescription?: string;
+    }): Promise<PromptVersionRef> {
+      const created = await opik.api.prompts.createPromptVersion({
+        name: args.name,
+        version: {
+          template: args.template,
+          ...(args.changeDescription ? { changeDescription: args.changeDescription } : {}),
+        },
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+      });
+      const id = created.id;
+      if (typeof id !== 'string' || id === '') {
+        throw new Error(`createPromptVersion(${args.name}) returned no version id`);
+      }
+      return {
+        id,
+        promptId: created.promptId ? String(created.promptId) : '',
+        // Absent, not defaulted: a version with no `version_number` is a mask
+        // (or a backend that stopped sending the field), and either is a real
+        // answer a label assertion must be able to see.
+        versionNumber: created.versionNumber ?? null,
+        template: created.template,
+      };
+    },
+
+    /**
+     * Every version of a prompt, newest first — the same ordering the prompt
+     * page's version timeline requests.
+     *
+     * Paged through in full rather than read with one large `size`: the point
+     * of the callers using this is prompts with more versions than one page
+     * holds, which is exactly the case a single request would silently cut off.
+     */
+    async listPromptVersions(promptId: string): Promise<PromptVersionRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.prompts.getPromptVersions(promptId, {
+            page,
+            size: 100,
+            sorting: JSON.stringify([{ field: 'created_at', direction: 'DESC' }]),
+          }),
+        100,
+      );
+      return content.map((v) => ({
+        id: String(v.id ?? ''),
+        promptId: v.promptId ? String(v.promptId) : promptId,
+        versionNumber: v.versionNumber ?? null,
+        template: v.template,
+      }));
+    },
+
+    /**
      * One `PUT /v1/private/datasets/items` batch, with explicit control over
      * `batch_group_id` — the field that decides whether the write commits a new
      * dataset version (grouped: every batch sharing an id collapses into one)
@@ -1529,6 +1625,52 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           // Absent and empty are different answers here — see TracePayload.
           tags: t.tags ?? null,
         };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * Every span on a trace, reduced to the fields a price resolution decides.
+     *
+     * Scoped by `projectId` as well as `traceId` because the spans listing is
+     * project-scoped: without it the backend falls back to the Default Project
+     * and answers with an empty page, which reads identically to "the trace has
+     * no spans".
+     */
+    async listSpanCosts(args: { projectId: string; traceId: string }): Promise<SpanCostRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            traceId: args.traceId,
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
+      }));
+    },
+
+    /**
+     * A trace's rolled-up estimated cost — the number the trace panel's stats
+     * row renders, aggregated server-side over the trace's spans.
+     *
+     * Null on 404 like `getTrace`, and null (not 0) when the trace carries no
+     * cost at all: a trace whose spans were all priced at zero and a trace the
+     * aggregate never reached are different answers.
+     */
+    async getTraceCost(traceId: string): Promise<number | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return t.totalEstimatedCost ?? null;
       } catch (err) {
         if (isNotFoundError(err)) return null;
         throw err;

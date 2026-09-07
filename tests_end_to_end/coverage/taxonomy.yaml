@@ -251,6 +251,7 @@ areas:
       - trace-explore/trace-attachments.spec.ts
       - trace-explore/trace-id-time-window.spec.ts
       - trace-explore/trace-partial-update-merge.spec.ts
+      - trace-explore/span-cost-resolution.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -258,7 +259,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
@@ -399,6 +400,7 @@ areas:
     specs:
       - prompts/prompt-library-smoke.spec.ts
       - prompts/prompt-delete.spec.ts
+      - prompts/prompt-version-pagination.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -406,8 +408,8 @@ areas:
       sdk-seeded-visible:      { covered: true,  tier: t1-smoke }
       edit-creates-version:    { covered: true,  tier: t1-smoke }
       old-version-preserved:   { covered: true,  tier: t1-smoke }
-      version-history:         { covered: true,  tier: t1-smoke }
-      compare-versions:        { covered: false }
+      version-history:         { covered: true,  tier: t1-smoke, note: "smoke covers select-a-version on a 2-version prompt; prompt-version-pagination adds the 31-version case, where the timeline pages and the labels must come from version_number" }
+      compare-versions:        { covered: true,  tier: t2-cuj, note: "the Compare-against menu's contents from a version deep-linked past page 1 — asserted label by label. Opening the compare dialog itself is still uncovered." }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
       delete-prompt:           { covered: true,  tier: t2-cuj }
 
