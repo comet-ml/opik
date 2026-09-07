@@ -6,6 +6,8 @@ import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts
 import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -31,6 +33,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -600,6 +603,7 @@ class ExperimentItemDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -633,8 +637,55 @@ class ExperimentItemDAO {
             return Mono.just(0L);
         }
 
+        if (JsonEachRowBulkInsert.isEnabled()) {
+            return insertJsonEachRow(experimentItems);
+        }
+
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> insert(experimentItems, connection));
+    }
+
+    /**
+     * Same rows as {@link #INSERT}, streamed as JSONEachRow through the v2 client instead of bound as
+     * ~9 named parameters per row. Behaviour the R2DBC path relies on is preserved deliberately:
+     * duplicate ids still append a new version for the ReplacingMergeTree to collapse, and the
+     * {@code log_comment} is rendered by the same {@code FilterUtils#getLogComment} so a benchmark can
+     * compare the two paths in {@code system.query_log} on equal terms.
+     */
+    private Mono<Long> insertJsonEachRow(Collection<ExperimentItem> experimentItems) {
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                "experiment_items",
+                getLogComment("insert_experiment_items", workspaceId, userName, experimentItems.size()),
+                experimentItems,
+                (body, item) -> appendJsonRow(body, item, userName, workspaceId)));
+    }
+
+    private void appendJsonRow(StringBuilder out, ExperimentItem item, String userName, String workspaceId) {
+        var node = JsonUtils.createObjectNode();
+
+        node.put("id", item.id().toString());
+        node.put("experiment_id", item.experimentId().toString());
+        node.put("dataset_item_id", item.datasetItemId().toString());
+        node.put("trace_id", item.traceId().toString());
+        node.put("workspace_id", workspaceId);
+
+        // Nullable(FixedString(36)): an absent project id stays NULL. Writing "" instead would be a
+        // 36-byte FixedString mismatch, and would also read back as a project rather than as absent.
+        if (item.projectId() != null) {
+            node.put("project_id", item.projectId().toString());
+        } else {
+            node.putNull("project_id");
+        }
+
+        node.put("created_by", userName);
+        node.put("last_updated_by", userName);
+        node.put("execution_policy", ExecutionPolicyMapper.serialize(item.executionPolicy()));
+
+        // created_at and last_updated_at stay absent from the row so their column DEFAULTs stamp them
+        // server-side, exactly as the R2DBC column list does — see the INSERT javadoc: created_at is the
+        // stalled-run reaper's liveness signal (OPIK-7459) and last_updated_at is the dedup version.
+        // This is why the insert sets input_format_defaults_for_omitted_fields.
+        out.append(node).append('\n');
     }
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {

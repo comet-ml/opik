@@ -27,6 +27,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
@@ -3310,6 +3311,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     /**
      * Sort mapping applied under {@code traceColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
@@ -4372,10 +4374,106 @@ class TraceDAOImpl implements TraceDAO {
 
         Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
 
+        if (JsonEachRowBulkInsert.isEnabled()) {
+            return insertJsonEachRow(traces);
+        }
+
         return Mono.from(insert(traces, connection))
                 .flatMapMany(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
 
+    }
+
+    /**
+     * The {@link #BATCH_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
+     * 20 named parameters per row. The {@code connection} the interface hands us is unused here: the v2
+     * client owns its own HTTP connection pool.
+     *
+     * <p>Every value is produced by the same helper the R2DBC binder uses, so the two paths write
+     * identical cells — including the batch-wide {@code nowForBatch} fallback, which must stay one
+     * timestamp per batch to keep downstream {@code MAX(last_updated_at)} aggregations stable.
+     */
+    private Mono<Long> insertJsonEachRow(List<Trace> traces) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            Instant nowForBatch = Instant.now();
+
+            return jsonBulkInsert.insert(
+                    "traces",
+                    getLogComment("batch_insert_traces", workspaceId, userName, traces.size()),
+                    traces,
+                    (body, trace) -> appendJsonRow(body, trace, userName, workspaceId, nowForBatch));
+        });
+    }
+
+    private void appendJsonRow(StringBuilder out, Trace trace, String userName, String workspaceId,
+            Instant nowForBatch) {
+
+        String inputValue = TruncationUtils.toJsonString(trace.input());
+        String outputValue = TruncationUtils.toJsonString(trace.output());
+
+        var node = JsonUtils.createObjectNode();
+
+        node.put("id", trace.id().toString());
+        node.put("project_id", trace.projectId().toString());
+        node.put("workspace_id", workspaceId);
+        node.put("name", StringUtils.defaultIfBlank(trace.name(), ""));
+        node.put("start_time", ClickHouseDateTimeFormat.formatNanos(trace.startTime()));
+
+        // Mirrors bindEpochSentinel: the epoch sentinel once the column is non-nullable, NULL while it
+        // is still Nullable.
+        if (traceColumnsNonNullable()) {
+            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(nullToEpoch(trace.endTime())));
+        } else if (trace.endTime() != null) {
+            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(trace.endTime()));
+        } else {
+            node.putNull("end_time");
+        }
+
+        node.put("input", inputValue);
+        node.put("output", outputValue);
+        node.put("metadata", TruncationUtils.toJsonString(trace.metadata()));
+
+        var tags = node.putArray("tags");
+        Optional.ofNullable(trace.tags()).ifPresent(values -> values.forEach(tags::add));
+
+        node.put("last_updated_at", ClickHouseDateTimeFormat.formatMicros(
+                trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
+        node.put("error_info", trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "");
+        node.put("created_by", userName);
+        node.put("last_updated_by", userName);
+        node.put("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
+        node.put("visibility_mode", trace.visibilityMode() != null
+                ? trace.visibilityMode().getValue()
+                : VisibilityMode.DEFAULT.getValue());
+        node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+        node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+
+        // Mirrors bindNanSentinel. Jackson quotes NaN, which is why the insert enables
+        // input_format_json_read_numbers_as_strings.
+        if (traceColumnsNonNullable()) {
+            node.put("ttft", nullToNaN(trace.ttft()));
+        } else if (trace.ttft() != null) {
+            node.put("ttft", trace.ttft());
+        } else {
+            node.putNull("ttft");
+        }
+
+        node.put("environment", StringUtils.defaultString(trace.environment()));
+
+        // truncation_threshold (UInt64 DEFAULT 10001) and source (Enum8 DEFAULT 'unknown') are LEFT OUT
+        // of the row when absent rather than written as null. Both columns are non-nullable, so a null
+        // would only land as the default via input_format_null_as_default — which is what the R2DBC
+        // bindNull relies on today. Omitting takes the column DEFAULT directly, giving the same cell
+        // without depending on that setting.
+        if (configuration.getResponseFormatting().getTruncationSize() > 0) {
+            node.put("truncation_threshold", configuration.getResponseFormatting().getTruncationSize());
+        }
+
+        if (trace.source() != null) {
+            node.put("source", trace.source().getValue());
+        }
+
+        out.append(node).append('\n');
     }
 
     private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {
