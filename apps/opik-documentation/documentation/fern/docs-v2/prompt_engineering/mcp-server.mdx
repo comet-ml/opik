@@ -14,27 +14,32 @@ Opik SDK:
 uvx opik mcp configure
 ```
 
-Or skip the terminal: paste this into Claude Code, Cursor, VS Code Copilot, Codex
-or opencode and the agent does the setup for itself.
+Or let your coding agent do it. Paste this into the agent you use, and it installs
+what is missing, registers the server for itself, and shows you the proof:
 
 ```text title="Installer prompt for your coding agent"
-Set up the Opik MCP server and the Opik skills for yourself.
+Set up the Opik MCP server and the Opik skills for yourself, so you can read my
+traces and experiments and fix code from them. Reference: https://www.comet.com/docs/opik/mcp-server
 
-1. Check that uv is installed: `uvx --version`. If it is missing, install it
-   (macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`; Windows:
-   `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
-   and use a fresh shell afterwards.
-2. Run `uvx opik configure status`. If it says the configuration is not found,
-   ask me for my Opik API key and workspace name (on https://www.comet.com/opik
-   they are in Account settings or the user menu, top right), then run
-   `uvx opik configure --yes --no-install-mcp --no-install-skills` with
-   OPIK_API_KEY and OPIK_WORKSPACE set in the environment of that one command.
-   Do not write the key anywhere else. If I run Opik locally or self-hosted,
-   ask for its URL and add `--use-local` or OPIK_URL_OVERRIDE instead of a key.
-3. Run `uvx opik mcp configure --skills --ai-client <the client you are running
-   in: claude-code, cursor, vscode, codex or opencode>`.
-4. Run `uvx opik mcp status`, show me the output, and tell me to start a new
-   session so you pick up the server and the skills.
+1. Detect, don't assume: my OS and shell, whether `uvx` is on PATH, and which
+   coding agent you are running in.
+2. If `uvx` is missing, install uv into my user directory
+   (https://docs.astral.sh/uv/getting-started/installation/) and reload PATH.
+   Ask me before anything that needs sudo or edits my shell rc files.
+3. Run `uvx opik configure status`. If it reports no configuration, stop and ask
+   me to set OPIK_API_KEY and OPIK_WORKSPACE in my environment (or to run
+   `uvx opik configure` once; for a local Opik, `uvx opik configure --use-local --yes`
+   needs no key), then continue. Never ask me to paste the key in chat, never
+   print it, never write it into this repo.
+4. Run `uvx opik mcp configure --skills --ai-client <the client you are running in>`.
+   `uvx opik mcp configure --help` lists the accepted names. This picks the right
+   server for my deployment and installs the skills.
+5. Prove it: run `uvx opik mcp status` and paste the output. If anything failed
+   or is out of sync, fix it and re-run until it is in sync.
+6. Tell me to start a new session so you pick up the server and skills, and to
+   test with "List my Opik projects".
+
+Do not change anything else on my machine or in this repo.
 ```
 
 One-click for Cursor and VS Code, hosted server only, sign-in in the browser:
