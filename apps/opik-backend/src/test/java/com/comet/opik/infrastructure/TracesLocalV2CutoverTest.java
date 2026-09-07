@@ -1393,11 +1393,11 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * The backfill's window bounds. A {@code DateTime64} literal carrying no timezone is parsed in the SESSION's, while
-     * every column it meets is {@code DateTime64(n, 'UTC')}, so the session is set explicitly here: an unpinned literal
-     * only diverges where it is not UTC. The row is seeded an hour into the week, so a bound read in a westward zone
-     * starts the window after it and the copy silently skips it — a hole in the migration, in the week the driver
-     * reported as done.
+     * The backfill's window bounds. A {@code DateTime64} literal carrying no timezone is parsed in the session's
+     * timezone, while every column it meets is {@code DateTime64(n, 'UTC')}, so the session is set explicitly here: an
+     * unpinned literal only diverges where it is not UTC. The row is seeded an hour into the week, so a bound read in
+     * a westward zone starts the window after it and the copy silently skips it — a hole in the migration, in the week
+     * the driver reported as done.
      *
      * <p>The row carries no {@code ttft} either, so the projection's NaN sentinel is asserted with it: a window test
      * that copied the wrong columns would otherwise pass. Its epoch {@code end_time} sentinel is deliberately NOT
@@ -1495,7 +1495,7 @@ class TracesLocalV2CutoverTest {
      * liveCount} rules out the vacuous case where nothing was copied at all.
      */
     @Test
-    void theRunbooksBackfillThenDeltaSequenceIsNotATie() {
+    void backfillThenDeltaSequenceIsNotATie() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var at = weekInstant(0, 0);

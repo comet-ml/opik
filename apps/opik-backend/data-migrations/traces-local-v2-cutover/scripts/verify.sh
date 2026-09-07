@@ -125,7 +125,14 @@ log() {
 # Extract one `-- >>> BEGIN <name>` .. `-- >>> END <name>` block from the reference SQL (exact-line markers), and
 # substitute this window's placeholders.
 render_block() {
-    local block="$1" lo="$2" hi="$3" sql
+    local block="$1" lo="$2" hi="$3" sql begins ends
+    # Exactly one pair: the awk otherwise runs to EOF on a missing END and sweeps the later blocks in with this one.
+    begins="$(grep -cxF -e "-- >>> BEGIN $block" "$VERIFY_SQL" || true)"
+    ends="$(grep -cxF -e "-- >>> END $block" "$VERIFY_SQL" || true)"
+    if (( begins != 1 || ends != 1 )); then
+        log "ERROR: $VERIFY_SQL holds $begins '-- >>> BEGIN $block' and $ends '-- >>> END $block'; expected one of each." >&2
+        return 1
+    fi
     sql="$(awk -v begin="-- >>> BEGIN $block" -v end="-- >>> END $block" \
         '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$VERIFY_SQL")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"

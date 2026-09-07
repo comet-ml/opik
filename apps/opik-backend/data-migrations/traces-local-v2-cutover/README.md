@@ -1091,7 +1091,9 @@ Pick the stage by how far the cutover got:
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
   table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
-  a multi-shard cluster and must be run once per shard. It also refuses when the shard count is **unreadable** — the
+  a multi-shard cluster — and on a per-shard run too, since the count is still above one. There is no driver path there:
+  apply the statement from `scripts/db-app-analytics/` by hand, one shard at a time, then check the postcondition once.
+  It also refuses when the shard count is **unreadable** — the
   postcondition reads `clusterAllReplicas('{cluster}', …)` and needs the same `system.macros` the count does, so a
   session that cannot read one cannot verify with the other, and proceeding would risk a whole-table rewrite that can
   never be certified. The primary fix is to grant `SELECT ON system.clusters` and `system.macros`. Where that is

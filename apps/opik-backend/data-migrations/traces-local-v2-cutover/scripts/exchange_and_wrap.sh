@@ -340,7 +340,16 @@ extract() {
 # can contain the very phrase that identifies it. The identity check is not redundant with the emptiness one -- markers
 # can match around the wrong statement, which is plenty of text.
 require_rendered() {
-    local sql="$1" what="$2" must_contain="$3" file="$4" masked
+    local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends
+    # Exactly one pair, checked on the file rather than the extraction: the awk stops at the first END and otherwise
+    # runs to EOF, so a missing or renamed END sweeps every later block into this one and --multiquery executes them
+    # all. The content checks below cannot see that -- a run-on capture still contains this block's own statement.
+    begins="$(grep -cxF -e "-- >>> BEGIN $what" "$file" || true)"
+    ends="$(grep -cxF -e "-- >>> END $what" "$file" || true)"
+    if (( begins != 1 || ends != 1 )); then
+        echo "ERROR: $file holds $begins '-- >>> BEGIN $what' and $ends '-- >>> END $what'; expected one of each." >&2
+        exit 2
+    fi
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         echo "ERROR: the '$what' block from $file rendered no executable SQL (empty, or comments only)." >&2
