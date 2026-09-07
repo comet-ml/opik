@@ -32,19 +32,21 @@ const SCORES_STORED_LINE = 'stored successfully';
  * the manual request is the only thing that can trigger it.
  */
 test.describe('Online Evaluation — thread-scoped rule fan-out', { tag: ['@t2-cuj', '@area:online-evaluation'] }, () => {
-  test('a manual evaluation of N threads scores every one of them exactly once', { tag: ['@cap:online-evaluation.rule-scope-thread-span'] }, async ({
+  test('A manual evaluation of N threads scores every one of them exactly once', { tag: ['@cap:online-evaluation.rule-scope-thread-span'] }, async ({
     threadCohort,
     backendClient,
     testNamespace,
     automationRulesCleanup,
     page,
   }) => {
-    // Budget for the longest chain: the cohort fixture's 60s thread-aggregation
-    // poll, the 180s wait for the rule to store scores, then three thread panels
-    // opened in sequence. Kept just above the 180s inner poll so that one fires
-    // first — it fails naming the threads that never got scored, which beats an
-    // opaque "test timeout exceeded".
-    test.setTimeout(300_000);
+    // A backstop above the sum of the inner ceilings, not a budget the test is
+    // expected to spend: the cohort fixture's 60s thread-aggregation poll, the
+    // 180s wait for the rule to store scores, then three thread panels opened in
+    // sequence at up to 60s each (waitForFullyLoaded waits 30s for the panel root
+    // and 30s for its first turn), plus navigation. Deliberately larger than that
+    // total so an inner timeout always fires first — each of those names what it
+    // was waiting for, which beats an opaque "test timeout exceeded".
+    test.setTimeout(600_000);
 
     const { projectId, threads } = threadCohort;
     const threadIds = threads.map((t) => t.threadId);
@@ -77,15 +79,21 @@ test.describe('Online Evaluation — thread-scoped rule fan-out', { tag: ['@t2-c
       }
     });
 
-    await test.step('The request reports one queued entry per thread', async () => {
+    await test.step('The request is accepted for the whole cohort', async () => {
       const queued = await backendClient.evaluateThreadsManually({
         projectId,
         threadModelIds: threads.map((t) => t.threadModelId),
         ruleIds: [ruleId],
       });
-      // The first place the split is observable. A request that collapsed to a
-      // single entry still answers 202.
-      expect(queued.entitiesQueued, 'one entry per thread named in the request').toBe(
+      // NOT evidence of the fan-out. ManualEvaluationService.evaluateThreads
+      // answers `threadModelIds.size()` — the count it was handed — after the
+      // enqueue chain completes, so a request that packed all three ids into one
+      // stream entry reports 3 here too. What it does rule out is the cohort
+      // being rejected or partially resolved before enqueueing (that path
+      // answers 0), which is worth pinning because every later assertion would
+      // otherwise fail with no indication that the request never landed.
+      // The fan-out itself is asserted from the evaluator-call count below.
+      expect(queued.entitiesQueued, 'every thread in the request was accepted').toBe(
         threads.length,
       );
       expect(queued.rulesApplied, 'exactly the one rule was applied').toBe(1);

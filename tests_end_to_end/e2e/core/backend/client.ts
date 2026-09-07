@@ -1547,12 +1547,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             'map — the conversation is passed to score() positionally.',
         );
       }
-      if (!isThreadScoped && !args.arguments) {
+      if (!isThreadScoped && Object.keys(args.arguments ?? {}).length === 0) {
         // The backend refuses to call the evaluator with an empty argument map,
         // so an omitted one fails the rule before its metric ever runs — a
-        // failure that reads exactly like a broken metric.
+        // failure that reads exactly like a broken metric. An explicitly empty
+        // `{}` reaches PythonEvaluatorService the same way an omitted map does,
+        // so it is rejected here too rather than only checking for absence.
         throw new Error(
-          `createAutomationRule: '${args.name}' is trace-scoped and needs an argument map.`,
+          `createAutomationRule: '${args.name}' is trace-scoped and needs a non-empty argument map.`,
         );
       }
       const { status, message, location } = await rawFetch(
