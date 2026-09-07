@@ -141,6 +141,11 @@ test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-c
     await test.step('The automation logs page renders exactly the stream the API reports', async () => {
       await logsPage.goto();
       await logsPage.waitForReady();
+      // Settle on the count the API already reported before reading the DOM:
+      // waitForReady returns on the first row, and readRows does not retry, so
+      // without this a table caught mid-render would be compared as if it were
+      // the whole stream.
+      await logsPage.waitForRowCount(judgeLogs.length);
 
       const rendered = await logsPage.readRows();
       // Compare the whole stream, not just "our error line is in there": a page
