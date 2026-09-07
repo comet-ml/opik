@@ -6,6 +6,8 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
@@ -17,11 +19,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -30,11 +27,11 @@ import org.redisson.config.Config;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
-import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * OPIK-8262, cross-layer half. The unit tests assert what the publisher is asked to write; this asserts what
@@ -45,16 +42,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * traces, an LLM provider) to re-observe a Redis write would test the harness more than the change.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class OnlineScorePublisherIntegrationTest {
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
     private final ServiceTogglesConfig serviceTogglesConfig = new ServiceTogglesConfig();
 
-    @Mock
-    private AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    /**
+     * Required by the publisher's constructor but never exercised: these tests use the overload that takes an
+     * already-resolved rule, so no findById lookup happens. Stubbed with nothing on purpose — a bare mock,
+     * rather than a lenient one, so any call the code does start making shows up instead of being absorbed.
+     */
+    private final AutomationRuleEvaluatorService automationRuleEvaluatorService = mock(
+            AutomationRuleEvaluatorService.class);
+
+    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private RedissonReactiveClient redissonClient;
     private OnlineScoringConfig config;
@@ -105,13 +107,8 @@ class OnlineScorePublisherIntegrationTest {
     void enqueueThreadMessageWritesOneEntryPerThreadId() {
         var publisher = newPublisher();
         var threadIds = List.of("thread-a-" + suffix(), "thread-b-" + suffix(), "thread-c-" + suffix());
-        var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
-                .id(UUID.randomUUID())
-                .name(podamFactory.manufacturePojo(String.class))
-                .code(podamFactory.manufacturePojo(TraceThreadLlmAsJudgeCode.class))
-                .build();
-
-        var projectId = UUID.randomUUID();
+        var rule = llmRule();
+        var projectId = idGenerator.generateId();
 
         publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user").block();
 
@@ -148,12 +145,8 @@ class OnlineScorePublisherIntegrationTest {
     void enqueueThreadMessageWritesOnePythonEntryPerThreadId() {
         var publisher = newPublisher();
         var threadIds = List.of("thread-a-" + suffix(), "thread-b-" + suffix(), "thread-c-" + suffix());
-        var projectId = UUID.randomUUID();
-        var rule = AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.builder()
-                .id(UUID.randomUUID())
-                .name(podamFactory.manufacturePojo(String.class))
-                .code(podamFactory.manufacturePojo(TraceThreadUserDefinedMetricPythonCode.class))
-                .build();
+        var projectId = idGenerator.generateId();
+        var rule = pythonRule();
 
         publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user").block();
 
@@ -173,6 +166,22 @@ class OnlineScorePublisherIntegrationTest {
                 .as("the Python payload needs the same per-entry granularity as the LLM one")
                 .hasSize(threadIds.size());
         assertThat(written).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    private AutomationRuleEvaluatorTraceThreadLlmAsJudge llmRule() {
+        return AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
+                .id(idGenerator.generateId())
+                .name(podamFactory.manufacturePojo(String.class))
+                .code(podamFactory.manufacturePojo(TraceThreadLlmAsJudgeCode.class))
+                .build();
+    }
+
+    private AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython pythonRule() {
+        return AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.builder()
+                .id(idGenerator.generateId())
+                .name(podamFactory.manufacturePojo(String.class))
+                .code(podamFactory.manufacturePojo(TraceThreadUserDefinedMetricPythonCode.class))
+                .build();
     }
 
     private OnlineScorePublisher newPublisher() {
