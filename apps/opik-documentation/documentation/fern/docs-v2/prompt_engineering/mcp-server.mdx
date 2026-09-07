@@ -14,14 +14,18 @@ Opik SDK:
 uvx opik mcp configure
 ```
 
-One-click for Cursor and VS Code, hosted server only, sign-in in the browser:
+One click for Cursor and VS Code, or a prompt for any coding agent. All three use
+the Opik Cloud hosted server and sign in through the browser:
 
 <div className="mcp-clients no-external-icon">
   <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
   <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
+  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Detect the coding agents installed here and which one you are; ask me 'only you, or all of them?' and wait. For each chosen agent, add the MCP server `opik-mcp` (Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its user-level config: use the client's own command with user scope where it has one (`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`), otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that already has a server with that URL. Install the skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you see in config files. Verify in the agent you are: reload MCP servers or ask me to, complete the browser sign-in if prompted, then call the Opik `list` tool with entity_type project and show the result; if the server only loads in a new session, say so and tell me what to ask you next. Report per agent: file, entry added, verified or pending sign-in. Change nothing else." title="Copy a prompt that makes your coding agent install the server and the skills for itself"><Icon icon="fa-solid fa-robot" /><span>Your coding agent</span><Icon icon="fa-regular fa-copy" /></a>
 </div>
 
-The buttons add the server only, not the skills. Another client, or a self-hosted
+The Cursor and VS Code buttons add the server only. The agent prompt has your agent
+detect the coding agents on your machine, ask which ones to set up, install the server
+and the skills for them, and verify with a real call. Another client, or a self-hosted
 Opik? See [Manual setup](#manual-setup).
 
 ## What this unlocks
@@ -101,32 +105,6 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
   </Step>
 </Steps>
 
-### Or let your coding agent do it
-
-On Opik Cloud this needs no API key and no terminal. Paste this into the agent
-you use:
-
-```text title="Installer prompt"
-Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server).
-Detect the coding agents installed here and which one you are; ask me "only you,
-or all of them?" and wait. For each chosen agent, add the MCP server `opik-mcp`
-(Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its
-user-level config: use the client's own command with user scope where it has one
-(`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`),
-otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that
-already has a server with that URL. Install the skills the same way:
-`npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you
-see in config files. Verify in the agent you are: reload MCP servers or ask me to,
-complete the browser sign-in if prompted, then call the Opik `list` tool with
-entity_type project and show the result; if the server only loads in a new
-session, say so and tell me what to ask you next. Report per agent: file, entry
-added, verified or pending sign-in. Change nothing else.
-```
-
-Self-hosted Opik: replace the URL in the prompt with your deployment's API base
-plus `/v1/mcp`, or have the agent run `uvx opik mcp configure --ai-client <agent> --skills`,
-which detects the deployment from your Opik configuration.
-
 ## Check your setup
 
 Each AI client keeps its own copy of the MCP configuration, which isn't updated
@@ -174,7 +152,7 @@ uvx opik configure status
 ```
 
 <Note>
-To refresh the skill pack, re-run `uvx opik mcp configure` — it rewrites the pack
+To refresh the skill pack, re-run `uvx opik mcp configure`. It rewrites the pack
 from the latest published version. Assistants read their skills at session start,
 so start a new session afterwards.
 </Note>
@@ -222,7 +200,7 @@ you change something.
 
 ### The tools you'll have
 
-Your assistant gets five tools. It picks between them on its own — this is here so
+Your assistant gets five tools and picks between them on its own. This is here so
 you know what it can reach for:
 
 | Tool | What your assistant can do with it |
@@ -254,7 +232,7 @@ first connect, so:
 
 - **No API key is stored** in the client's config — you authenticate through OAuth
   in the browser.
-- **`uv` is only needed for the setup command** — there is no local process to run
+- **`uv` is only needed for the setup command.** There is no local process to run
   afterwards.
 - Your workspace is selected during the OAuth sign-in, so a hosted server shows
   no workspace in `uvx opik mcp status`.
