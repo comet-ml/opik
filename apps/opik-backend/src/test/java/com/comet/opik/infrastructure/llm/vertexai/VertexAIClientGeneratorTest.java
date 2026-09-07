@@ -7,10 +7,9 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.cloud.vertexai.Transport;
-import com.google.cloud.vertexai.VertexAI;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,12 +37,15 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Vertex AI client generator")
 class VertexAIClientGeneratorTest {
 
     private static final String MODEL = "vertex_ai/gemini-2.5-flash";
+    private static final String GEMINI_3_MODEL = "vertex_ai/gemini-3-pro-preview";
     private static final String PROJECT_ID = "test-project";
 
     private static final String GENERATE_CONTENT_PATH = ".*:generateContent";
@@ -68,10 +70,13 @@ class VertexAIClientGeneratorTest {
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
 
     private String serviceAccountJson;
+    private OkHttpClient httpClient;
 
     /**
-     * WireMock serves a self-signed certificate and the Vertex SDK always talks TLS, so the JVM default has to trust it
-     * for the stub to be reachable at all.
+     * WireMock serves a self-signed certificate and everything here talks TLS, so its certificate has to be trusted in
+     * two places: the SDK sends the API request through OkHttp, so that needs an OkHttp client built to trust it, while
+     * the OAuth token exchange goes through Google's auth library on {@code HttpsURLConnection}, which only honours the
+     * JVM-wide defaults. Trusting one and not the other fails the request at whichever step was missed.
      */
     @BeforeAll
     void trustWireMockCertificate() throws Exception {
@@ -92,6 +97,11 @@ class VertexAIClientGeneratorTest {
 
         var sslContext = SSLContext.getInstance("TLS");
         sslContext.init(null, new TrustManager[]{trustAll}, new SecureRandom());
+
+        httpClient = new OkHttpClient.Builder()
+                .sslSocketFactory(sslContext.getSocketFactory(), trustAll)
+                .hostnameVerifier((hostname, session) -> true)
+                .build();
 
         HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
         HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
@@ -153,24 +163,22 @@ class VertexAIClientGeneratorTest {
 
     /**
      * Starts from the shipped {@code config-test.yml} rather than a hand-built config, so the generator is exercised
-     * against the same block the app boots with. Only the two things the stub needs are overridden: every multi-region
-     * location is remapped onto WireMock, which makes the endpoint the generator resolves observable as the host it
-     * actually calls, and {@code Transport.REST} is required because WireMock speaks HTTP, not gRPC.
+     * against the same block the app boots with. Only the endpoints are overridden: every multi-region location is
+     * remapped onto WireMock, which makes the endpoint the generator resolves observable as the host it actually calls.
      */
     private LlmProviderClientConfig clientConfig() {
-        var endpoint = wireMockHost() + "/";
+        var endpoint = "https://" + wireMockHost() + "/";
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
 
         config.setVertexAIClient(config.getVertexAIClient().toBuilder()
                 .multiRegionApiEndpoints(Map.of("global", endpoint, "eu", endpoint, "us", endpoint))
-                .transport(Transport.REST)
                 .build());
 
         return config;
     }
 
     private void completeVia(String configuredLocation) {
-        completeVia(new VertexAIClientGenerator(clientConfig()), configuredLocation);
+        completeVia(new VertexAIClientGenerator(clientConfig(), httpClient), configuredLocation);
     }
 
     private void completeVia(VertexAIClientGenerator generator, String configuredLocation) {
@@ -186,8 +194,12 @@ class VertexAIClientGeneratorTest {
     }
 
     private void completeWithCustomParameters(Map<String, Object> customParameters) {
+        completeWithCustomParameters(MODEL, customParameters);
+    }
+
+    private void completeWithCustomParameters(String model, Map<String, Object> customParameters) {
         var request = ChatCompletionRequest.builder()
-                .model(MODEL)
+                .model(model)
                 .customParameters(customParameters)
                 .build();
         var config = LlmProviderClientApiConfig.builder()
@@ -195,7 +207,7 @@ class VertexAIClientGeneratorTest {
                 .configuration(Map.of("location", "global"))
                 .build();
 
-        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), httpClient)
                 .generate(config, request)) {
             client.chat(UserMessage.from("hello"));
         }
@@ -252,37 +264,38 @@ class VertexAIClientGeneratorTest {
     }
 
     @Nested
-    @DisplayName("Locations that keep the SDK-derived host")
-    class SdkDerivedHosts {
+    @DisplayName("Locations that keep the SDK-derived endpoint")
+    class SdkDerivedEndpoints {
 
         /**
-         * Single-region locations are absent from the endpoint map, so the SDK keeps deriving the host from the location
-         * itself rather than using the configured multi-region endpoint. Asserting on the resolved host keeps this off
-         * the network: actually calling one of those hosts would mean real egress and multi-second DNS timeouts in CI.
+         * Single-region locations are absent from the endpoint map, so the SDK keeps deriving the endpoint from the
+         * location itself rather than using a configured multi-region one. Asserting on the location the client was
+         * built with keeps this off the network: actually calling one of those endpoints would mean real egress and
+         * multi-second DNS timeouts in CI.
          */
         @ParameterizedTest
         @ValueSource(strings = {"europe-west4", "us-central1", "asia-northeast1"})
         void areNotRedirectedToTheMultiRegionEndpoint(String location) {
-            assertThat(resolvedApiEndpoint(location)).isEqualTo("%s-aiplatform.googleapis.com".formatted(location));
+            assertThat(resolvedLocation(location)).isEqualTo(location);
         }
 
         /**
          * A blank location is not rejected at the API boundary and the SDK rejects an empty one outright, so it has to
-         * be treated as unset. Were it canonicalised into {@code ""}, building the client would fail with
-         * "location can't be null or empty" instead of defaulting like an absent value.
+         * be treated as unset. Were it canonicalised into {@code ""}, building the client would fail instead of
+         * defaulting like an absent value.
          */
         @ParameterizedTest
         @ValueSource(strings = {"", "   "})
         void blankLocationsBehaveLikeAnUnsetOne(String location) {
-            assertThat(resolvedApiEndpoint(location)).isEqualTo(resolvedApiEndpoint(null));
+            assertThat(resolvedLocation(location)).isEqualTo(resolvedLocation(null));
         }
 
         /**
-         * Builds a client without calling it, so the host the SDK settled on can be read back. A blank location that
-         * reached {@code setLocation} would surface here as an {@link IllegalArgumentException} instead of a host.
+         * Builds a client without calling it, so the location the SDK settled on can be read back. A blank location
+         * that reached the builder would surface here as an exception instead of a location.
          */
-        private String resolvedApiEndpoint(String location) {
-            var generator = new VertexAIClientGenerator(clientConfig());
+        private String resolvedLocation(String location) {
+            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -290,7 +303,7 @@ class VertexAIClientGeneratorTest {
                     .build();
 
             try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                return VertexAITestClients.apiEndpointOf(client);
+                return VertexAITestClients.clientOf(client).location();
             }
         }
     }
@@ -299,49 +312,65 @@ class VertexAIClientGeneratorTest {
     @DisplayName("Client ownership")
     class ClientOwnership {
 
-        // Force the lazy prediction client into existence so its shutdown is observable.
+        /**
+         * The generated wrapper owns the genai {@link com.google.genai.Client} because the langchain4j model keeps it
+         * private and is not closeable itself: nothing else can release its HTTP dispatcher and connection pool, and a
+         * client is built per request. Closing twice must stay safe, since the streaming path closes on the stream
+         * terminal and callers also close the wrapper.
+         */
         @Test
-        @DisplayName("closing the returned client shuts down the VertexAI it owns")
-        void closingTheReturnedClientShutsDownTheVertexAI() throws Exception {
-            var generator = new VertexAIClientGenerator(clientConfig());
+        @DisplayName("closing the returned client is idempotent")
+        void closingTheReturnedClientIsIdempotent() {
+            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                VertexAI vertexAI = VertexAITestClients.vertexAiOf(client);
+            var client = (CloseableVertexAiChatModel) generator.generate(config, request);
 
-                var predictionClient = vertexAI.getPredictionServiceClient();
-                assertThat(predictionClient.isShutdown()).isFalse();
-
+            assertThatCode(() -> {
                 client.close();
-
-                assertThat(predictionClient.isShutdown()).isTrue();
-            }
+                client.close();
+            }).doesNotThrowAnyException();
         }
 
         @Test
-        @DisplayName("closing the returned streaming client shuts down the VertexAI it owns")
-        void closingTheReturnedStreamingClientShutsDownTheVertexAI() throws Exception {
-            var generator = new VertexAIClientGenerator(clientConfig());
+        @DisplayName("closing the returned streaming client is idempotent")
+        void closingTheReturnedStreamingClientIsIdempotent() {
+            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            try (var client = generator.newVertexAIStreamingClient(config, request)) {
-                VertexAI vertexAI = client.vertexAI();
+            var client = generator.newVertexAIStreamingClient(config, request);
 
-                var predictionClient = vertexAI.getPredictionServiceClient();
-                assertThat(predictionClient.isShutdown()).isFalse();
-
+            assertThatCode(() -> {
                 client.close();
+                client.close();
+            }).doesNotThrowAnyException();
+        }
 
-                assertThat(predictionClient.isShutdown()).isTrue();
-            }
+        /**
+         * A client built for a model the generator cannot resolve must not outlive the failure. The model is looked up
+         * before the client is created, so this also pins that ordering.
+         */
+        @Test
+        @DisplayName("an unsupported model fails without leaving a client behind")
+        void unsupportedModelFailsWithoutLeavingAClientBehind() {
+            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
+            var request = ChatCompletionRequest.builder().model("vertex_ai/not-a-model").build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            assertThatThrownBy(() -> generator.generate(config, request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Unsupported model");
         }
     }
 
@@ -407,13 +436,56 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), httpClient)
                     .generateChat(config, modelParameters)) {
                 client.chat(UserMessage.from("hello"));
             }
 
             assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
                     .isEqualTo(24576);
+        }
+
+        @ParameterizedTest
+        @CsvSource({"minimal,minimal", "low,low", "medium,medium", "high,high"})
+        @DisplayName("Gemini 3 sends the level natively rather than a translated budget")
+        void gemini3SendsLevelNatively(String requested, String expectedLevel) {
+            completeWithCustomParameters(GEMINI_3_MODEL, Map.of("thinking", Map.of("level", requested)));
+
+            var thinkingConfig = sentGenerationConfig().get("thinkingConfig");
+            assertThat(thinkingConfig).isNotNull();
+            assertThat(thinkingConfig.path("thinkingLevel").asText()).isEqualToIgnoringCase(expectedLevel);
+            // The two fields are mutually exclusive upstream, so the budget must be absent entirely.
+            assertThat(thinkingConfig.has("thinkingBudget")).isFalse();
+        }
+
+        @Test
+        @DisplayName("an explicit budget still wins on Gemini 3, taking the caller at their word")
+        void gemini3HonoursExplicitBudget() {
+            completeWithCustomParameters(GEMINI_3_MODEL, Map.of("thinking", Map.of("budget_tokens", 4096)));
+
+            var thinkingConfig = sentGenerationConfig().get("thinkingConfig");
+            assertThat(thinkingConfig).isNotNull();
+            assertThat(thinkingConfig.path("thinkingBudget").asInt()).isEqualTo(4096);
+            assertThat(thinkingConfig.has("thinkingLevel")).isFalse();
+        }
+
+        @Test
+        @DisplayName("level off is dropped on Gemini 3, which cannot disable thinking")
+        void gemini3DropsOffLevel() {
+            completeWithCustomParameters(GEMINI_3_MODEL, Map.of("thinking", Map.of("level", "off")));
+
+            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        }
+
+        @Test
+        @DisplayName("Gemini 2.5 keeps the budget translation, since it rejects a level outright")
+        void gemini25KeepsBudgetTranslation() {
+            completeWithCustomParameters(MODEL, Map.of("thinking", Map.of("level", "low")));
+
+            var thinkingConfig = sentGenerationConfig().get("thinkingConfig");
+            assertThat(thinkingConfig).isNotNull();
+            assertThat(thinkingConfig.path("thinkingBudget").asInt()).isEqualTo(2048);
+            assertThat(thinkingConfig.has("thinkingLevel")).isFalse();
         }
 
         @ParameterizedTest
@@ -427,7 +499,7 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString(customParameters));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), httpClient)
                     .generateChat(config, modelParameters)) {
                 client.chat(UserMessage.from("hello"));
             }

@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
-import com.google.cloud.vertexai.VertexAI;
+import com.google.genai.Client;
 import dev.langchain4j.model.ModelProvider;
 import dev.langchain4j.model.chat.Capability;
 import dev.langchain4j.model.chat.ChatModel;
@@ -12,16 +12,16 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
-// Owns the VertexAI and closes it; the langchain4j model can't (its two-arg ctor nulls its handle, so its close() is a no-op).
+// Owns the genai Client and closes it; the langchain4j model can't (it keeps the client private and is not closeable).
 @Slf4j
 class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
 
     private final @NonNull ChatModel delegate;
-    private final @NonNull VertexAI vertexAI;
+    private final @NonNull Client client;
 
-    CloseableVertexAiChatModel(@NonNull ChatModel delegate, @NonNull VertexAI vertexAI) {
+    CloseableVertexAiChatModel(@NonNull ChatModel delegate, @NonNull Client client) {
         this.delegate = delegate;
-        this.vertexAI = vertexAI;
+        this.client = client;
     }
 
     @Override
@@ -48,7 +48,7 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
     @Override
     public void close() {
         try {
-            vertexAI.close();
+            client.close();
         } catch (Exception e) {
             log.warn("Failed to close Vertex AI client", e);
         }
@@ -62,7 +62,7 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
         }
     }
 
-    VertexAI vertexAI() {
-        return vertexAI;
+    Client client() {
+        return client;
     }
 }
