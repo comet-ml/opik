@@ -113,7 +113,10 @@ export async function deleteProviderKeyById(id: string): Promise<void> {
     body: JSON.stringify({ ids: [id] }),
   });
   if (!response.ok) {
-    throw new Error(`delete provider key returned ${response.status}`);
+    // The body, not just the status: this runs in fixture teardown, where a
+    // bare "returned 400" is all a leaked workspace-global key ever says for
+    // itself — and the next run only sees the leak, never the reason.
+    throw new Error(`delete provider key returned ${response.status}: ${await response.text()}`);
   }
 }
 

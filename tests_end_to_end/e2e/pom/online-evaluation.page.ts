@@ -258,10 +258,31 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /** Submit the add/edit dialog and wait for it to close. */
+  /**
+   * Submit the add/edit dialog and wait for the SAVE to land, not merely for
+   * the dialog to close.
+   *
+   * The dialog's submit handler calls `setOpen(false)` on the line after
+   * `mutate()`, without awaiting it, so the dialog is gone while the POST or
+   * PATCH is still in flight. Waiting only on the dialog therefore leaves two
+   * holes: a caller that reads the rule back over REST can read the state
+   * before the write, and a save that FAILED closes the dialog just the same —
+   * the error surfaces in a toast — so an assertion after it would be judging a
+   * write that never happened.
+   *
+   * Waiting for a 2xx on the evaluators write closes both.
+   */
   async submitRuleDialog(): Promise<void> {
     return test.step('submit the rule dialog', async () => {
+      const saved = this.page.waitForResponse(
+        (res) =>
+          /\/v1\/private\/automations\/evaluators(\/[^/?]+)?(\?|$)/.test(res.url()) &&
+          ['POST', 'PATCH', 'PUT'].includes(res.request().method()) &&
+          res.status() >= 200 &&
+          res.status() < 300,
+      );
       await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await saved;
       await this.dialog.waitFor({ state: 'hidden' });
     });
   }
