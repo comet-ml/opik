@@ -68,11 +68,20 @@ public class JsonEachRowBulkInsert {
      * The row writer is built here, in the constructor, rather than in a static initializer.
      *
      * <p>{@code JsonUtils.configure} <em>replaces</em> the static mapper during startup — the hazard
-     * {@code JsonUtilsConfigurationBundle}'s javadoc warns about — so anything that captures the mapper
-     * at class-load freezes the pre-bundle instance and silently ignores the configured
-     * {@code jacksonConfig} limits, {@code maxStringLength} included, which is exactly the setting that
-     * matters for large trace payloads. Guice constructs this singleton after that bundle has run, so
-     * binding it here picks up the configured mapper.
+     * {@code JsonUtilsConfigurationBundle}'s javadoc warns about — so anything capturing it at class-load
+     * holds the pre-bundle instance. What that instance carries is the mapper's <b>serialization</b>
+     * configuration: {@code NON_NULL} inclusion, snake_case naming, the date/duration handling and the
+     * {@code JavaTimeModule}. Deriving the writer from whatever mapper the application configured is the
+     * point; Guice builds this singleton after the bundle has run.
+     *
+     * <p>Note what this does <b>not</b> buy, because it would be easy to assume otherwise: the
+     * {@code jacksonConfig} limits ({@code maxStringLength} / {@code maxDocumentLength}) are
+     * {@link com.fasterxml.jackson.core.StreamReadConstraints} — parser-side only, as
+     * {@code JsonUtils#applyStreamReadConstraints}' own javadoc states. They bound what is read, e.g. an
+     * inbound request body, and place no bound whatsoever on what this class writes. The outbound
+     * payload here is as large as the batch it is given: {@code ExperimentItemBulkUpload} caps a bulk
+     * request at 4MB, but {@code TraceBatch} and {@code SpanBatch} carry no such annotation, so an
+     * outbound guard would be a new behaviour rather than one inherited from the mapper.
      *
      * <p>{@code FLUSH_AFTER_WRITE_VALUE} is disabled deliberately: otherwise the
      * {@link BufferedOutputStream} the rows are written through is flushed once per row and buffers

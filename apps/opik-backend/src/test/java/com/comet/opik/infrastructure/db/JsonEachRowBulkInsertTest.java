@@ -193,6 +193,38 @@ class JsonEachRowBulkInsertTest {
     }
 
     @Test
+    @DisplayName("an explicit null is written, not dropped by NON_NULL inclusion")
+    void writesExplicitNulls() {
+        // The configured mapper sets serialization inclusion to NON_NULL, and the DAOs call putNull() for
+        // columns that must receive SQL NULL rather than a column default (experiment_items.project_id,
+        // and end_time/ttft while those columns are still Nullable). If inclusion dropped the field the
+        // row would take the DDL default instead, which is a different cell.
+        Function<String, ObjectNode> nullMapper = value -> {
+            ObjectNode node = JsonUtils.createObjectNode();
+            node.put("name", value);
+            node.putNull("project_id");
+            return node;
+        };
+
+        var client = clientReturning(1L);
+        var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+
+        new JsonEachRowBulkInsert(client).insert("traces", "log-comment", List.of("a"), nullMapper).block();
+
+        verify(client).insert(eq("traces"), writerCaptor.capture(), any(ClickHouseFormat.class),
+                any(InsertSettings.class));
+
+        var out = new ByteArrayOutputStream();
+        try {
+            writerCaptor.getValue().onOutput(out);
+        } catch (Exception e) {
+            throw new AssertionError("writer threw", e);
+        }
+
+        assertThat(out.toString(StandardCharsets.UTF_8)).isEqualTo("{\"name\":\"a\",\"project_id\":null}\n");
+    }
+
+    @Test
     @DisplayName("the InsertResponse is closed on success")
     void closesTheResponse() throws Exception {
         var metric = mock(Metric.class);
