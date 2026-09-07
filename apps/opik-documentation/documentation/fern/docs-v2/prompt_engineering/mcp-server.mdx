@@ -14,32 +14,33 @@ Opik SDK:
 uvx opik mcp configure
 ```
 
-Or let your coding agent do it. Paste this into the agent you use, and it installs
-what is missing, registers the server for itself, and shows you the proof:
+Or let your coding agent do it. On Opik Cloud this needs no API key and no
+terminal: paste this into the agent you use, and it registers the hosted server
+for itself, installs the skills, and hands you the browser sign-in.
 
 ```text title="Installer prompt for your coding agent"
-Set up the Opik MCP server and the Opik skills for yourself, so you can read my
-traces and experiments and fix code from them. Reference: https://www.comet.com/docs/opik/mcp-server
+Connect yourself to Opik so you can read my traces and experiments and fix code
+from them. Reference: https://www.comet.com/docs/opik/mcp-server
 
-1. Detect, don't assume: my OS and shell, whether `uvx` is on PATH, and which
-   coding agent you are running in.
-2. If `uvx` is missing, install uv into my user directory
-   (https://docs.astral.sh/uv/getting-started/installation/) and reload PATH.
-   Ask me before anything that needs sudo or edits my shell rc files.
-3. Run `uvx opik configure status`. If it reports no configuration, stop and ask
-   me to set OPIK_API_KEY and OPIK_WORKSPACE in my environment (or to run
-   `uvx opik configure` once; for a local Opik, `uvx opik configure --use-local --yes`
-   needs no key), then continue. Never ask me to paste the key in chat, never
-   print it, never write it into this repo.
-4. Run `uvx opik mcp configure --skills --ai-client <the client you are running in>`.
-   `uvx opik mcp configure --help` lists the accepted names. This picks the right
-   server for my deployment and installs the skills.
-5. Prove it: run `uvx opik mcp status` and paste the output. If anything failed
-   or is out of sync, fix it and re-run until it is in sync.
-6. Tell me to start a new session so you pick up the server and skills, and to
-   test with "List my Opik projects".
+1. Detect, don't assume: which coding agent you are running in, and whether
+   `npx` is available.
+2. Register the Opik MCP server for yourself. Server name `opik-mcp`, transport
+   Streamable HTTP, URL https://www.comet.com/opik/api/v1/mcp, no headers and no
+   credentials; sign-in happens in my browser on first connect. Use your own
+   client's way of adding an MCP server if it has one (for example
+   `claude mcp add --transport http opik-mcp <url>` or `codex mcp add opik-mcp --url <url>`),
+   otherwise `npx add-mcp <url> --name opik-mcp`. Write it to my user-level config,
+   not into this repo.
+3. Install the Opik skills for yourself: `npx skills add comet-ml/opik-skills -g -y`.
+4. Prove it: show me the MCP entry you wrote (your client's list command or the
+   config file) and the list of installed skills. If either step failed, fix it
+   and re-run.
+5. Tell me to start a new session, complete the Opik sign-in when the browser
+   opens, and test with "List my Opik projects".
 
-Do not change anything else on my machine or in this repo.
+If I say I use a self-hosted Opik, use my deployment's API base plus /v1/mcp as
+the URL instead, and fall back to `uvx opik mcp configure` if that endpoint
+returns 404. Do not change anything else on my machine or in this repo.
 ```
 
 One-click for Cursor and VS Code, hosted server only, sign-in in the browser:
