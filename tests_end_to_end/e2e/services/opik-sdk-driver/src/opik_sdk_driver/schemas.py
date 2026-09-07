@@ -217,11 +217,25 @@ class DatasetReadWithMidReadInsertRequest(BaseModel):
 
 
 class DatasetReadWithMidReadInsertResponse(BaseModel):
+    """What the pinned read returned, and evidence the insert landed inside it.
+
+    `item_ids` is the whole read in the order it was reassembled — the pinned
+    result, which must be exactly the pre-insert dataset. The other three fields
+    exist to prove the scenario actually happened, because a read that finished
+    before the write started returns that same list and would pass on it alone.
+    """
+
     item_ids: list[str]
+    # One entry per chunk the read yielded, in order. Short chunks before the
+    # last one, or fewer chunks than the dataset needs, mean the read did not
+    # cover the dataset the way the caller sized it for.
     chunk_sizes: list[int]
-    # Chunks consumed before the insert ran, echoed back so the caller can
-    # assert the read really was mid-flight and not already finished.
+    # Chunks actually consumed at the moment the insert ran — observed by the
+    # route, not echoed from the request. Compared against the dataset's total
+    # chunk count it shows how many pages were still unfetched behind the write.
     chunks_before_insert: int
+    # Items the mid-read insert sent. Zero means nothing was written, so a
+    # "nothing changed" result proves nothing.
     inserted: int
 
 

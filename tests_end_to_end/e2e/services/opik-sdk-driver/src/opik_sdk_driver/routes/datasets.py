@@ -169,7 +169,11 @@ def read_dataset_with_mid_read_insert(
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     item_ids: list[str] = []
     chunk_sizes: list[int] = []
-    inserted = False
+    # How many chunks had actually been consumed when the insert ran. Observed
+    # rather than echoed from the request: a caller asserting the read was
+    # genuinely mid-flight has to be reading a number the read produced, not one
+    # it supplied.
+    chunks_before_insert: int | None = None
     try:
         dataset = client.get_dataset(
             name=body.dataset_name, project_name=body.project_name
@@ -180,14 +184,14 @@ def read_dataset_with_mid_read_insert(
             chunk_sizes.append(len(chunk))
             item_ids.extend(str(item["id"]) for item in chunk)
 
-            if not inserted and len(chunk_sizes) == body.pause_after_chunks:
+            if chunks_before_insert is None and len(chunk_sizes) == body.pause_after_chunks:
                 insert_mid_read()
-                inserted = True
+                chunks_before_insert = len(chunk_sizes)
     finally:
         client.end(flush=False)
         atexit.unregister(client.end)
 
-    if not inserted:
+    if chunks_before_insert is None:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -200,6 +204,6 @@ def read_dataset_with_mid_read_insert(
     return DatasetReadWithMidReadInsertResponse(
         item_ids=item_ids,
         chunk_sizes=chunk_sizes,
-        chunks_before_insert=body.pause_after_chunks,
+        chunks_before_insert=chunks_before_insert,
         inserted=len(body.items),
     )

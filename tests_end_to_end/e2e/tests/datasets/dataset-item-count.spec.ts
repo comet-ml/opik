@@ -66,7 +66,7 @@ test.describe('Dataset item count', { tag: ['@area:datasets'] }, () => {
       const smallName = `${testNamespace}-small`;
       const multiName = `${testNamespace}-multi`;
 
-      const datasetIds = await test.step(
+      const datasetIdsByName = await test.step(
         `Seed one dataset with no items, one with ${SMALL_SIZE} and one with ${MULTI_SIZE}`,
         async () => {
           const ids: Record<string, string> = {};
@@ -111,9 +111,21 @@ test.describe('Dataset item count', { tag: ['@area:datasets'] }, () => {
         // Which branch each row took. The empty dataset was never inserted
         // into, so it has no version to read items_total from and is the only
         // row the fallback scan can answer; the other two have one.
+        //
+        // This pair of assertions is also what pins the deployment mode: with
+        // TOGGLE_DATASET_VERSIONING_ENABLED=false (it defaults to true) an
+        // insert cuts no version, every row is answered by the fallback scan,
+        // and these fail here rather than letting the branch claims below pass
+        // against a backend that never took the items_total branch at all.
         expect(byName.get(emptyName)!.latestVersionName, 'no version => fallback branch').toBeNull();
-        expect(byName.get(smallName)!.latestVersionName).toBe('v1');
-        expect(byName.get(multiName)!.latestVersionName).toBe('v1');
+        expect(
+          byName.get(smallName)!.latestVersionName,
+          'insert cut a version => items_total branch (needs dataset versioning enabled)',
+        ).toBe('v1');
+        expect(
+          byName.get(multiName)!.latestVersionName,
+          'insert cut a version => items_total branch (needs dataset versioning enabled)',
+        ).toBe('v1');
 
         expect(byName.get(emptyName)!.datasetItemsCount).toBe(EMPTY_SIZE);
         expect(byName.get(smallName)!.datasetItemsCount).toBe(SMALL_SIZE);
@@ -129,7 +141,7 @@ test.describe('Dataset item count', { tag: ['@area:datasets'] }, () => {
           [smallName, SMALL_SIZE],
           [multiName, MULTI_SIZE],
         ] as const) {
-          const itemIds = await backendClient.listDatasetItemIds(datasetIds[name]);
+          const itemIds = await backendClient.listDatasetItemIds(datasetIdsByName[name]);
           expect(itemIds, `${name}: no item stored twice`).toHaveLength(
             new Set(itemIds).size,
           );
@@ -154,7 +166,7 @@ test.describe('Dataset item count', { tag: ['@area:datasets'] }, () => {
       const survivingSmallIds = await test.step(
         `Delete ${DELETED_FROM_SMALL} items from the ${SMALL_SIZE}-item dataset`,
         async () => {
-          const itemIds = await backendClient.listDatasetItemIds(datasetIds[smallName]);
+          const itemIds = await backendClient.listDatasetItemIds(datasetIdsByName[smallName]);
           await backendClient.deleteDatasetItemsByIds(itemIds.slice(0, DELETED_FROM_SMALL));
           return itemIds.slice(DELETED_FROM_SMALL);
         },
@@ -163,7 +175,7 @@ test.describe('Dataset item count', { tag: ['@area:datasets'] }, () => {
       await test.step('The count follows the delete on both surfaces', async () => {
         const remaining = SMALL_SIZE - DELETED_FROM_SMALL;
 
-        const itemIds = await backendClient.listDatasetItemIds(datasetIds[smallName]);
+        const itemIds = await backendClient.listDatasetItemIds(datasetIdsByName[smallName]);
         expect(new Set(itemIds), 'exactly the items that were not deleted survive').toEqual(
           new Set(survivingSmallIds),
         );
