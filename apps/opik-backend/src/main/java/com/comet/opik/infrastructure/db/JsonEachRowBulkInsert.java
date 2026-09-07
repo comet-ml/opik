@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
@@ -57,27 +56,35 @@ import java.util.function.Function;
  */
 @Singleton
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class JsonEachRowBulkInsert {
 
     private static final SerializedString EMPTY_ROOT_SEPARATOR = new SerializedString("");
 
-    private final @NonNull Client clickHouseClient;
+    private final Client clickHouseClient;
+
+    private final ObjectWriter rowWriter;
 
     /**
-     * Built at construction, not in a static initializer.
+     * The row writer is built here, in the constructor, rather than in a static initializer.
      *
-     * <p>{@code JsonUtils.configure} <em>replaces</em> the static mapper during startup — see
-     * {@code JsonUtilsConfigurationBundle}, which warns about holders that capture the previous instance
-     * — so a {@code static final} writer would freeze the pre-bundle mapper and miss the configured
-     * {@code jacksonConfig} limits. Guice builds this singleton after that bundle has run.
+     * <p>{@code JsonUtils.configure} <em>replaces</em> the static mapper during startup — the hazard
+     * {@code JsonUtilsConfigurationBundle}'s javadoc warns about — so anything that captures the mapper
+     * at class-load freezes the pre-bundle instance and silently ignores the configured
+     * {@code jacksonConfig} limits, {@code maxStringLength} included, which is exactly the setting that
+     * matters for large trace payloads. Guice constructs this singleton after that bundle has run, so
+     * binding it here picks up the configured mapper.
      *
-     * <p>{@code FLUSH_AFTER_WRITE_VALUE} is off deliberately: otherwise the underlying
-     * {@link BufferedOutputStream} is flushed once per row and buffers nothing.
+     * <p>{@code FLUSH_AFTER_WRITE_VALUE} is disabled deliberately: otherwise the
+     * {@link BufferedOutputStream} the rows are written through is flushed once per row and buffers
+     * nothing.
      */
-    private final ObjectWriter rowWriter = JsonUtils.getMapper()
-            .writer()
-            .without(SerializationFeature.FLUSH_AFTER_WRITE_VALUE);
+    @Inject
+    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient) {
+        this.clickHouseClient = clickHouseClient;
+        this.rowWriter = JsonUtils.getMapper()
+                .writer()
+                .without(SerializationFeature.FLUSH_AFTER_WRITE_VALUE);
+    }
 
     /**
      * Inserts {@code items} into {@code table}, mapping each to one JSON row, and returns the row count
