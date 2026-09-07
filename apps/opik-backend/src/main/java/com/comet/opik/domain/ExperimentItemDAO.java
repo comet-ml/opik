@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -637,7 +638,7 @@ class ExperimentItemDAO {
             return Mono.just(0L);
         }
 
-        if (JsonEachRowBulkInsert.isEnabled()) {
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
             return insertJsonEachRow(experimentItems);
         }
 
@@ -657,10 +658,10 @@ class ExperimentItemDAO {
                 "experiment_items",
                 getLogComment("insert_experiment_items", workspaceId, userName, experimentItems.size()),
                 experimentItems,
-                (body, item) -> appendJsonRow(body, item, userName, workspaceId)));
+                item -> toJsonRow(item, userName, workspaceId)));
     }
 
-    private void appendJsonRow(StringBuilder out, ExperimentItem item, String userName, String workspaceId) {
+    private ObjectNode toJsonRow(ExperimentItem item, String userName, String workspaceId) {
         var node = JsonUtils.createObjectNode();
 
         node.put("id", item.id().toString());
@@ -685,7 +686,7 @@ class ExperimentItemDAO {
         // server-side, exactly as the R2DBC column list does — see the INSERT javadoc: created_at is the
         // stalled-run reaper's liveness signal (OPIK-7459) and last_updated_at is the dedup version.
         // This is why the insert sets input_format_defaults_for_omitted_fields.
-        out.append(node).append('\n');
+        return node;
     }
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {

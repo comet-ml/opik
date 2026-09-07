@@ -37,6 +37,7 @@ import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -4374,7 +4375,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
 
-        if (JsonEachRowBulkInsert.isEnabled()) {
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
             return insertJsonEachRow(traces);
         }
 
@@ -4401,12 +4402,11 @@ class TraceDAOImpl implements TraceDAO {
                     "traces",
                     getLogComment("batch_insert_traces", workspaceId, userName, traces.size()),
                     traces,
-                    (body, trace) -> appendJsonRow(body, trace, userName, workspaceId, nowForBatch));
+                    trace -> toJsonRow(trace, userName, workspaceId, nowForBatch));
         });
     }
 
-    private void appendJsonRow(StringBuilder out, Trace trace, String userName, String workspaceId,
-            Instant nowForBatch) {
+    private ObjectNode toJsonRow(Trace trace, String userName, String workspaceId, Instant nowForBatch) {
 
         String inputValue = TruncationUtils.toJsonString(trace.input());
         String outputValue = TruncationUtils.toJsonString(trace.output());
@@ -4473,7 +4473,7 @@ class TraceDAOImpl implements TraceDAO {
             node.put("source", trace.source().getValue());
         }
 
-        out.append(node).append('\n');
+        return node;
     }
 
     private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {

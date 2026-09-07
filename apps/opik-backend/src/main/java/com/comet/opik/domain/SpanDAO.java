@@ -28,6 +28,7 @@ import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -1826,7 +1827,7 @@ public class SpanDAO {
 
         Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
 
-        if (JsonEachRowBulkInsert.isEnabled()) {
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
             return insertJsonEachRow(spans);
         }
 
@@ -1852,12 +1853,11 @@ public class SpanDAO {
                     "spans",
                     getLogComment("batch_insert_spans", workspaceId, userName, spans.size()),
                     spans,
-                    (body, span) -> appendJsonRow(body, span, userName, workspaceId, nowForBatch));
+                    span -> toJsonRow(span, userName, workspaceId, nowForBatch));
         });
     }
 
-    private void appendJsonRow(StringBuilder out, Span span, String userName, String workspaceId,
-            Instant nowForBatch) {
+    private ObjectNode toJsonRow(Span span, String userName, String workspaceId, Instant nowForBatch) {
 
         String inputValue = TruncationUtils.toJsonString(span.input());
         String outputValue = TruncationUtils.toJsonString(span.output());
@@ -1926,7 +1926,7 @@ public class SpanDAO {
         node.put("environment", StringUtils.defaultString(span.environment()));
 
         // Omitted rather than null when absent, so the column DEFAULT applies directly — see the same
-        // note in TraceDAO#appendJsonRow.
+        // note in TraceDAO#toJsonRow.
         if (configuration.getResponseFormatting().getTruncationSize() > 0) {
             node.put("truncation_threshold", configuration.getResponseFormatting().getTruncationSize());
         }
@@ -1935,7 +1935,7 @@ public class SpanDAO {
             node.put("source", span.source().getValue());
         }
 
-        out.append(node).append('\n');
+        return node;
     }
 
     private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
