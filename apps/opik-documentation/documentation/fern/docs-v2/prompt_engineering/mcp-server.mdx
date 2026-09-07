@@ -106,23 +106,24 @@ On Opik Cloud this needs no API key and no terminal. Paste this into the agent
 you use:
 
 ```text title="Installer prompt"
-Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server) so
-they can read my traces and experiments and fix code from them. Detect which
-coding agents are installed here and which one you are; ask me whether to set up
-only you or all of them, then wait. Register the Opik MCP server for the chosen
-agents in their user-level config: name `opik-mcp`, Streamable HTTP, URL
-https://www.comet.com/opik/api/v1/mcp, no credentials (sign-in happens in my
-browser), using each client's own add command or `npx add-mcp <url> --name opik-mcp`.
-Install the Opik skills for the same agents with `npx skills add comet-ml/opik-skills -g -y`.
-Verify with a real call: call the Opik `list` tool for projects and show me the
-result. If you cannot see the new server yet, ask me to reload MCP servers in my
-client (`/mcp` and Reconnect in Claude Code) and try again; only if it still does
-not appear, confirm `curl -s -o /dev/null -w '%{http_code}' <url>` returns 401 and
-tell me to start a new session. Report what you configured, where, and whether it
-is verified.
-Change nothing else. For self-hosted Opik use my API base plus /v1/mcp, and fall
-back to `uvx opik mcp configure` if it returns 404.
+Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server).
+Detect the coding agents installed here and which one you are; ask me "only you,
+or all of them?" and wait. For each chosen agent, add the MCP server `opik-mcp`
+(Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its
+user-level config: use the client's own command with user scope where it has one
+(`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`),
+otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that
+already has a server with that URL. Install the skills the same way:
+`npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you
+see in config files. Verify in the agent you are: reload MCP servers or ask me to,
+complete the browser sign-in if prompted, then call the Opik `list` tool with
+entity_type project and show the result; if the server only loads in a new
+session, say so and tell me what to ask you next. Report per agent: file, entry
+added, verified or pending sign-in. Change nothing else.
 ```
+
+Self-hosted Opik: replace the URL in the prompt with your deployment's API base
+plus `/v1/mcp`, or use `uvx opik mcp configure`, which detects the deployment.
 
 ## Check your setup
 
