@@ -30,7 +30,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/end2end_suites_v2.yml'
-      - 'scripts/test_e2e_allure_workflow.py'
+      - 'tests/unit/test_e2e_allure_workflow.py'
       - 'sdks/code_generation/fern/openapi/openapi.yaml'
       - 'tests_end_to_end/e2e/**'
 
@@ -74,7 +74,7 @@ jobs:
           python-version: '3.12'
 
       - name: Test Allure credential routing
-        run: uv run --with pyyaml python scripts/test_e2e_allure_workflow.py
+        run: uv run --with pyyaml python tests/unit/test_e2e_allure_workflow.py
 
       - name: Install E2E test dependencies
         working-directory: ${{ github.workspace }}/tests_end_to_end/e2e

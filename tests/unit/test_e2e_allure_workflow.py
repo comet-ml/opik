@@ -1,6 +1,6 @@
 """Exercise the checked-in E2E runner without Docker, npm, or Allure services.
 
-Run: uv run --with pyyaml python scripts/test_e2e_allure_workflow.py
+Run: uv run --with pyyaml python tests/unit/test_e2e_allure_workflow.py
 Requires Bash on PATH (as on the workflow's Ubuntu runner).
 """
 
@@ -15,7 +15,7 @@ import yaml
 
 class AllureWorkflowTest(unittest.TestCase):
     def test_credential_routes_preserve_test_failures(self):
-        root = Path(__file__).resolve().parents[1]
+        root = Path(__file__).resolve().parents[2]
         workflow = yaml.safe_load(
             (root / ".github/workflows/end2end_suites_v2.yml").read_text()
         )
