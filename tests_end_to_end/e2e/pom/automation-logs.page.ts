@@ -1,4 +1,4 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 /**
@@ -59,6 +59,24 @@ export class AutomationLogsPage {
         this.rows().first().waitFor({ state: 'visible' }),
         this.emptyState.waitFor({ state: 'visible' }),
       ]);
+    });
+  }
+
+  /**
+   * Poll until the table settles on exactly `expected` rows.
+   *
+   * `waitForReady` only proves the FIRST row arrived, and `readRows` is a
+   * one-shot DOM read with no retry of its own — so reading straight after it
+   * can catch a stream mid-render and silently compare a subset.
+   *
+   * Exact, never a lower bound, for the same reason as
+   * `TraceLogsSidebar.waitForTraceRows`: this page is read as the whole of one
+   * rule's stream, so a count above the expected one means another rule's lines
+   * leaked in, which is one of the failures this view exists to catch.
+   */
+  async waitForRowCount(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`Wait for ${expected} rule log rows`, async () => {
+      await expect(this.rows()).toHaveCount(expected, { timeout: timeoutMs });
     });
   }
 
