@@ -636,12 +636,12 @@ class ChatCompletionServiceTest {
         /**
          * The statuses the subscriber must retire, spelled out as a literal and used both to partition the
          * shared rows below and to assert every retryability outcome. Deliberately NOT
-         * {@code HttpStatusRetryability.isPermanent}: a test that derives its expectation from the predicate
-         * under test agrees with that predicate even when it is wrong, so production and tests would regress
-         * together silently. The predicate's own mapping is pinned separately, also with literals, in
-         * {@code HttpStatusRetryabilityTest}.
+         * {@link ChatCompletionService#isPermanentFailure}: a test that derives its expectation from the
+         * predicate under test agrees with that predicate even when it is wrong, so production and tests
+         * would regress together silently. The predicate's own mapping is pinned against its own literals
+         * by {@link #isPermanentFailure__whenStatus__thenMatchLiteralTable()}.
          */
-        private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 403, 404, 413, 422, 499);
+        private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 402, 403, 404, 413, 422, 499);
 
         /** The shared rows whose status is permanent, so their scoreTrace case needs no branch. */
         private static Stream<Arguments> permanentProviderStatuses() {
@@ -669,10 +669,15 @@ class ChatCompletionServiceTest {
         @CsvSource({
                 "400, Bad Request",
                 "401, Unauthorized",
+                // 402 is what OpenAiCompatStatusCodes maps insufficient_quota to, so it is the permanent
+                // status most likely to actually arrive; 499 is nginx's client-closed-request, which the
+                // predicate classifies permanent because nothing marks it transient.
+                "402, Payment Required",
                 "403, Forbidden",
                 "404, Not Found",
                 "413, Payload Too Large",
                 "422, Unprocessable Entity",
+                "499, Client Closed Request",
         })
         @DisplayName("A permanent provider 4xx becomes non-retryable, so the evaluation is dropped not replayed")
         void scoreTrace__whenPermanentClientError__thenNonRetryable(int status, String label) {
@@ -735,6 +740,66 @@ class ChatCompletionServiceTest {
                     Optional.of(new ErrorMessage(mappedStatus, "provider body says " + mappedStatus)));
 
             assertRetryable(thrown);
+        }
+
+        /**
+         * The out-of-credits path, which is the one 429 that reaches here carrying no wire status at all.
+         * {@code QuotaAwareHttpClient} rethrows {@link NonRetriableException} with the response body as its
+         * <b>message and deliberately no cause</b>, so langchain4j's {@code ExceptionMapper.findRoot()}
+         * cannot unwrap to the {@code HttpException} and re-map the 429 back to a retryable
+         * {@code RateLimitException}. {@code findProviderHttpStatus} pays the same price: no
+         * {@code HttpException} anywhere in the chain, and a bare {@code NonRetriableException} has no
+         * canonical status either, so the classification falls through to retryable.
+         *
+         * <p>Asserted as the deliberate contract, not as an oversight. It follows the asymmetry the cases
+         * above pin -- an absent status stays retryable, because needlessly retrying costs at most
+         * {@code maxRetries} attempts whereas dropping an unknown failure loses the evaluation for good --
+         * and the waste is bounded: {@code NonRetriableException} already stops langchain4j's inner retry
+         * and Opik's outer {@code withRetry} on the first attempt, so an exhausted key costs one provider
+         * call per redelivery rather than an error storm.
+         *
+         * <p>Retiring it on the first delivery instead would mean carrying the status on a dedicated
+         * exception type that {@code canonicalStatusOf} recognises, since the mapper's 402 must keep being
+         * ignored here. That is a production change on the OpenAI client, out of scope for this PR.
+         */
+        @Test
+        @DisplayName("An out-of-credits 429 carries no wire status, so it stays retryable by design")
+        void scoreTrace__whenInsufficientQuotaCarriesNoWireStatus__thenStaysRetryable() {
+            // Byte-for-byte the exception QuotaAwareHttpClient raises: body as message, no cause.
+            var providerFailure = new NonRetriableException(
+                    "{\"error\":{\"message\":\"You exceeded your current quota\",\"type\":\"insufficient_quota\"}}");
+
+            // The mapper's 402 is supplied precisely to prove it is not consulted on this path.
+            var thrown = whenScoreTraceFails(providerFailure,
+                    Optional.of(new ErrorMessage(402, "insufficient_quota")));
+
+            assertRetryable(thrown);
+            assertThat(thrown)
+                    .as("the provider body must survive for diagnostics even though it decides nothing")
+                    .hasMessageContaining("insufficient_quota");
+        }
+
+        /**
+         * The companion {@link #PERMANENT_STATUSES} promises. {@link ChatCompletionService#isPermanentFailure}
+         * is the predicate production actually consults, so its mapping is pinned here against a hand-written
+         * table rather than against {@code PERMANENT_STATUSES} -- deriving either from the other is exactly
+         * what would let production and tests regress together.
+         */
+        @ParameterizedTest(name = "isPermanentFailure({0}) == {1}")
+        @CsvSource({
+                // Client errors with nothing transient about them: this exact request can never succeed.
+                "400, true", "401, true", "402, true", "403, true", "404, true",
+                "413, true", "422, true", "499, true",
+                // 4xx by numbering, "not now" by meaning -- the whole reason family alone cannot decide.
+                "408, false", "425, false", "429, false",
+                // Server errors are the textbook retry case.
+                "500, false", "502, false", "503, false", "504, false",
+                // Outside the error families, so never permanent.
+                "200, false", "302, false",
+        })
+        @DisplayName("isPermanentFailure classifies each status, pinned independently of the suite's own table")
+        void isPermanentFailure__whenStatus__thenMatchLiteralTable(int status, boolean expectedPermanent) {
+            assertThat(ChatCompletionService.isPermanentFailure(status)).isEqualTo(expectedPermanent);
         }
 
         /**
