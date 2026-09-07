@@ -62,11 +62,22 @@ public class JsonEachRowBulkInsert {
 
     private static final SerializedString EMPTY_ROOT_SEPARATOR = new SerializedString("");
 
-    private static final ObjectWriter ROW_WRITER = JsonUtils.getMapper()
+    private final @NonNull Client clickHouseClient;
+
+    /**
+     * Built at construction, not in a static initializer.
+     *
+     * <p>{@code JsonUtils.configure} <em>replaces</em> the static mapper during startup — see
+     * {@code JsonUtilsConfigurationBundle}, which warns about holders that capture the previous instance
+     * — so a {@code static final} writer would freeze the pre-bundle mapper and miss the configured
+     * {@code jacksonConfig} limits. Guice builds this singleton after that bundle has run.
+     *
+     * <p>{@code FLUSH_AFTER_WRITE_VALUE} is off deliberately: otherwise the underlying
+     * {@link BufferedOutputStream} is flushed once per row and buffers nothing.
+     */
+    private final ObjectWriter rowWriter = JsonUtils.getMapper()
             .writer()
             .without(SerializationFeature.FLUSH_AFTER_WRITE_VALUE);
-
-    private final @NonNull Client clickHouseClient;
 
     /**
      * Inserts {@code items} into {@code table}, mapping each to one JSON row, and returns the row count
@@ -113,9 +124,7 @@ public class JsonEachRowBulkInsert {
                     // space, which would prepend one to every row after the first.
                     generator.setRootValueSeparator(EMPTY_ROOT_SEPARATOR);
                     for (T item : items) {
-                        // A writer without FLUSH_AFTER_WRITE_VALUE, or the BufferedOutputStream would
-                        // be flushed once per row and buffer nothing.
-                        ROW_WRITER.writeValue(generator, rowMapper.apply(item));
+                        rowWriter.writeValue(generator, rowMapper.apply(item));
                         generator.writeRaw('\n');
                     }
                 }

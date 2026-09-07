@@ -19,6 +19,9 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Row;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,6 +33,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -115,6 +119,7 @@ class BulkInsertV2ClientIntegrationTest {
 
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private ConnectionFactory clickHouseConnectionFactory;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport) {
@@ -123,6 +128,17 @@ class BulkInsertV2ClientIntegrationTest {
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
+        clickHouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                clickHouseContainer, DATABASE_NAME).build();
+    }
+
+    private <T> T queryOne(String sql, java.util.function.Function<Row, T> mapper) {
+        return Mono.usingWhen(
+                clickHouseConnectionFactory.create(),
+                connection -> Mono.from(connection.createStatement(sql).execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> mapper.apply(row)))),
+                Connection::close)
+                .block();
     }
 
     @AfterAll
@@ -192,7 +208,8 @@ class BulkInsertV2ClientIntegrationTest {
 
         var actual = spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
         assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(cost);
-        assertThat(actual.usage()).containsAllEntriesOf(Map.of("prompt_tokens", 12, "completion_tokens", 8));
+        assertThat(actual.usage()).containsExactlyInAnyOrderEntriesOf(
+                Map.of("prompt_tokens", 12, "completion_tokens", 8));
         assertThat(actual.tags()).containsExactlyInAnyOrder("alpha", "beta");
     }
 
@@ -226,12 +243,23 @@ class BulkInsertV2ClientIntegrationTest {
     }
 
     @Test
-    @DisplayName("a multi-row batch writes every row exactly once")
-    void multiRowBatchWritesEveryRow() {
+    @DisplayName("a multi-row batch writes each row exactly once")
+    void multiRowBatchWritesEachRowExactlyOnce() {
         var traces = List.of(newTraceBuilder().build(), newTraceBuilder().build(), newTraceBuilder().build());
 
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
+        // Read the RAW rows, no FINAL and no LIMIT 1 BY id: getById collapses duplicates, so a writer
+        // that emitted every row twice would satisfy a per-id existence check. Cardinality is the only
+        // assertion that can see it.
+        var ids = traces.stream().map(trace -> "'" + trace.id() + "'")
+                .collect(java.util.stream.Collectors.joining(","));
+        Long storedRows = queryOne(
+                "SELECT count() AS row_count FROM traces WHERE workspace_id = '%s' AND id IN (%s)"
+                        .formatted(WORKSPACE_ID, ids),
+                row -> row.get("row_count", Long.class));
+
+        assertThat(storedRows).isEqualTo(traces.size());
         traces.forEach(trace -> assertThat(
                 traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY).id()).isEqualTo(trace.id()));
     }
