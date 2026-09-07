@@ -34,6 +34,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -640,14 +641,6 @@ class ChatCompletionServiceTest {
          * together silently. The predicate's own mapping is pinned separately, also with literals, in
          * {@code HttpStatusRetryabilityTest}.
          */
-        /**
-         * Exact attempt count for the retry-budget tests, which set {@code getMaxAttempts()} to 3. That value is
-         * passed to langchain4j as {@code RetryPolicy.maxRetries}, and its contract is "the action can be executed
-         * up to maxRetries + 1 times" — so a fully-consumed budget is 4 calls, not 3. Asserted exactly rather than
-         * with {@code atLeast}, so an implementation that retries fewer times fails.
-         */
-        private static final int EXPECTED_ATTEMPTS_AT_MAX_RETRIES_3 = 4;
-
         private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 403, 404, 413, 422, 499);
 
         /** The shared rows whose status is permanent, so their scoreTrace case needs no branch. */
@@ -817,61 +810,58 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * Review finding: the permanent cases above assert the thrown TYPE but not that the call was made once.
-         * {@code InvalidRequestException} is already a {@code NonRetriableException}, so those cases pass with
-         * {@code failFastOnPermanentFailure} deleted — they do not exercise the HTTP-status path they claim to.
-         * These drive a raw {@code HttpException}, which is NOT a {@code NonRetriableException}, so only the
-         * status classification can stop the retry.
+         * Review finding: these hard-coded {@code maxAttempts} to 3, so they only ever exercised four
+         * executions and never the boundaries. They are now parameterised over the budget itself, because the
+         * relationship being asserted is langchain4j's {@code maxRetries + 1} contract — and {@code 0} is
+         * where an off-by-one would show, since a zero-retry budget must still make the initial call.
+         *
+         * <p>Both drive a raw {@code HttpException}, which is NOT a {@code NonRetriableException}, so only
+         * the status classification can stop the retry — an {@code InvalidRequestException} would be stopped
+         * by langchain4j regardless and would not exercise this path at all.
+         *
+         * <p>Status coverage is not duplicated here; which statuses are permanent is pinned by
+         * {@code scoreTrace__whenPermanentClientError__thenNonRetryable} and its transient counterpart. These
+         * use one representative of each and vary only the budget.
          */
-        @ParameterizedTest(name = "permanent HTTP {0} is attempted exactly once")
-        @CsvSource({
-                "400, Bad Request",
-                "403, Forbidden",
-                "404, Not Found",
-                "413, Payload Too Large",
-                "422, Unprocessable Entity",
-        })
-        @DisplayName("A permanent wire status does not consume the in-process retry budget")
-        void scoreTrace__whenPermanentHttpStatus__thenNotRetriedInProcess(int status, String label) {
-            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
-            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
-            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+        @ParameterizedTest(name = "maxRetries={0}: a permanent status is attempted once")
+        @ValueSource(ints = {0, 1, 2, 3})
+        @DisplayName("A permanent wire status is attempted exactly once, whatever the retry budget")
+        void scoreTrace__whenPermanentStatus__thenAttemptedOnceWhateverTheBudget(int maxRetries) {
+            var thrown = scoreTraceWithBudget(maxRetries,
+                    new RuntimeException(new HttpException(400, "Bad Request")));
 
-            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
-            when(chatModel.chat(any(ChatRequest.class)))
-                    .thenThrow(new RuntimeException(new HttpException(status, label)));
-            lenient().when(llmProviderFactory.getService(anyString(), anyString()))
-                    .thenReturn(llmProviderService);
-            lenient().when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> retryingService.scoreTrace(chatRequest, modelParameters, "workspace"))
-                    .isInstanceOf(ClientErrorException.class);
-
+            assertNonRetryable(thrown, 400);
             verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }
 
-        @ParameterizedTest(name = "transient HTTP {0} is still retried")
-        @CsvSource({"429, Too Many Requests", "503, Service Unavailable"})
-        @DisplayName("A transient wire status still consumes the retry budget")
-        void scoreTrace__whenTransientHttpStatus__thenStillRetriedInProcess(int status, String label) {
-            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
+        @ParameterizedTest(name = "maxRetries={0}: a transient status is attempted {1} times")
+        @CsvSource({"0, 1", "1, 2", "2, 3"})
+        @DisplayName("A transient wire status consumes the whole budget: maxRetries + 1 attempts")
+        void scoreTrace__whenTransientStatus__thenConsumesTheWholeBudget(int maxRetries, int expectedAttempts) {
+            var thrown = scoreTraceWithBudget(maxRetries,
+                    new RuntimeException(new HttpException(429, "Too Many Requests")));
+
+            assertRetryable(thrown);
+            verify(chatModel, times(expectedAttempts)).chat(any(ChatRequest.class));
+        }
+
+        /**
+         * Drives scoreTrace against a service built with the given retry budget. Shared so the three budget
+         * cases do not each repeat the construction, which is what let them drift to a single hard-coded value.
+         */
+        private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
+            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 
             when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
-            when(chatModel.chat(any(ChatRequest.class)))
-                    .thenThrow(new RuntimeException(new HttpException(status, label)));
+            when(chatModel.chat(any(ChatRequest.class))).thenThrow(providerFailure);
             lenient().when(llmProviderFactory.getService(anyString(), anyString()))
                     .thenReturn(llmProviderService);
             lenient().when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
 
-            // The status is now reported verbatim, so this asserts retryability rather than a flattened 500.
-            assertThatThrownBy(() -> retryingService.scoreTrace(chatRequest, modelParameters, "workspace"))
-                    .isInstanceOf(InternalServerErrorException.class);
-
-            verify(chatModel, times(EXPECTED_ATTEMPTS_AT_MAX_RETRIES_3)).chat(any(ChatRequest.class));
+            return catchThrowable(() -> retryingService.scoreTrace(chatRequest, modelParameters, "workspace"));
         }
 
         /**
@@ -939,46 +929,23 @@ class ChatCompletionServiceTest {
         @Test
         @DisplayName("A permanent GAX failure does not consume the in-process retry budget")
         void scoreTrace__whenPermanentGaxStatus__thenNotRetriedInProcess() {
-            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
-            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
-            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+            var thrown = scoreTraceWithBudget(2,
+                    new RuntimeException(gaxException(StatusCode.Code.INVALID_ARGUMENT, false)));
 
-            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
-            when(chatModel.chat(any(ChatRequest.class)))
-                    .thenThrow(new RuntimeException(gaxException(StatusCode.Code.INVALID_ARGUMENT, false)));
-            lenient().when(llmProviderFactory.getService(anyString(), anyString()))
-                    .thenReturn(llmProviderService);
-            lenient().when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> retryingService.scoreTrace(chatRequest, modelParameters, "workspace"))
-                    .isInstanceOf(ClientErrorException.class);
-
-            // GAX ApiException is not a NonRetriableException, so without failFastOnPermanentFailure langchain4j's
-            // RetryPolicy would replay a call that can never succeed.
+            // GAX ApiException is not a NonRetriableException, so without failFastOnPermanentFailure
+            // langchain4j's RetryPolicy would replay a call that can never succeed.
+            assertNonRetryable(thrown, 400);
             verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }
 
         @Test
         @DisplayName("A transient GAX failure is still retried in-process")
         void scoreTrace__whenTransientGaxStatus__thenStillRetriedInProcess() {
-            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
-            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
-            var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
+            var thrown = scoreTraceWithBudget(2,
+                    new RuntimeException(gaxException(StatusCode.Code.UNAVAILABLE, false)));
 
-            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
-            when(chatModel.chat(any(ChatRequest.class)))
-                    .thenThrow(new RuntimeException(gaxException(StatusCode.Code.UNAVAILABLE, false)));
-            lenient().when(llmProviderFactory.getService(anyString(), anyString()))
-                    .thenReturn(llmProviderService);
-            lenient().when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
-
-            // The status is now reported verbatim, so this asserts retryability rather than a flattened 500.
-            assertThatThrownBy(() -> retryingService.scoreTrace(chatRequest, modelParameters, "workspace"))
-                    .isInstanceOf(InternalServerErrorException.class);
-
-            verify(chatModel, times(EXPECTED_ATTEMPTS_AT_MAX_RETRIES_3)).chat(any(ChatRequest.class));
+            assertRetryable(thrown);
+            verify(chatModel, times(3)).chat(any(ChatRequest.class));
         }
 
         /**
@@ -1134,10 +1101,6 @@ class ChatCompletionServiceTest {
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
-        /**
-         * The provider's status is now reported verbatim, so this no longer pins a flattened 500 — it pins
-         * the property that matters: the subscriber will redeliver rather than drop.
-         */
         /**
          * Every retryable failure is flattened to a blanket 500 on this path: BaseRedisSubscriber matches
          * ClientErrorException by class, so a truthful 429 would be acked and dropped. The status is
