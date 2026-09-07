@@ -1093,15 +1093,15 @@ Pick the stage by how far the cutover got:
   table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
   a multi-shard cluster — and on a per-shard run too, since the count is still above one. There is no driver path there:
   apply the statement from `scripts/db-app-analytics/` by hand, one shard at a time, then check the postcondition once.
-  It also refuses when the shard count is **unreadable** — the
-  postcondition reads `clusterAllReplicas('{cluster}', …)` and needs the same `system.macros` the count does, so a
-  session that cannot read one cannot verify with the other, and proceeding would risk a whole-table rewrite that can
-  never be certified. The primary fix is to grant `SELECT ON system.clusters` and `system.macros`. Where that is
-  genuinely unavailable and the topology is known, `--confirm-single-shard` unblocks the shard-count guard **only** —
-  the postcondition needs the same macro, so it still cannot be evaluated, the driver reports the repair as unverified
-  and exits non-zero, and the exit-checklist item below ("printed `Sentinel postcondition OK` and exited zero") cannot
-  be ticked from such a run. It does **not** override a count that came back greater than 1, and it is accepted only
-  with `--sentinel-repair-only`, `--reverse-replay-only` and stages B and C. Separate from the stages by necessity, not
+  It also refuses when the shard count is **unreadable**: that count is how the driver learns whether a shard-local
+  rewrite can be certified, and proceeding on an unknown topology risks a whole-table rewrite that cannot be. The
+  primary fix is to grant `SELECT ON system.clusters` and `system.macros`. Where that is genuinely unavailable and the
+  topology is known, `--confirm-single-shard` unblocks that guard, and does not create an unverified repair. The
+  sentinel read runs before the mutation and again after, and it is the same query, resolving `{cluster}` from the
+  server's config rather than from `system.macros`: on the usual cause, a missing grant, both run and the repair
+  verifies; where the macro genuinely does not resolve, the first read fails and the driver aborts before mutating
+  anything. It does **not** override a count that came back greater than 1, and it is accepted only with
+  `--sentinel-repair-only`, `--reverse-replay-only` and stages B and C. Separate from the stages by necessity, not
   preference: the config revert has to land on every instance first, and these scripts do not roll out config. **That is
   the only ordering that binds** — repairing while any instance still has the flag `true` lets it mint fresh sentinels
   behind the mutation. Stage A may run before or after, because it `TRUNCATE`s the shadow rather than dropping it, so the

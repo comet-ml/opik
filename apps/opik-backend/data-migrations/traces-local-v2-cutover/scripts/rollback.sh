@@ -74,10 +74,10 @@
 #   --confirm-single-shard    Accepted with the modes that assert the shard count -- --sentinel-repair-only,
 #                             --reverse-replay-only, and stages B and C -- and rejected elsewhere. Asserts this cluster
 #                             has ONE shard where that count cannot be READ; it does NOT override a count that came back
-#                             greater than 1, which stays fatal. Use it only where system.clusters / system.macros are
-#                             genuinely unreadable and the topology is known, and note that the postcondition reads
-#                             clusterAllReplicas('{cluster}', ...), which needs the same macro -- so the mutation goes
-#                             ahead unverified and the driver exits non-zero.
+#                             greater than 1, which stays fatal. Use it only where that count is genuinely unreadable
+#                             and the topology is known. It does not create an unverified repair: the sentinel read
+#                             runs before the mutation and again after, and it is the same query -- so either it
+#                             resolves {cluster} and both run, or it cannot and the driver aborts before mutating.
 #   --confirm-flag-reverted   REQUIRED with --sentinel-repair-only, and accepted by no other mode. Asserts
 #                             databaseAnalyticsDataModel.traceColumnsNonNullable=false is live on EVERY backend
 #                             instance. The scripts cannot read backend config, and a repair run while any instance
@@ -421,11 +421,10 @@ assert_single_shard() {
         echo "       Stages B and C promote with a single ON CLUSTER RENAME, so only the replay after it is per-shard." >&2
         exit 1
     fi
-    # Unreadable is fatal unless the operator asserts the topology. Assuming the safe case defeats the point of the
-    # check: it exists to stop a whole-table rewrite whose postcondition cannot be satisfied, and that is exactly the
-    # run that would proceed. Nor does proceeding buy anything — the postcondition reads
-    # clusterAllReplicas('{cluster}', ...), which needs the same system.macros this count needs, so a session that
-    # cannot read the shard count cannot verify the repair either.
+    # Unreadable is fatal unless the operator asserts the topology: this count is how the driver learns whether a
+    # shard-local rewrite can be certified, and assuming the safe case is the run the check exists to stop. It does not
+    # follow that verification is then impossible -- {cluster} in a table function is substituted from the server's
+    # config, not read from system.macros -- so on the usual cause, a missing grant, the repair still verifies.
     # Zero is not one shard: the scalar subquery over an empty system.macros match yields a default, so a missing
     # 'cluster' macro or a cluster absent from this node's system.clusters returns 0. That is the unknown-topology state
     # this guard exists for, and it also guarantees the postcondition's clusterAllReplicas('{cluster}', ...) cannot run.
