@@ -780,10 +780,14 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * The companion {@link #PERMANENT_STATUSES} promises. {@link ChatCompletionService#isPermanentFailure}
-         * is the predicate production actually consults, so its mapping is pinned here against a hand-written
-         * table rather than against {@code PERMANENT_STATUSES} -- deriving either from the other is exactly
-         * what would let production and tests regress together.
+         * Pins the status-to-retryability mapping of {@link ChatCompletionService#isPermanentFailure}, the
+         * predicate production consults to decide whether a request can never succeed and so must be
+         * retired rather than retried.
+         *
+         * <p>This is the companion test {@link #PERMANENT_STATUSES} refers to. The expectations are the
+         * hand-written table below rather than {@code PERMANENT_STATUSES} itself: that set records which
+         * statuses the subscriber must retire, and deriving either from the other is exactly what would let
+         * production and tests regress together.
          */
         @ParameterizedTest(name = "isPermanentFailure({0}) == {1}")
         @CsvSource({
