@@ -183,6 +183,7 @@ public class McpOAuthService {
                     .workspaceId(row.workspaceId())
                     .workspaceName(row.workspaceName())
                     .resource(row.resource())
+                    .expiresAt(row.expiresAt())
                     .build());
         });
     }
