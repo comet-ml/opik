@@ -109,6 +109,27 @@ export class AutomationLogsPage {
       });
   }
 
+  /**
+   * The same row, narrowed further by the text its Message cell renders.
+   *
+   * Takes a substring rather than an exact match: the cell shows only
+   * `message.split('\n')[0]` until the row is expanded, so the caller passes the
+   * summary line and this still addresses a multi-line message correctly.
+   */
+  rowWithMessage({
+    traceId,
+    level,
+    message,
+  }: {
+    traceId: string;
+    level: string;
+    message: string;
+  }): Locator {
+    return this.row({ traceId, level }).filter({
+      has: this.page.locator(`td[data-cell-id$="_${COLUMN.message}"]`, { hasText: message }),
+    });
+  }
+
   /** One cell of a row, by column rather than by position. */
   cell(row: Locator, column: ColumnName): Locator {
     return row.locator(`td[data-cell-id$="_${COLUMN[column]}"]`);

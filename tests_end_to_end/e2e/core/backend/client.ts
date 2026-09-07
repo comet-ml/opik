@@ -10,6 +10,10 @@ import {
   type WaitForScoresSettledOpts,
 } from './wait-for-scores-settled';
 import {
+  waitForRuleLogsSettled,
+  type WaitForRuleLogsSettledOpts,
+} from './wait-for-rule-logs-settled';
+import {
   pollOptimizationStatus,
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
@@ -527,6 +531,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  // Hoisted for the same reason as localGetTrace below: waitForRuleLogsSettled
+  // is a free function and cannot reach the not-yet-constructed return object.
+  const localGetAutomationRuleLogs = async (
+    ruleId: string,
+    opts: { size?: number } = {},
+  ): Promise<AutomationRuleLogRef[]> => {
+    const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+      size: opts.size ?? 1000,
+    });
+    return (page.content ?? []).map((item) => ({
+      level: String(item.level ?? ''),
+      message: String(item.message ?? ''),
+      traceId: item.markers?.trace_id ?? null,
+    }));
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -1670,14 +1690,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       ruleId: string,
       opts: { size?: number } = {},
     ): Promise<AutomationRuleLogRef[]> {
-      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
-        size: opts.size ?? 1000,
-      });
-      return (page.content ?? []).map((item) => ({
-        level: String(item.level ?? ''),
-        message: String(item.message ?? ''),
-        traceId: item.markers?.trace_id ?? null,
-      }));
+      return localGetAutomationRuleLogs(ruleId, opts);
+    },
+
+    /**
+     * The same stream, but only once it has stopped growing — for any assertion
+     * about how many lines a rule wrote. See `wait-for-rule-logs-settled.ts`.
+     */
+    async waitForRuleLogsSettled(
+      ruleId: string,
+      opts: WaitForRuleLogsSettledOpts = {},
+    ): Promise<AutomationRuleLogRef[]> {
+      return waitForRuleLogsSettled(localGetAutomationRuleLogs, ruleId, opts);
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {

@@ -45,3 +45,4 @@ export {
   sumDatasetVersionField,
 } from './dataset-item-batches';
 export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
+export { type WaitForRuleLogsSettledOpts } from './wait-for-rule-logs-settled';

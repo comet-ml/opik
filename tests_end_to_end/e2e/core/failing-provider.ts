@@ -42,6 +42,15 @@ export function permanentFailureBaseUrl(): string {
   return `${loadEnvConfig().apiBaseUrl}/${UNSERVED_PATH}`;
 }
 
+/**
+ * The URL the online-scoring engine actually requests for a chat completion,
+ * which is what the gate below has to prove is a permanent 4xx — the base URL
+ * answering one says nothing about its children on an overridden destination.
+ */
+export function permanentFailureChatUrl(): string {
+  return `${permanentFailureBaseUrl().replace(/\/+$/, '')}/chat/completions`;
+}
+
 /** Backend wording for "the destination was contacted and answered a status". */
 const REACHED_WITH_STATUS = /token fetch failed with status '(\d{3})'/;
 
@@ -77,14 +86,17 @@ let destinationProbe: Promise<DestinationProbe> | undefined;
  *
  * The probe goes through the auth-config test endpoint because it is the one
  * place the backend performs a caller-chosen fetch and reports the outcome. It
- * requests the base URL itself rather than `<base>/chat/completions`; both are
- * unserved paths on the same server, so a 404 for one is a 404 for the other.
+ * requests {@link permanentFailureChatUrl} — the exact URL the engine will
+ * call — rather than the base: on the default destination the two are unserved
+ * paths on the same server and answer alike, but `OPIK_PERMANENT_4XX_URL` can
+ * point anywhere, and a base that 404s while its `/chat/completions` child does
+ * not would have the spec assert a status the rule never saw.
  *
  * Cached: the answer is a property of the deployment, and every spec asks.
  */
 function probeDestination(): Promise<DestinationProbe> {
   destinationProbe ??= (async () => {
-    const url = permanentFailureBaseUrl();
+    const url = permanentFailureChatUrl();
     try {
       await checkProviderAuthConfig({
         token_url: url,
@@ -129,9 +141,9 @@ function probeDestination(): Promise<DestinationProbe> {
           return {
             status: null,
             skipReason:
-              `the Opik backend cannot reach ${url}: ${err.body} — set ${DESTINATION_ENV} to an ` +
-              'address the backend can reach that answers a permanent 4xx (any unserved path on ' +
-              'the deployment itself will do).',
+              `the Opik backend cannot reach ${url}: ${err.body} — set ${DESTINATION_ENV} to a ` +
+              'BASE url the backend can reach whose /chat/completions answers a permanent 4xx ' +
+              '(any unserved path on the deployment itself will do).',
           };
         }
       }

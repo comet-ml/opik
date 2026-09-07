@@ -58,28 +58,24 @@ test.describe('Online Evaluation — automation logs page', { tag: ['@t2-cuj', '
         output: 'seed output',
       }));
 
-    const seededLogs = await test.step(
+    const seededLogs: AutomationRuleLogRef[] = await test.step(
       'Confirm server-side that the stream is complete before opening the page',
       async () => {
         // Opening the browser first would make an empty table ambiguous between
         // "the page does not render logs" and "there were none yet". The page
         // does not poll, so what it must render has to already exist.
-        let collected: AutomationRuleLogRef[] = [];
-        await expect
-          .poll(
-            async () => {
-              collected = await backendClient.getAutomationRuleLogs(ruleId);
-              return collected.some((l) => l.level === 'ERROR');
-            },
-            {
-              timeout: 180_000,
-              intervals: [2_000, 5_000],
-              message:
-                `rule '${ruleName}' never reported a failure — there is nothing for the page ` +
-                'to render, so a UI assertion here could not fail for the right reason',
-            },
-          )
-          .toBe(true);
+        //
+        // Settled rather than "first ERROR wins": the page is loaded after this
+        // read and asserted to hold exactly these rows, so a line that lands in
+        // between would fail the row count as a flake rather than as the
+        // redelivery it would actually be.
+        const collected = await backendClient.waitForRuleLogsSettled(ruleId, {
+          timeoutMs: 180_000,
+          until: (l) => l.some((line) => line.level === 'ERROR'),
+          untilDescription:
+            `an ERROR from rule '${ruleName}' — with no failure there is nothing for the page ` +
+            'to render, so a UI assertion could not fail for the right reason',
+        });
         expect(
           collected.map((l) => l.level).sort(),
           'the page is asserted against exactly this stream',
@@ -97,10 +93,20 @@ test.describe('Online Evaluation — automation logs page', { tag: ['@t2-cuj', '
         logsPage.rows,
         'the page must render the seeded stream and nothing else',
       ).toHaveCount(EXPECTED_ROWS);
-      await expect(
-        logsPage.row({ traceId: trace.id, level: 'INFO' }),
-        'both INFO lines must be attributed to the seeded trace',
-      ).toHaveCount(seededLogs.filter((l) => l.level === 'INFO').length);
+      // Addressing each row by the message its cell actually shows, not just by
+      // level and trace id: a page that rendered three rows with empty Message
+      // cells would satisfy the count and the attribution, and this capability
+      // is a claim that the page renders the stream's content. The summary line
+      // is what the cell shows before expanding, so that is what it is matched
+      // on. Exactly one row per line, so an ambiguous match fails loudly.
+      for (const line of seededLogs) {
+        const summary = line.message.split('\n')[0];
+        await expect(
+          logsPage.rowWithMessage({ traceId: trace.id, level: line.level, message: summary }),
+          `the ${line.level} line the API reported as '${summary}' must render as exactly one ` +
+            'row, attributed to the seeded trace',
+        ).toHaveCount(1);
+      }
     });
 
     const errorRow = logsPage.row({ traceId: trace.id, level: 'ERROR' });

@@ -74,27 +74,23 @@ test.describe('Online Evaluation — LLM-judge provider failure classification',
         output: 'seed output',
       }));
 
-    const logs = await test.step('Wait for the rule to report its failure', async () => {
-      let collected: AutomationRuleLogRef[] = [];
-      await expect
-        .poll(
-          async () => {
-            collected = await backendClient.getAutomationRuleLogs(ruleId);
-            // The failure line is written last in the scorer's chain, so its
-            // arrival is what makes the stream complete for this trace.
-            return collected.some((l) => l.level === 'ERROR');
-          },
-          {
-            timeout: 180_000,
-            intervals: [2_000, 5_000],
-            message:
-              `rule '${ruleName}' never reported a failure — its provider cannot succeed, so a ` +
-              'silent stream means the rule was never invoked at all',
-          },
-        )
-        .toBe(true);
-      return collected;
-    });
+    const logs: AutomationRuleLogRef[] = await test.step(
+      'Wait for the rule to report its failure and for the stream to go quiet',
+      async () =>
+        // Settled, not "first ERROR wins": every assertion below is a count, and
+        // a redelivered message writes its lines some seconds after the first
+        // failure lands. A snapshot taken the instant the ERROR appears would
+        // report that redelivery — the exact regression this spec exists to
+        // catch — as a pass. Same reason the sibling rules in this area read
+        // scores through waitForTraceScoresSettled.
+        backendClient.waitForRuleLogsSettled(ruleId, {
+          timeoutMs: 180_000,
+          until: (l) => l.some((line) => line.level === 'ERROR'),
+          untilDescription:
+            `an ERROR from rule '${ruleName}' — its provider cannot succeed, so a silent ` +
+            'stream means the rule was never invoked at all',
+        }),
+    );
 
     await test.step('The rule called the provider once and reported once', async () => {
       // A permanent 4xx is a terminal answer: the subscriber must ack and retire
