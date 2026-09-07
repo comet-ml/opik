@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
     env.VITE_AI_COST_BACKEND_PORT || "8000",
     10,
   );
+  const aiCostWorkspace = env.VITE_AI_COST_WORKSPACE;
 
   return {
     base: env.VITE_BASE_URL || "/",
@@ -66,10 +67,16 @@ export default defineConfig(({ mode }) => {
         // prefix wins (mirrors the prod nginx ai-spend divert). The plugin
         // always targets cost-api; the opik-backend ai-spend endpoints are
         // being retired. /api/v1/private/ai-spend/X -> :port/cost-api/v1/private/ai-spend/X
+        // VITE_AI_COST_WORKSPACE, when set, replaces the browser's
+        // Comet-Workspace header: a local cost-api answers to one workspace
+        // name only, which need not be the one the UI is browsing.
         "/api/v1/private/ai-spend": {
           target: `http://localhost:${aiCostBackendPort}`,
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/api/, "/cost-api"),
+          ...(aiCostWorkspace
+            ? { headers: { "Comet-Workspace": aiCostWorkspace } }
+            : {}),
         },
         "/api": {
           target: `http://localhost:${backendPort}`,
