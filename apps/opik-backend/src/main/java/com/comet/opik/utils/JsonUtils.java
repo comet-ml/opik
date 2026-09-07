@@ -350,6 +350,42 @@ public class JsonUtils {
         return counter.getCount();
     }
 
+    /**
+     * Whether {@code value} serializes to more than {@code maxSizeInBytes} UTF-8 bytes, without materializing
+     * its JSON. The value is streamed through a counting output stream that aborts as soon as the budget is
+     * exceeded, so an oversized payload costs O(1) transient heap and stops at the limit instead of being
+     * serialized in full and then copied into a byte array. A {@code null} value never exceeds the limit.
+     */
+    public boolean exceedsSerializedLengthInBytes(Object value, long maxSizeInBytes) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            writeValue(new BudgetedOutputStream(maxSizeInBytes), value);
+            return false;
+        } catch (RuntimeException exception) {
+            // The abort signal does not always surface as-is: for container values Jackson catches it and
+            // rethrows it wrapped (MapSerializer.wrapAndThrow -> JsonMappingException -> UncheckedIOException),
+            // so the cause chain has to be inspected rather than the thrown type alone.
+            if (hasCause(exception, BudgetedOutputStream.BudgetExceededException.class)) {
+                return true;
+            }
+            throw exception;
+        }
+    }
+
+    private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        for (var current = throwable; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+        }
+        return false;
+    }
+
     public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {
         try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
             return MAPPER.readValue(inputStream, valueTypeRef);
