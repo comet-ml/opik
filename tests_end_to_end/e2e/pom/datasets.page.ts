@@ -28,6 +28,21 @@ export class DatasetsPage {
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
   }
 
+  /**
+   * The "Item count" cell of a dataset's row, as rendered.
+   *
+   * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
+   * than a positional nth(): the column is user-configurable in both order and
+   * visibility, so position is not stable. `dataset_items_count` is the column
+   * id `DatasetListPage` registers, and it is in the default selected set.
+   *
+   * Unlike the Version history tab's Item count, this column has no
+   * `accessorFn`, so the number is rendered raw — "2500", not "2,500".
+   */
+  datasetItemCount(name: string): Locator {
+    return this.datasetRow(name).locator('[data-cell-id$="_dataset_items_count"]');
+  }
+
   async openDatasetByName(name: string): Promise<DatasetItemsPage> {
     if (!this.projectId) {
       throw new Error('DatasetsPage.openDatasetByName: call goto(projectId) first');

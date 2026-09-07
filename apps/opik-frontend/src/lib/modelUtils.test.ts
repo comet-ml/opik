@@ -623,8 +623,9 @@ describe("Gemini thinking level", () => {
       "medium",
       "high",
     ]);
-    // 3.1 Flash Lite has only minimal and high.
+    // 3.1 Flash Lite has only minimal and high, plus "none" because it does not think by default.
     expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE)).toEqual([
+      "none",
       "minimal",
       "high",
     ]);
@@ -639,12 +640,14 @@ describe("Gemini thinking level", () => {
     expect(
       getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH),
     ).toBe("medium");
+    // Flash Lite is the exception: measured against the live API it does not think by default, so it
+    // preselects "none" rather than the "minimal" Google's docs table claims.
     expect(
       getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE),
-    ).toBe("minimal");
+    ).toBe("none");
     expect(
       getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE),
-    ).toBe("minimal");
+    ).toBe("none");
   });
 
   it("only ever preselects a level the model actually offers", () => {
@@ -841,6 +844,84 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
         custom_parameters: { thinking: { level: "low" } },
       }).custom_parameters,
     ).toEqual({ thinking: { level: "high" } });
+  });
+
+  // The Flash Lite models do not think by default, so their preselected level must not switch
+  // thinking on — that regressed latency ~2x for a customer (OPIK-8102 follow-up).
+  it("defaults the Flash Lite models to none, which sends nothing", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+    ]) {
+      expect(getDefaultThinkingLevel(model), `default for ${model}`).toBe(
+        "none",
+      );
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should offer none`,
+      ).toContain("none");
+      expect(
+        sanitizeConfigForRequest(model, { temperature: 0 }).custom_parameters,
+        `${model} should send no thinking block by default`,
+      ).toBeUndefined();
+    }
+  });
+
+  // "none" must REMOVE a persisted block, not merely decline to add one, or the level saved before
+  // this change keeps being sent and the model keeps thinking.
+  it("clears a persisted thinking block when none is selected", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: {
+          thinking: { level: "minimal" },
+          unrelated: "keep",
+        },
+      }).custom_parameters,
+    ).toEqual({ unrelated: "keep" });
+  });
+
+  it("drops custom_parameters entirely when none leaves it empty", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+        custom_parameters: { thinking: { level: "minimal" } },
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  // auto is the weaker "let the model decide" and must not delete fields the form cannot represent.
+  it("leaves a persisted thinking block alone for auto", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: { thinking: { budget_tokens: 4096 } },
+      }).custom_parameters,
+    ).toEqual({ thinking: { budget_tokens: 4096 } });
+  });
+
+  it("sends no thinking block for an explicit none", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+        thinkingLevel: "none",
+      }).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  // A thinking-by-default model keeps its level: none is only for the models that ship without it.
+  it("does not offer none to models that think by default", () => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+    ]) {
+      expect(
+        getThinkingLevelOptions(model).map((o) => o.value),
+        `${model} should not offer none`,
+      ).not.toContain("none");
+    }
   });
 
   it("adds no thinking block for models without a level control", () => {

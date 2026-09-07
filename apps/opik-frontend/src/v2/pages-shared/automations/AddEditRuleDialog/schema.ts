@@ -160,7 +160,7 @@ const LLMJudgeBaseSchema = z.object({
     // Held as its own field so the shared model-config control can drive it, then folded into
     // custom_parameters.thinking on save — the backend reads it from there.
     thinkingLevel: z
-      .enum(["auto", "off", "minimal", "low", "medium", "high"])
+      .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
       .optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
@@ -594,6 +594,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   const thinkingCustomParameters =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
+    thinkingLevel !== "none" &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )
@@ -629,12 +630,18 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // level of its own here", not "delete whatever else was in there": budget_tokens and
   // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
   // this same key for extended thinking.
+  // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
+  // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
+  // "let the model decide" and leaves the block alone, since it may hold fields the form cannot
+  // represent (budget_tokens, include_thoughts, or Anthropic's type).
+  const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
+    thinkingLevel !== "none" &&
     !thinkingCustomParameters;
   const otherCustomParameters =
-    thinkingCustomParameters || formRejectedItsLevel
+    thinkingCustomParameters || formRejectedItsLevel || formClearsThinking
       ? omit(persistedCustomParameters, "thinking")
       : persistedCustomParameters;
 
