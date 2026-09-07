@@ -26,12 +26,18 @@
     pre.hidden = false;
   }
 
+  function hideFallback(chip) {
+    var row = chip.closest(".mcp-clients") || chip.parentNode;
+    var pre = row.nextElementSibling;
+    if (pre && pre.classList.contains("mcp-prompt-fallback")) pre.hidden = true;
+  }
+
   document.addEventListener("click", function (event) {
     var chip = event.target.closest && event.target.closest("[data-opik-copy]");
     if (!chip) return;
     event.preventDefault();
     var text = chip.getAttribute("data-opik-copy");
-    var done = function () { mark(chip, "is-copied"); };
+    var done = function () { mark(chip, "is-copied"); hideFallback(chip); };
     var fail = function () { mark(chip, "is-failed"); showFallback(chip, text); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fail);
