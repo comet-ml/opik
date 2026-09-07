@@ -49,7 +49,7 @@ export type ParsedOpenInferenceFields = {
 
 const MEDIA_PLACEHOLDER_RE = /^\[(image|audio)_\d+\]$/;
 const MEDIA_DATA_URI_RE = /^data:(image|audio)\/([a-z0-9.+-]+)(?:;[^,]*)?,/i;
-const INLINE_IMAGE_TYPES = new Set([
+const INLINE_IMAGE_SUBTYPES = new Set([
   "png",
   "jpeg",
   "gif",
@@ -68,7 +68,8 @@ export const isSafeOpenInferenceMediaUrl = (
   const dataUriMatch = MEDIA_DATA_URI_RE.exec(url);
   if (dataUriMatch?.[1].toLowerCase() === type) {
     return (
-      type === "audio" || INLINE_IMAGE_TYPES.has(dataUriMatch[2].toLowerCase())
+      type === "audio" ||
+      INLINE_IMAGE_SUBTYPES.has(dataUriMatch[2].toLowerCase())
     );
   }
   try {
