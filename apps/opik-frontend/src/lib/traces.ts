@@ -17,6 +17,7 @@ import {
   extractLegacyOpenInferenceOutputText,
   extractOpenInferencePrettyText,
   hasLegacyOpenInferenceAttributes,
+  isOpenInferenceField,
 } from "@/lib/openinference";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
@@ -640,17 +641,6 @@ export const prettifyMessage = (
     type: "input",
   },
 ): PrettifyMessageResponse => {
-  const recoveredOpenInferenceOutput =
-    config.type === "output"
-      ? extractLegacyOpenInferenceOutputText(config.openInferenceInput)
-      : undefined;
-  if (isString(recoveredOpenInferenceOutput)) {
-    return {
-      message: recoveredOpenInferenceOutput,
-      prettified: true,
-    };
-  }
-
   if (typeof message === "number" || typeof message === "boolean") {
     return { message: String(message), prettified: true };
   }
@@ -701,6 +691,16 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyCustomMessagingLogic(message, config);
+    }
+
+    if (
+      !isString(processedMessage) &&
+      config.type === "output" &&
+      !isOpenInferenceField(message, "output", true)
+    ) {
+      processedMessage = extractLegacyOpenInferenceOutputText(
+        config.openInferenceInput,
+      );
     }
 
     if (!isString(processedMessage)) {

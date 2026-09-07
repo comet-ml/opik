@@ -6,6 +6,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -43,6 +44,8 @@ public final class OpenInferenceSpanNormalizer {
     private static final String OUTPUT_VALUE = "output.value";
     private static final String OUTPUT_MIME_TYPE = "output.mime_type";
     private static final String JSON_MIME_TYPE = "application/json";
+    private static final ObjectReader JSON_READER = JsonUtils.getMapper().reader()
+            .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     private static final Pattern MESSAGE_ATTRIBUTE = Pattern.compile(
             "^llm\\.(input|output)_messages\\.([^.]+)\\.message\\.(.+)$");
@@ -332,6 +335,10 @@ public final class OpenInferenceSpanNormalizer {
             MessageBuilder message = messages.computeIfAbsent(messageIndex, ignored -> new MessageBuilder());
             if (!message.accept(matcher.group(3), value)) {
                 metadata.set(key, toJsonNode(value));
+            } else {
+                // Existing scoring rules address the original flattened input keys, including
+                // sparse indices. Keep those aliases alongside the canonical message arrays.
+                input.set(key, toLegacyMessageValue(value));
             }
             return true;
         }
@@ -401,7 +408,7 @@ public final class OpenInferenceSpanNormalizer {
         private Result finish() {
             String resolvedProvider = StringUtils.firstNonBlank(provider, system);
             // OpenInference names the hosting provider "aws"; Opik prices it as Bedrock.
-            if ("aws".equals(resolvedProvider)) {
+            if ("aws".equalsIgnoreCase(resolvedProvider)) {
                 resolvedProvider = "bedrock";
             }
             if (!inputMessages.isEmpty()) {
@@ -762,7 +769,7 @@ public final class OpenInferenceSpanNormalizer {
         if (parsed != null) {
             return parsed;
         }
-        log.debug("Failed to parse OpenInference {} as JSON; preserving the original value", key);
+        log.debug("Failed to parse OpenInference value as JSON; preserving the original value, key='{}'", key);
         return JsonUtils.valueToTree(value.getStringValue());
     }
 
@@ -777,10 +784,7 @@ public final class OpenInferenceSpanNormalizer {
 
     private static JsonNode parseJsonString(String value) {
         try {
-            JsonNode parsed = JsonUtils.getMapper()
-                    .reader()
-                    .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-                    .readTree(value);
+            JsonNode parsed = JSON_READER.readTree(value);
             return parsed == null || parsed.isMissingNode() ? null : parsed;
         } catch (JsonProcessingException exception) {
             return null;
@@ -797,6 +801,25 @@ public final class OpenInferenceSpanNormalizer {
             case "GUARDRAIL" -> SpanType.guardrail;
             default -> SpanType.general;
         };
+    }
+
+    private static JsonNode toLegacyMessageValue(AnyValue value) {
+        if (value.hasStringValue()) {
+            String text = value.getStringValue();
+            // Match the historical JSON decoding of flattened message attributes, without
+            // logging payloads when parsing fails.
+            if (text.startsWith("{") || text.startsWith("[") || text.startsWith("\"")) {
+                JsonNode parsed = parseJsonString(text);
+                if (parsed != null) {
+                    if (parsed.isTextual()) {
+                        JsonNode nested = parseJsonString(parsed.asText());
+                        return nested == null ? parsed : nested;
+                    }
+                    return parsed;
+                }
+            }
+        }
+        return toJsonNode(value);
     }
 
     private static boolean isOpenInferenceAttribute(String key) {
