@@ -14,27 +14,38 @@ Opik SDK:
 uvx opik mcp configure
 ```
 
-Don't see your client in the list it prints? On Opik Cloud, any MCP client can take
-the hosted server directly:
+Or skip the terminal: paste this into Claude Code, Cursor, VS Code Copilot, Codex
+or opencode and the agent does the setup for itself.
 
-```bash
-npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
+```text title="Installer prompt for your coding agent"
+Set up the Opik MCP server and the Opik skills for yourself.
+
+1. Check that uv is installed: `uvx --version`. If it is missing, install it
+   (macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`; Windows:
+   `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
+   and use a fresh shell afterwards.
+2. Run `uvx opik configure status`. If it says the configuration is not found,
+   ask me for my Opik API key and workspace name (on https://www.comet.com/opik
+   they are in Account settings or the user menu, top right), then run
+   `uvx opik configure --yes --no-install-mcp --no-install-skills` with
+   OPIK_API_KEY and OPIK_WORKSPACE set in the environment of that one command.
+   Do not write the key anywhere else. If I run Opik locally or self-hosted,
+   ask for its URL and add `--use-local` or OPIK_URL_OVERRIDE instead of a key.
+3. Run `uvx opik mcp configure --skills --ai-client <the client you are running
+   in: claude-code, cursor, vscode, codex or opencode>`.
+4. Run `uvx opik mcp status`, show me the output, and tell me to start a new
+   session so you pick up the server and the skills.
 ```
 
-[`add-mcp`](https://github.com/neon-solutions/add-mcp) writes the URL into Windsurf,
-Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more. It adds the
-server only; the skill pack for those clients comes from
-`npx skills add comet-ml/opik-skills`. On a self-hosted deployment, replace the URL
-with your own API base plus `/v1/mcp`, or use the local server described in
-[Manual setup](#local-server-uvx).
+One-click for Cursor and VS Code, hosted server only, sign-in in the browser:
 
 <div className="mcp-clients no-external-icon">
   <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
   <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
 </div>
 
-One click installs the Opik Cloud hosted server and opens a browser sign-in. It
-does not install the skill pack; run the command above for that.
+The buttons add the server only, not the skills. Another client, or a self-hosted
+Opik? See [Manual setup](#manual-setup).
 
 ## What this unlocks
 
@@ -68,26 +79,6 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
 [Manual setup](#manual-setup).
 </Tip>
 
-<Note>
-**Asking your coding agent to do this works.** Setup writes into your AI client's
-own configuration, so it never happens on a run that did not ask for it — but
-naming what you want is asking, and that works without a terminal:
-
-```bash
-uvx opik mcp configure --ai-client cursor --skills
-```
-
-Credentials come from `~/.opik.config` (written by an earlier `uvx opik configure`) or
-from `OPIK_API_KEY` and `OPIK_WORKSPACE` already present in the environment, such
-as a CI secret. Do not paste the key into the command line; it ends up in shell
-history. `--ai-client` takes `claude-code`, `cursor`, `vscode`, `codex`,
-`opencode`, or `all` for every client detected on the machine; repeat it for
-several. `--skills` installs the skill pack without asking, `--no-skills` skips it.
-
-A run that names nothing and has no terminal — a CI job, a Docker build — writes
-nothing, which is the behaviour you want there.
-</Note>
-
 <Steps>
   <Step title="Install uv, if you don't have it">
     ```bash title="macOS / Linux"
@@ -105,9 +96,8 @@ nothing, which is the behaviour you want there.
     uvx opik mcp configure
     ```
 
-    The first run downloads the Opik CLI, about 460 MB, and takes a few seconds;
-    later runs start in about a second. `uvx opik@latest mcp configure` forces the
-    newest release when you want new clients or flags.
+    The first run downloads the Opik CLI and takes a few seconds; later runs start
+    in about a second.
 
     This reuses your existing Opik configuration (`~/.opik.config`); if you
     haven't configured Opik yet, the wizard offers to do it for you first.
@@ -183,6 +173,23 @@ To refresh the skill pack, re-run `uvx opik mcp configure` — it rewrites the p
 from the latest published version. Assistants read their skills at session start,
 so start a new session afterwards.
 </Note>
+
+### From a script or CI
+
+Setup writes into your AI client's own configuration, so a run with no terminal
+writes nothing unless you name the client:
+
+```bash
+uvx opik mcp configure --ai-client cursor --skills
+```
+
+Credentials come from `~/.opik.config` or from `OPIK_API_KEY` and `OPIK_WORKSPACE`
+already present in the environment, such as a CI secret; do not paste the key into
+the command line. `--ai-client` takes `claude-code`, `cursor`, `vscode`, `codex`,
+`opencode`, or `all` for every client detected on the machine; repeat it for
+several. `--skills` installs the skill pack without asking, `--no-skills` skips it.
+A run that names nothing and has no terminal, a CI job or a Docker build, writes
+nothing.
 
 ## Start using it
 
@@ -276,6 +283,17 @@ them confidently. Run `uvx opik configure`, pick a workspace, and re-run.
 
 Prefer to wire it up yourself, or your client wasn't detected? Configure any client
 by hand below.
+
+On Opik Cloud, any MCP client can take the hosted server in one line:
+
+```bash
+npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
+```
+
+[`add-mcp`](https://github.com/neon-solutions/add-mcp) writes the URL into Windsurf,
+Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more. On a
+self-hosted deployment, replace the URL with your own API base plus `/v1/mcp`, or
+use the [local server](#local-server-uvx).
 
 For the **skill pack** on a client the CLI doesn't cover, the community
 [`skills`](https://github.com/vercel-labs/skills) CLI knows the skill directories
