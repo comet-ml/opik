@@ -153,6 +153,78 @@ class DatasetInsertItemsResponse(BaseModel):
     inserted: int
 
 
+class DatasetReadItemsRequest(BaseModel):
+    """One `Dataset.get_items(...)` call, with its read knobs exposed verbatim.
+
+    `num_threads`/`chunk_size`/`nb_samples` are plain ints rather than
+    constrained ones on purpose: the SDK's own validation of them (0, negative,
+    over the chunk cap) is part of what a caller reads this route to assert, so
+    pydantic must not reject those values before the SDK sees them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    # Omitted keys are left to the SDK's defaults rather than restated here, so
+    # a caller asking for "the defaults" really gets them.
+    nb_samples: int | None = None
+    num_threads: int | None = None
+    chunk_size: int | None = None
+    filter_string: str | None = None
+    workspace: str | None = None
+
+
+class DatasetReadItemsResponse(BaseModel):
+    """What one read returned, or why the SDK refused to start it.
+
+    Items are reduced to their ids in dataset order: a caller comparing two
+    reads is asserting which items came back and in what order, and shipping
+    whole payloads back over the bridge for a few-thousand-item dataset is a
+    cost with no assertion behind it.
+    """
+
+    item_ids: list[str]
+    # The ValueError message when the SDK rejected the arguments, else None. The
+    # route answers 200 either way so the caller can assert on the message; a
+    # rejected read has no items, never an empty result that looks like one.
+    value_error: str | None = None
+
+
+class DatasetReadWithMidReadInsertRequest(BaseModel):
+    """A `stream_items()` read with an insert committed in the middle of it.
+
+    The interleaving is driven here rather than by racing two HTTP calls from
+    the caller: the reader consumes `pause_after_chunks` chunks, runs the insert
+    to completion, and only then consumes the rest. That makes the overlap
+    structural — every remaining page is fetched against a backend that already
+    holds the new items — where a timing race would leave the test asserting
+    whatever the network happened to order.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    items: list[dict[str, Any]]
+    chunk_size: int
+    num_threads: int = 1
+    # Must be >= 1 (so the read is genuinely in progress) and low enough that
+    # pages remain unfetched at the pause — see the route's docstring for the
+    # look-ahead the reader keeps in flight.
+    pause_after_chunks: int
+    workspace: str | None = None
+
+
+class DatasetReadWithMidReadInsertResponse(BaseModel):
+    item_ids: list[str]
+    chunk_sizes: list[int]
+    # Chunks consumed before the insert ran, echoed back so the caller can
+    # assert the read really was mid-flight and not already finished.
+    chunks_before_insert: int
+    inserted: int
+
+
 class ExperimentItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
