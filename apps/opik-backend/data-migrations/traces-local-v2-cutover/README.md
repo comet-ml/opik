@@ -1006,9 +1006,9 @@ other feature: a slow query to tune, a dashboard label, a metric gone quiet, a b
 not the safer default — it discards post-cutover writes, runs the guard-less reverse replay, and returns the estate to
 the unpartitioned original, so it costs more than most faults are worth.
 
-`rollback.sh` passes `--time`, so every statement it runs prints its elapsed seconds. Record the **reverse replay's**:
-it is the step that scales with the number of bridged deletions, so it is the one to compare against the window below.
-The promotes and the un-wrap are single `RENAME`s and are effectively constant.
+`rollback.sh` passes `--time`, so every statement it runs prints its elapsed seconds. Record the figure for the
+**reverse replay**: it scales with the number of bridged deletions, so that is the number to compare against the window
+below. The promotes and the un-wrap are single `RENAME`s and are effectively constant.
 
 Two things bound the decision rather than a stopwatch. The **window** is open only while the parked original exists —
 `finalize.sh` closes it, and nothing reopens it (see "Point of no return"). And in practice the decision is made in the
