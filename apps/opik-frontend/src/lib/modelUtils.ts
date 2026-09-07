@@ -530,8 +530,8 @@ export const sanitizeConfigForRequest = (
       }
     }
 
-    // "auto" also sends nothing, but it is the weaker "let the model decide": it leaves a persisted
-    // block alone rather than deleting fields the form cannot represent.
+    // "auto" is the weaker "let the model decide": it neither adds a level nor removes an existing
+    // block, so persisted fields the form cannot represent are still sent as they were.
     if (
       level !== "auto" &&
       level !== "none" &&

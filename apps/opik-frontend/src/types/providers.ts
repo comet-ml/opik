@@ -1040,8 +1040,8 @@ export interface LLMOpenRouterConfigsType {
 }
 
 // "auto", "none" and "off" are Opik's own, describing what we send rather than values the API takes:
-//   auto — no thinkingConfig, letting a thinking-by-default model pick its own budget
-//   none — no thinkingConfig, on a model that does not think by default
+//   auto — adds no level and leaves any persisted block as-is, letting the model pick its own budget
+//   none — removes the thinking block, on a model that does not think by default
 //   off  — an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to
 export type GeminiThinkingLevel =
   | "auto"

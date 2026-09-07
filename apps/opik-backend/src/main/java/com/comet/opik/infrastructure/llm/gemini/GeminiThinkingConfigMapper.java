@@ -17,7 +17,8 @@ class GeminiThinkingConfigMapper {
      * Builds the Google AI Studio thinking config for a model.
      * <p>
      * {@code thinking_level} is Gemini 3+ only and earlier models reject it, so on 2.5 a level is translated into
-     * its budget — the same translation Vertex needs at every version. {@code off} is always a zero budget.
+     * its budget — the same translation Vertex needs at every version. {@code off} becomes a zero budget where a
+     * budget is what the model takes; on Gemini 3+, which cannot disable thinking, no config is sent at all.
      * <p>
      * Level and the legacy {@code thinking_budget} are mutually exclusive (sending both is a 400), so exactly one
      * is ever set.
