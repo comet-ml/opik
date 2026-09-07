@@ -1,7 +1,6 @@
 name: Application E2E Tests (v2)
 
 env:
-  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
   ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
   ALLURE_ENDPOINT: https://comet.testops.cloud/
   ALLURE_PROJECT_ID: 1
@@ -31,6 +30,7 @@ on:
     paths:
       - '.github/workflows/end2end_suites_v2.yml'
       - 'tests/unit/test_e2e_allure_workflow.py'
+      - 'tests/unit/requirements-workflow.txt'
       - 'sdks/code_generation/fern/openapi/openapi.yaml'
       - 'tests_end_to_end/e2e/**'
 
@@ -44,12 +44,35 @@ permissions:
   contents: read
 
 jobs:
+  validate_workflow:
+    name: Validate E2E workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup uv & Python
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: '3.12'
+
+      - name: Test Allure credential routing
+        run: |
+          uv venv
+          uv pip install --require-hashes --only-binary :all: -r tests/unit/requirements-workflow.txt
+          .venv/bin/python tests/unit/test_e2e_allure_workflow.py
+
   run_suite:
+    needs: validate_workflow
     name: "Run v2 suite: ${{ github.event.inputs.tier || 't1' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     env:
+      ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
       OPIK_DEPLOYMENT: oss
       OPIK_BASE_URL: http://localhost:5173
       OPIK_WORKSPACE: default
@@ -72,9 +95,6 @@ jobs:
         uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: '3.12'
-
-      - name: Test Allure credential routing
-        run: uv run --with pyyaml python tests/unit/test_e2e_allure_workflow.py
 
       - name: Install E2E test dependencies
         working-directory: ${{ github.workspace }}/tests_end_to_end/e2e
