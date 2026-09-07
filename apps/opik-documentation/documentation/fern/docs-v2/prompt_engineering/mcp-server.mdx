@@ -91,8 +91,9 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
   </Step>
   <Step title="Restart your AI client">
     Assistants read their configuration at startup, so **start a new session**
-    before trying the prompts in [Start using it](#start-using-it). In Claude Code,
-    `/mcp` and **Reconnect** picks the server up without leaving the session.
+    before trying the prompts in [Start using it](#start-using-it). Reconnecting
+    inside a running session only refreshes servers it already loaded; a newly
+    added server needs a new session.
 
     <Note>
     If your client isn't detected, see [Manual setup](#manual-setup).
@@ -123,7 +124,8 @@ added, verified or pending sign-in. Change nothing else.
 ```
 
 Self-hosted Opik: replace the URL in the prompt with your deployment's API base
-plus `/v1/mcp`, or use `uvx opik mcp configure`, which detects the deployment.
+plus `/v1/mcp`, or have the agent run `uvx opik mcp configure --ai-client <agent> --skills`,
+which detects the deployment from your Opik configuration.
 
 ## Check your setup
 
@@ -294,8 +296,9 @@ npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
 ```
 
 [`add-mcp`](https://github.com/neon-solutions/add-mcp) writes the URL into Windsurf,
-Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more. On a
-self-hosted deployment, replace the URL with your own API base plus `/v1/mcp`, or
+Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more. The client
+has to support browser sign-in (OAuth) for remote MCP servers; without it the
+hosted endpoint answers 401. On a self-hosted deployment, replace the URL with your own API base plus `/v1/mcp`, or
 use the [local server](#local-server-uvx).
 
 For the **skill pack** on a client the CLI doesn't cover, the community
