@@ -1727,6 +1727,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
       }
       const custom = model.custom_parameters;
+      // A scalar or an array here would sail through a cast and then fail an
+      // assertion somewhere further out, describing the symptom rather than
+      // the cause. Same reason `getLlmJudgeMessages` refuses a non-array
+      // `code.messages`.
+      if (custom !== null && custom !== undefined) {
+        if (typeof custom !== 'object' || Array.isArray(custom)) {
+          throw new Error(
+            `getLlmJudgeModel: ${ruleId} returned code.model.custom_parameters as ` +
+              `${Array.isArray(custom) ? 'an array' : typeof custom} — expected an object or nothing.`,
+          );
+        }
+      }
       return {
         name: model.name,
         customParameters:

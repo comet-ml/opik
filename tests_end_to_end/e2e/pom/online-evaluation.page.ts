@@ -389,10 +389,16 @@ export class OnlineEvaluationPage {
    * inside it is still open, the first Escape closes that select and leaves
    * the popover up. Retrying on the observed state beats guessing how many
    * presses the current sub-state needs.
+   *
+   * The press is guarded on the popover still being there. Unconditional, an
+   * Escape arriving after something else had already dismissed the popover
+   * would land on the rule dialog behind it and discard the very edit this
+   * method is called to preserve — a silent no-op save rather than a failure.
    */
   async closeModelParameters(): Promise<void> {
     return test.step('close the model-parameters popover', async () => {
       await expect(async () => {
+        if (await this.modelParametersMenu.isHidden()) return;
         await this.page.keyboard.press('Escape');
         await expect(this.modelParametersMenu).toBeHidden({ timeout: 1_000 });
       }).toPass({ timeout: 10_000 });

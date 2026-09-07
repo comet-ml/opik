@@ -122,13 +122,16 @@ const PromptModelConfigs = ({
     <DropdownMenu>
       <TooltipWrapper content="Model parameters">
         <DropdownMenuTrigger asChild>
-          {/* Icon-only, so it has no accessible name to address it by — the
-              "Model parameters" string lives in the tooltip, which does not
-              contribute one. Test-only hook; nothing reads it at runtime. */}
+          {/* Icon-only: the "Model parameters" string lives in the tooltip,
+              which contributes nothing to the accessible name, so a screen
+              reader announced this as an unnamed button. `aria-label` fixes
+              that and gives the suite a role-addressable handle; the
+              `data-testid` stays as the stable one the POM selects on. */}
           <Button
             variant={variant}
             size={size}
             disabled={disabled}
+            aria-label="Model parameters"
             data-testid="model-parameters-trigger"
           >
             <Settings2 />
