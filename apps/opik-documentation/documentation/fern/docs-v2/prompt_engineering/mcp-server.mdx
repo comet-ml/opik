@@ -14,8 +14,8 @@ Opik SDK:
 uvx opik mcp configure
 ```
 
-Don't see your client in the list it prints? Any MCP client can take the hosted
-server directly:
+Don't see your client in the list it prints? On Opik Cloud, any MCP client can take
+the hosted server directly:
 
 ```bash
 npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
@@ -24,15 +24,17 @@ npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
 [`add-mcp`](https://github.com/neon-solutions/add-mcp) writes the URL into Windsurf,
 Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more. It adds the
 server only; the skill pack for those clients comes from
-`npx skills add comet-ml/opik-skills`.
+`npx skills add comet-ml/opik-skills`. On a self-hosted deployment, replace the URL
+with your own API base plus `/v1/mcp`, or use the local server described in
+[Manual setup](#local-server-uvx).
 
 <div className="mcp-clients no-external-icon">
   <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
   <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
 </div>
 
-One click installs the hosted server and opens a browser sign-in. It does not
-install the skill pack; run the command above for that.
+One click installs the Opik Cloud hosted server and opens a browser sign-in. It
+does not install the skill pack; run the command above for that.
 
 ## What this unlocks
 
@@ -601,9 +603,9 @@ your client.
   </Accordion>
   <Accordion title='"Opik is not configured yet" or "needs either a terminal or an explicit client"'>
     You ran it from an agent, a script or CI, so there was nothing to ask in.
-    Name the client, and make sure `OPIK_API_KEY` and `OPIK_WORKSPACE` are set in
-    the environment (a CI secret store, or a `~/.opik.config` from an earlier
-    `opik configure`) rather than typed into the command:
+    Name the client, and provide credentials through `OPIK_API_KEY` and
+    `OPIK_WORKSPACE` in the environment, or through a `~/.opik.config` created by
+    an earlier `opik configure`, rather than typing the key into the command:
 
     ```bash
     uvx opik mcp configure --ai-client cursor --skills

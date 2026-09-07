@@ -121,7 +121,7 @@ uvx opik mcp configure
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0%3D)
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D)
 
-其他 MCP 客户端：`npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`。详细说明、故障排除和常见问题请参阅 [MCP 服务器指南](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik)。
+上面的徽章和下方的 `add-mcp` 备用命令面向 Opik Cloud；上面的命令同样适用于自托管部署。Opik Cloud 上的其他 MCP 客户端：`npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`。详细说明、故障排除和常见问题请参阅 [MCP 服务器指南](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik)。
 
 <br>
 
