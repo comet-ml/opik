@@ -4,7 +4,6 @@ import com.comet.opik.utils.JsonUtils;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
@@ -30,7 +29,6 @@ public class MaxJsonSizeMapValidator implements ConstraintValidator<MaxJsonSize,
         if (value == null) {
             return true;
         }
-        long size = JsonUtils.writeValueAsString(value).getBytes(StandardCharsets.UTF_8).length;
-        return size <= maxSizeInBytes;
+        return !JsonUtils.exceedsSerializedLengthInBytes(value, maxSizeInBytes);
     }
 }

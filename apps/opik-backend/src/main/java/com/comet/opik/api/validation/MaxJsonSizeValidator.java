@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-import java.nio.charset.StandardCharsets;
-
 public class MaxJsonSizeValidator implements ConstraintValidator<MaxJsonSize, JsonNode> {
 
     private volatile long maxSizeInBytes;
@@ -21,7 +19,6 @@ public class MaxJsonSizeValidator implements ConstraintValidator<MaxJsonSize, Js
         if (value == null) {
             return true;
         }
-        long size = JsonUtils.writeValueAsString(value).getBytes(StandardCharsets.UTF_8).length;
-        return size <= maxSizeInBytes;
+        return !JsonUtils.exceedsSerializedLengthInBytes(value, maxSizeInBytes);
     }
 }
