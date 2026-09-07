@@ -39,5 +39,14 @@ class BaseMetric(abc.ABC):
     async def ascore(
         self, *args: Any, **kwargs: Any
     ) -> Union[_score_result.ScoreResult, List[_score_result.ScoreResult]]:
-        """Async variant of :meth:`score`. Defaults to calling ``score``."""
-        return self.score(*args, **kwargs)
+        """Async variant of :meth:`score`.
+
+        Defaults to running :meth:`score` in a worker thread, so a blocking
+        implementation does not stall the caller's event loop. Override this
+        when the metric has a genuinely asynchronous implementation.
+        """
+        # Deferred: importing asyncio costs tens of milliseconds, and this
+        # module is on the near-zero-import-time path.
+        import asyncio
+
+        return await asyncio.to_thread(self.score, *args, **kwargs)
