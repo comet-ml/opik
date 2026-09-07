@@ -1,5 +1,8 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -12,6 +15,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -118,6 +122,7 @@ class BulkInsertV2ClientIntegrationTest {
     }
 
     private TraceResourceClient traceResourceClient;
+    private DatasetResourceClient datasetResourceClient;
     private SpanResourceClient spanResourceClient;
     private ConnectionFactory clickHouseConnectionFactory;
 
@@ -127,6 +132,7 @@ class BulkInsertV2ClientIntegrationTest {
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
         spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         clickHouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 clickHouseContainer, DATABASE_NAME).build();
@@ -275,5 +281,106 @@ class BulkInsertV2ClientIntegrationTest {
 
         assertThat(traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY).startTime())
                 .isEqualTo(startTime);
+    }
+
+    // ------------------------------------------------------------------ dataset items ---
+    // Dataset versioning defaults to ON (TOGGLE_DATASET_VERSIONING_ENABLED), so PUT /datasets/items
+    // lands in DatasetItemVersionDAO#insertItems -- dataset_item_versions, 23 columns, the widest bulk
+    // write here. DatasetItemDAO#save covers the legacy dataset_items table on the same flag.
+
+    private DatasetItem newDatasetItem(Map<String, com.fasterxml.jackson.databind.JsonNode> data) {
+        return DatasetItem.builder()
+                .id(factory.manufacturePojo(DatasetItem.class).id())
+                .source(DatasetItemSource.MANUAL)
+                .data(data)
+                .build();
+    }
+
+    private UUID newDataset() {
+        return datasetResourceClient.createDataset(
+                DatasetResourceClient.buildDataset(factory), API_KEY, WORKSPACE_NAME);
+    }
+
+    @Test
+    @DisplayName("dataset items round-trip their data map, tags and source through JSONEachRow")
+    void datasetItemsRoundTrip() {
+        // data is Map(String, String) holding each value's serialized JsonNode, and tags is
+        // Array(String) -- the two encodings this row shares with the span path.
+        var datasetId = newDataset();
+        var data = Map.of(
+                "input", JsonUtils.getJsonNodeFromString("\"what is the capital of France?\""),
+                "expected_output", JsonUtils.getJsonNodeFromString("{\"answer\": \"Paris\"}"));
+        var item = newDatasetItem(data).toBuilder()
+                .tags(java.util.Set.of("alpha", "beta"))
+                .description("a description")
+                .build();
+
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetId(datasetId).items(List.of(item)).build(),
+                WORKSPACE_NAME, API_KEY);
+
+        var actual = datasetResourceClient.getDatasetItem(item.id(), API_KEY, WORKSPACE_NAME);
+        assertThat(actual.id()).isEqualTo(item.id());
+        assertThat(actual.source()).isEqualTo(DatasetItemSource.MANUAL);
+        assertThat(actual.data()).containsExactlyInAnyOrderEntriesOf(data);
+        assertThat(actual.tags()).containsExactlyInAnyOrder("alpha", "beta");
+        assertThat(actual.description()).isEqualTo("a description");
+    }
+
+    @Test
+    @DisplayName("dataset item content with newlines and quotes does not split a JSONEachRow line")
+    void datasetItemContentWithNewlinesSurvives() {
+        var datasetId = newDataset();
+        var awkward = JsonUtils.getJsonNodeFromString(
+                "{\"text\": \"line one\\nline \\\"two\\\"\\ttabbed\", \"unicode\": \"\u65e5\u672c\u8a9e \u2014 ok\"}");
+        var first = newDatasetItem(Map.of("input", awkward));
+        var second = newDatasetItem(Map.of("input", JsonUtils.getJsonNodeFromString("\"plain\"")));
+
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetId(datasetId).items(List.of(first, second)).build(),
+                WORKSPACE_NAME, API_KEY);
+
+        // If the first row's newline ended its line early, the second would be lost or corrupt.
+        assertThat(datasetResourceClient.getDatasetItem(first.id(), API_KEY, WORKSPACE_NAME).data())
+                .containsEntry("input", awkward);
+        assertThat(datasetResourceClient.getDatasetItem(second.id(), API_KEY, WORKSPACE_NAME).id())
+                .isEqualTo(second.id());
+    }
+
+    @Test
+    @DisplayName("a dataset item batch writes each row exactly once and server-stamps created_at")
+    void datasetItemBatchWritesEachRowOnceAndStampsCreatedAt() {
+        var datasetId = newDataset();
+        var items = List.of(
+                newDatasetItem(Map.of("input", JsonUtils.getJsonNodeFromString("\"one\""))),
+                newDatasetItem(Map.of("input", JsonUtils.getJsonNodeFromString("\"two\""))),
+                newDatasetItem(Map.of("input", JsonUtils.getJsonNodeFromString("\"three\""))));
+
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetId(datasetId).items(items).build(),
+                WORKSPACE_NAME, API_KEY);
+
+        var ids = items.stream().map(item -> "'" + item.id() + "'")
+                .collect(java.util.stream.Collectors.joining(","));
+
+        // Raw rows, no FINAL: reads collapse duplicates via LIMIT 1 BY, so a writer emitting every row
+        // twice would still satisfy a per-id read. Cardinality is the only assertion that sees it.
+        Long storedRows = queryOne(
+                "SELECT count() AS row_count FROM dataset_item_versions WHERE workspace_id = '%s' AND id IN (%s)"
+                        .formatted(WORKSPACE_ID, ids),
+                row -> row.get("row_count", Long.class));
+        assertThat(storedRows).isEqualTo(items.size());
+
+        // created_at and last_updated_at are omitted from the JSON row so their DEFAULT now64(9)
+        // stamps them. If they were sent as absent/zero instead, this would read back as the epoch --
+        // and last_updated_at is the ReplacingMergeTree version, so a zero there would make every
+        // later update lose to the original row.
+        Long stampedRows = queryOne(
+                ("SELECT count() AS row_count FROM dataset_item_versions WHERE workspace_id = '%s' "
+                        + "AND id IN (%s) AND created_at > toDateTime64('2000-01-01 00:00:00', 9) "
+                        + "AND last_updated_at > toDateTime64('2000-01-01 00:00:00', 9)")
+                        .formatted(WORKSPACE_ID, ids),
+                row -> row.get("row_count", Long.class));
+        assertThat(stampedRows).isEqualTo(items.size());
     }
 }

@@ -10,9 +10,12 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ErrorUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -39,6 +42,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -1039,6 +1043,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
 
@@ -1050,8 +1055,64 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(datasetId, items);
+        }
+
         return asyncTemplate.nonTransaction(connection -> mapAndInsert(
                 datasetId, items, connection, INSERT_DATASET_ITEM));
+    }
+
+    /**
+     * Same rows as {@link #INSERT_DATASET_ITEM}, streamed as JSONEachRow instead of bound as 9 named
+     * parameters per row plus a shared workspace id.
+     *
+     * <p>Only {@code save} moves onto this path. {@code mapAndInsert} is also rendered with
+     * {@code BULK_UPDATE} by the bulk-update flow, which reads the pre-existing row to merge tags and
+     * so is not a plain row append.
+     *
+     * <p>{@code created_at} and {@code last_updated_at} stay absent from the row. The R2DBC template
+     * writes {@code now64(9)} for {@code created_at} and omits {@code last_updated_at} entirely; both
+     * columns are declared {@code DEFAULT now64(9)}, so omitting them here produces the same
+     * server-stamped value — and {@code last_updated_at} is the ReplacingMergeTree version, so a
+     * client-supplied one would change which duplicate wins.
+     */
+    private Mono<Long> insertJsonEachRow(UUID datasetId, List<DatasetItem> items) {
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                "dataset_items",
+                getLogComment("save_dataset_items", workspaceId, userName, items.size()),
+                items,
+                item -> toJsonRow(item, datasetId, userName, workspaceId)));
+    }
+
+    private ObjectNode toJsonRow(DatasetItem item, UUID datasetId, String userName, String workspaceId) {
+        var node = JsonUtils.createObjectNode();
+
+        node.put("id", item.id().toString());
+        node.put("dataset_id", datasetId.toString());
+        // Enum8 column: ClickHouse accepts the enum's name, which is what getValue() returns and what
+        // the R2DBC bind sends.
+        node.put("source", item.source().getValue());
+        // String DEFAULT '' columns, not Nullable: an absent trace/span is "" on both paths, so the
+        // same mapper the binder uses is reused rather than omitting the field.
+        node.put("trace_id", DatasetItemResultMapper.getOrDefault(item.traceId()));
+        node.put("span_id", DatasetItemResultMapper.getOrDefault(item.spanId()));
+
+        // Map(String, String): each value is the JsonNode's serialized form, exactly as
+        // DatasetItemResultMapper.getOrDefault produces for the binder.
+        var data = node.putObject("data");
+        DatasetItemResultMapper.getOrDefault(item.data()).forEach(data::put);
+
+        var tags = node.putArray("tags");
+        if (item.tags() != null) {
+            item.tags().forEach(tags::add);
+        }
+
+        node.put("workspace_id", workspaceId);
+        node.put("created_by", userName);
+        node.put("last_updated_by", userName);
+
+        return node;
     }
 
     private Mono<Long> mapAndInsert(

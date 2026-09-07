@@ -23,12 +23,14 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
@@ -61,6 +63,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -2736,6 +2739,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
     /**
      * v2 ClickHouse client used for {@code INSERT ... SELECT} on {@code dataset_item_versions},
@@ -3694,6 +3698,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .distinct()
                 .count();
 
+        if (config.getBulkInsert().v2ClientEnabled()) {
+            return insertItemsJsonEachRow(datasetId, newVersionId, items, workspaceId, userName)
+                    // itemCount, not the server's row count: the R2DBC path deliberately returns the
+                    // DISTINCT dataset_item_id count (OPIK-7891) because reads collapse a repeated
+                    // stable id via LIMIT 1 BY, so every version total derived from this value would
+                    // be inflated by the raw row count. Both paths must answer the same number.
+                    .thenReturn(itemCount);
+        }
+
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
 
@@ -3961,6 +3974,76 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
      * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
      */
+    /**
+     * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 15 named
+     * parameters per row plus 5 shared ones. This is the widest bulk write in the codebase — 23
+     * columns — so it is where the driver's per-name linear scan costs the most.
+     *
+     * <p>Column handling that has to match the binder rather than look reasonable:
+     * <ul>
+     * <li>{@code created_at} / {@code last_updated_at} are omitted so their {@code DEFAULT now64(9)}
+     * stamps them server-side, as the template's inline {@code now64(9)} does. {@code last_updated_at}
+     * is the ReplacingMergeTree version column, so supplying a client clock here would decide which
+     * duplicate wins.</li>
+     * <li>{@code item_created_at} / {@code item_last_updated_at} have NO default and are required, so
+     * they are always written, through the same {@code formatTimestamp} the binder uses (which strips
+     * the trailing {@code Z} — hence the insert's {@code date_time_input_format=best_effort}).</li>
+     * <li>{@code data_hash}, {@code description_hash}, {@code evaluators_hash},
+     * {@code execution_policy_hash} and {@code column_types} are MATERIALIZED and must stay absent;
+     * that is what {@code input_format_defaults_for_omitted_fields} is for.</li>
+     * <li>{@code metadata} is written as {@code ""} unconditionally, matching the binder — not carried
+     * from the item.</li>
+     * </ul>
+     *
+     * <p>The R2DBC template carries no {@code log_comment}; one is supplied here because the helper
+     * requires it, which also makes the two paths comparable in {@code system.query_log}.
+     */
+    private Mono<Long> insertItemsJsonEachRow(UUID datasetId, UUID newVersionId, List<DatasetItem> items,
+            String workspaceId, String userName) {
+        return jsonBulkInsert.insert(
+                DATASET_ITEM_VERSIONS,
+                getLogComment("insert_delta_items", workspaceId, userName, items.size()),
+                items,
+                item -> toJsonRow(item, datasetId, newVersionId, workspaceId, userName));
+    }
+
+    private ObjectNode toJsonRow(DatasetItem item, UUID datasetId, UUID newVersionId, String workspaceId,
+            String userName) {
+        var node = JsonUtils.createObjectNode();
+
+        node.put("id", item.id().toString());
+        node.put("dataset_item_id", item.datasetItemId().toString());
+        node.put("dataset_id", datasetId.toString());
+        node.put("dataset_version_id", newVersionId.toString());
+
+        var data = node.putObject("data");
+        DatasetItemResultMapper.getOrDefault(item.data()).forEach(data::put);
+
+        node.put("description", item.description() != null ? item.description() : "");
+        node.put("metadata", "");
+        node.put("source", item.source() != null ? item.source().getValue() : "sdk");
+        node.put("trace_id", DatasetItemResultMapper.getOrDefault(item.traceId()));
+        node.put("span_id", DatasetItemResultMapper.getOrDefault(item.spanId()));
+
+        var tags = node.putArray("tags");
+        if (item.tags() != null) {
+            item.tags().forEach(tags::add);
+        }
+
+        node.put("evaluators", serializeEvaluators(item.evaluators()));
+        node.put("execution_policy", serializeExecutionPolicy(item.executionPolicy()));
+        node.put("item_created_at", formatTimestamp(item.createdAt()));
+        node.put("item_last_updated_at", formatTimestamp(item.lastUpdatedAt()));
+        node.put("item_created_by", item.createdBy() != null ? item.createdBy() : userName);
+        node.put("item_last_updated_by", item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName);
+
+        node.put("created_by", userName);
+        node.put("last_updated_by", userName);
+        node.put("workspace_id", workspaceId);
+
+        return node;
+    }
+
     private static String formatTimestamp(Instant timestamp) {
         if (timestamp == null) {
             return Instant.now().toString().replace("Z", "");
