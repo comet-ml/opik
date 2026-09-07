@@ -29,6 +29,8 @@ on:
         description: ALLURE_USERNAME service parameter. Leave blank.
   pull_request:
     paths:
+      - '.github/workflows/end2end_suites_v2.yml'
+      - 'scripts/test_e2e_allure_workflow.py'
       - 'sdks/code_generation/fern/openapi/openapi.yaml'
       - 'tests_end_to_end/e2e/**'
 
