@@ -66,7 +66,8 @@
 #                             rewrite, and that wait is unbounded server-side, so the client socket timeout is the
 #                             only limit on it. Under the stock 300 a healthy repair on a large table is reported as
 #                             a failure. The cost of a generous value is that a genuinely dead connection takes that
-#                             long to surface.
+#                             long to surface. It also sets distributed_ddl_task_timeout, which is what bounds each
+#                             stage's ON CLUSTER promote — see the CH_ARGS comment below.
 #   --sentinel-repair-only    repair ONLY the epoch/NaN sentinels on the restored original (no promote, no replay, no
 #                             rename). Requires --confirm-flag-reverted. Mutually exclusive with --stage,
 #                             --reverse-replay-only and --unwrap-only.
@@ -309,7 +310,12 @@ fi
 CH_ARGS=()
 [[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
-CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
+# distributed_ddl_task_timeout as well as receive_timeout: every stage's promote is an ON CLUSTER RENAME, whose wait is
+# capped server-side (180s by default, with distributed_ddl_output_mode = 'throw') rather than by the client socket.
+# receive_timeout alone would bound the long mutations and not the rename that precedes them, which is the half of a
+# stage that must not be left unfinished.
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" \
+          --distributed_ddl_task_timeout="$RECEIVE_TIMEOUT")
 
 ch() {
     clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_rollback' --query "$1"

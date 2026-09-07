@@ -134,17 +134,33 @@ render_block() {
     sql="${sql//'${WINDOW_LO}'/$lo}"
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${SAMPLE_MOD}'/$SAMPLE_MOD}"
+    # A renamed, moved or split marker yields empty text, and an empty --query exits 0, so the caller would read "no
+    # output" as a verdict rather than as a failure to ask. Read-only here, unlike the drivers that mutate, but the
+    # verdicts gate the EXCHANGE, so refuse rather than let a window pass unasked.
+    #
+    # RETURN, not exit: every caller invokes this inside a command substitution, where an exit ends only the subshell
+    # and would leave the outer clickhouse-client running with an empty --query. The callers assign first, so a
+    # non-zero return trips `set -e` there.
+    if [[ -z "${sql//[[:space:]]/}" ]]; then
+        log "ERROR: the '$block' block rendered empty from $VERIFY_SQL." >&2
+        log "       Expected the exact marker lines '-- >>> BEGIN $block' and '-- >>> END $block'." >&2
+        return 1
+    fi
     printf '%s' "$sql"
 }
 
 # Verdict TSV row for one window: src_rows dst_rows src_checksum dst_checksum ok
 compare_window() {
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block compare "$1" "$2")"
+    local sql
+    sql="$(render_block compare "$1" "$2")" || exit 2
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block drill-down "$1" "$2")"
+    local sql
+    sql="$(render_block drill-down "$1" "$2")" || exit 2
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Count of keys in one window that GENUINELY differ, re-checked on the sorting key so FINAL cannot hide a
@@ -159,7 +175,9 @@ confirm_keys_window() {
 # FINAL had to choose between rows that differ. Run ONLY when confirm-keys returned 0, because that is the only verdict
 # whose soundness depends on it; see the version-ties block for why it is a separate statement and an upper bound.
 version_ties_window() {
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$(render_block version-ties "$1" "$2")"
+    local sql
+    sql="$(render_block version-ties "$1" "$2")" || exit 2
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"

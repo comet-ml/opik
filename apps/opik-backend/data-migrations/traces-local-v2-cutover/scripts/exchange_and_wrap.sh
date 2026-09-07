@@ -35,7 +35,8 @@
 #   --receive-timeout N       seconds clickhouse-client waits for the NEXT PACKET before giving up (receive_timeout).
 #                             Default 1800, against ClickHouse's own 300, which bounds the GAP between packets rather
 #                             than total query time — so a step that goes quiet while the server works trips it while
-#                             healthy. Trade-off and shared rationale: ../README.md.
+#                             healthy. In this driver it also sets distributed_ddl_task_timeout, which is the binding
+#                             limit here — see the CH_ARGS comment below, and ../README.md for the trade-off.
 #   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
 #                             Must carry an explicit ' UTC' marker, as the drivers print it; the value is parsed as
 #                             UTC, so without it the zone it was captured in is unknown.
@@ -123,13 +124,21 @@ done
 [[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
 
 # One place for the connection and client-side options, so every call site below carries the same host, port,
-# database and receive_timeout. log_comment is NOT here: the final deletion replay is tagged separately so it
-# can be found on its own in query_log, and clickhouse-client rejects a setting passed twice — so each call
-# site supplies its own tag rather than overriding a default.
+# database and the two timeouts. log_comment is NOT here, because clickhouse-client rejects a setting passed twice and
+# only some of these statements take it from the client at all: the blocks in 000003 and 000002 set their own, by a
+# leading SET and a trailing SETTINGS respectively, and both beat a client-level value. So the plain queries pass the
+# flag per call, and run_final_deletion_replay substitutes the tag into the SQL instead.
 CH_ARGS=()
 [[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
-CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
+# distributed_ddl_task_timeout as well as receive_timeout, because everything this driver executes through run_block
+# is ON CLUSTER DDL and that wait is capped server-side (180s by default, with distributed_ddl_output_mode = 'throw'),
+# not by the client socket. Raising only receive_timeout would leave the one statement pair where a timeout costs most
+# still bounded at the default: the EXCHANGE and its post-swap RENAME are a single --multiquery call, so a
+# TIMEOUT_EXCEEDED between them leaves the split state assert_pre_exchange_topology diagnoses (traces already holds the
+# successor while traces_local_v2 still exists) while the DDL keeps running in the background.
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" \
+          --distributed_ddl_task_timeout="$RECEIVE_TIMEOUT")
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 [[ -f "$DELTA_SQL_FILE" ]] || { echo "ERROR: cannot find $DELTA_SQL_FILE" >&2; exit 2; }
 # --backfill-start (the anchor printed by backfill.sh) is interpolated into the final deletion replay; validate its shape.
@@ -324,15 +333,48 @@ extract() {
     awk -v begin="-- >>> BEGIN $1" -v end="-- >>> END $1" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$SQL_FILE"
 }
 
+# Refuse rendered SQL that is not what the caller asked for. A marker renamed, moved, indented or split yields EMPTY
+# text, and an empty --query is not an error the way a malformed statement is: clickhouse-client exits 0, so `set -e`
+# never fires and the step prints its success line having done nothing. The three checks catch different faults:
+#   * non-empty      -- the marker pair did not match at all;
+#   * must_contain   -- the markers matched, but around the wrong text. "Non-empty" cannot see this;
+#   * no placeholder -- a placeholder this driver does not substitute survived into the statement. Checked on
+#                       comment-masked text, as backfill.sh and delta_replay.sh do against these same files, so a
+#                       placeholder merely mentioned in a comment does not refuse a good file.
+require_rendered() {
+    local sql="$1" what="$2" must_contain="$3" file="$4" masked
+    if [[ -z "${sql//[[:space:]]/}" ]]; then
+        echo "ERROR: the '$what' block rendered empty from $file." >&2
+        echo "       Expected the exact marker lines '-- >>> BEGIN $what' and '-- >>> END $what'." >&2
+        exit 2
+    fi
+    if ! grep -qF "$must_contain" <<<"$sql"; then
+        echo "ERROR: the '$what' block from $file does not contain '$must_contain', so the markers are around the" >&2
+        echo "       wrong text. Refusing to run it." >&2
+        exit 2
+    fi
+    masked="$(sed 's/--.*$//' <<<"$sql")"
+    if grep -qF '${' <<<"$masked"; then
+        echo "ERROR: the '$what' block from $file still holds an unsubstituted \${...} placeholder after rendering." >&2
+        echo "       Refusing to send SQL containing a literal placeholder." >&2
+        exit 2
+    fi
+}
+
 run_block() {
     local sql
     sql="$(extract "$1")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    case "$1" in
+        exchange) require_rendered "$sql" exchange "EXCHANGE TABLES" "$SQL_FILE" ;;
+        wrap)     require_rendered "$sql" wrap     "Distributed"     "$SQL_FILE" ;;
+        *)        echo "ERROR: unknown block '$1'." >&2; exit 2 ;;
+    esac
     # Each ON CLUSTER DDL in the block emits one row per host (host, port, status, error, hosts_remaining,
     # hosts_active); status 0 with an empty error means that host applied it. Labelled so the rows are not mistaken for
     # output of the preceding step (e.g. the final deletion replay).
     echo "  $1: ON CLUSTER responses per host (host, port, status, error, hosts_remaining, hosts_active):"
-    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
 }
 
 # Final deletion replay before the EXCHANGE. delta_replay.sh (step 2) replayed deletes only up to when it ran; cutover_start
@@ -346,9 +388,25 @@ run_final_deletion_replay() {
     sql="$(awk -v begin="-- >>> BEGIN deletion-replay" -v end="-- >>> END deletion-replay" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$DELTA_SQL_FILE")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
+    # A silent no-op here is the worst failure in this script: the deletes it masks are covered by neither the forward
+    # replay (bounded by when delta_replay.sh ran) nor the rollback reverse-replay (bounded by cutover_start), and
+    # verify.sh has already run, so nothing downstream would notice them going live again on `traces` after the swap.
+    require_rendered "$sql" deletion-replay "DELETE FROM" "$DELTA_SQL_FILE"
+    # Retag so this run is separable from delta_replay.sh's in query_log. The block sets log_comment in its own trailing
+    # SETTINGS, and a per-statement value beats the client's --log_comment, so substituting the value is the only way to
+    # distinguish them; the runbook asks for this replay's wall time specifically. Asserted, because a rename of the tag
+    # in 000002 would otherwise leave both runs sharing one tag again, silently.
+    local from="traces_local_v2_cutover:deletion_replay"
+    local to="traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay"
+    grep -qF "$from" <<<"$sql" || {
+        echo "ERROR: the deletion-replay block no longer sets log_comment = '$from', so this run cannot be" >&2
+        echo "       separated from delta_replay.sh's in query_log. Update the tag here to match $DELTA_SQL_FILE." >&2
+        exit 2
+    }
+    sql="${sql//"$from"/"$to"}"
     # --time prints the statement's elapsed seconds to stderr (a bare --query prints nothing). This replay sits inside
     # the final-delta -> EXCHANGE gap the buffer hold has to cover, so its wall time is the number to record.
-    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --time --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 }
 
 if [[ "$WRAP_ONLY" == "1" ]]; then
@@ -369,7 +427,8 @@ fi
 
 # Captured in UTC; the reverse replay and its postcondition parse it as UTC (000004_rollback_reverse_replay.sql).
 CUTOVER_START="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6, 'UTC'))")"
-echo "RECORD cutover_start=$CUTOVER_START UTC  (pass the timestamp to rollback.sh --cutover-start if you roll back after this point)"
+echo "RECORD cutover_start=$CUTOVER_START UTC  (if you roll back after this point, pass it with the marker:"
+echo "       rollback.sh --cutover-start '$CUTOVER_START UTC')"
 
 echo "Final deletion replay: masking deletes bridged since the last delta_replay so none leak across the swap..."
 run_final_deletion_replay

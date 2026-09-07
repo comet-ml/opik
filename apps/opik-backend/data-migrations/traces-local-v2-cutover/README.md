@@ -643,15 +643,15 @@ weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITI
 touches them by accident, and vice versa. Once written, the extra partitions are benign at rest: they never tier to cold
 and are skipped by time-bounded reads.
 
-> **They are NOT few, and they break the backfill unless `max_partitions_per_insert_block` is raised.** An earlier
-> version of this section claimed the extra partitions were "bounded (few distinct far-future timestamps → few extra
-> weeks) and harmless". The first half is wrong on real data and the second half is only true *after* the copy
-> succeeds. Measured on a production-shape environment (2026-08-17, 269.2 M rows):
+> **They are NOT few, and they break the backfill unless `max_partitions_per_insert_block` is raised.** The intuition to
+> distrust is that they are "bounded (few distinct far-future timestamps → few extra weeks) and harmless": the first half
+> is wrong on real data, and the second is only true *after* the copy succeeds. Measured on a production-shape
+> environment (2026-08-17):
 >
 > | Measure | Value |
 > |---|---|
-> | Far-future rows | **11,128,875** — 4.1% of the table, not a handful |
-> | Distinct far-future weekly partitions | **1,517**, spanning ~2194 → 2299-12-31 |
+> | Far-future rows | a low single-digit **percentage** of the table, not a handful |
+> | Distinct far-future weekly partitions | **over a thousand**, spanning roughly 2194 → 2299 |
 > | Result of running `backfill.sh` unmodified | **`Code: 252 … TOO_MANY_PARTS`** on week `2025-06-16` |
 >
 > This is reproduced, not projected: the driver was run against the real cluster and aborted with
@@ -661,26 +661,27 @@ and are skipped by time-bounded reads.
 >
 > | Measure | Value |
 > |---|---|
-> | Far-future partitions in the window | 275 |
-> | …holding ≤ 5 rows each | **268** — about 635 rows in total |
-> | Head partitions | 7, holding 125,553 of the window's 126,188 far-future rows |
-> | Primary-key footprint of that rare tail | **12 projects** |
-> | Worst single block: total destination partitions | **333** (269 far-future, the rest ordinary weeks it touched) |
+> | Far-future partitions in the window | a few hundred |
+> | …holding ≤ 5 rows each | **nearly all of them**, a negligible share of the rows between them |
+> | Head partitions | a handful, holding nearly every far-future row in the window |
+> | Primary-key footprint of that rare tail | **a handful of projects** |
+> | Worst single block: total destination partitions | **several hundred** (mostly far-future, the rest ordinary weeks it touched) |
 >
 > So the mechanism is: the byte cap `min_insert_block_size_bytes` (256 MB) binds long before
-> `max_insert_block_size`, so for ~54 KiB trace rows a block holds only ~4,841 rows; and because the rare tail occupies
-> a narrow primary-key range, one such block picks up most of those 268 partitions at once. ClickHouse caps partitions
-> per block at **100** by default and, with `throw_on_max_partitions_per_insert_block = 1`, **aborts the INSERT**
-> instead of degrading.
+> `max_insert_block_size`, because trace rows are large, so a block holds far fewer rows than the row cap allows; and
+> because the rare tail occupies a narrow primary-key range, one such block picks up most of those tiny partitions at
+> once. ClickHouse caps partitions per block at **100** by default and, with
+> `throw_on_max_partitions_per_insert_block = 1`, **aborts the INSERT** instead of degrading.
 >
 > **This survives parallelism, which is the counter-intuitive part.** The statement has no `ORDER BY` and the read is
-> parallel (`max_insert_threads = 0`, `max_threads = auto(48)`), so it is tempting to assume 48 interleaved streams
+> parallel (`max_insert_threads = 0`, `max_threads = auto`), so it is tempting to assume the interleaved streams
 > scatter the tail across many blocks and keep every block under the limit. They do not — the abort above happened
 > under exactly that configuration. Do not reason your way past this one; measure it.
 >
-> **The abort is not all-or-nothing.** In the run above, 511,328 rows had already committed as 119 parts before the
-> offending block threw. The destination is a `ReplacingMergeTree` keyed on `(workspace_id, project_id, id)`, so
-> re-running the window converges rather than duplicating — but a failed window leaves partial data behind, and
+> **The abort is not all-or-nothing.** In the run above a substantial share of the window had already committed, as
+> parts, before the offending block threw. The destination is a `ReplacingMergeTree` keyed on
+> `(workspace_id, project_id, id)`, so re-running the window converges rather than duplicating — but a failed window
+> leaves partial data behind, and
 > prerequisite #2 ("`traces_local_v2` is empty") no longer holds until it is cleared with `rollback.sh --stage A`.
 >
 > **No batching flag avoids this.** `backfill.sh` splits a week only by `created_at`, to respect
@@ -695,13 +696,13 @@ and are skipped by time-bounded reads.
 > **Why 2000 is sound, and it is not the simulation below that establishes it.** A block cannot span more partitions
 > than the table has, so **the destination's total distinct partition count is a hard upper bound** on partitions per
 > block. Size the setting above that total and it can never be exceeded, whatever the read order or thread count turns
-> out to be. In the measurement above that total is about 1,616 (1,517 far-future plus roughly 99 real weeks), so 2000
-> clears it with margin. Derive your own number the same way, from `far_future_weeks` plus the real week count, rather
-> than from any per-block estimate.
+> out to be. In the measurement above that total sat comfortably under 2000, which is why that is the default. Derive
+> your own number the same way, from `far_future_weeks` plus the real week count, rather than from any per-block
+> estimate.
 >
-> The observed worst block is consistent with that bound and shows why the far-future count alone is not the right input:
-> its 333 partitions are 269 far-future plus 64 of the 99 real weeks, so a block's spread mixes both and lands well
-> under the 1,616 ceiling. Sizing from `far_future_weeks` alone would have undercounted it by 64.
+> The observed worst block is consistent with that bound and shows why the far-future count alone is not the right
+> input: its partitions were mostly far-future but included a substantial minority of real weeks, so a block's spread
+> mixes both and still lands well under the ceiling. Sizing from `far_future_weeks` alone would have undercounted it.
 >
 > The cost of raising it is a larger part count per insert — one part per partition touched — which background merges
 > then compact. That is strictly better than the alternative, which is the backfill not running.
@@ -858,6 +859,13 @@ Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOU
 > quiet while the server works does, and the client then gives up on a healthy statement. That is why the default is
 > raised across the board rather than per driver. The cost of a generous value is that a genuinely dead connection takes
 > that long to surface; for resumable, idempotent steps that is the better trade.
+>
+> **On the three drivers that issue `ON CLUSTER` DDL it also sets `distributed_ddl_task_timeout`, and there that is the
+> binding limit.** `exchange_and_wrap.sh`, `rollback.sh` and `finalize.sh` wait on the distributed-DDL queue, which is
+> capped server-side (180s by default, `distributed_ddl_output_mode = 'throw'`) rather than by the client socket, so
+> raising the client timeout alone would leave those statements bounded at the default. That matters most for the
+> `EXCHANGE` and its post-swap `RENAME`, which are one call: a timeout between them leaves the split state
+> `exchange_and_wrap.sh` diagnoses, while the DDL keeps running in the background.
 
 ### Timezones: every window bound pins `'UTC'`
 
@@ -879,8 +887,9 @@ deletion replay both miss because they share that bound.
 Because that failure is silent, the persisted anchor carries the claim rather than relying on it: `backfill.sh` writes
 `--state-file` with an explicit ` UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
 attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
-rejected with the two ways out — re-record it with the marker if it is known to have been taken on a UTC server, or
-restart the copy cleanly. The same reasoning is why both drivers print their anchors labelled `UTC`: the value an
+rejected, with the three ways out the driver prints: delete the file if the destination is still empty, since nothing was
+copied against the lost anchor and a fresh one is owed; re-record it with the marker if it is known to have been taken on
+a UTC server; or restart the copy cleanly. The same reasoning is why both drivers print their anchors labelled `UTC`: the value an
 operator pastes into `--backfill-start` or `--cutover-start` says which zone it is in — and those flags **require** the
 marker, so the guard cannot be bypassed by supplying the anchor by hand.
 
@@ -1247,7 +1256,7 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    produced it: clients send them, and rows predating the flag hold them. Unbounded, the repair would set those to
    `NULL` with no way back — the parked successor encodes an absent `end_time` as that same epoch, so nothing holds the
    original — and the counts would still report success. Measured on an internal environment: the unbounded predicate
-   matched 34 keys across 12 workspaces where only 5 came from the flag window. Take the bounds from when the flag
+   matched roughly seven times as many keys as the flag window had produced. Take the bounds from when the flag
    rolled out and when its revert finished landing on every instance. Rows are matched on `created_at` **or**
    `last_updated_at`. Both bounds are interpreted as UTC regardless of the server's timezone.
 
@@ -1611,10 +1620,12 @@ and escalate rather than passing it — arbitrary is not the same as benign.
 > `last_updated_at >= cutover_start` on the differing ids before calling it a defect. A leak shows up as rows present in
 > the backup but absent from `traces` *and* absent from it entirely; post-cutover writes are the harmless direction.
 
-**Feasibility at scale.** A full pass reads every partition (heavy but bounded per week — run off-peak). When that is
-infeasible, sample and still get high confidence:
+**Feasibility at scale.** A full pass reads every week in the range (heavy but bounded per week — run off-peak). When
+that is infeasible, sample and still get high confidence:
 - `--sample-mod N` compares a deterministic 1/N `id` sample — the *same* rows on both sides, so like-for-like.
-- `--weeks-stride S` compares every S-th weekly partition (partition-pruned, so genuinely cheaper).
+- `--weeks-stride S` compares every S-th week, so it reads a fraction of the windows and is genuinely cheaper. Note
+  that a window is narrowed by the `created_at` minmax skip index, not by partition pruning: the source is
+  unpartitioned and the successor's partitions are id_at-derived.
 - `--receive-timeout N` raises the client's per-packet wait (default 1800, against ClickHouse's 300). The
   post-mismatch confirm-keys re-check can stall past the stock value and abort the compare at the first mismatch.
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;

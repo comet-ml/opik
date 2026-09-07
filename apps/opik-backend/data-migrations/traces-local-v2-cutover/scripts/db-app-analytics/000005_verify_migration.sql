@@ -30,7 +30,7 @@
 --   * `compare`       once per created_at week (optionally sampled), parsing the single verdict row;
 --   * `confirm-keys`  on a week that reported ok=0, to separate a real difference from a superseded-version artifact;
 --   * `version-ties`  when confirm-keys returned 0, since that verdict is only sound where no version is tied;
---   * `drill-down`    with --drill-down, on any week that reported ok=0, whatever the two blocks above concluded.
+--   * `drill-down`    with --drill-down, on any week that reported ok=0, whatever confirm-keys and version-ties made of it.
 --
 -- OLD_TABLE is the old-schema table (Nullable, nanosecond) and NEW_TABLE the new-schema one (sentinels, microsecond).
 -- Before the EXCHANGE: OLD_TABLE=traces, NEW_TABLE=traces_local_v2 (the successor being built). After it, `traces` is
@@ -501,6 +501,13 @@ FROM src_ties, dst_ties
 -- Neither setting is a query-level cap. max_rows_to_read = 0 removes any row limit a settings profile imposes: this
 -- read is not truncatable -- it either covers the window's physical versions or throws -- and a throw would fail a gate
 -- that could otherwise answer. max_bytes_before_external_group_by lets the GROUP BY spill to disk rather than hit the
--- memory limit. What actually bounds the read is the window predicate above, which prunes partitions.
+-- memory limit.
+--
+-- Know what the override authorises, because NEITHER side prunes partitions on created_at. The source is unpartitioned
+-- altogether, and the successor partitions on an id_at-derived expression, which a created_at predicate cannot prune.
+-- The window narrows the read through the created_at minmax skip index instead, which drops granules rather than parts,
+-- and this block runs without FINAL over every physical version the window still selects, on both sides, in the common
+-- case rather than the rare one: an artifact verdict is the normal pre-EXCHANGE outcome. So the cost is a full read of
+-- the surviving granules per differing window, and --sample-mod is the lever that bounds it.
 SETTINGS max_rows_to_read = 0, max_bytes_before_external_group_by = 4000000000;
 -- >>> END version-ties
