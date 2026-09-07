@@ -62,3 +62,12 @@
   height: 14px !important;
   opacity: 0.75;
 }
+.mcp-prompt-fallback {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 8px;
+  margin: 8px 0 0;
+}
