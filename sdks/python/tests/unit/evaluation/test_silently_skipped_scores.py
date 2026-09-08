@@ -122,13 +122,16 @@ def test_evaluate__item_evaluator_type_is_unsupported__reported_as_a_failed_scor
     # The evaluation itself is unaffected — an unknown type must not abort it.
     assert scores["always_passes"].scoring_failed is False
 
-    # A failed score is not persisted, so it stays out of the experiment scores.
-    logged_score_names = [
-        score.name
+    # A failed score is persisted at its recorded 0.0 with the error in
+    # reason (#8134): dropping it would let backend averages silently diverge
+    # from the items actually evaluated.
+    logged_scores = {
+        score.name: score
         for trace in fake_backend.trace_trees
         for score in trace.feedback_scores or []
-    ]
-    assert logged_score_names == ["always_passes"]
+    }
+    assert set(logged_scores) == {"always_passes", "code_metric_evaluator"}
+    assert logged_scores["code_metric_evaluator"].value == 0.0
 
 
 def test_evaluate__scoring_key_mapping_matches_nothing__warning_is_logged(fake_backend):

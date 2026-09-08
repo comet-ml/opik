@@ -9,7 +9,7 @@ from opik.rest_api import TracePublic, TraceThread
 
 
 def test_log_feedback_scores():
-    """Test that log_feedback_scores correctly logs feedback scores."""
+    """Test that log_feedback_scores logs all scores, failed ones included (#8134)."""
     # Create mock results
     score1 = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
     score2 = score_result.ScoreResult(name="metric2", value=0.6, reason="Average")
@@ -22,7 +22,7 @@ def test_log_feedback_scores():
         )
     ]
 
-    expected_scores = [score1, score2]
+    expected_scores = [score1, score2, score3]
 
     mock_client = mock.MagicMock(spec=threads_client.ThreadsClient)
     project_name = "test_project"
@@ -37,7 +37,7 @@ def test_log_feedback_scores():
 
     # Check the scores
     scores = call_args["scores"]
-    assert len(scores) == 2
+    assert len(scores) == 3
     for i, score in enumerate(scores):
         assert score["id"] == "thread_1"
         assert score["name"] == expected_scores[i].name
