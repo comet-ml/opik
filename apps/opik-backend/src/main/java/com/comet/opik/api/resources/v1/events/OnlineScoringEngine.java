@@ -1576,13 +1576,17 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Reports the dropped scores on the rule's log stream, one line per score, so the user can see which
-     * metric returned no value instead of inferring it from a batch that stored fewer scores than it ran.
+     * Reports the dropped scores on the rule's log stream so the user can see which metric returned no
+     * value instead of inferring it from a batch that stored fewer scores than it ran.
      *
-     * <p>Both interpolated values are user-controlled and get the same sanitizing the judge path applies to
-     * judge-chosen text: the score name comes from the metric's code, and {@code entityId} is a UUID on the
-     * trace and span paths but the caller-supplied thread id on the thread one — a CR/LF in it would forge
-     * entries in the rule's log, and an oversized one would flood it.
+     * <p>One line for the whole batch, with the names capped and the remainder counted, the way the judge
+     * path reports unreadable and undeclared names. A metric returning a list of scores decides how many
+     * names land here, so a line per name would let one evaluation flood the rule's log.
+     *
+     * <p>Every interpolated value is user-controlled and gets the same sanitizing applied to judge-chosen
+     * text: the names come from the metric's code, and {@code entityId} is a UUID on the trace and span
+     * paths but the caller-supplied thread id on the thread one — a CR/LF in it would forge entries in the
+     * log, and an oversized one would flood a single entry.
      */
     public static void logValuelessPythonScores(
             @NonNull Logger userFacingLogger,
@@ -1594,11 +1598,17 @@ public class OnlineScoringEngine {
             return;
         }
 
+        // A metric is free to leave a score unnamed; rendered rather than dropped, so the count a user sees
+        // still matches the scores their rule ran.
+        var reported = valuelessNames.stream()
+                .map(name -> StringUtils.isBlank(name) ? "<unnamed>" : name)
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .toList();
+        var omitted = valuelessNames.size() - reported.size();
+
         try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
-            var safeEntityId = sanitize(String.valueOf(entityId));
-            valuelessNames.forEach(name -> userFacingLogger.warn(
-                    "Skipped score '{}' for {} '{}' because the metric returned no value",
-                    StringUtils.isBlank(name) ? "<unnamed>" : sanitize(name), entityLabel, safeEntityId));
+            userFacingLogger.warn("Skipped {} for {} '{}' because the metric returned no value",
+                    renderNames(reported, omitted), entityLabel, sanitize(String.valueOf(entityId)));
         }
     }
 

@@ -216,7 +216,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             verify(userFacingLogger).warn(
                     contains("because the metric returned no value"),
-                    eq("hallucination"),
+                    eq("'hallucination'"),
                     eq("traceId"),
                     eq(traceId.toString()));
         }
