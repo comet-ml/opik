@@ -48,11 +48,19 @@ const AnnotateTracesDialog: React.FunctionComponent<
 > = ({ rows, open, setOpen, type }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
-    workspaceName,
-    page: 1,
-    size: 1000,
-  });
+  const {
+    data: feedbackDefinitionsData,
+    isLoading: isDefinitionsLoading,
+    isError: isDefinitionsError,
+    refetch: refetchDefinitions,
+  } = useFeedbackDefinitionsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1000,
+    },
+    { enabled: Boolean(open) },
+  );
   const { mutateAsync: setFeedbackScore } = useTraceFeedbackScoreSetMutation();
 
   const [draft, setDraft] = useState<DraftScore>({});
@@ -323,51 +331,73 @@ const AnnotateTracesDialog: React.FunctionComponent<
           Apply the same feedback score to {rows.length} selected {entityCopy}.
         </p>
         <div className="flex flex-col gap-3 py-2">
-          <div>
-            <div className="comet-body-s-accented pb-1">Score</div>
-            <SelectBox
-              value={draft.name ?? ""}
-              options={feedbackDefinitions.map((definition) => ({
-                label: definition.name,
-                value: definition.name,
-              }))}
-              onChange={handleScoreNameChange}
-              className="h-8 min-w-[200px] py-1"
-              testId="annotate-bulk-score-select"
-              renderTrigger={(value) => {
-                if (!value) {
-                  return <div className="truncate">Select a score</div>;
-                }
-                return <span className="text-nowrap">{value}</span>;
-              }}
-              renderOption={(option: DropdownOption<string>) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              )}
-            />
-          </div>
-          {selectedDefinition && (
-            <div>
-              <div className="comet-body-s-accented pb-1">Value</div>
-              {renderValueInput()}
+          {isDefinitionsError ? (
+            <div
+              className="comet-body-s text-red-600"
+              data-testid="annotate-bulk-error"
+            >
+              Failed to load feedback definitions.
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => refetchDefinitions()}
+              >
+                Retry
+              </Button>
             </div>
-          )}
-          {selectedDefinition && (
-            <div>
-              <div className="comet-body-s-accented pb-1">
-                Reason (optional)
+          ) : isDefinitionsLoading ? (
+            <div className="comet-body-s text-light-slate">
+              Loading feedback definitions…
+            </div>
+          ) : (
+            <>
+              <div>
+                <div className="comet-body-s-accented pb-1">Score</div>
+                <SelectBox
+                  value={draft.name ?? ""}
+                  options={feedbackDefinitions.map((definition) => ({
+                    label: definition.name,
+                    value: definition.name,
+                  }))}
+                  onChange={handleScoreNameChange}
+                  className="h-8 min-w-[200px] py-1"
+                  testId="annotate-bulk-score-select"
+                  renderTrigger={(value) => {
+                    if (!value) {
+                      return <div className="truncate">Select a score</div>;
+                    }
+                    return <span className="text-nowrap">{value}</span>;
+                  }}
+                  renderOption={(option: DropdownOption<string>) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  )}
+                />
               </div>
-              <Textarea
-                placeholder="Add a reason..."
-                value={draft.reason ?? ""}
-                onChange={(event) =>
-                  setDraft((d) => ({ ...d, reason: event.target.value }))
-                }
-                className="min-h-8 resize-none py-1"
-                data-testid="annotate-bulk-reason-input"
-              />
-            </div>
+              {selectedDefinition && (
+                <div>
+                  <div className="comet-body-s-accented pb-1">Value</div>
+                  {renderValueInput()}
+                </div>
+              )}
+              {selectedDefinition && (
+                <div>
+                  <div className="comet-body-s-accented pb-1">
+                    Reason (optional)
+                  </div>
+                  <Textarea
+                    placeholder="Add a reason..."
+                    value={draft.reason ?? ""}
+                    onChange={(event) =>
+                      setDraft((d) => ({ ...d, reason: event.target.value }))
+                    }
+                    className="min-h-8 resize-none py-1"
+                    data-testid="annotate-bulk-reason-input"
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
         <DialogFooter>
