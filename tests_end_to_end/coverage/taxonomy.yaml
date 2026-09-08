@@ -680,6 +680,7 @@ areas:
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
+      - online-evaluation/online-evaluation-thread-scope-batch-close.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
