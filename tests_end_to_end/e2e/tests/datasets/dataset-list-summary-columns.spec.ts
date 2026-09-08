@@ -177,6 +177,16 @@ test.describe('Datasets list — computed summary columns', { tag: ['@area:datas
       await test.step('Open the Datasets list and show the optimization column', async () => {
         await datasets.goto(summarisedDatasets.projectId);
         await datasets.waitForReady();
+        // waitForReady() races a real row against the "No datasets yet" state,
+        // so it also resolves on an empty-state flash rendered before the first
+        // page lands. The project holds exactly the seeded datasets, so waiting
+        // for that many rows is the readiness condition this test actually
+        // needs — and it has to hold before the Columns menu is touched, which
+        // is the one step below that is not a retrying assertion.
+        await expect(
+          page.locator('tbody tr[data-row-id]'),
+          'every seeded dataset is on the page before the columns are configured',
+        ).toHaveCount(summarisedDatasets.datasets.length);
         // "Most recent optimization" is off by default, so the column a user
         // would have to turn on to see optimization recency is turned on here.
         await datasets.setColumnEnabled('Most recent optimization', true);

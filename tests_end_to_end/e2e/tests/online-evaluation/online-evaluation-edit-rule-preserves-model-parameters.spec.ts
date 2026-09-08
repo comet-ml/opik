@@ -1,4 +1,5 @@
 import { test, expect } from '@e2e/fixtures';
+import type { JudgeMessageWrite } from '@e2e/core/backend';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 
 /**
@@ -44,7 +45,7 @@ const SEEDED_CUSTOM_PARAMETERS = {
   unrelated_marker: 'keep-me',
 } as const;
 
-const JUDGE_MESSAGES = [
+const JUDGE_MESSAGES: JudgeMessageWrite[] = [
   {
     role: 'USER',
     content: 'Is the OUTPUT non-empty?\n\nOUTPUT:\n{{output}}',
@@ -77,11 +78,11 @@ test.describe(
         const ruleName = `${testNamespace}-thinking`;
 
         const ruleId = await test.step('Seed an LLM-judge rule carrying custom_parameters', async () =>
-          backendClient.createLlmJudgeAutomationRule({
+          backendClient.createLlmJudgeRule({
             projectId: project.id,
             name: ruleName,
             samplingRate: 1,
-            modelName: JUDGE_MODEL,
+            model: JUDGE_MODEL,
             temperature: 0,
             customParameters: SEEDED_CUSTOM_PARAMETERS,
             messages: JUDGE_MESSAGES,

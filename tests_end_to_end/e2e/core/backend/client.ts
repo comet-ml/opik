@@ -1823,86 +1823,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
-     * Create an `llm_as_judge` online-evaluation rule and return its id.
-     *
-     * Separate from `createAutomationRule` (which builds the
-     * `user_defined_metric_python` shape) because the two rule types carry
-     * completely different `code` blocks, and folding both into one signature
-     * would make every field optional — so a caller could build a rule the
-     * backend rejects and only find out at runtime.
-     *
-     * `customParameters` is passed through verbatim, including `null`: the
-     * whole point of a spec that round-trips this block is that the value the
-     * caller chose is the value that comes back, so nothing is defaulted here.
-     *
-     * Distinct from `createLlmJudgeRule` below, which defaults the model block
-     * and builds a single-entry schema for the message-shape specs. This one
-     * defaults nothing, because what it exists to seed is the exact model block
-     * a spec then asserts came back unchanged.
-     *
-     * Goes through `rawFetch` for the same two reasons `createAutomationRule`
-     * does: creation answers 201 with an empty body, so the id exists only in
-     * the `Location` header, and the id is parsed from there rather than
-     * recovered by a name lookup that could pick up an earlier run's leftovers.
-     */
-    async createLlmJudgeAutomationRule(args: {
-      projectId: string;
-      name: string;
-      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
-      samplingRate: number;
-      /** Provider model id as the picker stores it, e.g. `claude-haiku-4-5-20251001`. */
-      modelName: string;
-      temperature: number;
-      customParameters: Record<string, unknown> | null;
-      messages: Array<{ role: string; content: string }>;
-      /** Judge-prompt variable name -> extraction path (e.g. `output.answer`). */
-      variables: Record<string, string>;
-      schema: Array<{ name: string; type: string; description: string }>;
-      enabled?: boolean;
-    }): Promise<string> {
-      const { status, message, location } = await rawFetch(
-        'POST',
-        '/v1/private/automations/evaluators/',
-        {
-          body: {
-            type: 'llm_as_judge',
-            action: 'evaluator',
-            name: args.name,
-            project_ids: [args.projectId],
-            sampling_rate: args.samplingRate,
-            enabled: args.enabled ?? true,
-            code: {
-              model: {
-                name: args.modelName,
-                temperature: args.temperature,
-                custom_parameters: args.customParameters,
-              },
-              messages: args.messages.map((m) => ({
-                role: m.role,
-                content: m.content,
-              })),
-              variables: args.variables,
-              schema: args.schema,
-            },
-          },
-        },
-      );
-      if (status !== 201) {
-        throw new Error(
-          `createLlmJudgeAutomationRule: expected 201 for '${args.name}', got ${status}: ${message}`,
-        );
-      }
-      const id = location?.split('/').filter(Boolean).pop();
-      if (!id) {
-        throw new Error(
-          `createLlmJudgeAutomationRule: 201 for '${args.name}' carried no usable Location ` +
-            `header (got '${location}') — cannot address the rule.`,
-        );
-      }
-      return id;
-    },
-
-    /**
      * Create an LLM-as-judge rule and return its id.
      *
      * Separate from `createAutomationRule` (which only builds
@@ -1934,8 +1854,24 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the rule name: rule names carry the run namespace and can approach the
        * 150-char column bound, while a score name is a short human label, and
        * the edit dialog renders it as one.
+       *
+       * Ignored when `schema` is given explicitly.
        */
       scoreName?: string;
+      temperature?: number;
+      /**
+       * The model block's free-form slot (`thinking`, and anything else a
+       * caller persists alongside it). Omitted from the request entirely when
+       * not given, rather than sent as `null`: the round-trip specs assert that
+       * the value the caller chose is the value that comes back, so the two
+       * cases have to stay distinguishable.
+       */
+      customParameters?: Record<string, unknown> | null;
+      /**
+       * The whole output schema, for a caller that needs more than the single
+       * INTEGER entry `scoreName` builds — a BOOLEAN judge, or several scores.
+       */
+      schema?: Array<{ name: string; type: string; description: string }>;
       enabled?: boolean;
     }): Promise<string> {
       const scoreName = args.scoreName ?? 'Accuracy';
@@ -1951,14 +1887,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate ?? 1,
             enabled: args.enabled ?? true,
             code: {
-              model: { name: args.model ?? 'gpt-4o', temperature: 0 },
+              model: {
+                name: args.model ?? 'gpt-4o',
+                temperature: args.temperature ?? 0,
+                ...(args.customParameters === undefined
+                  ? {}
+                  : { custom_parameters: args.customParameters }),
+              },
               messages: args.messages.map((m) => ({
                 role: m.role,
                 ...(m.content === undefined ? {} : { content: m.content }),
                 ...(m.contentArray === undefined ? {} : { content_array: m.contentArray }),
               })),
               variables: args.variables ?? { output: 'output.output' },
-              schema: [
+              schema: args.schema ?? [
                 {
                   name: scoreName,
                   type: 'INTEGER',
