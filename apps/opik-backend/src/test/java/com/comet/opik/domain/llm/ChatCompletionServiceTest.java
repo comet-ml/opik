@@ -24,7 +24,9 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -47,6 +49,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -130,7 +133,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(expectedMessagePart)
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -151,7 +154,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(errorMessage)
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -171,7 +174,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("RuntimeException")
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -194,7 +197,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(rootCauseMessage)
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -272,7 +275,7 @@ class ChatCompletionServiceTest {
 
             // Then
             assertThat(thrown)
-                    .isInstanceOf(BadRequestException.class)
+                    .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Unsupported feature for the selected LLM provider")
                     .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
             assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
@@ -300,7 +303,7 @@ class ChatCompletionServiceTest {
 
             // Then
             assertThat(thrown)
-                    .isInstanceOf(BadRequestException.class)
+                    .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Unsupported feature for the selected LLM provider")
                     .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
             assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
@@ -323,7 +326,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId))
-                    .isInstanceOf(BadRequestException.class);
+                    .isExactlyInstanceOf(BadRequestException.class);
 
             // The provider was never reached, so there is no provider error to map.
             verify(llmProviderFactory, never()).getService(anyString(), anyString());
@@ -395,7 +398,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> retryingService.create(request, workspaceId))
-                    .isInstanceOf(BadRequestException.class);
+                    .isExactlyInstanceOf(BadRequestException.class);
 
             // UnsupportedFeatureException extends LangChain4jException, not NonRetriableException, so without the
             // fail-fast wrapper langchain4j's RetryPolicy would retry a call that can never succeed.
@@ -418,7 +421,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> retryingService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class);
+                    .isExactlyInstanceOf(InternalServerErrorException.class);
 
             verify(llmProviderService, atLeast(2)).generate(any(), anyString());
         }
@@ -471,7 +474,7 @@ class ChatCompletionServiceTest {
             // When & Then — createAndStreamResponse runs before Response.ok() is built, so nothing is committed yet
             // and this surfaces as a genuine 400
             assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
-                    .isInstanceOf(BadRequestException.class)
+                    .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining(ChatCompletionService.ERROR_EMPTY_MESSAGES);
 
             verify(handlers, never()).handleError(any());
@@ -515,7 +518,7 @@ class ChatCompletionServiceTest {
 
             // When & Then — not a client error, so it keeps its existing behaviour rather than becoming a 200
             assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isExactlyInstanceOf(IllegalStateException.class)
                     .hasMessage("connection pool exhausted");
 
             verify(handlers, never()).handleError(any());
@@ -534,7 +537,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider");
         }
     }
@@ -636,20 +639,21 @@ class ChatCompletionServiceTest {
         /**
          * The statuses the subscriber must retire, spelled out as a literal and used both to partition the
          * shared rows below and to assert every retryability outcome. Deliberately NOT
-         * {@link ChatCompletionService#isPermanentFailure}: a test that derives its expectation from the
-         * predicate under test agrees with that predicate even when it is wrong, so production and tests
-         * would regress together silently. The predicate's own mapping is pinned against its own literals
-         * by {@link #isPermanentFailure__whenStatus__thenMatchLiteralTable()}.
+         * {@link com.comet.opik.utils.HttpStatusRetryability#isPermanent}: a test that derives its
+         * expectation from the predicate under test agrees with that predicate even when it is wrong, so
+         * production and tests would regress together silently. That predicate's own mapping is pinned
+         * against its own literals by {@code HttpStatusRetryabilityTest}, which lives beside it because it
+         * is now the contract between this service and {@code BaseRedisSubscriber}.
          */
         private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 402, 403, 404, 413, 422, 499);
 
         /** The shared rows whose status is permanent, so their scoreTrace case needs no branch. */
-        private static Stream<Arguments> permanentProviderStatuses() {
+        private static Stream<Arguments> permanentProviderErrorCases() {
             return providerStatusProvider().filter(row -> PERMANENT_STATUSES.contains(row.get()[2]));
         }
 
         /** The complement, kept separate for the same reason. */
-        private static Stream<Arguments> transientProviderStatuses() {
+        private static Stream<Arguments> transientProviderErrorCases() {
             return providerStatusProvider().filter(row -> !PERMANENT_STATUSES.contains(row.get()[2]));
         }
 
@@ -712,7 +716,7 @@ class ChatCompletionServiceTest {
             var thrown = whenScoreTraceFails(new RuntimeException(new HttpException(status, label)),
                     Optional.empty());
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, status);
         }
 
         /**
@@ -740,6 +744,49 @@ class ChatCompletionServiceTest {
                     Optional.of(new ErrorMessage(mappedStatus, "provider body says " + mappedStatus)));
 
             assertRetryable(thrown);
+        }
+
+        /**
+         * Review finding from baz on this PR: {@code scoreTrace} reads only the wire status, while
+         * {@code create()} and the streaming handler prefer {@code getLlmProviderError}, so one failure can
+         * be reported with two different statuses. The divergence is real and deliberate, and it is pinned
+         * here rather than left to be rediscovered.
+         *
+         * <p>Unifying on the mapper is precisely what the classification PR removed. The mappers synthesize
+         * a status when they cannot parse a body ({@code CustomLlmErrorMessage} defaults to 400,
+         * {@code OpenAiErrorMessage} to 500) and nothing downstream can tell that from a genuinely parsed
+         * 400, so every unparseable CustomLlm failure would be retired on its first delivery and the
+         * evaluation lost. Unifying the other way — making {@code create()} ignore a body it did parse —
+         * would change the status HTTP callers already depend on, and buy this path nothing.
+         *
+         * <p>They diverge because they answer different questions. {@code create()} reports to a caller who
+         * reads the response, so the most specific reading of the body should win. {@code scoreTrace}
+         * decides whether a queued evaluation is redelivered or discarded, and only what the provider
+         * literally put on the wire is trustworthy enough to discard work.
+         */
+        @Test
+        @DisplayName("A mapper status disagreeing with the wire binds create(), never scoreTrace")
+        void whenMapperStatusDisagreesWithWire__thenCreateFollowsMapperAndScoreTraceFollowsWire() {
+            // The body parses to a permanent 401; the exception chain says transient 429.
+            var mapperReports401 = Optional.of(new ErrorMessage(401, "mapper parsed an auth failure"));
+
+            // create(): the parsed body wins, so the HTTP caller is told 401.
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(new RateLimitException("slow down"));
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(mapperReports401);
+
+            var fromCreate = catchThrowable(() -> chatCompletionService.create(request, "test-workspace-id"));
+
+            assertThat(fromCreate).isExactlyInstanceOf(ClientErrorException.class);
+            assertThat(((WebApplicationException) fromCreate).getResponse().getStatus())
+                    .as("create() answers a caller who reads the body, so the parsed status wins")
+                    .isEqualTo(401);
+
+            // scoreTrace: same failure, same mapper verdict, and the wire status still decides.
+            var fromScoreTrace = whenScoreTraceFails(new RateLimitException("slow down"), mapperReports401);
+
+            assertRetryable(fromScoreTrace, 429);
         }
 
         /**
@@ -780,33 +827,6 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * Pins the status-to-retryability mapping of {@link ChatCompletionService#isPermanentFailure}, the
-         * predicate production consults to decide whether a request can never succeed and so must be
-         * retired rather than retried.
-         *
-         * <p>This is the companion test {@link #PERMANENT_STATUSES} refers to. The expectations are the
-         * hand-written table below rather than {@code PERMANENT_STATUSES} itself: that set records which
-         * statuses the subscriber must retire, and deriving either from the other is exactly what would let
-         * production and tests regress together.
-         */
-        @ParameterizedTest(name = "isPermanentFailure({0}) == {1}")
-        @CsvSource({
-                // Client errors with nothing transient about them: this exact request can never succeed.
-                "400, true", "401, true", "402, true", "403, true", "404, true",
-                "413, true", "422, true", "499, true",
-                // 4xx by numbering, "not now" by meaning -- the whole reason family alone cannot decide.
-                "408, false", "425, false", "429, false",
-                // Server errors are the textbook retry case.
-                "500, false", "502, false", "503, false", "504, false",
-                // Outside the error families, so never permanent.
-                "200, false", "302, false",
-        })
-        @DisplayName("isPermanentFailure classifies each status, pinned independently of the suite's own table")
-        void isPermanentFailure__whenStatus__thenMatchLiteralTable(int status, boolean expectedPermanent) {
-            assertThat(ChatCompletionService.isPermanentFailure(status)).isEqualTo(expectedPermanent);
-        }
-
-        /**
          * Regression for the precedence bug caught in review of OPIK-8240.
          *
          * <p>The provider mappers synthesize a status when they cannot read one off the body:
@@ -828,7 +848,7 @@ class ChatCompletionServiceTest {
             var thrown = whenScoreTraceFails(providerFailure,
                     Optional.of(new ErrorMessage(syntheticStatus, "synthetic mapper fallback")));
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, wireStatus);
         }
 
         /** The harmless direction of the same precedence rule, kept so the rule is pinned both ways. */
@@ -857,7 +877,7 @@ class ChatCompletionServiceTest {
          * failures that could never succeed (the redaction-limit incident).
          */
         @ParameterizedTest(name = "scoreTrace: when {0}, then non-retryable {2}")
-        @MethodSource("permanentProviderStatuses")
+        @MethodSource("permanentProviderErrorCases")
         @DisplayName("Online scoring drops a permanent provider status instead of replaying it")
         void scoreTrace__whenPermanentProviderErrorUnparsed__thenNonRetryable(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
@@ -867,15 +887,15 @@ class ChatCompletionServiceTest {
             assertNonRetryable(thrown, expectedStatus);
         }
 
-        @ParameterizedTest(name = "scoreTrace: when {0}, then retryable")
-        @MethodSource("transientProviderStatuses")
+        @ParameterizedTest(name = "scoreTrace: when {0}, then retryable as {2}")
+        @MethodSource("transientProviderErrorCases")
         @DisplayName("Online scoring keeps a transient provider status retryable, honouring maxRetries")
         void scoreTrace__whenTransientProviderErrorUnparsed__thenRetryable(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
             var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
 
             assertThat(thrown).hasMessageContaining(expectedMessagePart);
-            assertRetryable(thrown);
+            assertRetryable(thrown, expectedStatus);
         }
 
         /**
@@ -957,13 +977,19 @@ class ChatCompletionServiceTest {
             assertNonRetryable(thrown, expectedStatus);
         }
 
-        @ParameterizedTest(name = "GAX {0} stays retryable")
-        @CsvSource({"RESOURCE_EXHAUSTED", "DEADLINE_EXCEEDED", "UNAVAILABLE", "INTERNAL", "UNKNOWN"})
+        @ParameterizedTest(name = "GAX {0} stays retryable as HTTP {1}")
+        @CsvSource({
+                "RESOURCE_EXHAUSTED, 429",
+                "DEADLINE_EXCEEDED, 504",
+                "UNAVAILABLE, 503",
+                "INTERNAL, 500",
+                "UNKNOWN, 500",
+        })
         @DisplayName("A transient VertexAI GAX failure still honours maxRetries")
-        void scoreTrace__whenTransientGaxStatus__thenRetryable(StatusCode.Code code) {
+        void scoreTrace__whenTransientGaxStatus__thenRetryable(StatusCode.Code code, int expectedStatus) {
             var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, false)), Optional.empty());
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, expectedStatus);
         }
 
         /**
@@ -1036,13 +1062,13 @@ class ChatCompletionServiceTest {
             assertNonRetryable(thrown, status);
         }
 
-        @ParameterizedTest(name = "Responses SDK {0} -> retryable")
+        @ParameterizedTest(name = "Responses SDK {0} -> retryable, status preserved")
         @CsvSource({"408", "429", "500", "503"})
-        @DisplayName("A transient OpenAI Responses failure stays retryable")
+        @DisplayName("A transient OpenAI Responses failure keeps its status and stays retryable")
         void scoreTrace__whenTransientResponsesSdkStatus__thenRetryable(int status) {
             var thrown = whenScoreTraceFails(new RuntimeException(responsesException(status)), Optional.empty());
 
-            assertRetryable(thrown);
+            assertRetryable(thrown, status);
         }
 
         /**
@@ -1166,22 +1192,40 @@ class ChatCompletionServiceTest {
                     .contains(expectedStatus);
             assertThat(thrown)
                     .as("a permanent status must arrive as ClientErrorException, which the subscriber retires")
-                    .isInstanceOf(ClientErrorException.class);
+                    .isExactlyInstanceOf(ClientErrorException.class);
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
         /**
-         * Every retryable failure is flattened to a blanket 500 on this path: BaseRedisSubscriber matches
-         * ClientErrorException by class, so a truthful 429 would be acked and dropped. The status is
-         * therefore deliberately NOT the provider's own here — that only becomes safe once the subscriber
-         * classifies by status.
+         * For a failure that carried a real wire status: the status must be reported verbatim, not
+         * flattened. Without this, reintroducing the blanket-500 workaround would pass every retryability
+         * assertion — a 500 is retryable too, so "not permanent" alone cannot see the lie.
+         */
+        private void assertRetryable(Throwable thrown, int expectedStatus) {
+            assertRetryable(thrown);
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus())
+                    .as("a transient provider status must reach the subscriber verbatim, not as a blanket 500")
+                    .isEqualTo(expectedStatus);
+        }
+
+        /**
+         * Retryable is asserted against the literal permanent set, not the production predicate, so a
+         * regression in {@code HttpStatusRetryability} cannot make these tests agree with broken behaviour.
          */
         private void assertRetryable(Throwable thrown) {
+            assertThat(thrown).isInstanceOf(WebApplicationException.class);
+            var status = ((WebApplicationException) thrown).getResponse().getStatus();
+            // Exact, not just assignable: scoreTrace raises only these two, and asserting
+            // ServerErrorException exactly is what fails if the blanket InternalServerErrorException(500)
+            // workaround is ever reintroduced -- it is a subclass, so isInstanceOf would still pass.
             assertThat(thrown)
-                    .as("a status that may clear on retry must stay outside NON_RETRYABLE_EXCEPTIONS")
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .isNotInstanceOf(ClientErrorException.class);
-            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
+                    .as("status %d must arrive as the type its family implies", status)
+                    .isExactlyInstanceOf(familyOf(status) == Response.Status.Family.CLIENT_ERROR
+                            ? ClientErrorException.class
+                            : ServerErrorException.class);
+            assertThat(PERMANENT_STATUSES)
+                    .as("status %d must stay retryable so the subscriber redelivers it", status)
+                    .doesNotContain(status);
         }
 
         @ParameterizedTest(name = "streaming: when {0}, then stream status {2}")
@@ -1269,7 +1313,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessage(expectedMessage);
         }
 
@@ -1289,7 +1333,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("Service is unreachable")
                     .hasMessageContaining(customMessage);

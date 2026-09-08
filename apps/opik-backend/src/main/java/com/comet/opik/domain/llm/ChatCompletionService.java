@@ -3,9 +3,9 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.exception.AuthenticationException;
@@ -40,7 +40,6 @@ import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -142,39 +141,35 @@ public class ChatCompletionService {
             log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             chatResponse = retryPolicy.withRetry(
-                    () -> failFastOnPermanentFailure(
-                            () -> failFastOnUnsupportedFeature(() -> languageModelClient.chat(chatRequest))));
+                    () -> failFastOnNonRetriableFailure(() -> languageModelClient.chat(chatRequest)));
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
 
-            // Deliberately NOT failHandlingLLMProviderError here, unlike create() and the streaming handler:
-            // those answer an HTTP caller and want the status verbatim, whereas this answers the online-
-            // scoring subscribers, where the thrown TYPE decides retryability. BaseRedisSubscriber matches
-            // ClientErrorException by class, so recovering the status here would make the whole 4xx family
-            // non-retryable, transient 408s and 429s included.
+            // Report the status the provider actually sent, same as create() and the streaming handler.
+            // BaseRedisSubscriber classifies a ClientErrorException by that status, so a truthful 429 is
+            // redelivered and a truthful 400 is retired; this no longer has to misreport either.
             //
-            // Permanence is decided only from a status the provider actually sent. The mappers synthesize
-            // one when they cannot parse the body (CustomLlm 400, OpenAi 500) and nothing downstream can
-            // tell that apart from a real 400, so consulting them would drop every unparseable CustomLlm
-            // failure on its first delivery. Retrying a permanent error costs maxRetries attempts; dropping
-            // an unknown one loses the evaluation, so an absent status stays retryable.
-            var wireStatus = findProviderHttpStatus(runtimeException);
+            // Only a wire status is used. The provider mappers synthesize one when they cannot parse the body
+            // (CustomLlm 400, OpenAi 500) and nothing downstream can tell that from a real 400, so consulting
+            // them would retire every unparseable CustomLlm failure on its first delivery. An absent status
+            // falls through to 500 and stays retryable: burning maxRetries on a doomed request costs attempts,
+            // losing an unknown failure costs the evaluation.
+            var status = findProviderHttpStatus(runtimeException)
+                    .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
 
-            if (wireStatus.filter(ChatCompletionService::isPermanentFailure).isPresent()) {
-                // The subscriber acks and removes on the first delivery rather than burning
-                // maxRetries x pendingMessageDuration on a request whose outcome cannot change.
-                throw new ClientErrorException(buildDetailedErrorMessage(runtimeException), wireStatus.get(),
-                        runtimeException);
+            var detail = buildDetailedErrorMessage(runtimeException);
+            // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
+            // cause is carried through, unlike failHandlingLLMProviderError, because this exception is logged
+            // rather than serialized to an HTTP caller and the provider stack is the diagnostic.
+            if (familyOf(status) == Response.Status.Family.CLIENT_ERROR) {
+                throw new ClientErrorException(detail, status, runtimeException);
             }
-            // Everything else stays a blanket 500 so it lands outside NON_RETRYABLE_EXCEPTIONS and honours
-            // onlineScoring.maxRetries -- including transient 4xx, a distinction ClientErrorException
-            // cannot express on its own while the subscriber matches it by class.
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
+            throw new ServerErrorException(detail, status, runtimeException);
         } finally {
             // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
             if (languageModelClient instanceof AutoCloseable closeable) {
@@ -195,27 +190,52 @@ public class ChatCompletionService {
      * original exception is kept as the cause, so {@link #failIfUnsupportedFeature} still recognises it downstream.
      */
     private <T> T failFastOnUnsupportedFeature(Callable<T> action) throws Exception {
-        return failFastWhen(action, runtimeException -> findUnsupportedFeature(runtimeException).isPresent());
+        return failFastWhen(action, this::isUnsupportedFeature);
     }
 
     /**
-     * Skips the in-process retries for a provider status that can never succeed, mirroring
-     * {@link #failFastOnUnsupportedFeature}. Applied only on the scoreTrace path: {@code create()} answers an HTTP
-     * caller, and narrowing its retry behaviour is not this change's business. Mainly reached for VertexAI, whose GAX
-     * exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail fast
-     * on their own. The cause is preserved, so the catch block still classifies from the same status.
+     * Fails fast for {@code scoreTrace} when the failure can never succeed, so the in-process retry budget is not
+     * spent on a doomed call.
+     *
+     * <p>Review finding on #8169: this used to be {@code failFastOnPermanentFailure} wrapped around
+     * {@code failFastOnUnsupportedFeature} at the call site — two levels of indirection for what is one decision,
+     * and awkward to reason about because neither level named what it was really asking. Both conditions mean the
+     * same thing and both are raised the same way by {@link #failFastWhen}, so they are one predicate here, with
+     * each reason its own named method so it can be read — and exercised — independently.
+     *
+     * <p>Permanence is deliberately narrow, and broadening it silently loses evaluations.
+     * {@link HttpStatusRetryability} carves 408, 425 and 429 out of the client-error family because they mean "not
+     * now" rather than "not ever" — diverging from langchain4j on 425 per RFC 8470 — and a failure that never
+     * reached the wire yields no status at all, so it stays retryable. Both carve-outs matter beyond this method:
+     * the status thrown from the catch block is also what {@code BaseRedisSubscriber} classifies by, so anything
+     * treated as permanent is acked and dropped on its first delivery instead of being redelivered.
+     *
+     * <p>Only scoreTrace fails fast on a permanent status: {@code create()} answers an HTTP caller, and narrowing
+     * its retry behaviour is not this change's business. The permanent check is mainly reached for VertexAI, whose
+     * GAX exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail
+     * fast on their own. The cause is preserved either way, so the catch block still classifies from the same status.
      */
-    private <T> T failFastOnPermanentFailure(Callable<T> action) throws Exception {
-        return failFastWhen(action,
-                runtimeException -> findProviderHttpStatus(runtimeException)
-                        .filter(ChatCompletionService::isPermanentFailure)
-                        .isPresent());
+    private <T> T failFastOnNonRetriableFailure(Callable<T> action) throws Exception {
+        return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isPermanentProviderFailure(runtimeException));
+    }
+
+    /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
+    private boolean isUnsupportedFeature(RuntimeException runtimeException) {
+        return findUnsupportedFeature(runtimeException).isPresent();
+    }
+
+    /** A status the provider actually sent that {@link HttpStatusRetryability} classifies as never succeeding. */
+    private boolean isPermanentProviderFailure(RuntimeException runtimeException) {
+        return findProviderHttpStatus(runtimeException)
+                .filter(HttpStatusRetryability::isPermanent)
+                .isPresent();
     }
 
     /**
-     * Shared mechanism for both fail-fast wrappers: run the action, and rewrap a matching failure as
+     * Shared mechanism for the fail-fast wrappers: run the action, and rewrap a matching failure as
      * {@link NonRetriableException} so {@code RetryPolicy.withRetry} gives up on the first attempt. Only the
-     * predicate differs between the two, so keeping one copy of the propagation means a future change to how
+     * predicate differs between them, so keeping one copy of the propagation means a future change to how
      * NonRetriableException is raised cannot apply to one and not the other. The cause is always preserved.
      */
     private <T> T failFastWhen(Callable<T> action, Predicate<RuntimeException> nonRetriable) throws Exception {
@@ -304,6 +324,11 @@ public class ChatCompletionService {
      * chain before any typed exception is considered, because it carries the upstream code verbatim: langchain4j's
      * {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))}, and taking the outermost
      * match would collapse that 503 into the flat 500 the typed exception implies.
+     *
+     * <p>Review finding on #8170 asked whether an outer wrapper's status can shadow a nested provider one, since
+     * {@code ExceptionUtils} lists the chain outermost-first. It cannot: {@code HttpException}'s only constructor is
+     * {@code (int, String)}, so it never carries a cause and is always terminal in the chain. At most one can appear,
+     * and the {@code findFirst} here is therefore not a precedence choice between rival wire statuses.
      */
     private Optional<Integer> findProviderHttpStatus(Throwable throwable) {
         List<Throwable> chain = ExceptionUtils.getThrowableList(throwable);
@@ -345,7 +370,11 @@ public class ChatCompletionService {
      * the gRPC and HTTP-JSON transports, rather than a table of our own.
      *
      * <p>An exception GAX marks retryable yields no status, so <em>within this method</em> the mapping can only
-     * prevent a drop, never cause one. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
+     * prevent a drop, never cause one. That costs reporting fidelity — such a failure is reported as a flat 500
+     * rather than, say, the 503 GAX translated — and it is kept deliberately: returning the status regardless would
+     * let a GAX-retryable client-error code that {@link HttpStatusRetryability} does not carve out (ABORTED maps to
+     * 409, for instance) be classified permanent, and both this fail-fast and {@code BaseRedisSubscriber} would then
+     * drop an evaluation GAX itself says is worth retrying. Trading a precise status for that is not worth it. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
      * {@code HttpException} in the chain first, and a wire status legitimately outranks GAX's {@code isRetryable},
      * which is a configured judgment rather than something the server said. Not reachable for VertexAI in any case —
      * {@code VertexAiGeminiChatModel} goes through the Google Cloud SDK and never produces a langchain4j
@@ -358,31 +387,6 @@ public class ChatCompletionService {
         return Optional.ofNullable(apiException.getStatusCode())
                 .map(StatusCode::getCode)
                 .map(StatusCode.Code::getHttpStatusCode);
-    }
-
-    /** 425 Too Early has no {@link Response.Status} constant; 408 and 429 do and are used directly. */
-    private static final int TOO_EARLY_STATUS = 425;
-
-    /**
-     * 4xx statuses that say "not now", not "not ever", so family alone can't decide retryability.
-     * langchain4j agrees on 408 and 429 but maps 425 to a non-retriable {@code InvalidRequestException};
-     * we diverge deliberately per RFC 8470, which is safe because retryability is read from the wire
-     * status, not the mapped type.
-     */
-    private static final Set<Integer> TRANSIENT_CLIENT_ERRORS = Set.of(
-            Response.Status.REQUEST_TIMEOUT.getStatusCode(),
-            TOO_EARLY_STATUS,
-            Response.Status.TOO_MANY_REQUESTS.getStatusCode());
-
-    /**
-     * Whether this exact request can never succeed, so the caller should give up rather than retry.
-     * Server errors are excluded: a 5xx is the textbook retry case. Anything unrecognised is retryable,
-     * matching {@code BaseRedisSubscriber}'s "unknown defaults to retryable for safety".
-     */
-    @VisibleForTesting
-    static boolean isPermanentFailure(int status) {
-        return familyOf(status) == Response.Status.Family.CLIENT_ERROR
-                && !TRANSIENT_CLIENT_ERRORS.contains(status);
     }
 
     /**
