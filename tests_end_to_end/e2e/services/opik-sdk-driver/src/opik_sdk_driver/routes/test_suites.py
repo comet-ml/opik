@@ -73,7 +73,7 @@ def insert_test_suite_items(
             name=body.suite_name, project_name=body.project_name
         )
         items = [item.model_dump(exclude_none=True) for item in body.items]
-        suite.insert(items)
+        suite.insert(items, deduplication=body.deduplication)
         suite_id = str(suite.id)
     finally:
         client.end(flush=True)

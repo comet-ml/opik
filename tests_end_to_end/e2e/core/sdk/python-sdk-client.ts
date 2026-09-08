@@ -60,14 +60,34 @@ export interface PythonSdkClient {
    * One `Dataset.insert(...)` into an existing dataset — and therefore exactly
    * one new dataset version, however many 1000-item batches the SDK splits the
    * payload into. `num_threads` > 1 uploads those batches in parallel.
+   * `deduplication: false` bypasses the content-hash dedup path, so identical
+   * content sent twice is stored twice.
    */
   insertDatasetItems(args: {
     dataset_name: string;
     project_name: string;
     items: Array<Record<string, unknown>>;
     num_threads?: number;
+    deduplication?: boolean;
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number }>;
+  /**
+   * Several `Dataset.insert(...)` calls sharing ONE `Dataset` object — the
+   * shape `insertDatasetItems` cannot express, because the bridge builds a
+   * fresh client per request and a backend-fetched `Dataset` always starts
+   * with its hash cache unsynced. Reach for this only when one insert's effect
+   * on the NEXT one is the subject; otherwise use `insertDatasetItems`.
+   */
+  insertDatasetItemsSession(args: {
+    dataset_name: string;
+    project_name: string;
+    inserts: Array<{
+      items: Array<Record<string, unknown>>;
+      num_threads?: number;
+      deduplication?: boolean;
+    }>;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number[] }>;
   /**
    * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
    * order it returned them** — the property a concurrent paged read has to
@@ -188,6 +208,7 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  /** `deduplication: false` stores identical test cases as separate items. */
   insertTestSuiteItems(args: {
     suite_name: string;
     project_name: string;
@@ -196,6 +217,7 @@ export interface PythonSdkClient {
       assertions?: string[];
       description?: string;
     }>;
+    deduplication?: boolean;
     workspace?: string;
   }): Promise<{ suite_id: string; inserted: number }>;
   runTestSuite(args: {
@@ -371,6 +393,16 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       return request<{ dataset_id: string; inserted: number }>(
         'POST',
         '/datasets/insert-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async insertDatasetItemsSession(args) {
+      // Same budget as insertDatasetItems, and for the same reason — except
+      // this route runs several inserts back to back inside one request.
+      return request<{ dataset_id: string; inserted: number[] }>(
+        'POST',
+        '/datasets/insert-items-session',
         args,
         { timeoutMs: 180_000 },
       );
