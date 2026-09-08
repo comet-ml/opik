@@ -998,6 +998,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         .map((a) => ({ id: String(a.id), name: a.name as string }));
     },
 
+    // Alerts scoped to one project, for teardown that cannot lean on a name
+    // prefix: the alert form generates names itself from the selected
+    // triggers, so a UI-created alert may carry no test namespace at all.
+    // Same workspace-wide page as listAlertsWithPrefix — findAlerts has no
+    // server-side project filter either — but `project_id` is on the payload,
+    // so the filter is exact rather than a string guess.
+    async listAlertsInProject(projectId: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.alerts.findAlerts({ size: 500, page }), 500);
+      return content
+        .filter((a) => a.projectId === projectId)
+        .map((a) => ({ id: String(a.id), name: String(a.name ?? '') }));
+    },
+
     async deleteAlertsBatch(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
       await opik.api.alerts.deleteAlertBatch({ ids });
