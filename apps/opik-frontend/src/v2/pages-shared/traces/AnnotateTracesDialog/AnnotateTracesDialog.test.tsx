@@ -201,9 +201,7 @@ describe("AnnotateTracesDialog", () => {
     fireEvent.click(
       screen.getByTestId("annotate-bulk-score-select-option-satisfaction"),
     );
-    fireEvent.click(
-      screen.getByTestId("annotate-bulk-category-select-option-good"),
-    );
+    fireEvent.click(screen.getByTestId("annotate-bulk-category-toggle-good"));
 
     await waitFor(() => {
       expect(screen.getByTestId("annotate-bulk-apply-button")).toBeEnabled();

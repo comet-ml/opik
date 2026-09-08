@@ -18,13 +18,12 @@ import {
   FEEDBACK_DEFINITION_TYPE,
   FeedbackDefinition,
 } from "@/types/feedback-definitions";
-import { isNumericFeedbackScoreValid } from "@/lib/traces";
-import DebounceInput from "@/shared/DebounceInput/DebounceInput";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { SelectItem } from "@/ui/select";
 import { DropdownOption } from "@/types/shared";
 import { Textarea } from "@/ui/textarea";
+import FeedbackScoreValueInput from "@/v2/pages-shared/traces/FeedbackScoreValueInput/FeedbackScoreValueInput";
+import { isNumericFeedbackScoreValid } from "@/lib/traces";
 
 const MAX_ANNOTATE_ROWS = 500;
 const MAX_CONCURRENT_ANNOTATIONS = 5;
@@ -113,27 +112,6 @@ const AnnotateTracesDialog: React.FunctionComponent<
     }));
   }, []);
 
-  const handleNumericValueChange = useCallback(
-    (value: string | number | readonly string[] | undefined) => {
-      const num =
-        typeof value === "string" && value !== "" ? Number(value) : value;
-      if (
-        typeof num !== "number" ||
-        Number.isNaN(num) ||
-        !selectedDefinition ||
-        !isNumericFeedbackScoreValid(
-          selectedDefinition.details as { min: number; max: number },
-          num,
-        )
-      ) {
-        setDraft((d) => ({ ...d, value: undefined }));
-        return;
-      }
-      setDraft((d) => ({ ...d, value: num }));
-    },
-    [selectedDefinition],
-  );
-
   const handleApply = useCallback(async () => {
     if (!isValueValid || !draft.name || draft.value === undefined) {
       return;
@@ -214,113 +192,6 @@ const AnnotateTracesDialog: React.FunctionComponent<
     toast,
   ]);
 
-  const renderValueInput = () => {
-    if (!selectedDefinition) {
-      return null;
-    }
-
-    if (selectedDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
-      return (
-        <DebounceInput
-          className="my-0.5 h-8 min-w-[120px] py-1"
-          max={selectedDefinition.details.max}
-          min={selectedDefinition.details.min}
-          step="any"
-          dimension="sm"
-          delay={300}
-          onValueChange={handleNumericValueChange}
-          placeholder="Score"
-          type="number"
-          value={draft.value ?? ""}
-          data-testid="annotate-bulk-score-input"
-        />
-      );
-    }
-
-    if (selectedDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
-      return (
-        <ToggleGroup
-          className="min-w-fit p-0.5"
-          onValueChange={(value?: string) => {
-            if (!value) {
-              return;
-            }
-            setDraft((d) => ({
-              ...d,
-              value: value === selectedDefinition.details.true_label ? 1 : 0,
-              categoryName: value,
-            }));
-          }}
-          variant="outline"
-          type="single"
-          size="md"
-          value={draft.categoryName ?? ""}
-        >
-          <ToggleGroupItem
-            className="w-full"
-            key="true"
-            value={selectedDefinition.details.true_label}
-          >
-            {selectedDefinition.details.true_label}
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            className="w-full"
-            key="false"
-            value={selectedDefinition.details.false_label}
-          >
-            {selectedDefinition.details.false_label}
-          </ToggleGroupItem>
-        </ToggleGroup>
-      );
-    }
-
-    if (selectedDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
-      const categoricalOptionList = Object.entries(
-        selectedDefinition.details.categories,
-      ).map(([name, value]) => ({
-        label: name,
-        value: name,
-        description: String(value),
-      }));
-
-      return (
-        <SelectBox
-          value={draft.categoryName ?? ""}
-          options={categoricalOptionList}
-          onChange={(value?: string) => {
-            if (!value) {
-              return;
-            }
-            const categoryValue = Object.entries(
-              selectedDefinition.details.categories,
-            ).find(([categoryName]) => categoryName === value)?.[1];
-
-            setDraft((d) => ({
-              ...d,
-              categoryName: value,
-              value: categoryValue,
-            }));
-          }}
-          className="my-0.5 h-8 min-w-[160px] py-1"
-          testId="annotate-bulk-category-select"
-          renderTrigger={(value) => {
-            if (!value) {
-              return <div className="truncate">Select a category</div>;
-            }
-            return <span className="text-nowrap">{value}</span>;
-          }}
-          renderOption={(option: DropdownOption<string>) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.value} ({option.description})
-            </SelectItem>
-          )}
-        />
-      );
-    }
-
-    return null;
-  };
-
   return (
     <Dialog open={Boolean(open)} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg" data-testid="annotate-bulk-dialog">
@@ -378,7 +249,22 @@ const AnnotateTracesDialog: React.FunctionComponent<
               {selectedDefinition && (
                 <div>
                   <div className="comet-body-s-accented pb-1">Value</div>
-                  {renderValueInput()}
+                  <FeedbackScoreValueInput
+                    feedbackDefinition={selectedDefinition}
+                    value={draft.value ?? ""}
+                    categoryName={draft.categoryName}
+                    onChange={({
+                      value: newValue,
+                      categoryName: newCategory,
+                    }) =>
+                      setDraft((d) => ({
+                        ...d,
+                        value: newValue,
+                        categoryName: newCategory,
+                      }))
+                    }
+                    testIdPrefix="annotate-bulk"
+                  />
                 </div>
               )}
               {selectedDefinition && (
