@@ -13,7 +13,8 @@ try:  # pragma: no cover - optional dependency
 except ImportError:  # pragma: no cover - optional dependency
     nltk_chrf_score = None
 
-ChrFFn = Callable[[Sequence[str], Sequence[str]], float]
+# The candidate is a single string; only the references are a sequence.
+ChrFFn = Callable[[str, Sequence[str]], float]
 
 
 class ChrF(BaseMetric):
@@ -24,6 +25,12 @@ class ChrF(BaseMetric):
     computes chrF (character n-gram overlap). chrF++ (word n-grams via ``word_order``)
     is not supported by the NLTK backend; provide a custom ``chrf_fn`` to compute it.
     Scores range from `0.0` (no overlap) to `1.0` (perfect match).
+
+    When several references are supplied, the default backend scores the candidate
+    against each reference separately and returns the **best** (highest) score, the
+    standard multi-reference behaviour for chrF. NLTK's ``sentence_chrf`` accepts a
+    single reference only, so a list handed to it directly would be joined into one
+    string and score lower than the best individual match.
 
     References:
       - Popović, "chrF: character n-gram F-score for automatic MT evaluation" (WMT 2015)
@@ -44,7 +51,11 @@ class ChrF(BaseMetric):
         word_order: Maximum word n-gram order for chrF++. Not supported by the
             default NLTK backend; provide ``chrf_fn`` to use it.
         lowercase: Whether to lowercase candidate and references prior to scoring.
-        chrf_fn: Optional custom scoring callable for testing or offline usage.
+        chrf_fn: Optional custom scoring callable ``(candidate, references) -> float``
+            receiving the candidate string and the sequence of reference strings,
+            for testing or offline usage. Note this differs from NLTK's
+            ``sentence_chrf``, which takes a single reference — supplying it
+            directly means multi-reference scoring is left to your callable.
 
     Example:
         >>> from opik.evaluation.metrics import ChrF
@@ -85,20 +96,36 @@ class ChrF(BaseMetric):
                     " `pip install nltk` or provide `chrf_fn`."
                 )
 
-            def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
-                try:
-                    return float(
-                        nltk_chrf_score.sentence_chrf(
-                            references,
-                            candidate,
-                            max_len=self._char_order,
-                            beta=self._beta,
-                            ignore_whitespace=self._ignore_whitespace,
-                        )
+            def _score_single(candidate: str, reference: str) -> float:
+                # `sentence_chrf` has accepted these keywords since NLTK 3.4
+                # (2018-11-17), the release that added `ignore_whitespace`:
+                # https://github.com/nltk/nltk/blob/3.4/nltk/translate/chrf_score.py#L18
+                # It is unchanged in the latest release:
+                # https://github.com/nltk/nltk/blob/3.9.1/nltk/translate/chrf_score.py#L16
+                # Every NLTK release installable on the Python versions this SDK
+                # supports is newer than 3.4, so a TypeError here would signal a
+                # genuine error rather than an old NLTK. Catching it would mask
+                # that and silently drop char_order/beta/ignore_whitespace, so
+                # let it propagate.
+                return float(
+                    nltk_chrf_score.sentence_chrf(
+                        reference,
+                        candidate,
+                        max_len=self._char_order,
+                        beta=self._beta,
+                        ignore_whitespace=self._ignore_whitespace,
                     )
-                except TypeError:
-                    # Older NLTK versions expose the helper with fewer keyword arguments.
-                    return float(nltk_chrf_score.sentence_chrf(references, candidate))
+                )
+
+            def _compute(candidate: str, references: Sequence[str]) -> float:
+                # NLTK's sentence_chrf scores against a *single* reference; handing
+                # it the whole list makes NLTK join the references into one string,
+                # which drags the score down instead of rewarding the best match.
+                # Score each reference on its own and keep the highest, the standard
+                # multi-reference behaviour for chrF.
+                return max(
+                    _score_single(candidate, reference) for reference in references
+                )
 
             self._chrf_fn = _compute
 
