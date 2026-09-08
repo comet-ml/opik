@@ -249,6 +249,8 @@ areas:
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-attachments.spec.ts
+      - trace-explore/trace-id-time-window.spec.ts
+      - trace-explore/trace-partial-update-merge.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -264,6 +266,7 @@ areas:
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
+      messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details" }
       agent-graph-tab:        { covered: false }
       prompts-tab:            { covered: false, note: "PromptsTab — conditional on opik_prompts metadata + canViewPrompts, like agent-graph-tab" }
       attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
@@ -271,6 +274,7 @@ areas:
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
+      update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
@@ -506,9 +510,12 @@ areas:
       - datasets/dataset-version-counters.spec.ts
       - datasets/dataset-version-repeated-item-id.spec.ts
       - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-item-count.spec.ts
+      - datasets/dataset-parallel-item-read.spec.ts
+      - datasets/dataset-read-version-pinning.spec.ts
       - datasets/dataset-list-summary-columns.spec.ts
     capabilities:
-      list-datasets:          { covered: true,  tier: t1-smoke, note: "t1 asserts the row renders; t2 adds the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version asserted per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages; and on screen, Item count plus the two recency columns populated on exactly the right rows" }
+      list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete; t2 also asserts the rest of the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version — per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages, and on screen the Item count plus the two recency columns populated on exactly the right rows" }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
       create-dataset-sdk:     { covered: true,  tier: t1-smoke }
       view-items:             { covered: true,  tier: t1-smoke }
@@ -518,7 +525,7 @@ areas:
       filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
       filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
-      sdk-round-trip:         { covered: true,  tier: t1-smoke }
+      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read" }
       version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50) and a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent)" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
@@ -653,6 +660,8 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
+      - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
       - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
@@ -660,17 +669,32 @@ areas:
       create-python-rule:      { covered: true,  tier: t1-smoke }
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
-      list-rules:              { covered: false }
+      list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
-      # Scoped on purpose. The spec opens a rule's edit dialog and saves it with
-      # no field changed, asserting the model's custom_parameters survive the
-      # round-trip — the payload the form serializes AND the persisted blob.
-      # It does not drive any individual editor control, so editing a rule's
-      # prompt, model, variables or scope is still uncovered.
-      edit-rule:               { covered: true,  tier: t2-cuj, note: "unedited save only: LLM-judge rule seeded over REST with model.custom_parameters, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key. Editing individual fields is not covered" }
+      # Scoped, and the three parts are not equally scoped:
+      #   - plain-string prompt: the edit dialog IS opened, its hydrated prompt
+      #     asserted byte-exact, and submitted unchanged, so the UI save round
+      #     trip is real.
+      #   - content_array prompt: API-level only. The dialog renders no image
+      #     part, so the url/detail that a regression would drop are not
+      #     observable in the UI; that half is a read-then-write over REST and
+      #     no dialog gesture is made.
+      #   - model custom_parameters: the edit dialog IS opened and submitted
+      #     with no field changed, asserting the model's custom_parameters
+      #     survive — the payload the form serializes AND the persisted blob.
+      # Editing a FIELD through the dialog (renaming, changing the model,
+      # rewriting the prompt, changing variables or scope) is still uncovered by
+      # all three.
+      #
+      # OPEN, needs a human call: the content_array test asserts judge-message
+      # content-SHAPE preservation, which no capability in this area names. It
+      # rides on edit-rule for want of a better key. Either add a capability for
+      # it or drop that tag and leave the behaviour honestly uncovered — do not
+      # let it sit here as a silent widening of edit-rule.
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; model custom_parameters: rule seeded over REST, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       # Deliberately still false. online-evaluation-python-metric-errors.spec.ts
@@ -694,23 +718,30 @@ areas:
     label: Alerts
     nav_group: Production
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
+    spec_dir: alerts
     specs:
+      - alerts/alerts-crud.spec.ts
     capabilities:
-      list-alerts:         { covered: false }
-      create-alert:        { covered: false }
-      edit-alert:          { covered: false }
-      event-triggers:      { covered: false }
-      webhook-destination: { covered: false }
-      enable-disable:      { covered: false }
-      delete-alert:        { covered: false }
+      list-alerts:         { covered: true,  tier: t1-smoke }
+      create-alert:        { covered: true,  tier: t1-smoke }
+      edit-alert:          { covered: true,  tier: t2-cuj }
+      event-triggers:      { covered: true,  tier: t2-cuj }
+      webhook-destination: { covered: true,  tier: t1-smoke }
+      enable-disable:      { covered: true,  tier: t2-cuj }
+      delete-alert:        { covered: true,  tier: t2-cuj }
+      # "Test connection" / "Test trigger" POST the draft alert to the endpoint
+      # in the form. Asserting a *success* needs a receiver the suite controls;
+      # against example.com the mutation answers failure, so a passing test
+      # would only be pinning the error toast. Left uncovered until a receiver
+      # exists rather than covered by asserting the sad path.
       test-alert:          { covered: false }
-
-  # ===================== ASSISTANT / CONNECT =====================
 
     visual:
       alerts-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E12" }
       alerts-list:  { covered: false, state: default }
       alert-editor: { covered: false, state: default }
+
+  # ===================== ASSISTANT / CONNECT =====================
 
   ollie:
     label: Opik Connect

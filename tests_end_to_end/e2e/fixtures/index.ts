@@ -105,6 +105,14 @@ export type {
   TraceAttachmentsFixtures,
 } from './trace-attachments.fixture';
 export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type { IdAgedTraceRef, IdAgedTracesFixtures } from './id-aged-traces.fixture';
+export type {
+  AlertSeed,
+  AlertRef,
+  AlertEventType,
+  AlertFixtures,
+} from './alert.fixture';
+export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
 export type {
   SummarisedDatasetShape,
   SummarisedDatasetRef,

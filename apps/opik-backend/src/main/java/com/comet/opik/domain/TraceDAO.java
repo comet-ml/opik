@@ -1967,40 +1967,22 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-     * Deletes by the full {@code (workspace_id, project_id, id)} sort key, matching on {@code (project_id, id)} tuples
-     * so a single statement can span several projects (e.g. a reused id resolved to all its owning projects, or a
-     * cross-project batch) instead of one delete per project (OPIK-7483). Every deleted row carries its {@code
-     * project_id}, so no delete is ever project-less - also required once {@code traces} is a Distributed table
-     * (OPIK-7455).
+     * Deletes by the full {@code (workspace_id, project_id, id)} sort key, matching {@code (project_id, id)} tuples so
+     * one statement can span several projects (OPIK-7483). Pairs are bound as two arrays and zipped, so the query text
+     * is constant regardless of batch size.
      * <p>
-     * {@code <if(partitions)>} adds the table's own weekly partition expression, bound as the set of partitions the
-     * batch's ids resolve to. It is emitted whenever every id in the batch is one whose partition can be derived
-     * exactly ({@link WeeklyPartitions#of}); otherwise the predicate is omitted and the statement is byte-identical to
-     * the previous unbounded form. That is what preserves the original guarantee — a row whose {@code id_at} cannot be
-     * trusted is still deleted, because no id in such a batch is used to derive a partition.
+     * {@code <if(partition)>} adds {@code IN PARTITION}, which scopes which <b>parts</b> the mutation is registered
+     * against — a {@code WHERE} clause cannot, since parts are selected before it is considered, which is why a delete
+     * of a few rows rewrote all ~3,650 parts and timed out. Omitted for the unbounded fallback.
      * <p>
-     * No schema flag gates it. {@link WeeklyPartitions} derives a value per {@code id_at} type the mutation may meet
-     * — the legacy 32-bit {@code DateTime} of {@code traces} as well as the {@code DateTime64(0)} of the partitioned
-     * successor — so one rendered statement is correct on both sides of the cutover EXCHANGE, in either direction, with
-     * nothing to flip and nothing to revert on rollback.
-     * <p>
-     * Why it matters: a mutation selects parts at the <b>partition</b> stage, where the (workspace_id, project_id, id)
-     * predicate prunes nothing, so deleting a handful of rows rewrote every part of the table. Measured on prod-test
-     * (271.6 M rows, 3,928 parts): 12 ids rewrote <b>3,928 parts / 5.40 TiB</b>. With this predicate the same batch
-     * selects <b>5</b> parts. An {@code id_at} <em>range</em> is not a substitute: on a batch spanning 1996 and 2200 a
-     * range still selected 2,644 parts, where the exact set selected 4.
-     * <p>
-     * The pairs are bound (never inlined) as two positional string arrays and zipped back into {@code (project_id, id)}
-     * tuples with {@code arrayZip}, so the query text is constant regardless of batch size and no value reaches the SQL
-     * as a literal. {@code arrayZip} is a deterministic function, not a subquery - ClickHouse rejects subqueries in
-     * delete mutations. Callers batch to keep each array within the driver's reliable bind size ({@link
-     * com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE}).
+     * {@code <partition>} is interpolated, not bound: {@code IN PARTITION {p:UInt32}} is a ClickHouse syntax error. Safe
+     * because the value is always a {@code long} from {@link WeeklyPartitions}.
      */
     private static final String DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS = """
             DELETE FROM <traces_mutation_table>
+            <if(partition)>IN PARTITION <partition><endif>
             WHERE workspace_id = :workspace_id
             AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
-            <if(partitions)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :partitions<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2328,7 +2310,7 @@ class TraceDAOImpl implements TraceDAO {
      * {@code :min_id}'s week and inverted the window, so the fast pass matched nothing and every id fell through to
      * the unbounded pass. It now resolves them.
      * <p>
-     * The fallback remains load-bearing for what {@link com.comet.opik.utils.WeeklyPartitions#of} still cannot derive
+     * The fallback remains load-bearing for what {@link com.comet.opik.utils.WeeklyPartitions#groupByPartition} still cannot derive
      * exactly: an id at or past the end of {@code DateTime64}'s range, where {@code id_at} saturates to
      * {@code 2299-12-31} whatever the real week, so every such id collapses into one partition. Real data contains
      * them, so the bounded query is never a delete's sole resolver.
@@ -3645,42 +3627,79 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, @NonNull Connection connection) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIdTraceIdPairs),
                 "Argument 'projectIdTraceIdPairs' must not be empty");
+        // Checked here rather than where the ids are stringified, so it holds whichever branch deleteBatch takes: the
+        // partitioned path would otherwise read a null as "underivable", silently take the unbounded fallback, and
+        // only then NPE - reporting a caller's bug as the slow delete this class exists to avoid.
+        Preconditions.checkArgument(
+                projectIdTraceIdPairs.stream().noneMatch(pair -> pair.getLeft() == null || pair.getRight() == null),
+                "Argument 'projectIdTraceIdPairs' must not contain null ids");
         log.info("Deleting traces by (project_id, id) pairs, count '{}'", projectIdTraceIdPairs.size());
 
         return makeMonoContextAware((userName, workspaceId) -> Flux
                 .fromIterable(Lists.partition(List.copyOf(projectIdTraceIdPairs), ANALYTICS_DELETE_BATCH_SIZE))
-                .concatMap(batch -> {
-                    var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces",
-                            workspaceId,
-                            userName, "pairs_size=%s".formatted(batch.size()));
-                    selectTracesMutationTable(template);
-
-                    var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
-                    var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
-
-                    // Prune to the batch's own partitions when every id in the batch allows it; otherwise emit the
-                    // unbounded form. Needs no schema flag: WeeklyPartitions derives a value per id_at type the
-                    // mutation may meet, so the set is correct on the legacy traces and on the partitioned successor.
-                    var partitions = WeeklyPartitions.of(batch.stream().map(Pair::getRight).toList());
-                    // Flag only, exactly like distributed_wrap: the values reach ClickHouse via the bind below,
-                    // never through the template, so the rendered SQL is constant regardless of batch contents.
-                    partitions.ifPresent(_ -> template.add("partitions", true));
-
-                    var statement = connection.createStatement(template.render())
-                            .bind("workspace_id", workspaceId)
-                            .bind("project_ids", projectIds)
-                            .bind("trace_ids", traceIds);
-
-                    if (partitions.isPresent()) {
-                        statement = statement.bind("partitions", partitions.get().toArray(Long[]::new));
-                    }
-
-                    var segment = startSegment("traces", "Clickhouse", "delete");
-                    return Mono.from(statement.execute())
-                            .doFinally(_ -> endSegment(segment))
-                            .then();
-                })
+                .concatMap(batch -> deleteBatch(batch, workspaceId, userName, connection))
                 .then());
+    }
+
+    /**
+     * Deletes one batch: one {@code IN PARTITION} statement per partition its ids resolve to, or a single unbounded
+     * statement when they cannot all be derived, or when the target is not partitioned.
+     * <p>
+     * Sequential on purpose: bounded concurrency was measured and deferred (OPIK-8230).
+     */
+    private Mono<Void> deleteBatch(List<Pair<UUID, UUID>> batch, String workspaceId, String userName,
+            Connection connection) {
+        // traceColumnsNonNullable doubles as "the mutation target is weekly-partitioned": the same cutover EXCHANGE
+        // drops the Nullable(...) columns and puts the partitioned successor behind the name mutations target, so one
+        // flag carries both facts. Deliberately not the wrap flag, which governs routing and is still false in the
+        // window between the EXCHANGE and the wrap - reading that one leaves production's deletes unpruned.
+        var grouped = traceColumnsNonNullable()
+                ? WeeklyPartitions.groupByPartition(batch.stream().map(Pair::getRight).toList())
+                : Optional.<Map<Long, Set<UUID>>>empty();
+
+        if (grouped.isEmpty()) {
+            return executeDelete(batch, null, workspaceId, userName, connection);
+        }
+
+        // id -> its pairs, built once per batch rather than rescanning the whole batch once per partition: an id can
+        // map to more than one pair (the same trace id reused across projects, OPIK-7483), so this is a
+        // Collectors.groupingBy, not a plain lookup map.
+        var pairsById = batch.stream().collect(Collectors.groupingBy(Pair::getRight));
+
+        return Flux.fromIterable(grouped.get().entrySet())
+                .concatMap(entry -> {
+                    var partitionPairs = entry.getValue().stream()
+                            .flatMap(id -> pairsById.get(id).stream())
+                            .toList();
+                    return executeDelete(partitionPairs, entry.getKey(), workspaceId, userName, connection);
+                })
+                .then();
+    }
+
+    /**
+     * Renders and executes one delete statement — unbounded when {@code partition} is null, scoped to it otherwise.
+     */
+    private Mono<Void> executeDelete(List<Pair<UUID, UUID>> pairs, Long partition,
+            String workspaceId, String userName, Connection connection) {
+        var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces", workspaceId,
+                userName, "pairs_size=%s".formatted(pairs.size()));
+        selectTracesMutationTable(template);
+        if (partition != null) {
+            template.add("partition", partition);
+        }
+
+        var projectIds = pairs.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
+        var traceIds = pairs.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
+
+        var statement = connection.createStatement(template.render())
+                .bind("workspace_id", workspaceId)
+                .bind("project_ids", projectIds)
+                .bind("trace_ids", traceIds);
+
+        var segment = startSegment("traces", "Clickhouse", "delete");
+        return Mono.from(statement.execute())
+                .doFinally(_ -> endSegment(segment))
+                .then();
     }
 
     /**
