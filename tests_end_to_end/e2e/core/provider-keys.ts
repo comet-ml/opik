@@ -56,10 +56,42 @@ export async function findProviderKeyByName(providerName: string): Promise<Provi
   return body.content.find((key) => key.provider_name === providerName) ?? null;
 }
 
+/**
+ * How the OPIK BACKEND addresses its own HTTP connector — not how this process
+ * addresses the deployment.
+ *
+ * The default is the backend's own `SERVER_APPLICATION_PORT` (8080, see
+ * apps/opik-backend/config.yml), which every deployment shape can reach from
+ * inside itself: a host process, a docker-compose container, a pod. That is the
+ * whole point — unlike `mockAuthBaseUrlForBackend`, this needs no topology
+ * knowledge and no host-reachable address, so it works identically on a local
+ * `oss` stack and on a remote deployment. Override only if the connector is
+ * moved off 8080.
+ */
+export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://localhost:8080';
+
+/**
+ * A custom-llm `base_url` that always answers a permanent HTTP 404.
+ *
+ * langchain4j appends `/chat/completions`, so the backend ends up asking its own
+ * connector for a route that does not exist and gets its standard
+ * `{"code":404,"message":"HTTP 404 Not Found"}` back. That makes "the provider
+ * refused with a 4xx" a routing fact rather than a data fact — no external
+ * service, no credentials, no mock process, and nothing that can start
+ * succeeding.
+ *
+ * Deliberately not httpbin.org or any other public status echo: a permanent test
+ * must not depend on a third party being up, and an external body would also be
+ * empty, which the scorer renders as a blank error reason.
+ */
+export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoint`;
+
 export async function createProviderKey(payload: {
   provider: string;
   provider_name: string;
   base_url: string;
+  /** Static bearer for providers that are not in `auth_config` token mode. */
+  api_key?: string;
   configuration?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
 }): Promise<void> {

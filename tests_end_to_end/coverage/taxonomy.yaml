@@ -718,12 +718,16 @@ areas:
       edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; model custom_parameters: rule seeded over REST, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
-      # Deliberately still false. online-evaluation-python-metric-errors.spec.ts
-      # asserts a rule's log stream through GET /automations/evaluators/{id}/logs,
-      # but this key names the /$workspaceName/automation-logs PAGE, which no spec
-      # opens. Flipping it on the strength of an API read would mark a UI nobody
-      # tested as tested for good.
-      automation-logs:         { covered: false }
+      # The PAGE, /$workspaceName/automation-logs — not the API read behind it.
+      # online-evaluation-python-metric-errors.spec.ts asserts a rule's log stream
+      # through GET /automations/evaluators/{id}/logs and deliberately does NOT
+      # claim this key, because an API read says nothing about what renders.
+      # online-evaluation-llm-judge-provider-failure.spec.ts does open the page:
+      # it compares the rendered rows against that same API stream, so a dropped
+      # or foreign line fails, and it expands the error row to read the message
+      # body the collapsed cell hides. Still uncovered here: the refresh control,
+      # the expand-all toggle, and column resizing.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "failing-judge stream only: rendered rows compared line-for-line against the rule-logs API, trace_id marker column, newest-first order, and expanding the ERROR row to reveal the provider status; refresh, expand-all and column resize are not exercised" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
