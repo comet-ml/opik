@@ -2204,7 +2204,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * the model block holds, and an `undefined` threaded into that assertion
      * would read as "the value changed" when the truth is "the rule is not the
      * one you think". `custom_parameters` is the one field allowed to be
-     * absent, and it is normalised to `null` — the API's own "nothing set".
+     * absent, and it is normalised to `null` — the API's own "nothing set" —
+     * but a present value that is not an object throws rather than being cast,
+     * because the backend types it as a bare `JsonNode`.
      */
     async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelRef> {
       const { status, message, json } = await rawFetch(
@@ -2220,7 +2222,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           model?: {
             name?: string;
             temperature?: number;
-            custom_parameters?: Record<string, unknown> | null;
+            custom_parameters?: unknown;
           };
         };
       };
@@ -2233,10 +2235,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (!model || typeof model.name !== 'string') {
         throw new Error(`getLlmJudgeModel: ${ruleId} returned no code.model.name`);
       }
+      // `LlmAsJudgeModelParameters.customParameters` is a bare `JsonNode`, so
+      // an array or a scalar is representable even though the product only
+      // ever writes an object there. Checked rather than cast, so the
+      // `Record` on LlmJudgeModelRef is an invariant a caller can rely on
+      // instead of a claim about a shape nothing verified.
+      const raw = model.custom_parameters;
+      if (raw !== undefined && raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} returned code.model.custom_parameters as ` +
+            `${Array.isArray(raw) ? 'an array' : typeof raw}, not an object`,
+        );
+      }
       return {
         name: model.name,
         temperature: typeof model.temperature === 'number' ? model.temperature : null,
-        customParameters: model.custom_parameters ?? null,
+        customParameters: (raw as Record<string, unknown> | null | undefined) ?? null,
       };
     },
 
