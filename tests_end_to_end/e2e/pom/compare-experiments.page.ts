@@ -157,6 +157,116 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * The compared experiments' section headings in the row-detail panel, in DOM
+   * order — which, inside the panel's horizontal flex group, is left-to-right
+   * reading order.
+   *
+   * Asserted with `toHaveText(names)` rather than read-then-compare so the
+   * assertion retries while the panel is still populating and fails on a count
+   * mismatch as well as on a wrong order. `panelExperimentSection()` is keyed by
+   * name and so cannot express order at all.
+   */
+  async expectPanelExperimentOrder(experimentNames: string[]): Promise<void> {
+    await test.step(`panel sections read ${JSON.stringify(experimentNames)} left to right`, async () => {
+      await expect(
+        this.rowPanel.getByRole('heading', { level: 2 }),
+        'compared experiment sections, in panel order',
+      ).toHaveText(experimentNames);
+    });
+  }
+
+  /**
+   * How many resize dividers the row-detail panel's layout has. One fewer than
+   * the number of panels (dataset + one per compared experiment), so a
+   * two-experiment comparison has two.
+   */
+  async countPanelDividers(): Promise<number> {
+    return this.panelDividers.count();
+  }
+
+  /**
+   * The `data-panel-size` of every panel in the row-detail panel's resizable
+   * group, in DOM order.
+   *
+   * Deliberately the group's own percentages, not measured widths: the panels
+   * carry a `min-w-72` CSS floor with no matching `minSize` prop, so a narrow
+   * panel's rendered width clamps and stops tracking the size the group
+   * assigned it. The percentages are what the layout actually persists.
+   */
+  async panelLayout(): Promise<string[]> {
+    return test.step('read the row-detail panel layout', async () => {
+      return this.panelsInRowPanel.evaluateAll((panels) =>
+        panels.map((p) => p.getAttribute('data-panel-size') ?? ''),
+      );
+    });
+  }
+
+  /**
+   * Drags one of the row-detail panel's resize dividers horizontally and
+   * returns the layout it settles on.
+   *
+   * `dividerIndex` is positional because a divider has no identity beyond where
+   * it sits between two panels; call `countPanelDividers()` first so the
+   * position is unambiguous. Waits for the layout to actually change, so the
+   * returned value is the post-drag one rather than a mid-drag read.
+   */
+  async dragPanelDivider(dividerIndex: number, deltaX: number): Promise<string[]> {
+    return test.step(`drag panel divider #${dividerIndex} by ${deltaX}px`, async () => {
+      const before = await this.panelLayout();
+      const divider = this.panelDividers.nth(dividerIndex);
+      await expect(divider, `panel divider #${dividerIndex}`).toBeVisible();
+      const box = await divider.boundingBox();
+      if (!box) {
+        throw new Error(`CompareExperimentsPage.dragPanelDivider: divider #${dividerIndex} has no bounding box`);
+      }
+
+      const y = box.y + box.height / 2;
+      const startX = box.x + box.width / 2;
+      await this.page.mouse.move(startX, y);
+      await this.page.mouse.down();
+      await this.page.mouse.move(startX + deltaX, y, { steps: 10 });
+      await this.page.mouse.up();
+
+      await expect
+        .poll(() => this.panelLayout(), { message: 'panel layout after the drag' })
+        .not.toEqual(before);
+      return this.panelLayout();
+    });
+  }
+
+  /**
+   * Steps the row-detail panel to the next/previous dataset item using the
+   * panel's own arrow navigation, and waits for the `row` query param to catch
+   * up.
+   *
+   * These are the header's labelled buttons; the `side-panel-next` /
+   * `side-panel-previous` testids belong to the default header, which this
+   * panel replaces with its own. Scoped to the panel and anchored on the label
+   * because "Next" as a loose substring also matches unrelated buttons whose
+   * accessible name merely contains it (a dataset called "…-next-…", say).
+   */
+  async goToNextRow(expectedDatasetItemId: string): Promise<void> {
+    await this.stepRow('Next', expectedDatasetItemId);
+  }
+
+  async goToPreviousRow(expectedDatasetItemId: string): Promise<void> {
+    await this.stepRow('Previous', expectedDatasetItemId);
+  }
+
+  private async stepRow(label: 'Next' | 'Previous', expectedDatasetItemId: string): Promise<void> {
+    await test.step(`step the panel to the ${label.toLowerCase()} item (${expectedDatasetItemId})`, async () => {
+      const button = this.rowPanel.getByRole('button', { name: new RegExp(`^${label}`) });
+      await expect(button, `panel ${label} button`).toBeEnabled();
+      await button.click();
+      await expect
+        .poll(() => new URL(this.page.url()).searchParams.get('row'), {
+          message: `"row" query param after ${label}`,
+        })
+        .toBe(expectedDatasetItemId);
+    });
+  }
+
   async expectExperimentColumnsInConfiguration(experiments: { id: string; name: string }[]): Promise<void> {
     await test.step('each experiment is a named column on the Configuration tab', async () => {
       for (const exp of experiments) {
@@ -241,6 +351,25 @@ export class CompareExperimentsPage {
 
   private configHeader(experimentId: string): Locator {
     return this.page.locator(`th[data-header-id="${experimentId}"]`);
+  }
+
+  /**
+   * The row-detail slide-over. `ResizableSidePanel` stamps its `panelId` as the
+   * container's testid, so this is the compare panel specifically — scoping to
+   * it keeps panel locators off the grid rendered behind it.
+   */
+  private get rowPanel(): Locator {
+    return this.page.getByTestId('compare-experiments');
+  }
+
+  /** The resizable panels inside the row-detail panel (dataset + one per experiment). */
+  private get panelsInRowPanel(): Locator {
+    return this.rowPanel.locator('[data-panel]');
+  }
+
+  /** The draggable dividers between those panels. */
+  private get panelDividers(): Locator {
+    return this.rowPanel.locator('[data-panel-resize-handle-id]');
   }
 
   /** A compared experiment's section in the row-detail panel, keyed by its h2 name. */
