@@ -115,6 +115,7 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({
                   className={cn({
                     "border-destructive": Boolean(validationErrors?.message),
                   })}
+                  data-testid="alert-webhook-url-input"
                   placeholder="https://hooks.slack.com/services/..."
                   {...field}
                 />

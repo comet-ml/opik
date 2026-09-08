@@ -415,6 +415,63 @@ You can download a dataset from Opik using the `get_dataset` method:
   ```
 </CodeBlocks>
 
+### Downloading large datasets faster
+
+Dataset items are fetched a page at a time, and those pages are downloaded concurrently. Raise
+`num_threads` to speed up a large read — the default is 4:
+
+```python title="Python" language="python"
+from opik import Opik
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# The whole dataset as one list, downloaded over 8 threads
+items = dataset.get_items(num_threads=8)
+```
+
+The thread count never changes the result, only how quickly it arrives.
+
+`get_items()` returns the whole dataset as a single list, so the call does not return until every
+item has been downloaded and the full result is held in memory. `stream_items()` reads the same
+items in chunks instead, yielding each chunk as soon as it arrives. Use it when you want to start
+processing before the download finishes, or when the dataset is too large to hold in memory all at
+once:
+
+```python title="Python" language="python"
+from opik import Opik
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# One chunk at a time, instead of the whole dataset at once
+for chunk in dataset.stream_items(chunk_size=5000, num_threads=8):
+    process(chunk)  # a list of dicts, exactly as get_items() returns them
+```
+
+Chunks arrive in dataset order; only the last one may be shorter than `chunk_size`. Both methods
+accept the same `filter_string`, and `nb_samples` to read only the first N items:
+
+```python title="Python" language="python"
+for chunk in dataset.stream_items(
+    num_threads=8,
+    filter_string='data.category = "geography"',
+    nb_samples=10_000,
+):
+    process(chunk)
+```
+
+`nb_samples` must be a positive integer — omit it or pass `None` to read everything. Passing `0`
+or a negative value raises `ValueError` rather than being treated as a limit.
+
+<Note>
+  `chunk_size` controls how many items each request fetches. It defaults to 2000, which is also
+  the maximum — a larger value raises `ValueError`, so that peak memory stays bounded. Fetching a
+  chunk costs a fixed overhead whatever its size, so lowering it makes the whole read slower;
+  lower it only when individual items are large, since up to `2 * num_threads` chunks are held in
+  memory at once.
+</Note>
+
 ## Filtering datasets programmatically
 
 You can filter dataset items using the `filter_string` parameter on the `get_items()` method or when

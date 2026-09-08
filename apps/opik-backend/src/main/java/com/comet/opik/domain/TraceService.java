@@ -537,7 +537,7 @@ class TraceServiceImpl implements TraceService {
      * Resolves every owning project for each id: a bounded fast pass, then an unbounded pass over only the ids the
      * bounded one leaves unresolved. Returns id -> owning projects; ids absent from the result have no live row.
      * <p>
-     * The bounded pass's week window can miss a row whose week {@link com.comet.opik.utils.WeeklyPartitions#of}
+     * The bounded pass's week window can miss a row whose week {@link com.comet.opik.utils.WeeklyPartitions#groupByPartition}
      * cannot derive exactly — an id at or past the end of {@code DateTime64}'s range, where {@code id_at} saturates
      * to {@code 2299-12-31} whatever the real week — so the unbounded pass re-resolves the miss set and the bounded
      * query is never a delete's sole resolver. A far-future timestamp short of that ceiling is no longer such a case:
@@ -566,11 +566,20 @@ class TraceServiceImpl implements TraceService {
                 });
     }
 
+    /**
+     * All-or-nothing over the batch: an error anywhere skips {@code TracesDeleted} for every pair, not just the failed
+     * one. OPIK-8230 widens the window — the DAO can now emit several statements per batch, so earlier partitions' rows
+     * may already be gone. Deletes are idempotent; restructuring this coupling is out of that ticket's scope. The
+     * deletion-events capture is outside it: it runs first, so a failed or partially-applied delete is still recorded.
+     */
     private Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, Connection connection) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
-            return dao.delete(projectIdTraceIdPairs, connection)
+            // Deferred so the delete is assembled after the capture rather than alongside it: TraceDAO.delete
+            // validates and logs eagerly.
+            return captureDeletions(projectIdTraceIdPairs, workspaceId, userName)
+                    .then(Mono.defer(() -> dao.delete(projectIdTraceIdPairs, connection)))
                     .doOnSuccess(_ -> projectIdTraceIdPairs.stream()
                             .collect(Collectors.groupingBy(Pair::getLeft,
                                     Collectors.mapping(Pair::getRight, Collectors.toUnmodifiableSet())))
@@ -584,17 +593,27 @@ class TraceServiceImpl implements TraceService {
                                 log.info(
                                         "Published TracesDeleted event, trace ids count '{}', project id '{}', workspace '{}'",
                                         traceIds.size(), projectId, workspaceId);
-                            }))
-                    .then(captureDeletions(projectIdTraceIdPairs, workspaceId, userName));
+                            }));
         });
     }
 
     /**
-     * Records the deleted (project_id, trace_id) pairs in the deletion-events bridge so deletes issued while the table
-     * is being migrated survive the copy. Runs after the delete and is best-effort: capture is auxiliary and must never
-     * disrupt the delete, so failures are logged and swallowed. Running after the delete also avoids recording a delete
-     * that did not happen. No-op unless capture is enabled. Deferred so that nothing is built or run until subscribed,
-     * i.e. only after the delete succeeds.
+     * Records the (project_id, trace_id) pairs about to be deleted in the deletion-events bridge, so deletes issued
+     * while the table is being migrated survive the copy, and so a rollback re-applies them instead of resurrecting the
+     * rows.
+     * <p>
+     * Runs <b>before</b> the delete (OPIK-8141). The bridge is the only record of a lightweight delete, and a delete can
+     * fail its client while the server-side mutation still applies — the observed case being a client timeout on a
+     * mutation that then completed — so capturing afterwards let exactly those deletes go unrecorded, unrecoverably:
+     * neither replay direction can re-apply what the bridge does not name. Capturing first over-records instead when
+     * the delete does fail, which is the recoverable direction: the forward replay skips any id still live on the
+     * source, and a rollback re-applies a delete the user did ask for. The ordering is only worth something because the
+     * analytics connection carries {@code wait_for_async_insert = 1}: the insert completing means the rows are in the
+     * table, not merely queued in the async-insert buffer.
+     * <p>
+     * Still best-effort: a capture failure is logged and swallowed, never propagated. A lost event risks a resurrected
+     * row at the next copy or rollback, whereas failing the delete would impact live traffic — the worse trade for an
+     * auxiliary insert. No-op unless capture is enabled. Deferred so nothing is built or run until subscribed.
      */
     private Mono<Void> captureDeletions(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, String workspaceId,
             String userName) {

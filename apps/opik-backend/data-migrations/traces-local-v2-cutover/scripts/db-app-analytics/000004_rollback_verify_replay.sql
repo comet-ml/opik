@@ -9,10 +9,11 @@
 -- `created_at` with the post-rollback compare bounded below the cutover window — so a row created *inside* that window
 -- and deleted after it falls outside every window the compare looks at.
 --
--- What 0 proves: every delete the bridge RECORDED in the window is masked. What it does not: capture runs after the
--- delete and is best-effort by design (an auxiliary insert must never fail a user's delete), so a delete still in flight
--- when this runs, or one whose capture errored, is invisible to the replay and to this check alike. Quiescing trace
--- deletes before the promote is what bounds that — see the runbook — not this query.
+-- What 0 proves: every delete the bridge RECORDED in the window is masked. What it does not: capture runs before the
+-- delete but is best-effort by design (an auxiliary insert must never fail a user's delete), so a delete still in flight
+-- when this runs, or one whose capture errored, is invisible to the replay and to this check alike. A delete that merely
+-- errored is no longer such a case (OPIK-8141): capture goes first, so it is recorded regardless. Quiescing trace
+-- deletes before the promote is what bounds the rest — see the runbook — not this query.
 --
 -- KEEP IN STEP WITH 000004_rollback_reverse_replay.sql: same (workspace_id, project_id, id) key, same toFixedString(36)
 -- casts onto the bridge's String columns, same length guards. A check filtered differently from the replay would either
@@ -32,7 +33,7 @@ WHERE (workspace_id, project_id, id) IN (
         toFixedString(deleted_id, 36)
     FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
     WHERE source_table = 'traces'
-      AND event_time >= toDateTime64('${CUTOVER_START}', 6)
+      AND event_time >= toDateTime64('${CUTOVER_START}', 6, 'UTC')
       AND project_id != ''
       AND length(project_id) = 36
       AND length(deleted_id) = 36

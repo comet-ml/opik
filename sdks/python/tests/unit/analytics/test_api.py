@@ -1,6 +1,7 @@
 import pytest
 
 from opik import analytics
+from opik import config
 from opik.analytics import api
 
 
@@ -267,3 +268,55 @@ def test_track_event__action_is_not_a_string__does_not_raise(action, recording_w
     api.track_event("client", action)
 
     assert recording_worker.names == []
+
+
+class TestReportingAllowed:
+    """The question a call site asks before doing work to enrich an event.
+
+    Enrichment can cost a round-trip, so `OPIK_ANALYTICS_ENABLE=false` has to
+    switch that off too, not just the sending.
+    """
+
+    def test_reporting_allowed__happyflow(self, monkeypatch):
+        # Every "yes" this can answer has to be arranged explicitly, because the
+        # answer is read from the environment the suite itself runs in: CI sets
+        # OPIK_ANALYTICS_ENABLE=false, pytest is a rule of its own, and being
+        # switched off for good is process-wide state that an earlier test asking
+        # for a worker is enough to have set.
+        monkeypatch.setenv("OPIK_ANALYTICS_ENABLE", "true")
+        monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
+        monkeypatch.setattr(api, "_DISABLED", False)
+
+        assert analytics.reporting_allowed() is True
+
+    def test_reporting_allowed__rules_say_no__is_false(self):
+        """Running under pytest is one of those rules."""
+        assert analytics.reporting_allowed() is False
+
+    def test_reporting_allowed__already_disabled__is_false(self, monkeypatch):
+        monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
+        monkeypatch.setattr(api, "_DISABLED", True)
+
+        assert analytics.reporting_allowed() is False
+
+    def test_reporting_allowed__config_unreadable__is_false(self, monkeypatch):
+        def broken():
+            raise ValueError("boom")
+
+        monkeypatch.setattr(api.config, "OpikConfig", broken)
+
+        assert analytics.reporting_allowed() is False
+
+
+def test_reporting_allowed__no_analytics_url__is_false(monkeypatch):
+    """A missing destination has to refuse enrichment, not just sending.
+
+    `_start_worker` already gives up without a URL, so a call site that pays for
+    a lookup before reporting would be doing it for an event that is dropped.
+    """
+    monkeypatch.setattr(api.rules.environment, "in_pytest", lambda: False)
+    monkeypatch.setattr(
+        api.config, "OpikConfig", lambda: config.OpikConfig(analytics_url="")
+    )
+
+    assert analytics.reporting_allowed() is False

@@ -8,6 +8,7 @@ import click
 import opik.config as opik_config
 import opik.url_helpers as url_helpers
 from opik import analytics
+from opik.cli import account_identity
 from opik.cli import configure as configure_cli
 from opik.cli import assistants
 from opik.cli import install_view
@@ -153,6 +154,9 @@ def configure(
         # must not carry a string on one event and a bool on another.
         skills_requested=str(skills_flag),
         local_server=local_server,
+        # This command reuses an existing Opik configuration, so the account is
+        # normally known from the start — this is the MCP funnel's entry point.
+        **account_identity.event_properties(),
     )
 
     host_keys = _resolve_host_keys(hosts)
@@ -227,6 +231,10 @@ def configure(
         "result",
         clients_written=outcome.clients,
         skills_installed=outcome.skills,
+        # Resolved again, not reused: this command can run `opik configure` on the
+        # way through, which is what turns an unconfigured run into an attributed
+        # one.
+        **account_identity.event_properties(),
     )
 
 
