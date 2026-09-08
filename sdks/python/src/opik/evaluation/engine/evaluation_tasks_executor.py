@@ -166,7 +166,9 @@ class StreamingExecutor(Generic[T]):
                 result.score_results, list
             ):
                 for score in result.score_results:
-                    if isinstance(score, ScoreResult) and not score.scoring_failed:
+                    # Failed scores count at their recorded 0.0 so the running
+                    # average matches the final aggregate (#8134).
+                    if isinstance(score, ScoreResult):
                         self._score_totals[score.name] += score.value
                         self._score_counts[score.name] += 1
 
