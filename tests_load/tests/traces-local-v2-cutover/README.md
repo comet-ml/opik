@@ -157,8 +157,14 @@ $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfil
 #    compares, because the gap and a fidelity defect live in different weeks:
 #
 #    (a) SIZE THE GAP — unbounded, straight after the swap, with --drill-down. The gap rows are in the cutover week,
-#        which every weekly bound excludes, so a bounded run cannot see them. Read the keys listed for the
-#        backup-only side: those are the tail writes. (Keys live-only are post-swap writes — the harmless direction.)
+#        which every weekly bound excludes, so a bounded run cannot see them. TWO of the drill-down's categories are
+#        gap rows: keys listed backup-only (traces created in the tail), AND keys on both sides whose hashes differ
+#        with the newer last_updated_at in the backup (traces updated in the tail — the successor holds an older
+#        version, so counting only backup-only keys would report this gap as clean). Keys live-only, and differing
+#        hashes whose newer version is live, are post-swap writes — the harmless direction. The drill-down prints
+#        hashes, not versions, so compare last_updated_at per key to separate the two. live_traffic.py's --update-ratio
+#        is what makes the both-sides category reachable at all — it updates traces created earlier in the run, so some
+#        of those updates land in the tail against a trace the backfill already copied. Rehearse with it non-zero.
 $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --drill-down
 #
 #    (b) CHECK FIDELITY — bounded below the cutover week, where any mismatch IS a defect rather than the known gap.

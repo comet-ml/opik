@@ -172,8 +172,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
    No config change precedes this step — the procedure takes no hold on writes.
    The driver passes `--time`, so clickhouse-client prints each statement's wall time in seconds (delta-insert first,
-   deletion replay second) — **record the second value**: it sizes the final-delta→`EXCHANGE` gap, which is where tail
-   writes are left behind. Without `--time` a bare `--query` prints no timing at all.
+   deletion replay second) — **record the second value**: it is the *first half* of the final-delta→`EXCHANGE` gap,
+   which is where tail writes are left behind. The second half is `exchange_and_wrap.sh`'s own run through the swap,
+   which that driver reports (step 4). Without `--time` a bare `--query` prints no timing at all.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
@@ -310,11 +311,12 @@ delta one). This is normal — `ReplacingMergeTree` collapses them on merge / un
 
 ### The one rolling restart (`traceColumnsNonNullable`)
 
-Getting to the `EXCHANGE` needs **one** rolling restart, and it carries no latency cost: rolling out
+Getting to the `EXCHANGE` needs **one** rolling restart, and it carries no *steady-state* latency cost: rolling out
 `databaseAnalyticsDataModel.traceColumnsNonNullable = true` (prereq 6) to every backend instance beforehand. Nothing is
 restarted afterwards to undo it. The optional `Distributed` wrap spends a restart of its own for
 `tracesDistributedWrapEnabled` (see the wrap prerequisite) — that one belongs to the wrap, is only paid if you apply
-it, and likewise costs no latency.
+it, and likewise leaves no standing latency behind. What each roll *does* cost while it is in flight is ingestion
+capacity, so plan for that (see the end of this section).
 
 > **The async-insert knob is untouched, and OPIK-7686's decision stands.** The three
 > `ANALYTICS_DB_ASYNC_INSERT_*` knobs remain valid production tuning, deliberately absent from the chart's `values.yaml`
@@ -367,10 +369,16 @@ toward `--force`, which the Go/No-Go forbids. Hence:
 | Signal | Judgement |
 |---|---|
 | the deletion-replay **mutation** on `traces_local_v2` | **Unconditional.** It is one bounded statement, not churn, so it must reach `is_done` on every replica within `--settle-timeout` (default 120s) or the gate fails — an unapplied mask means bridged deletes leak live across the swap. |
-| the **replication queue** on `traces` / `traces_local_v2` | **Stuck-ness, not depth.** It passes the moment the queue drains to 0. If it has not drained by the deadline, the gate reports the oldest entry's age, the highest `num_tries` and whether any entry carries a `last_exception` — an entry older than 60s, more than 3 retries, or any recorded exception means a replica is genuinely lagging and the gate **fails loudly, printing the offending entries per replica**. A queue that is merely moving is accepted, with the numbers printed so the operator sees what was accepted. |
+| the **replication queue** on `traces` / `traces_local_v2` | **Stuck-ness, not depth.** It passes the moment the queue drains to 0. If it has not drained by the deadline, the gate reports the oldest entry's age, the highest `num_tries` and whether any entry carries a `last_exception` — an entry older than 60s, more than 3 retries, or any recorded exception means a replica is genuinely lagging and the gate **fails loudly, printing the offending entries per replica**. A queue that is busy but not stuck is accepted, with the numbers printed so the operator sees what was accepted. |
 
-Raise `--settle-timeout` for a slow-but-progressing cluster. `--force` skips the gate entirely and is a production
-No-Go: the gate is permissive enough that reaching its failure path means something is genuinely wrong.
+The queue verdict is a **snapshot** over the last sample read, in both the polled and the single-sample case — nothing
+compares consecutive samples. Polling buys the queue time to drain, and a genuinely stuck entry time to age past the
+thresholds; that is all, so a shorter `--settle-timeout` is a weaker gate by exactly that much.
+
+Raise `--settle-timeout` (0–3600s) for a slow-but-progressing cluster, at a price: the gate sits between the final
+delta and the `EXCHANGE`, so whatever it waits is added to the tail write-gap. The driver prints the wait alongside its
+elapsed-through-`EXCHANGE` so the gap can be sized with it included. `--force` skips the gate entirely and is a
+production No-Go: the gate is permissive enough that reaching its failure path means something is genuinely wrong.
 
 ### The final cutover window
 
@@ -404,11 +412,13 @@ The tail is still worth running tightly, because its length is what decides how 
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step before the swap.
-4. Run `exchange_and_wrap.sh --backfill-start '<anchor> UTC' …` **immediately** after it (the settle gate + `EXCHANGE` are
-   fast and metadata-only). It captures `cutover_start`, then runs a **final deletion replay** from `backfill_start`
-   right before the swap — so deletes bridged in the `[final delta_replay, cutover_start)` gap are masked on the
-   successor rather than leaking (that gap is covered by neither the earlier forward replay nor the rollback
-   reverse-replay, which starts at `cutover_start`). Deletions only.
+4. Run `exchange_and_wrap.sh --backfill-start '<anchor> UTC' …` **immediately** after it. It captures `cutover_start`,
+   then runs a **final deletion replay** from `backfill_start` right before the swap — so deletes bridged in the
+   `[final delta_replay, cutover_start)` gap are masked on the successor rather than leaking (that gap is covered by
+   neither the earlier forward replay nor the rollback reverse-replay, which starts at `cutover_start`). Deletions only.
+   The `EXCHANGE` itself is metadata-only, but this driver is **not** instantaneous: the settle gate ahead of it polls
+   for as long as the cluster needs, to `--settle-timeout`, and every second of that is tail. The driver prints its
+   elapsed-through-`EXCHANGE` with the gate wait itemised — that figure plus step 3's replay time is the gap.
 
 Keep step 3→4 short. **Deletes** up to `cutover_start` are covered by step 4's final deletion replay; **writes** in
 that gap and across the swap skew are the exposure above. The one residual on the delete side is a delete whose
@@ -1710,14 +1720,18 @@ of the three as needing the same.
 The **replication-settle gate** belongs in the same category — it decides a verdict rather than reading a single
 number — so it needs the rehearsal too, under **live ingestion**, in both directions:
 
-- it does **not** abort on ordinary ingest churn (a moving `replication_queue` is accepted, with its numbers printed);
+- it does **not** abort on ordinary ingest churn (a busy-but-not-stuck `replication_queue` is accepted, with its
+  numbers printed);
 - it **does** abort on a genuinely lagging replica, naming the offending entries — stop or throttle a replica, or hold
   a mutation, and confirm the gate fails loudly rather than passing;
 - the deletion-replay mutation is judged unconditionally: an unfinished mutation fails the gate however quiet the queue
   is, and `--settle-timeout` bounds how long it waits to find out.
 
 The **argument guards** fail fast, before touching ClickHouse, so they are cheap to exercise by hand after any change
-here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-maintenance`.
+here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-maintenance`, and `--settle-timeout` must
+refuse anything outside 0–3600 as well as a leading zero. That last one is not cosmetic: bash arithmetic wraps silently
+past 2^63 instead of erroring, and an out-of-range value used to leave the gate's poll count negative, which skipped
+every sample and passed the gate without reading replication at all.
 
 Run it with: `mvn -o test -Dtest=TracesLocalV2CutoverTest` from `apps/opik-backend`.
 
@@ -1757,11 +1771,22 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       cross-node swap skew stay in `traces_pre_cutover_backup` and nothing in this procedure carries them into the live
       table yet (see "The final cutover window"). Size it straight after the swap with an **unbounded** post-`EXCHANGE`
       compare plus `--drill-down`: the gap rows sit in the cutover week, which every weekly bound excludes, so a bounded
-      run cannot see them. Keys listed **backup-only** are the gap; live-only keys are post-swap writes, the harmless
-      direction. Then either accept it with whoever authorised the cutover, or recover from the backup before
-      `finalize.sh` retires it. OPIK-8238 replaces this item with its reconciliation postcondition.
-- [ ] **Final-delta→EXCHANGE gap kept short** — record the final replay's wall time. The tail's length is what decides
-      how many writes land in the gap above.
+      run cannot see them. The drill-down reports keys in three shapes and **two of them can be gap rows**, so do not
+      size this by key presence alone:
+      - **backup-only** (`dst_hash` NULL) — traces *created* in the tail. Gap.
+      - **both sides, hashes differ** — gap when the newer `last_updated_at` is **in the backup**: a trace *updated* in
+        the tail, whose successor row is an older version. A presence check finds nothing to do here and would report
+        the gap as clean. When the newer version is the **live** one, it is an ordinary post-swap update instead.
+      - **live-only** (`src_hash` NULL) — traces created after the swap. Harmless.
+
+      The drill-down prints hashes, not versions, so the middle shape needs a `last_updated_at` comparison per key
+      across the two tables to settle which way it points. Then either accept the total with whoever authorised the
+      cutover, or recover from the backup before `finalize.sh` retires it. OPIK-8238 replaces this item with its
+      reconciliation postcondition.
+- [ ] **Final-delta→EXCHANGE gap kept short** — record the **whole** interval, not just the final replay's wall time:
+      the replay's own `--time` output *plus* the elapsed-through-`EXCHANGE` figure `exchange_and_wrap.sh` prints in its
+      tail summary, which itemises the settle-gate wait. The tail's length is what decides how many writes land in the
+      gap above, and on a busy cluster the gate is the part of it that varies.
 - [ ] **Far-future partitions quantified — and `max_partitions_per_insert_block` sized from the result.** Run the
       bad-`id` audit query above; remediated or explicitly accepted. The count is not just informational: if
       `far_future_weeks` exceeds the ClickHouse default of 100, the backfill **aborts** without a raised
@@ -1773,8 +1798,9 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **`EXCHANGE TABLES ... ON CLUSTER` works end-to-end** — or the fallback `RENAME` sequence is documented for the
       variant that needs it.
 - [ ] **No ingestion-path config change on any path** — forward, rollback, wrap or un-wrap. The procedure requires
-      one rolling restart to reach the `EXCHANGE`, carrying only `traceColumnsNonNullable = true`, with no latency
-      cost — plus the wrap's own restart for `tracesDistributedWrapEnabled` if the wrap is applied. Confirm you know
+      one rolling restart to reach the `EXCHANGE`, carrying only `traceColumnsNonNullable = true`, with no
+      steady-state latency cost though it does consume ingestion capacity while it rolls — plus the wrap's own
+      restart for `tracesDistributedWrapEnabled` if the wrap is applied. Confirm you know
       how a backend restart is triggered on the target deployment and that it fits the schedule — see
       ["The one rolling restart"](#the-one-rolling-restart-tracecolumnsnonnullable).
 - [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`). Retention deletes bypass

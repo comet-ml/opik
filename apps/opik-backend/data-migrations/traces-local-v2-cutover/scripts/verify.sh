@@ -125,7 +125,7 @@ log() {
 # Extract one `-- >>> BEGIN <name>` .. `-- >>> END <name>` block from the reference SQL (exact-line markers), and
 # substitute this window's placeholders.
 render_block() {
-    local block="$1" lo="$2" hi="$3" sql begins ends
+    local block="$1" lo="$2" hi="$3" sql begins ends masked
     # Exactly one pair: the awk otherwise runs to EOF on a missing END and sweeps the later blocks in with this one.
     begins="$(grep -cxF -e "-- >>> BEGIN $block" "$VERIFY_SQL" || true)"
     ends="$(grep -cxF -e "-- >>> END $block" "$VERIFY_SQL" || true)"
@@ -148,9 +148,25 @@ render_block() {
     # RETURN, not exit: every caller invokes this inside a command substitution, where an exit ends only the subshell
     # and would leave the outer clickhouse-client running with an empty --query. The callers assign first, so a
     # non-zero return trips `set -e` there.
-    if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
+    masked="$(sed 's/--.*$//' <<<"$sql")"
+    if [[ -z "${masked//[[:space:]]/}" ]]; then
         log "ERROR: the '$block' block from $VERIFY_SQL rendered no executable SQL (empty, or comments only)." >&2
         log "       Expected the exact marker lines '-- >>> BEGIN $block' and '-- >>> END $block'." >&2
+        return 1
+    fi
+    # A block whose markers moved around the wrong statement is plenty of text, so emptiness cannot catch it, and an
+    # unsubstituted placeholder would reach ClickHouse as a literal. Both would turn a mis-marked file into a wrong
+    # verdict rather than a refusal — which is worse here than in a driver that only executes, because this driver's
+    # output IS the go/no-go. Checked on the comment-masked text: comments are not whitespace and a block's own prose
+    # can contain the phrase that identifies it.
+    if ! grep -qF 'SELECT' <<<"$masked"; then
+        log "ERROR: the '$block' block from $VERIFY_SQL has no SELECT outside its comments, so the markers are around" >&2
+        log "       the wrong statement. Refusing to run it." >&2
+        return 1
+    fi
+    if grep -qF '${' <<<"$masked"; then
+        log "ERROR: the '$block' block from $VERIFY_SQL still holds an unsubstituted \${...} placeholder after" >&2
+        log "       rendering. Refusing to send SQL containing a literal placeholder." >&2
         return 1
     fi
     printf '%s' "$sql"
