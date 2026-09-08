@@ -585,109 +585,127 @@ A typical investigative loop using Claude Code:
 
 ## Troubleshooting
 
-Two checks solve most problems: run `uvx opik mcp status`, then start a new session in
-your client.
+Before anything else: run `uvx opik mcp status`, then start a new session in your
+client. Most problems end there.
 
 <AccordionGroup>
-  <Accordion title="Sign-in did not open, or the client says it needs authentication">
-    The hosted server signs you in through the browser on the first connection,
-    and clients try once per session. Start a new session, then trigger sign-in
-    from the client: `/mcp` in Claude Code, the MCP panel in Cursor. On a corporate
-    network, allow `www.comet.com`. Sessions expire after a while; the client signs
-    in again on the next connection.
+  <Accordion title="The client asks for authentication, or the browser sign-in never opened">
+    The hosted server signs you in through the browser on the first connection, and
+    the client only tries once per session.
+
+    - Start a new session, then trigger sign-in from the client: `/mcp` in Claude
+      Code, the MCP settings panel in Cursor, `codex mcp login opik-mcp` in Codex.
+    - On a corporate network, allow `www.comet.com`.
+    - Sessions expire. When that happens, the client asks you to sign in again.
   </Accordion>
-  <Accordion title="Opik is not in the client, or it connected with no tools">
-    Clients read MCP config and skills at session start, so start a new one. Then
-    `uvx opik mcp status`: it lists every client that has Opik and the file it lives
-    in. If setup printed `exists but is not a valid JSON object`, that client's
-    config has comments in it; paste the block the CLI printed into the file
-    yourself.
+  <Accordion title="Opik does not show up in the client, or shows no tools">
+    Clients read MCP servers and skills when a session starts.
+
+    - Start a new session.
+    - Run `uvx opik mcp status`. It lists every client that has the server and the
+      config file it lives in. If your client is missing, run
+      `uvx opik mcp configure` again.
+    - If setup printed `exists but is not a valid JSON object`, that client's config
+      has comments in it. Paste the block the CLI printed into the file by hand.
   </Accordion>
   <Accordion title='"Opik is not configured yet" or "needs either a terminal or an explicit client"'>
-    You ran it from an agent, a script or CI, so there was nothing to ask in.
-    Name the client, and provide credentials through `OPIK_API_KEY` and
-    `OPIK_WORKSPACE` in the environment, or through a `~/.opik.config` created by
-    an earlier `uvx opik configure`, rather than typing the key into the command:
+    The command ran without a terminal, from an agent, a script or CI, so it could
+    not ask you anything.
 
-    ```bash
-    uvx opik mcp configure --ai-client cursor --skills
-    ```
+    - Name the client: `uvx opik mcp configure --ai-client cursor --skills`.
+    - Provide credentials through `OPIK_API_KEY` and `OPIK_WORKSPACE` in the
+      environment, or through `~/.opik.config` from an earlier `uvx opik configure`.
+      Do not type the key into the command.
   </Accordion>
-  <Accordion title="The agent sees no data, or the wrong data">
-    The usual cause is the wrong workspace. With the local server the CLI refuses
-    to guess and prints `Your Opik configuration does not name a workspace`. With
-    the hosted server the workspace is chosen at sign-in. Run `uvx opik configure`,
-    pick the workspace, then `uvx opik mcp configure` again and start a new
-    session. If `uvx opik mcp status` shows `✗ OUT OF SYNC`, the same re-run fixes it.
+  <Accordion title="The agent sees no data, or data from the wrong workspace">
+    The server points at a different workspace than you expect.
+
+    - Hosted server: the workspace was chosen at sign-in. Sign out and in again
+      from the client's MCP panel and pick the right one.
+    - Local server: run `uvx opik configure`, choose the workspace, then
+      `uvx opik mcp configure` again, then a new session.
+    - `✗ OUT OF SYNC` in `uvx opik mcp status` means the client config is older
+      than your Opik configuration. The same re-run fixes it.
   </Accordion>
-  <Accordion title='Status says "Local (stdio)" on Opik Cloud, or the hosted server returned 404'>
-    The CLI probes `/.well-known/oauth-authorization-server/opik` on your
-    deployment to decide. A proxy, VPN or TLS error fails the probe, and the CLI
-    falls back to the local server with your API key in the client config. Re-run
-    once the deployment is reachable. A 404 means the deployment has no hosted
-    server; on self-hosted Opik, `--local-server` is the intended path.
+  <Accordion title='Status shows "Local (stdio)" on Opik Cloud'>
+    The CLI checks `/.well-known/oauth-authorization-server/opik` on your
+    deployment to pick the server. If a proxy, VPN or TLS error blocks that check,
+    it falls back to the local server and stores your API key in the client config.
+
+    - Re-run `uvx opik mcp configure` from a network that can reach the deployment.
+    - A 404 on that check means the deployment has no hosted server. On self-hosted
+      Opik, pass `--local-server`; that is the intended path.
   </Accordion>
-  <Accordion title='"uvx: command not found", or the first tool call takes a long time'>
-    Install uv with the one-liner in [Quick setup](#quick-setup-with-the-opik-cli)
-    and open a new terminal. The local server is downloaded by your client on
-    first use, together with a Python runtime; setup pre-warms that cache but
-    gives up after a timeout. If the first call is slow, let it finish once, or
-    run `uvx opik-mcp --help` by hand to see the real error.
+  <Accordion title='"uvx: command not found"'>
+    `uv` is not installed, or the terminal was opened before the install.
+
+    - Install it with the one-liner in [Quick setup](#quick-setup-with-the-opik-cli).
+    - Open a new terminal and run `uvx --version`.
+  </Accordion>
+  <Accordion title="The first tool call takes a long time, or the client says the server failed to start">
+    With the local server the client runs `uvx opik-mcp`, which downloads the
+    package and a Python runtime on first use. Setup pre-warms that cache, but
+    gives up after a timeout.
+
+    - Let the first call finish once. Later calls start in about a second.
+    - If it fails, run `uvx opik-mcp --help` in a terminal to see the real error.
   </Accordion>
   <Accordion title="Cursor: tool call timed out after 60 seconds">
-    Cursor enforces a hard tool-call timeout that ignores progress notifications,
-    and large traces hit it. Ask for fewer traces or one span at a time, or use
-    Claude Code or VS Code for long investigations.
+    Cursor enforces a hard 60-second timeout per tool call, and large traces hit it.
+
+    - Ask for fewer traces, or for one span at a time.
+    - For long investigations use Claude Code or VS Code, which have no such cap.
   </Accordion>
 </AccordionGroup>
 
 ## FAQ
 
 <AccordionGroup>
-  <Accordion title="Is it safe to let an agent write to my workspace?">
-    The agent acts with your permissions and cannot exceed them. Most real usage is
-    reads. The single `write` tool can score, comment, save prompt versions and
-    create traces. Keep your client's tool approval on for writes, and remember
-    that trace content is untrusted input the agent will read.
-  </Accordion>
   <Accordion title="Do I need the Opik SDK, Python or Node?">
-    No. `uvx opik mcp configure` needs only uv. The Cursor and VS Code buttons need
-    nothing. `npx add-mcp` needs Node. Your project's language does not matter.
+    No. `uvx opik mcp configure` needs only `uv`. The Cursor and VS Code buttons
+    need nothing. `npx add-mcp` and `npx skills add` need Node. The language of
+    your project does not matter.
   </Accordion>
-  <Accordion title="My client is not listed. Which ones are supported?">
-    The CLI writes config for Claude Code, Cursor, VS Code Copilot, Codex and
-    opencode. For the others, `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`
-    writes the same hosted URL into twenty clients. Any client that speaks
-    Streamable HTTP can use the URL directly; see [Manual setup](#manual-setup).
-    Skills for other clients: `npx skills add comet-ml/opik-skills`.
+  <Accordion title="Hosted or local server: which one do I get, and where do credentials live?">
+    On Opik Cloud, and on any deployment that advertises it, you get the hosted
+    server: your client signs in through the browser and nothing is stored in its
+    config. Everywhere else, or with `--local-server`, you get the local server:
+    `uvx opik-mcp` runs on your machine with `OPIK_API_KEY` and `OPIK_WORKSPACE` in
+    the client's `env` block. `uvx opik mcp status` shows which one each client
+    uses.
   </Accordion>
-  <Accordion title="API key or sign-in?">
-    On Opik Cloud, and on any deployment that advertises the hosted server, you
-    sign in through the browser and nothing is stored in the client config. The
-    local server takes your API key and workspace in the client's `env` block. For
-    an agent or CI, set `OPIK_API_KEY` and `OPIK_WORKSPACE` and name the client
-    with `--ai-client`.
+  <Accordion title="Is it safe to let an agent write to my workspace?">
+    The agent acts with your permissions and cannot exceed them. One tool,
+    `write`, can score, comment, save prompt versions and create traces; everything
+    else is read-only. Keep your client's tool approval on for writes. Trace content
+    is text your users wrote, so treat anything the agent reads from a trace as
+    data, not as instructions.
   </Accordion>
-  <Accordion title="Hosted or local server, which do I get?">
-    Hosted when your deployment advertises it, which Opik Cloud does. Local
-    otherwise, or when you pass `--local-server`. `uvx opik mcp status` shows which one
-    each client points at.
+  <Accordion title="My client is not in the list. Can I still use it?">
+    Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode.
+    For any other client on Opik Cloud, run
+    `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`, or point
+    the client at that URL yourself with the Streamable HTTP transport. Skills for
+    other clients: `npx skills add comet-ml/opik-skills`. See
+    [Manual setup](#manual-setup).
   </Accordion>
-  <Accordion title="Can I use several workspaces?">
-    One per client config. Hosted picks the workspace at sign-in. For the local
-    server, run `uvx opik configure` to switch, then `uvx opik mcp configure` again.
-    Several workspaces in one client at the same time is not supported.
+  <Accordion title="Can I work with several workspaces?">
+    One workspace per client config. On the hosted server you pick it at sign-in.
+    On the local server, `uvx opik configure` switches it, then run
+    `uvx opik mcp configure` again.
   </Accordion>
-  <Accordion title="Is there a read-only mode or a project scope?">
+  <Accordion title="Is there a read-only mode or a per-project scope?">
     Not yet. Until then, use your client's tool approval to gate the `write` tool.
   </Accordion>
-  <Accordion title="How do I update or remove it?">
-    Update: `uvx opik@latest mcp configure` rewrites the entry and refreshes the
-    skill pack; uvx otherwise reuses its cached copy. If you also have the `opik`
-    package installed, the two can be different versions; their MCP configs are
-    compatible, and `uvx opik mcp status` reads either. Remove: there is no
-    `opik mcp remove`. Use `claude mcp remove opik-mcp`, `codex mcp remove opik-mcp`,
-    or delete the `opik-mcp` entry from your client's MCP config. The local server's
-    telemetry switches off with `OPIK_MCP_ANALYTICS_ENABLED=false`.
+  <Accordion title="How do I update?">
+    `uvx opik@latest mcp configure`. It rewrites the client config and refreshes the
+    skill pack. Plain `uvx opik` reuses the version it already has cached. Start a
+    new session afterwards.
+  </Accordion>
+  <Accordion title="How do I remove it?">
+    There is no remove command. Use `claude mcp remove opik-mcp` or
+    `codex mcp remove opik-mcp`, or delete the `opik-mcp` entry from your client's
+    MCP config file. Local server telemetry switches off with
+    `OPIK_MCP_ANALYTICS_ENABLED=false` in the same config.
   </Accordion>
 </AccordionGroup>
