@@ -1,8 +1,13 @@
 # Traces cutover — local simulation tooling
 
-Ad-hoc CLI scripts to stand up a representative dataset and live traffic on a **local** Opik, so the traces
-buffered-cutover runbook (`apps/opik-backend/data-migrations/traces-local-v2-cutover`) can be rehearsed end to end and
-iterated on quickly.
+Ad-hoc CLI scripts to stand up a representative dataset and live traffic on a **local** Opik, so the traces cutover
+runbook (`apps/opik-backend/data-migrations/traces-local-v2-cutover`) can be rehearsed end to end and iterated on
+quickly.
+
+**Rehearse with traffic still flowing through the swap.** The cutover holds writes nowhere, so convergence has to come
+from the procedure rather than from stopping traffic: keep the write and delete generators below running across the
+delta and the `EXCHANGE`. Quiescing traffic to make the compare converge rehearses an assumption the procedure does
+not make.
 
 | Script | What it does | Talks to |
 |---|---|---|
@@ -45,8 +50,8 @@ ClickHouse connection defaults (user/password/db all `opik`, host `localhost:812
 
 ### Changing backend config mid-rehearsal
 
-The runbook's operator-owned steps are **backend config plus a restart** (raise/restore the async-insert buffer, flip
-`traceColumnsNonNullable`, flip `tracesDistributedWrapEnabled`). These flags are read from a startup snapshot, so a
+The runbook's operator-owned steps are **backend config plus a restart** (flip `traceColumnsNonNullable`, flip
+`tracesDistributedWrapEnabled`). These flags are read from a startup snapshot, so a
 restart is required — `opik.sh` has no flag for them. Recreate just the backend, keeping the rest of the stack up. Note
 `opik.sh` runs under compose project **`opik-opik`** (containers are `opik-opik-*`), so pass `-p opik-opik` or you will
 silently create a second, parallel project:
@@ -58,12 +63,12 @@ recreate_backend() {   # exports must be set by the caller; unset a var to retur
     -f deployment/docker-compose/docker-compose.override.yaml \
     --profile opik up -d --no-deps backend
   until [ "$(docker inspect -f '{{.State.Health.Status}}' opik-opik-backend-1)" = healthy ]; do sleep 3; done
-  docker exec opik-opik-backend-1 env | grep -E 'ANALYTICS_DB_DATA_MODEL_TRACE|ASYNC_INSERT_BUSY_TIMEOUT_MAX' | sort
+  docker exec opik-opik-backend-1 env | grep -E 'ANALYTICS_DB_DATA_MODEL_TRACE' | sort
 }
 ```
 
 Always re-read the env out of the container afterwards (as above) to confirm the flag actually took — that is the only
-check available for `traceColumnsNonNullable`, whose failure mode is silent (see the runbook's prereq #7).
+check available for `traceColumnsNonNullable`, whose failure mode is silent (see the runbook's prereq #6).
 
 ## End-to-end rehearsal
 
@@ -79,10 +84,13 @@ export CLICKHOUSE_HOST=localhost CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik
 # 2. (Optional) Estimate the backfill ETA for a given config.
 $RUNBOOK/scripts/estimate.sh --database opik --max-rows-per-insert 400 --pause-seconds 1
 
-# 3. Generate concurrent write + delete traffic for the duration of the cutover (two more terminals).
+# 3. Generate concurrent write + delete traffic for the duration of the cutover (two more terminals). Size --duration
+#    to cover the WHOLE sequence through the EXCHANGE, not just the backfill: the procedure takes no hold on writes, so
+#    traffic flowing across the swap is the condition being rehearsed. Stopping traffic to make verify.sh converge
+#    tests an assumption the runbook does not make.
 #    --resurrect-ratio is REQUIRED to exercise the replay's resurrection guard (delete then re-create under the same
 #    id). Do NOT expect the write/delete overlap to produce that by chance: live_traffic.py only updates ids from its
-#    own recent-creates buffer, and a 5-minute 5-tps/3-tps run has been observed to yield ZERO resurrections — leaving
+#    own recent-creates list, and a 5-minute 5-tps/3-tps run was measured yielding ZERO resurrections — leaving
 #    the one silent-data-loss path in the replay completely unexercised. delete_traffic.py warns if it resurrected none.
 #    Let the delete traffic run PAST the end of the backfill: a delete of an already-copied row is the leak the bridge
 #    exists to close, whereas a delete before its row is copied is simply never copied (mask-honored INSERT).
@@ -93,8 +101,10 @@ $RUNBOOK/scripts/estimate.sh --database opik --max-rows-per-insert 400 --pause-s
 #    --in-progress-ratio is likewise REQUIRED to exercise the pre-swap window's sentinel / negative-duration caveat:
 #    without it every trace is ended, so no trace is ever written with an absent end_time and the caveat (plus its
 #    rollback repair) produces ZERO affected rows. live_traffic.py warns if it left none in progress.
-python tests_load/tests/traces-local-v2-cutover/live_traffic.py   --tps 5 --duration 150 --update-ratio 0.4 --in-progress-ratio 0.15
-python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 3 --duration 150 --resurrect-ratio 0.05
+#    --duration 900 is a starting point, not a recommendation: it has to outlast steps 4-8. Extend it (or re-launch
+#    both generators) rather than letting them expire before the EXCHANGE.
+python tests_load/tests/traces-local-v2-cutover/live_traffic.py   --tps 10 --duration 900 --update-ratio 0.2 --in-progress-ratio 0.15
+python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 3  --duration 900 --resurrect-ratio 0.05
 
 # 4. Backfill (small --max-rows-per-insert exercises the adaptive sub-window splitting on modest data). Record the
 #    backfill_start it prints.
@@ -105,9 +115,10 @@ $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_sta
 
 # 6. QA the copy BEFORE the swap: normalized fidelity compare of source vs destination.
 $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the differing keys of ANY differing window
-#    Locally there is no async-insert buffer, so in-flight writes may still be settling: once traffic has stopped,
-#    re-run delta_replay.sh then verify.sh until it reports "PASSED" (convergence). In production the buffer holds
-#    writes during the cutover window instead.
+#    Writes keep arriving throughout, so the current week converges only as far as the last delta reached: re-run
+#    delta_replay.sh then verify.sh, and read a PASS as "the copy is faithful as of the last delta", not "nothing can
+#    arrive after it". Whatever arrives after it lands in the tail write-gap (runbook "The final cutover window"), not
+#    in this compare. Do NOT stop the traffic to force a clean PASS.
 #
 #    Re-running only converges a MISMATCH. The other two non-zero verdicts do not resolve by re-copying, so do not
 #    loop on them:
@@ -119,13 +130,13 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 #    "OK -- superseded-version artifact" is a PASS that differs, so it needs no action.
 
 # 7. MANDATORY CONFIG STEP, and the one most easily skipped in a rehearsal: roll out traceColumnsNonNullable=true
-#    BEFORE the EXCHANGE (runbook "The final cutover window"), and raise the buffer ceiling so the --confirm-buffer-raised
-#    assertion is truthful rather than vacuous. Use recreate_backend() from "Changing backend config mid-rehearsal" above.
+#    BEFORE the EXCHANGE (runbook "The final cutover window"). This is the only restart the cutover itself needs, and
+#    it carries no latency cost; step 10's optional wrap has its own. Use recreate_backend() from "Changing backend
+#    config mid-rehearsal" above.
 #    Skipping this leaves the whole read-side half of the flag unexercised — and its failure mode is SILENT (writes still
 #    succeed either way; absent end_time just reads back as 1970-01-01 instead of null).
 export ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED=true \
-       ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE=true \
-       ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=10000
+       ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE=true
 recreate_backend
 #    Positive check (the only real one): an in-progress trace must read back end_time = None. Writing one now, while
 #    `traces` is still the Nullable original, is also what exercises the pre-swap window's two documented caveats.
@@ -136,30 +147,40 @@ recreate_backend
 #    --confirm-retention-paused holds trivially here (retention is disabled by default).
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start> UTC' \
-    --confirm-buffer-raised --confirm-retention-paused --skip-wrap
-#    Record the cutover_start it prints. Run the post-swap compare NOW, while writes are still held — and UNBOUNDED,
-#    because the current week is where the delta and the final deletion replay just landed, making it the week most worth
-#    comparing. Once writes resume, live legitimately outgrows the frozen backup and that week diverges for good; from
-#    then on the compare only means anything bounded, which skips exactly that week:
-#      $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --to-week last-sealed
-#    ('last-sealed' excludes the current calendar week, so it covers the cutover week only in a same-week rehearsal —
-#     which a local run always is. Elsewhere, bound below cutover_start's week explicitly.)
-$RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
+    --confirm-retention-paused --skip-wrap
+#    The settle gate polls (default 120s) instead of demanding an instantaneous replication_queue of 0, so with the
+#    traffic from step 3 still flowing it should pass on ordinary churn rather than abort. Watch what it prints: it
+#    reports the queue depth, the oldest entry's age and max num_tries, and says which of the two verdicts it reached.
+#    Record the cutover_start it prints. With traffic running there WILL be traces left in the tail write-gap — in
+#    traces_pre_cutover_backup but not in live traces (runbook "The final cutover window"; OPIK-8238 adds the sweep
+#    that carries them). Seeing that gap is part of the point of rehearsing with traffic, and it takes TWO different
+#    compares, because the gap and a fidelity defect live in different weeks:
+#
+#    (a) SIZE THE GAP — unbounded, straight after the swap, with --drill-down. The gap rows are in the cutover week,
+#        which every weekly bound excludes, so a bounded run cannot see them. Read the keys listed for the
+#        backup-only side: those are the tail writes. (Keys live-only are post-swap writes — the harmless direction.)
+$RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --drill-down
+#
+#    (b) CHECK FIDELITY — bounded below the cutover week, where any mismatch IS a defect rather than the known gap.
+#        The parked backup is frozen at cutover_start while live `traces` keeps taking writes, so the current week
+#        diverges for good. ('last-sealed' excludes the current calendar week, which in a same-week local rehearsal is
+#        the cutover week; elsewhere bound below cutover_start's week explicitly.)
+$RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --to-week last-sealed
 
-# 9. Restore the buffer ceiling (unset the env var and recreate_backend), keeping traceColumnsNonNullable=true and
-#    deletion capture ON — capture must stay live through the soak, since the rollback reverse-replay reads the bridge.
-unset ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS; recreate_backend
+# 9. Leave the config as it is: keep traceColumnsNonNullable=true and deletion capture ON — capture must stay live
+#    through the soak, since the rollback reverse-replay reads the bridge.
 
 # 10. OPTIONAL — the deferred Distributed wrap. Flip tracesDistributedWrapEnabled=true FIRST (it retargets trace
-#     mutations at traces_local) and re-raise the buffer for --confirm-maintenance. A mismatch here IS fail-loud: with
-#     the flag true before the wrap exists, deletes 500 with "Code: 60 ... Table opik.traces_local does not exist" —
-#     worth triggering once, to see it. After the wrap, `DELETE FROM opik.traces` returns "Code: 36 DELETE query is not
-#     supported", and system.parts relabels from traces to traces_local.
-export ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=true \
-       ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=10000
+#     mutations at traces_local). --confirm-maintenance is a SEPARATE, unrelated concern: it asserts traffic is
+#     quiesced or a maintenance window is in effect for the wrap's cross-node ON CLUSTER skew, which hits reads and
+#     which no ingestion-side setting covers. Both wrap paths (--with-wrap and --wrap-only) require it.
+#     A mismatch on the toggle IS fail-loud: with the flag true before the wrap exists, deletes 500 with
+#     "Code: 60 ... Table opik.traces_local does not exist" — worth triggering once, to see it. After the wrap,
+#     `DELETE FROM opik.traces` returns "Code: 36 DELETE query is not supported", and system.parts relabels from
+#     traces to traces_local.
+export ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=true
 recreate_backend
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted
-unset ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS; recreate_backend
 ```
 
 **Resetting between iterations depends on how far the last run got.** If you have **not** completed the `EXCHANGE`
@@ -193,6 +214,11 @@ Rollback is driven by `rollback.sh`; pick the stage by how far the forward run g
 deletion replay**, so to exercise it, delete some traces *after* the EXCHANGE — they are bridged with
 `event_time >= cutover_start`, and the rollback must re-apply them so they do **not** resurrect on the restored `traces`.
 Pass the `cutover_start` that `exchange_and_wrap.sh` printed.
+
+**Rehearse the rollback direction with traffic running too**, for the same reason as the forward direction: no path in
+either direction holds writes, so the promote and the reverse replay have to be correct against a table that is still
+being written to. The generators below are the post-cutover activity the rollback discards or replays; leave them
+running across the promote.
 
 ```bash
 # Stage A — forward run stopped before the EXCHANGE: discards the shadow; live `traces` is untouched.

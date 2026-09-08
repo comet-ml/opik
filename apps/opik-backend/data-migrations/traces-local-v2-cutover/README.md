@@ -1,13 +1,17 @@
-# Buffered cutover runbook — `traces` → partitioned + sharding-ready
+# Cutover runbook — `traces` → partitioned + sharding-ready
 
-Operator runbook for the buffered cutover of the ClickHouse `traces` table: it migrates the live, unpartitioned
+Operator runbook for the cutover of the ClickHouse `traces` table: it migrates the live, unpartitioned
 `traces` table to `traces_local_v2` (weekly-partitioned, denullified, `is_deleted`-ready) with **near-zero downtime**
 and **near-zero deletion loss** — the deletion bridge replays every captured delete before the swap, leaving only a
 bounded residual micro-window (see "The final cutover window" below, which also gives the mitigation) — then wraps it
 in a sharding-ready `Distributed` table.
 
-The mechanism is **backfill + delta + deletion replay + EXCHANGE**, using the ingestion async-insert buffer to absorb
-the brief cutover window instead of a dual-write path.
+The mechanism is **backfill + delta + deletion replay + EXCHANGE**, with no dual-write path and **no ingestion-path
+config change**. Writes are never held: the `EXCHANGE` is atomic per node, so a concurrent insert always commits to a
+valid table. Writes that land in the *old* one — in the final-delta→`EXCHANGE` gap and during the cross-node
+`ON CLUSTER` skew — stay in the parked backup, which is an open defect tracked as OPIK-8238 rather than a property of
+this procedure. See ["The final cutover window"](#the-final-cutover-window) for what the swap does and does not
+guarantee.
 
 This runbook is the human-facing artifact; its SQL is validated end-to-end by
 [`TracesLocalV2CutoverTest`](../../src/test/java/com/comet/opik/infrastructure/TracesLocalV2CutoverTest.java). Treat
@@ -59,12 +63,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 |---|---|---|
 | Before the backfill | Row masked on the source | `INSERT SELECT` honors `apply_deleted_mask=1` → never copied. No replay. |
 | During the backfill, after its row was copied | Delta can't see the mask flip | Captured in the bridge → **replayed** before EXCHANGE. |
-| During the delta / buffer window | Same as above | Same bridge, same replay step. |
+| During the delta and the final cutover window | Same as above | Same bridge, same replay step. |
 
 ## Prerequisites (do not start without these)
 
 1. **24h UUIDv7 ingestion validation** live long enough that no un-validated future-dated ids land in newly ingested
-   weeks. This is not tied to a retention cycle (retention never runs — prereq 8). Pre-validation far-future-timestamp
+   weeks. This is not tied to a retention cycle (retention never runs — prereq 7). Pre-validation far-future-timestamp
    rows already in the table are *not* blocked by this: they are copied by the `created_at` slice and surfaced by the far-future audit
    query below — this prereq only ensures no *new* out-of-range partitions are created mid-cutover.
 2. **`traces_local_v2` exists and is empty** (migration 000101).
@@ -78,21 +82,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    `ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED=true` (the backend service forwards it) and restart the
    backend. `backfill.sh` captures the `backfill_start` anchor (a `now64(6, 'UTC')` taken just before the first INSERT)
    and prints it — the delta and the replay both key off it.
-6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
-   `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
-   `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
-   again. **Where it is set, the exact value, the rollout and the revert step are in
-   ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it)** — it is a temporary env var on the
-   deployment's own backend config, not a chart value (OPIK-7686). Have that config change written and reviewed *before*
-   the window, so applying it is a merge, not an edit. The ceiling is a backend per-query setting applied on the backend's own
-   ClickHouse client, so the migration scripts' direct `clickhouse-client` session **cannot read or verify it**. It is
-   therefore **operator-asserted**: `exchange_and_wrap.sh` refuses the EXCHANGE without `--confirm-buffer-raised` (a
-   fail-fast acknowledgment gate — it forces the operator to confirm the step, though it cannot prove the value took
-   effect). Confirm it actually took effect on the prod-clone/staging load test (the Go/No-Go "Async-insert ceiling
-   confirmed" item) before production. **Also confirm client/SDK insert timeouts exceed the widened buffer** (~10s) —
-   with `wait_for_async_insert=1` a raised ceiling blocks each insert until it flushes, so a shorter client timeout would
-   surface as ingestion errors during the window.
-7. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
+6. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
    `ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE`, default `false`). The successor's `end_time`/`ttft` are
    **non-nullable sentinel** columns, so the app must represent an absent value as the epoch/NaN sentinel — not `null` —
    once they are live. This flag switches that on **both** sides: the write bind, and the read/filter/sort translation
@@ -111,26 +101,26 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    > EXCHANGE the read-back becomes the discriminator: an absent `end_time` must return `null`, not `1970-01-01`. Assert
    > `ttft` alongside it — same flag, other arm, and one trace written without either covers both. Do both sides of the
    > swap, or a stale instance passes the only check you ran.
-8. **Confirm Data Retention is disabled** (`RETENTION_ENABLED=false`, the default). If it is ever enabled, see the
+7. **Confirm Data Retention is disabled** (`RETENTION_ENABLED=false`, the default). If it is ever enabled, see the
    retention note above first.
-9. **Sufficient free disk** — the backfill writes a full second physical copy of `traces`, so node free space must clear
+8. **Sufficient free disk** — the backfill writes a full second physical copy of `traces`, so node free space must clear
    **≥ 2× the current `traces` on-disk size** (more counting merge scratch). `estimate.sh` reports headroom and
    `backfill.sh` aborts below `--min-free-factor` (default 2.0). On tiered storage this whole-node floor is necessary but
    not sufficient — validate per-volume (hot) headroom too, since new parts land hot before they tier.
-10. **Schema parity of source and successor** — `traces` and `traces_local_v2` must stay equivalent for as long as both
-    exist: the same base (stored) columns (which the cutover must copy) and the same materialized columns (which each
-    table recomputes). Guarded in CI by `TracesLocalV2CutoverTest` — `cutoverCopiesEveryBaseColumn` (a new base column
-    fails the build until it is in the cutover column list) and `successorMaterializedColumnsMatchSource` (a materialized
-    column added to one table but not the other fails the build). Re-confirm both are green on the release being
-    deployed.
-11. **Fresh backup / snapshot** of the ClickHouse data node.
-12. **Freeze concurrent DDL on `traces` for the window — and through the rollback-eligible soak.** Hold any deploy or
+9. **Schema parity of source and successor** — `traces` and `traces_local_v2` must stay equivalent for as long as both
+   exist: the same base (stored) columns (which the cutover must copy) and the same materialized columns (which each
+   table recomputes). Guarded in CI by `TracesLocalV2CutoverTest` — `cutoverCopiesEveryBaseColumn` (a new base column
+   fails the build until it is in the cutover column list) and `successorMaterializedColumnsMatchSource` (a materialized
+   column added to one table but not the other fails the build). Re-confirm both are green on the release being
+   deployed.
+10. **Fresh backup / snapshot** of the ClickHouse data node.
+11. **Freeze concurrent DDL on `traces` for the window — and through the rollback-eligible soak.** Hold any deploy or
     Liquibase changeset that would `ALTER`, `RENAME`, or otherwise touch `traces` / `traces_local_v2` for the whole
     backfill→EXCHANGE window — a schema change landing mid-cutover races the swap and can corrupt it — and keep it frozen
     until `finalize.sh` commits (see "Point of no return"): a `traces` schema change made *after* the EXCHANGE is lost
     from the live table on a rollback + finalize. The revamp's own migrations (000096/000101) are already applied; this
     is about *unrelated* migrations or ad-hoc DDL during the window.
-13. **Deletion bridge holds no empty-`project_id` trace events, and OPIK-7483 is live fleet-wide.** Since OPIK-7483 every
+12. **Deletion bridge holds no empty-`project_id` trace events, and OPIK-7483 is live fleet-wide.** Since OPIK-7483 every
     trace delete carries its `project_id`, so the cutover replay is full-key only (no workspace-scoped branch). Confirm
     OPIK-7483 is deployed across the **whole** backend fleet before the window (a straggler pre-7483 backend could emit an
     empty-`project_id` event the replay would miss), then assert the bridge holds none. `deletion_events_local` is a
@@ -140,7 +130,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     WHERE source_table = 'traces' AND project_id = '';
     ```
     If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
-14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, anchored at the current instant.** The
+13. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, anchored at the current instant.** The
     driver takes a literal timestamp carrying the ` UTC` marker, so read the clock first and pass what it printed:
     `SELECT toString(now64(6, 'UTC'))`, then `--backfill-start '<that value> UTC'`. Both statements execute but match
     nothing (no row has `created_at`/`last_updated_at` in the future, and the bridge holds no events after that instant),
@@ -153,7 +143,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     > `ALTER DELETE`**. The read-only drivers (`estimate.sh`, `verify.sh`) cannot surface this — only executing a
     > mutation can. Grant it **column-scoped** (`ALTER UPDATE(_row_exists)`) so the user can flip the delete mask
     > without being able to modify any real data column.
-15. Schedule during off-peak hours.
+14. Schedule during off-peak hours.
 
 ## The sequence
 
@@ -176,36 +166,36 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    It executes the reference statement in
    [`000001_backfill_traces_local_v2.sql`](scripts/db-app-analytics/000001_backfill_traces_local_v2.sql) — the script
    reads that file and substitutes the window bounds, so the two never drift.
-2. **Raise the buffer ceiling** (config — see
-   ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it) for the key, the value and the
-   restart wait), then **[`scripts/delta_replay.sh`](scripts/delta_replay.sh)**
+2. **[`scripts/delta_replay.sh`](scripts/delta_replay.sh)**
    (reference SQL [`000002_delta_and_deletion_replay.sql`](scripts/db-app-analytics/000002_delta_and_deletion_replay.sql))
    — delta-insert (anchored at `backfill_start`), then **deletion replay**. The replay runs with
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
+   No config change precedes this step — the procedure takes no hold on writes.
    The driver passes `--time`, so clickhouse-client prints each statement's wall time in seconds (delta-insert first,
-   deletion replay second) — **record the second value**: the final-delta→EXCHANGE gap must fit inside the buffer hold
-   (Go/No-Go). Without `--time` a bare `--query` prints no timing at all.
+   deletion replay second) — **record the second value**: it sizes the final-delta→`EXCHANGE` gap, which is where tail
+   writes are left behind. Without `--time` a bare `--query` prints no timing at all.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
 3. **QA — run [`scripts/verify.sh`](scripts/verify.sh)** (see "Verifying the migration"): confirm the copy altered no
-   data before committing the swap. Run it after step 2 (and it can be re-run after step 4).
+   data before committing the swap. Run it after step 2; it can be re-run after the swap, bounded as
+   ["Verifying the migration"](#verifying-the-migration-qa) describes.
 4. **[`scripts/exchange_and_wrap.sh`](scripts/exchange_and_wrap.sh)** (reference SQL
    [`000003_exchange_and_wrap.sql`](scripts/db-app-analytics/000003_exchange_and_wrap.sql)) — first **gates on a settled
-   replication state** (empty `replication_queue` on `traces`/`traces_local_v2` and the deletion-replay mutation finished
-   on `traces_local_v2`, across all replicas via `clusterAllReplicas`) so no replica swaps in an incomplete table
-   (`--force` overrides); then records and
+   replication state** (see ["The replication-settle gate"](#the-replication-settle-gate) — it polls rather than
+   demanding an instantaneous zero, so live ingest churn does not abort it while a genuinely lagging replica still
+   does; `--force` overrides, and the Go/No-Go forbids that in production); then records and
    prints `cutover_start`, runs `EXCHANGE TABLES ... ON CLUSTER` and renames the displaced old data to
    `traces_pre_cutover_backup` (see "Naming and the parked backup"). It **stops there by default** (EXCHANGE only,
    leaving `traces` a `MergeTree` where deletes still work); the `RENAME` + `Distributed` wrap runs only with
-   `--with-wrap`. Restore the buffer ceiling and verify.
+   `--with-wrap`. Then reconcile (step 5) and verify.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
-       --backfill-start '<anchor from backfill.sh> UTC' --confirm-buffer-raised --confirm-retention-paused
+       --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused
    ```
-   Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay), `--confirm-buffer-raised` (writes in
-   the final window survive the swap), and `--confirm-retention-paused` (retention deletes bypass the bridge, so a
-   retention sweep in the window would leak across the swap). Add `--with-wrap --confirm-daos-retargeted` only once
+   Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay) and `--confirm-retention-paused`
+   (retention deletes bypass the bridge, so a retention sweep in the window would leak across the swap). Add
+   `--with-wrap --confirm-maintenance --confirm-daos-retargeted` only once
    `databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true` is live across the backend fleet (OPIK-7455), so trace
    mutations target `traces_local`. The wrap is separately reversible at any later point with
    `rollback.sh --unwrap-only` (see "Un-wrap"), which keeps the cutover — so a wrap concern need not become a decision
@@ -259,7 +249,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 >   completes, every trace delete targets a `traces_local` that does not exist yet →
 >   `Code: 60 UNKNOWN_TABLE`. Reads and writes are unaffected.
 > - **wrap first**: from the swap until the rolling restart finishes, deletes hit the `Distributed` `traces`
->   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew with no buffer.
+>   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew to reads.
 >
 > **Since OPIK-7773 the mismatch window is also a readiness window.** `clickhouse-traces-topology` is a
 > `critical`/`ready` check, so for as long as flag and topology disagree — in **either** order — every instance that
@@ -305,12 +295,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > The wrap is **gapless per node**: it pre-builds the `Distributed` wrapper under a temp name, then one atomic
 > multi-target `RENAME` rotates the data to `traces_local` and the wrapper into `traces`, so `traces` is never absent on
 > a node. A brief **cross-node** `ON CLUSTER` propagation skew still exists (as for any `ON CLUSTER` DDL), during which a
-> Distributed query could route to a not-yet-created `traces_local` on a lagging node — so the deferred `--wrap-only`
-> path still **requires `--confirm-maintenance`** (re-raise `asyncInsertBusyTimeoutMaxMs` / quiesce ingestion / take a
-> maintenance window). The same-run `--with-wrap` path **shares that cross-node window** — the still-raised EXCHANGE
-> buffer parks INSERTs (reducing, not eliminating, the exposure to a size-triggered flush routed at a not-yet-created
-> `traces_local`), and SELECTs are not buffered — so the brief skew is an accepted cost of the cutover window either way,
-> not something the buffer fully covers.
+> Distributed query could route to a not-yet-created `traces_local` on a lagging node — so **both** wrap paths
+> **require `--confirm-maintenance`** (quiesce ingestion / take a maintenance window). The exposure is identical on the
+> two paths: the failing query is a `SELECT`, so nothing done on the ingestion side reduces it, and being in the same
+> run as the `EXCHANGE` buys `--with-wrap` nothing here (OPIK-8239).
 >
 > **Wrap flags** (`exchange_and_wrap.sh`, mutually exclusive; default is EXCHANGE-only): omit them (or pass
 > `--skip-wrap`, an explicit alias) to run the EXCHANGE and stop; `--with-wrap` to also apply the wrap in the same run;
@@ -320,78 +308,33 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 delta one). This is normal — `ReplacingMergeTree` collapses them on merge / under `FINAL` / `LIMIT 1 BY id`, highest
 `last_updated_at` winning. Do not "fix" it.
 
-### Where the buffer bump lives (and how to revert it)
+### The one rolling restart (`traceColumnsNonNullable`)
 
-**Decision (OPIK-7686): a temporary env var on the deployed backend's own configuration — not a chart value.** The three
-`ANALYTICS_DB_ASYNC_INSERT_*` knobs are deliberately absent from the chart's `values.yaml` (OPIK-6880, #7675).
-Rationale:
+Getting to the `EXCHANGE` needs **one** rolling restart, and it carries no latency cost: rolling out
+`databaseAnalyticsDataModel.traceColumnsNonNullable = true` (prereq 6) to every backend instance beforehand. Nothing is
+restarted afterwards to undo it. The optional `Distributed` wrap spends a restart of its own for
+`tracesDistributedWrapEnabled` (see the wrap prerequisite) — that one belongs to the wrap, is only paid if you apply
+it, and likewise costs no latency.
 
-- **No chart change is needed.** `component.backend.env` is a free-form map rendered straight into the backend
-  ConfigMap, so a deployment-level entry is already sufficient.
-- **Removal is a clean one-step rollback.** Unset means "leave `queryParameters` alone" (`DatabaseAnalyticsFactory`), so
-  *deleting* the key restores whatever `queryParameters` carries — `async_insert_busy_timeout_max_ms=250` on the shipped
-  `config.yml` default. There is no "set it back to 250" edit, and therefore no pinned value that can later drift from
-  that default. For a time-boxed window that reversibility is the property worth optimising for.
-  > **If your deployment overrides `ANALYTICS_DB_QUERY_PARAMETERS`, `250` is not your baseline.** Deleting the key
-  > restores *that* chain's `async_insert_busy_timeout_max_ms` — or, if the chain omits it, the ClickHouse server value.
-  > Read your effective `queryParameters` before the window and record the number you are reverting to.
-- **The value is deployment- and window-specific** — one environment, for the length of the cutover. Keeping it in that
-  deployment's own config leaves it version-controlled and auditable without turning a temporary state into a permanent
-  chart default that every install inherits.
-- **A chart value would save no work**: you edit the deployment config either way.
-
-> For the record, the reason first given on #7675 for excluding these — that rendering them would send empty strings
-> where the backend expects an integer, so it "would not be inert" — was **wrong**. `config.yml` ships
-> `${ANALYTICS_DB_ASYNC_INSERT_*:-}` as the default for all three, so the empty case is the normal path in every
-> environment today: an empty substitution leaves a bare YAML scalar that parses to `null` on the boxed field behind it
-> (`Integer` for the two busy-timeout knobs, `Long` for `asyncInsertMaxDataSize`), and the `@Min(1)` each of them carries
-> does not fire on null. Exposing them in the chart with empty defaults *would* be safe. The decision above rests on
-> reversibility and scope, not on safety.
-
-> **Never bump it by editing `ANALYTICS_DB_QUERY_PARAMETERS`.** That means re-pasting the entire tuning string
-> (`compress`, `failover`, `async_insert`, `wait_for_async_insert`, the skip-index and shard settings, …), which risks
-> silently dropping one of the others and drifting from the `config.yml` default. The dedicated
-> `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` override exists precisely so the cutover states only the one value it
-> is changing.
-
-**What to set.** One key on the backend. The two delivery forms are not interchangeable — under Helm it is a YAML entry
-in the values map, so `KEY=VALUE` shell syntax there renders nothing:
-
-```yaml
-# Helm — under component.backend.env (quote the value; the ConfigMap takes strings)
-component:
-  backend:
-    env:
-      ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS: "10000"
-```
-
-```bash
-# docker-compose — a backend environment variable (the compose file already forwards it)
-ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=10000
-```
-
-Only the ceiling changes: leave `…_MIN_MS` and `…_MAX_DATA_SIZE` unset, so the floor stays at the
-`async_insert_busy_timeout_min_ms=100` carried by `queryParameters`, and widening the ceiling alone is what parks the
-inserts.
-
-**How to revert: delete the key** — do not set `250` (see the caveat above on what your baseline actually is). The revert
-is owed on **every** exit path, not just the happy one: after a successful EXCHANGE it is sequence step 5, and after a
-**rollback** it is equally required. `rollback.sh` is SQL-only and does not touch backend config, so no stage removes the
-override for you — a rolled-back deployment left with the widened ceiling keeps parking every insert for up to ~10s.
-Treat the revert (and its restart) as part of finishing either outcome.
+> **The async-insert knob is untouched, and OPIK-7686's decision stands.** The three
+> `ANALYTICS_DB_ASYNC_INSERT_*` knobs remain valid production tuning, deliberately absent from the chart's `values.yaml`
+> (OPIK-6880, #7675) and settable as a deployment-level env var — see the
+> [self-host troubleshooting guide](../../../opik-documentation/documentation/fern/docs-v2/self-host/troubleshooting.mdx)
+> for how and when to use them. What ended is only the **cutover's dependence** on raising one of them for the window
+> (OPIK-8239) — a dependence that never delivered what it promised; see "The final cutover window".
 
 **It takes effect only on a backend restart — so confirm the restart finished before continuing.** The backend receives
-this through the container environment (`envFrom.configMapRef` under Helm), which Kubernetes injects at container start
-only: editing the ConfigMap does not reach a running pod. **How that restart is triggered is deployment-specific** — the
-chart ships no automation for it, so some deployments run a ConfigMap watcher that rolls the workload on its own while
-others need an explicit `kubectl rollout restart deployment/opik-backend`. Know which one yours is *before* the window.
-Either way the operator's obligation is identical, because the ceiling has to be live on **every** instance before step
-2 — so verify rather than assume:
+the flag through the container environment (`envFrom.configMapRef` under Helm), which Kubernetes injects at container
+start only: editing the ConfigMap does not reach a running pod. **How that restart is triggered is deployment-specific**
+— the chart ships no automation for it, so some deployments run a ConfigMap watcher that rolls the workload on its own
+while others need an explicit `kubectl rollout restart deployment/opik-backend`. Know which one yours is *before* the
+window. Either way the flag has to be live on **every** instance before the `EXCHANGE` (see "The final cutover window"),
+so verify rather than assume:
 
 ```bash
 kubectl rollout status deployment/opik-backend -n <namespace>
 kubectl get cm opik-backend -n <namespace> \
-    -o jsonpath='{.data.ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS}{"\n"}'
+    -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE}{"\n"}'
 # and confirm no surviving pod predates the roll:
 kubectl get pods -n <namespace> -l component=opik-backend \
     -o custom-columns=NAME:.metadata.name,START:.status.startTime
@@ -399,48 +342,91 @@ kubectl get pods -n <namespace> -l component=opik-backend \
 
 These names are what the chart renders by default — Deployment and ConfigMap `opik-backend`, label
 `component=opik-backend`. They are derived from `opik.name`, so a `nameOverride` (or a parent chart supplying one) moves
-all three; substitute your release's actual names.
+all three; substitute your release's actual names. The ConfigMap read proves the *value* is there; it does not prove
+every pod picked it up, which is what the rollout status and the pod start times are for — and neither proves the
+**behaviour**, which only the positive per-instance check in prereq 6 does.
 
-Three consequences to plan for:
+**The restart itself costs ingestion capacity** (rolling-update `maxUnavailable`, plus any PodDisruptionBudget), so do
+it while there is slack — not between the final delta and the `EXCHANGE`.
 
-- **One restart, not two, before the tail.** `traceColumnsNonNullable = true` (prereq 7) is another entry in the same
-  backend config and the same ConfigMap — and step 1 of "The final cutover window" asks for both. Land them **together**
-  so the fleet restarts once.
-- **Keep the chosen ceiling below the pod's termination grace period.** The revert is delivered by a *second* restart, and
-  at that moment pods are holding inserts parked for up to the widened ceiling. The chart does not set
-  `terminationGracePeriodSeconds`, so it is the Kubernetes default **30s** — comfortably above a ~10000ms ceiling, but a
-  much larger ceiling would let `SIGKILL` land on parked inserts. Check the two numbers against each other before
-  choosing a value.
-- **The restart itself costs ingestion capacity** (rolling-update `maxUnavailable`, plus any PodDisruptionBudget), so do
-  it while there is slack — not between the final delta and the EXCHANGE.
+### The replication-settle gate
 
-### The final cutover window (the zero-loss invariant)
+`exchange_and_wrap.sh` gates the swap on replication having settled, because the `EXCHANGE` is metadata-only and
+near-instant but each replica reads its own local parts afterwards: a replica still fetching backfilled parts, or one
+that has not finished the deletion-replay mutation, would serve an incomplete table. Both signals are read across every
+replica via `clusterAllReplicas`, so one connection sees the whole cluster. The queries are the `settle-sample`,
+`settle-queue-detail` and `settle-mutation-detail` blocks of
+[`000003_exchange_and_wrap.sql`](scripts/db-app-analytics/000003_exchange_and_wrap.sql); the driver renders all three
+before it starts polling, so a mis-marked block fails the run up front rather than while reporting a failure.
 
-The buffer widening (prereq 6) is what makes the flip lossless, but the guarantee rests on a timing invariant worth
-stating precisely. Writes use `async_insert=1, wait_for_async_insert=1`, so a raised `asyncInsertBusyTimeoutMaxMs` parks
-each insert (the client blocks) until it flushes — and after the `EXCHANGE` a parked insert flushes into whatever table
-is now named `traces`, i.e. the successor. **But the adaptive buffer also flushes on size**, so under load a flush can
-still land in the *old* `traces` in the gap between the last delta read and the `EXCHANGE` — and the delta has already
-run. The binding constraint is therefore **not** "replay < buffer window"; it is that the **gap between the final delta
-and the `EXCHANGE` completing must stay within the buffer hold**. So run the tail as tightly as possible:
+**It polls, and it judges the two signals differently.** On a multi-replica cluster under live ingestion the
+`replication_queue` count is intermittently non-zero by construction — a `GET_PART` entry exists for every part a
+replica has not yet fetched — so demanding an instantaneous 0 would abort on ordinary churn and push the operator
+toward `--force`, which the Go/No-Go forbids. Hence:
 
-1. Widen the buffer, and **roll out `traceColumnsNonNullable = true` to every backend instance** (see below). Both are
-   entries in the same backend config and the same ConfigMap, so land them **together** and let the single restart carry
-   both — see ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it).
+| Signal | Judgement |
+|---|---|
+| the deletion-replay **mutation** on `traces_local_v2` | **Unconditional.** It is one bounded statement, not churn, so it must reach `is_done` on every replica within `--settle-timeout` (default 120s) or the gate fails — an unapplied mask means bridged deletes leak live across the swap. |
+| the **replication queue** on `traces` / `traces_local_v2` | **Stuck-ness, not depth.** It passes the moment the queue drains to 0. If it has not drained by the deadline, the gate reports the oldest entry's age, the highest `num_tries` and whether any entry carries a `last_exception` — an entry older than 60s, more than 3 retries, or any recorded exception means a replica is genuinely lagging and the gate **fails loudly, printing the offending entries per replica**. A queue that is merely moving is accepted, with the numbers printed so the operator sees what was accepted. |
+
+Raise `--settle-timeout` for a slow-but-progressing cluster. `--force` skips the gate entirely and is a production
+No-Go: the gate is permissive enough that reaching its failure path means something is genuinely wrong.
+
+### The final cutover window
+
+**What the swap guarantees.** Nothing in this procedure parks an insert, and it does not need to: the `EXCHANGE` is
+**atomic per node** (it requires an Atomic database, the default), so `traces` is never absent anywhere and every
+concurrent insert commits to a valid table — the old storage if it reaches a node pre-swap, the new one if post-swap.
+Neither errors, and no insert is rejected. **Deletes** are covered up to `cutover_start` by step 4's final replay.
+
+**Writes in the tail are not covered yet.** Two sources leave them in the table that becomes the parked backup:
+
+- the **final-delta→`EXCHANGE` gap** — writes after the last delta read and before the swap;
+- the **cross-node `ON CLUSTER` skew** — `EXCHANGE` is atomic per node but not across nodes, so while it propagates,
+  inserts routed at a not-yet-swapped node still land in the old table.
+
+Those rows are **not destroyed** — they sit in `traces_pre_cutover_backup` and stay recoverable until `finalize.sh`
+retires it. What is missing is a step that carries them into the live table and proves it did: one driven by *version*
+rather than key presence (a trace merely *updated* in the tail is already on the successor at an older
+`last_updated_at`, so a presence check finds nothing to do), and one that does not resurrect a delete that fired after
+the swap. **OPIK-8238 adds exactly that** and supersedes this note. Until it lands, size the gap after the swap and
+decide knowingly — see the Go/No-Go item.
+
+> **This is an open defect, not a regression introduced by dropping the buffer.** The removed setting was believed to
+> hold these writes and largely did not — the rejected alternatives below give the mechanism. Removing it widens the gap
+> by the small fraction the buffer genuinely held, and replaces a false guarantee with a stated one.
+
+The tail is still worth running tightly, because its length is what decides how many writes land in that gap:
+
+1. **Roll out `traceColumnsNonNullable = true` to every backend instance**
+   (["The one rolling restart"](#the-one-rolling-restart-tracecolumnsnonnullable), and the flip's own note below). Do it
+   while there is slack, not between the final delta and the `EXCHANGE`.
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
-3. Run a **final** `delta_replay.sh` as the last write-facing step.
+3. Run a **final** `delta_replay.sh` as the last write-facing step before the swap.
 4. Run `exchange_and_wrap.sh --backfill-start '<anchor> UTC' …` **immediately** after it (the settle gate + `EXCHANGE` are
    fast and metadata-only). It captures `cutover_start`, then runs a **final deletion replay** from `backfill_start`
    right before the swap — so deletes bridged in the `[final delta_replay, cutover_start)` gap are masked on the
    successor rather than leaking (that gap is covered by neither the earlier forward replay nor the rollback
-   reverse-replay, which starts at `cutover_start`). Deletions only; the buffer carries the writes.
-5. Restore the buffer ceiling; parked inserts flush into the successor.
+   reverse-replay, which starts at `cutover_start`). Deletions only.
 
-Keep step 3→4 short. **Deletes** up to `cutover_start` are covered by step 4's final deletion replay; **writes** in the
-gap are covered by the buffer (which flushes into the successor after the flip). The one residual is a delete whose
-bridge row commits after that final replay's read but with `event_time < cutover_start` — the same inherent micro-window
-as a size-triggered buffer flush; if delete load is high, quiesce user deletes for the final seconds.
+Keep step 3→4 short. **Deletes** up to `cutover_start` are covered by step 4's final deletion replay; **writes** in
+that gap and across the swap skew are the exposure above. The one residual on the delete side is a delete whose
+bridge row commits after that final replay's read but with `event_time < cutover_start` — an inherent micro-window; if
+delete load is high, quiesce user deletes for the final seconds.
+
+*Rejected alternatives, recorded so they are not re-proposed (OPIK-8239).* **Widening the async-insert buffer**
+(`asyncInsertBusyTimeoutMaxMs`) to hold writes across the swap does not work here. The backend serves reads and writes
+through one shared R2DBC `ConnectionFactory` (`DatabaseAnalyticsModule`), and writes run `wait_for_async_insert=1`, so
+a parked insert holds a request thread and a connection for its whole wait and reads contend with it on the same
+transport: the entire ClickHouse-backed surface slows, not just ingestion. It also covers only part of the gap, because
+the adaptive buffer flushes on whichever of the busy timeout, `async_insert_max_data_size` or
+`async_insert_max_query_number` fires first, and at real trace row widths the size and count limits bind well before
+the timeout. And because the ceiling arrives through the container environment, applying
+it and reverting it are two fleet-wide restarts, which brackets the degraded period and puts a floor under its length.
+**`wait_for_async_insert=0`** removes the latency but discards delivery confirmation exactly when it matters most, and
+still needs both restarts. **A smaller ceiling** keeps every one of those costs for proportionally less of an already
+partial benefit.
 
 **The `traceColumnsNonNullable` flip (mandatory, and why it goes first).** The successor stores `end_time`/`ttft` as
 non-nullable epoch/NaN sentinels, and the flag is what makes the app agree with that representation — sentinel binds on
@@ -448,7 +434,7 @@ write, and sentinel→`null` translation on read, filter and sort. It is a **con
 (not atomic), unlike the metadata-only `EXCHANGE`, so it cannot be flipped at the same instant; roll it out to `true` on
 **all** instances **before** the `EXCHANGE`.
 
-*Why before, not after.* Not because writes would break — they would not (see prereq #7: a `null` bind is silently
+*Why before, not after.* Not because writes would break — they would not (see prereq #6: a `null` bind is silently
 converted to the column DEFAULT, which is the sentinel, so writes succeed on either setting). It goes first because the
 **read** side must already speak sentinel the instant the successor is live under the name `traces`: while the flag is
 `false` against the successor, an absent `end_time` reads back as `1970-01-01` rather than `null`, and absent-value
@@ -645,7 +631,7 @@ instead scatter each insert across every weekly partition that workspace spans �
 (litellm [BerriAI/litellm#31294](https://github.com/BerriAI/litellm/issues/31294) mints ~2201). The rows are legitimate
 customer data — a valid UUIDv7 that merely carries a future timestamp — so they are copied and kept like any other.
 `traces_local_v2` partitions by the honest `Date32` weekly Monday of `id_at`
-([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
+(OPIK-7456: `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
 and its `id_at` is a `DateTime64` (honest to 2299), so each such row lands in its **own honest ~2201 (`22010601`-shaped)
 weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITION` / retention / tiering operation never
 touches them by accident, and vice versa. Once written, the extra partitions are benign at rest: they never tier to cold
@@ -797,7 +783,7 @@ on a large backfill for no gain.
 `TraceService.delete(ids, projectId)` resolves each id's owning project(s) and deletes per project under the full key.
 Since **OPIK-7483** there is no project-less path: an id that resolves to no owning project is absent (a delete of a
 non-existent row) and is skipped, so **no deletion event is ever bridged with an empty `project_id`** for
-`source_table='traces'` (a pre-cutover check asserts the bridge holds none — Prerequisites #13). The replay therefore
+`source_table='traces'` (a pre-cutover check asserts the bridge holds none — Prerequisites #12). The replay therefore
 carries a single branch: full-key events delete by `(workspace_id, project_id, id)` — exact, prunes on the destination
 primary key, and correct even though trace ids are not globally unique (a reused id deleted in one project leaves its
 copies in other projects untouched). Without this replay, those during-window deletions would **silently leak** across
@@ -832,17 +818,29 @@ They are **complementary, not alternatives**, and there is **no copy-paste drift
   pins this list to the live `traces` base columns (OPIK-7772 extends it to a topology-aware CI check).
 
 **Every SQL operation — happy path and every rollback stage — is run by a driver script; no SQL or `.sql` file is ever
-run by hand.** Each `.sql` file is the single source a driver reads:
+run by hand.** Each `.sql` file is the single source its driver reads those statements from:
 
 | Step | Reference SQL | Driver |
 |------|---------------|--------|
 | plan — backfill ETA | — | `estimate.sh` |
 | 1 — backfill | `000001_backfill_traces_local_v2.sql` | `backfill.sh` |
 | 2 — delta + replay | `000002_delta_and_deletion_replay.sql` | `delta_replay.sh` |
-| 3 — EXCHANGE + wrap | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
+| 3 — settle gate, EXCHANGE + wrap | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
 | QA — fidelity compare (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
 | rollback | `000004_rollback_stage_{a,b,c}_*.sql`, `000004_rollback_unwrap.sql`, `000004_rollback_reverse_replay.sql` + its postcondition `000004_rollback_verify_replay.sql`, `000004_rollback_sentinel_repair.sql` + its postcondition `000004_rollback_verify_sentinels.sql` | `rollback.sh` |
 | finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
+
+**Where the line falls, for anyone adding SQL here.** Two rows show `—` because not every query a driver issues comes
+from a file, and the split is deliberate:
+
+- **In a versioned `.sql` file, extracted by marker:** every statement that changes data or schema, and every read
+  whose result *is a verdict* the operator acts on. That second half is why `000005`'s `compare` / `confirm-keys` /
+  `version-ties` blocks and `000003`'s three `settle-*` blocks live in files despite being read-only — a fidelity gate
+  or a swap gate deciding wrongly is the failure this procedure exists to prevent, so its SQL is reviewed and versioned
+  like a statement.
+- **Inline in the driver:** the short scalar probes that steer control flow — "what engine is `traces`?", "does this
+  table exist?", "how many replicas?". They are one-liners against `system.*`, they change nothing, and putting them
+  behind a marker would add indirection without adding review value.
 
 Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOUSE_HOST`, `CLICKHOUSE_USER` and
 `CLICKHOUSE_PASSWORD`, plus `--database` and — when the native port is not 9000 — `--port`.
@@ -951,15 +949,14 @@ server's major version, either way:
   official `clickhouse/clickhouse-server` image (set `CLICKHOUSE_CLIENT_IMAGE` to your server version) and dials out to
   `CLICKHOUSE_HOST`; for a ClickHouse on the host's own loopback, add `--network=host` via `CLICKHOUSE_CLIENT_DOCKER_OPTS`.
 
-**In the forward sequence, the only manual actions are not SQL:** (1) raising/restoring the async-insert buffer ceiling
-(`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3 — see
-["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it); (2) flipping
-`databaseAnalyticsDataModel.traceColumnsNonNullable` to `true` in lockstep with the EXCHANGE (and back on rollback) —
-see "The final cutover window"; (3) flipping `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` around the wrap and
-the un-wrap — see "Un-wrap"; and (4) the go/no-go judgement between steps. All four are *backend config* / judgement
+**In the forward sequence, the only manual actions are not SQL:** (1) flipping
+`databaseAnalyticsDataModel.traceColumnsNonNullable` to `true` before the EXCHANGE (and back on rollback) — see "The
+final cutover window"; (2) flipping `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` around the wrap and the
+un-wrap — see "Un-wrap"; and (3) the go/no-go judgement between steps. All three are *backend config* / judgement
 changes (env + rolling restart, or a config push) that these DB-facing scripts cannot and should not make: the mechanism
 is deployment-specific, so the drivers name the flag and the ordering and leave the rollout to the operator. They are
-deliberately operator-owned, and none of them involves typing SQL.
+deliberately operator-owned, and none of them involves typing SQL. **No ingestion-path config change appears on any
+path** — forward, rollback, wrap or un-wrap.
 
 **Recovery is where hand-run SQL does appear**, so the claim above is about the forward sequence and not about the whole
 runbook. Two kinds, both deliberate and documented where they occur:
@@ -1159,8 +1156,8 @@ choosing its mutation table, so reads and inserts never consult it — which is 
 The **DDL** window is separate and not delete-only. While the `ON CLUSTER` rename propagates, a lagging replica still
 resolves the wrapper's `traces_local` target, which the already-renamed replicas no longer have, so a query routed there
 can fail with `UNKNOWN_TABLE` — the exact mirror of the wrap's own window, where a `Distributed` query reaches a node
-where `traces_local` does not exist *yet*. It is sub-second and fails loudly, but it touches **reads too**, so the
-async-insert buffer alone does not cover it: quiesce traffic or take a maintenance window. That is what
+where `traces_local` does not exist *yet*. It is sub-second and fails loudly, but it touches **reads too**, so no
+ingestion-side setting covers it: quiesce traffic or take a maintenance window. That is what
 `--confirm-maintenance` asserts.
 
 `traceColumnsNonNullable` stays `true`: the live table is still the partitioned, sentinel-schema successor, which is
@@ -1185,7 +1182,7 @@ Use stage B/C while the parked original still exists.
 >
 > | step | order | why |
 > |---|---|---|
-> | forward wrap (`--wrap-only`) | **toggle first**, then DDL | in the gap, deletes target a `traces_local` that does not exist yet → `Code 60`. DDL-first would send them at a `traces` that is already `Distributed` → `Code 36`, plus unbuffered cross-node skew |
+> | forward wrap (`--with-wrap` or `--wrap-only`) | **toggle first**, then DDL | in the gap, deletes target a `traces_local` that does not exist yet → `Code 60`. DDL-first would send them at a `traces` that is already `Distributed` → `Code 36`, and exposes the cross-node skew to reads as well |
 > | un-wrap (`--unwrap-only`) | **DDL first**, then toggle | the mirror image: the gap gives `Code 60` again, which is the cheaper failure |
 > | stage B / C | **DDL first**, then toggle | same reasoning as the un-wrap; the promote must land before the flags describing the new shape |
 >
@@ -1377,9 +1374,10 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    you to set `traceColumnsNonNullable` back to `false`, so it *is* false now; the retry puts the sentinel-schema
    successor back under `traces`, which needs it `true` and needs every backend instance restarted to pick it up (it
    comes from a startup snapshot). Skipping this is silent, not loud: absent `end_time` reads back as `1970-01-01` while
-   writes keep succeeding. Raise the async-insert buffer for the window too. Nothing else needs flipping: trace-delete
+   writes keep succeeding. Nothing else needs flipping: no ingestion-path config change is involved, and trace-delete
    partition pruning carries no flag, so the retry's `EXCHANGE` needs no pruning step in either direction — see
-   "Trace-delete partition pruning needs no flip at all".
+   "Trace-delete partition pruning needs no flip at all". The retry's own final-delta→`EXCHANGE` gap and swap skew
+   carry the same write exposure as the first run — see "The final cutover window".
 5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor, marker included (the
    shadow still holds every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
@@ -1421,7 +1419,7 @@ reversible indefinitely via `--unwrap-only`, which needs only `traces` and `trac
 - **Soak duration** — keep the parked backup (`traces_pre_cutover_backup` after a successful cutover;
   `traces_post_rollback_backup` after a rollback) for a defined window (recommend ~2 weeks; it fits well inside the
   bridge's 2-year TTL) so any latent read/query regression surfaces while rollback is still an option.
-- **Freeze `traces` schema DDL through the soak** (extends prereq #12 past the EXCHANGE). Rollback restores the **frozen
+- **Freeze `traces` schema DDL through the soak** (extends prereq #11 past the EXCHANGE). Rollback restores the **frozen
   original** `traces`, which carries no post-cutover DDL, so a column/index added to the successor in-window is **lost
   from the live table** on rollback; finalize's recycle then truncates the parked successor to an empty shadow (its data
   gone — the empty shadow keeps the added column, drift the next cutover's `cutoverCopiesEveryBaseColumn` guard flags).
@@ -1479,10 +1477,10 @@ and disable capture after finalize.
 
 | Variant | Strategy | Notes |
 |---------|----------|-------|
-| Comet SaaS | Buffered cutover (this runbook) | Buffer absorbs the cutover window; bridge active through the soak. |
-| On-premise enterprise | Buffered cutover | Same runbook; ships in the same Helm push. |
+| Comet SaaS | Live cutover (this runbook) | No ingestion-path config change. Tail write-gap per "The final cutover window" (OPIK-8238). Bridge active through the soak. |
+| On-premise enterprise | Live cutover | Same runbook; ships in the same Helm push. |
 | Open-source Docker | Brief read-only window | Little data, downtime acceptable. Bridge still ships; the replay is a no-op when there were no concurrent deletes. If the Liquibase ClickHouse extension cannot run `EXCHANGE ON CLUSTER`, use the fallback `RENAME` sequence. |
-| AWS SageMaker | Buffered cutover | Runs on its own cadence; the bridge ships ahead of the cutover. |
+| AWS SageMaker | Live cutover | Runs on its own cadence; the bridge ships ahead of the cutover. |
 
 ## Verifying the migration (QA)
 
@@ -1629,7 +1627,7 @@ side only is the copy gap, whatever the re-check said. If the sets cannot be est
 and escalate rather than passing it — arbitrary is not the same as benign.
 
 > **The pre-EXCHANGE compare is the gate; the post-EXCHANGE compare has a caveat.** `traces_pre_cutover_backup` is a
-> **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
+> **frozen** snapshot as of `cutover_start`, but live `traces` never stops taking writes — so
 > the **current (live) week will legitimately show a mismatch** (the live table is a superset of the frozen backup by
 > exactly the post-cutover writes). That is expected, not a leak. To use the post-EXCHANGE compare as a real check,
 > either run it **immediately after the swap before writes resume**, or bound it to the **sealed historical weeks** with
@@ -1681,14 +1679,25 @@ ones most often worth reading).
   reverse-replays so a post-cutover delete does not resurrect;
 - **wrong-stage rollback guard** — the topology signals `rollback.sh` keys on (the `traces` engine and `end_time`
   nullability) are distinct in each cutover state, so a mis-targeted stage aborts instead of touching the wrong table;
-- the replay wall time is measured and logged (not asserted — it is environment-sensitive; the buffer-window sizing is
-  done in the cutover rehearsal, not in CI).
+- the replay wall time is measured and logged (not asserted — it is environment-sensitive; sizing the tail against a
+  real workload is done in the cutover rehearsal, not in CI).
 
-**What it does not cover.** The suite drives SQL directly, so nothing in the `scripts/` drivers is exercised by it — they
-need a `clickhouse-client` binary the backend test job does not install, and the repo has no bash harness. The cutover
-rehearsal covers them instead: their argument validation, their topology guards, and three `verify.sh` behaviours worth
-separating from the rest, because they decide a *verdict* rather than reject an argument — and a wrong verdict from a
-fidelity gate is the failure this whole procedure exists to avoid:
+**What it does not cover, and why that is a decision rather than a gap.** The suite drives SQL directly, so nothing in
+the `scripts/` drivers is exercised by it. **Unit-testing them is deliberately out of scope, and the reason is lifespan
+rather than feasibility**: the repo does run bash suites elsewhere (`test_rebaseline_db_changelog.sh`,
+`test_precommit_wrappers.sh`) and stubbing `clickhouse-client` would work. But this is migration tooling with a finite
+life — once the cutover and its soak are done it stops changing, `spans` gets its own parallel directory rather than
+reusing these files, and a harness over eight drivers would be permanent maintenance on code heading for the archive.
+
+**The sanctioned validation is performing the procedure** — the forward cutover, the wrap, and the rollback of each
+(stage A/B/C and `--unwrap-only`) — on a local or test environment. That exercises the drivers against a real
+ClickHouse rather than a stub, which is the stronger check, and it suffices because every guard fails *closed*: a
+refused argument, a lagging replica or a mis-marked SQL block aborts before any DDL or mutation is sent, so an untested
+guard costs a re-run, not data. Do not add per-driver suites here without revisiting that trade-off explicitly.
+
+So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and three
+`verify.sh` behaviours worth separating from the rest, because they decide a *verdict* rather than reject an argument —
+and a wrong verdict from a fidelity gate is the failure this whole procedure exists to avoid:
 
 - refusing to report `PASSED` when the bounds selected **no** window (an empty range compares nothing, so a pass would be
   vacuous);
@@ -1697,6 +1706,18 @@ fidelity gate is the failure this whole procedure exists to avoid:
 
 Each rests on manual verification. Exercise them in the rehearsal alongside the driver guards, and treat a change to any
 of the three as needing the same.
+
+The **replication-settle gate** belongs in the same category — it decides a verdict rather than reading a single
+number — so it needs the rehearsal too, under **live ingestion**, in both directions:
+
+- it does **not** abort on ordinary ingest churn (a moving `replication_queue` is accepted, with its numbers printed);
+- it **does** abort on a genuinely lagging replica, naming the offending entries — stop or throttle a replica, or hold
+  a mutation, and confirm the gate fails loudly rather than passing;
+- the deletion-replay mutation is judged unconditionally: an unfinished mutation fails the gate however quiet the queue
+  is, and `--settle-timeout` bounds how long it waits to find out.
+
+The **argument guards** fail fast, before touching ClickHouse, so they are cheap to exercise by hand after any change
+here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-maintenance`.
 
 Run it with: `mvn -o test -Dtest=TracesLocalV2CutoverTest` from `apps/opik-backend`.
 
@@ -1709,8 +1730,6 @@ Watch these for the whole backfill→EXCHANGE window; wire alerts before startin
   means merges are not keeping up; increase `--pause-seconds`.
 - **Replication backlog** (`system.replication_queue`) and **mutations** (`system.mutations` `is_done = 0`) — must trend
   to zero; a growing queue means a replica is falling behind.
-- **Ingestion latency / error rate** — with the widened buffer, insert latency rises by design (up to the buffer window);
-  alert on client-side timeouts or ingestion errors, which mean the client timeout is below the buffer.
 - **Query p99** on the project traces listing — the backfill competes for I/O; a sustained regression is an abort signal.
 - **Deletion-capture health** — capture is best-effort and **swallows** errors (so a bridge hiccup never blocks a user's
   delete), so watch the backend logs for `captureDeletions` failures. A silently-dropped capture would leak a delete.
@@ -1730,11 +1749,19 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 
 - [ ] **Runbook rehearsed on a production-shape staging snapshot** end-to-end; timings recorded. Staging must match
       production **topology**, not just data shape — same replica count and tiered-storage policy — since the
-      multi-replica settle gates, storage/TTL parity, and buffer-flush timing are otherwise untested until production.
+      multi-replica settle gate and the storage/TTL parity are otherwise untested until production. Rehearse with
+      **parallel traffic still flowing through the swap** — converging by stopping traffic tests an assumption this
+      procedure does not make.
 - [ ] **Deletion test green** — `TracesLocalV2CutoverTest` passes; **0 deletion leaks** confirmed on staging.
-- [ ] **Final-delta→EXCHANGE gap fits inside the buffer hold with margin** — the binding invariant is the gap between
-      the final delta and the EXCHANGE completing (≈ replay wall time + EXCHANGE), staying within the buffer hold and
-      accounting for size-triggered flushes — **not** "replay < buffer window" alone (see "The final cutover window").
+- [ ] **Tail write-gap accepted knowingly, or OPIK-8238 landed** — writes in the final-delta→`EXCHANGE` gap and the
+      cross-node swap skew stay in `traces_pre_cutover_backup` and nothing in this procedure carries them into the live
+      table yet (see "The final cutover window"). Size it straight after the swap with an **unbounded** post-`EXCHANGE`
+      compare plus `--drill-down`: the gap rows sit in the cutover week, which every weekly bound excludes, so a bounded
+      run cannot see them. Keys listed **backup-only** are the gap; live-only keys are post-swap writes, the harmless
+      direction. Then either accept it with whoever authorised the cutover, or recover from the backup before
+      `finalize.sh` retires it. OPIK-8238 replaces this item with its reconciliation postcondition.
+- [ ] **Final-delta→EXCHANGE gap kept short** — record the final replay's wall time. The tail's length is what decides
+      how many writes land in the gap above.
 - [ ] **Far-future partitions quantified — and `max_partitions_per_insert_block` sized from the result.** Run the
       bad-`id` audit query above; remediated or explicitly accepted. The count is not just informational: if
       `far_future_weeks` exceeds the ClickHouse default of 100, the backfill **aborts** without a raised
@@ -1745,22 +1772,20 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       settings profile too, so it does not depend on the invocation.
 - [ ] **`EXCHANGE TABLES ... ON CLUSTER` works end-to-end** — or the fallback `RENAME` sequence is documented for the
       variant that needs it.
-- [ ] **Async-insert ceiling confirmed** — raising `asyncInsertBusyTimeoutMaxMs` demonstrably widens the adaptive buffer
-      under load, not just the cap. `exchange_and_wrap.sh` enforces the acknowledgment via `--confirm-buffer-raised`, but
-      that is an assertion only — this checklist item is the actual "it took effect under load" verification.
-- [ ] **The buffer-bump and revert changes are pre-written and reviewed** — the config entry raising
-      `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` (with `traceColumnsNonNullable = true` alongside it) and the revert
-      that *deletes* the key, both prepared before the window so each is a merge rather than an edit under pressure.
-      Confirm the chosen ceiling is below `terminationGracePeriodSeconds`, and that you know how a backend restart is
-      triggered on the target deployment and that it fits the schedule — see
-      ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it).
+- [ ] **No ingestion-path config change on any path** — forward, rollback, wrap or un-wrap. The procedure requires
+      one rolling restart to reach the `EXCHANGE`, carrying only `traceColumnsNonNullable = true`, with no latency
+      cost — plus the wrap's own restart for `tracesDistributedWrapEnabled` if the wrap is applied. Confirm you know
+      how a backend restart is triggered on the target deployment and that it fits the schedule — see
+      ["The one rolling restart"](#the-one-rolling-restart-tracecolumnsnonnullable).
 - [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`). Retention deletes bypass
       the deletion bridge, so a sweep in the window would leak/resurrect across the swap; `exchange_and_wrap.sh` and
       `rollback.sh` (stages B/C) enforce `--confirm-retention-paused`, but that is an assertion — this item is the real
       "it is actually paused on every backend" verification.
 - [ ] **Reconciliation clean** — per-window source/dest counts within 0.01% across the whole backfill.
-- [ ] **Replication settled before the EXCHANGE** — `replication_queue` empty and the deletion-replay mutation
-      `is_done` on **all** replicas (`exchange_and_wrap.sh` gates on this; do not `--force` past it in production).
+- [ ] **Replication settled before the EXCHANGE** — the deletion-replay mutation `is_done` on **all** replicas, and the
+      replication queue either drained or demonstrably just busy rather than stuck (`exchange_and_wrap.sh` gates on
+      this — see ["The replication-settle gate"](#the-replication-settle-gate); do **not** `--force` past it in
+      production, and confirm on staging under live ingest that it does not abort on ordinary churn).
 - [ ] **`traceColumnsNonNullable = true` rolled out to every backend instance before the EXCHANGE** — confirmed live on
       the whole fleet by a **positive** check, not by the absence of ingestion errors: write an in-progress trace (no
       `end_time`, and so no `ttft`) through the API and assert the epoch/NaN **sentinel** was stored for both — then
@@ -1777,8 +1802,10 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       for a single-row deletion leak — an unexpected empty-`project_id` bridge event the single-branch replay would miss,
       or any other single-key divergence — and any sampling (`--sample-mod > 1`), week stride, or week narrowing can hash
       that one row out and still report `ok=1`. Reserve sampling/ranged runs for follow-up confidence *after* the full gate
-      passes. Re-run `delta_replay.sh` then `verify.sh` until it PASSES: while the buffer holds writes (or, on a rehearsal
-      without it, once traffic is quiescent) the last delta must catch every in-flight write.
+      passes. Re-run `delta_replay.sh` then `verify.sh` until it PASSES. Read that PASS for what it is: writes never
+      stop, so it certifies the copy **as of the last delta**, not that nothing arrived after it. The writes that
+      arrive after it land in the tail gap described in "The final cutover window" — do not quiesce traffic to force a
+      cleaner PASS.
 - [ ] **`Distributed` wrap gated on the DAO toggle** — apply the wrap (step 4, part 2) only once
       `databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true` is live across the backend fleet (OPIK-7455), set in
       lockstep with the wrap so trace mutations target `traces_local`; otherwise stop after the `EXCHANGE`, since a
@@ -1786,6 +1813,11 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       is unsupported and breaks the trace-delete path.
 - [ ] **No query-semantics regression** — FINAL / `LIMIT 1 BY` dedup verified; p99 on the project traces listing page within
       ±10% of the pre-migration baseline.
-- [ ] **Rollback rehearsed at every stage** (before EXCHANGE, after EXCHANGE/before wrap, after wrap) — deletes during
+- [ ] **Rollback rehearsed at every stage** (before EXCHANGE, after EXCHANGE/before wrap, after wrap) — **with traffic
+      running**, the same way the forward direction is rehearsed. Deletes during
       the post-cutover window do not resurrect after the reverse-replay; the parked table is retained for the soak.
+- [ ] **`--with-wrap` refuses without `--confirm-maintenance`** — verified. Both wrap paths carry the same unmitigated
+      cross-node `UNKNOWN_TABLE` exposure, and it hits reads either way.
+- [ ] **No ingestion-latency regression, and query p99 within the agreed budget**, measured on the prod-clone
+      environment across the whole tail.
 - [ ] **Go/No-Go decision recorded** with the staging evidence attached.

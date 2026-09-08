@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Driver for step 2 of the buffered traces cutover: delta-insert + deletion replay (runbook: ../README.md).
+# Driver for step 2 of the traces cutover: delta-insert + deletion replay (runbook: ../README.md).
 #
 # Reads db-app-analytics/000002_delta_and_deletion_replay.sql (the single source), substitutes the placeholders and runs
 # it. Run it after backfill.sh, then verify.sh, then exchange_and_wrap.sh.
@@ -117,9 +117,6 @@ esac
 [[ -z "$MAX_INSERT_THREADS" || "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (force no parallel INSERT SELECT execution) or 1..99; omit it entirely to inherit the server's setting." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 
-echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this step (backend config, not SQL) and"
-echo "restore it after the EXCHANGE."
-
 sql="$(cat "$SQL_FILE")"
 sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
@@ -217,10 +214,11 @@ if grep -qF '${MAX_INSERT_THREADS}' <<<"$mit_masked"; then
 fi
 # <<< END max_insert_threads rendering
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
-# --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
-# the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.
+# --query). The SECOND number is the deletion replay's wall time, which is how the operator sizes the tail: it sits
+# inside the final-delta -> EXCHANGE gap, which is where tail writes are left behind (see the runbook's "The final
+# cutover window"; OPIK-8238). Without this flag there is no way to record it short of digging in query_log.
 echo "Statement wall times (seconds, in order: delta-insert, deletion-replay):"
 clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 
-echo "Delta + deletion replay complete. RECORD the deletion-replay wall time above (the second value) — the"
-echo "final-delta -> EXCHANGE gap must fit inside the buffer hold. Run verify.sh before the EXCHANGE."
+echo "Delta + deletion replay complete. RECORD the deletion-replay wall time above (the second value) — it sizes the"
+echo "final-delta -> EXCHANGE gap where tail writes are left behind. Run verify.sh before the EXCHANGE."

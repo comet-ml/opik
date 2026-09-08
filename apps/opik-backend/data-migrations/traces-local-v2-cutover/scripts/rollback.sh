@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Driver for rolling the buffered traces cutover back (runbook: ../README.md).
+# Driver for rolling the traces cutover back (runbook: ../README.md).
 #
 # Runs the db-app-analytics/000004_rollback_* file(s) that match how far the cutover got. Pick the stage by the last
 # step that completed:
@@ -108,9 +108,9 @@
 #   --confirm-maintenance     REQUIRED with --unwrap-only. The un-wrap is gapless per node (atomic rotate), but renaming
 #                             the live `traces` has a brief cross-node ON CLUSTER propagation skew during which a query
 #                             routed at a lagging replica's wrapper can fail with UNKNOWN_TABLE. That hits READS, not
-#                             only writes, so raising the async-insert buffer does NOT discharge this flag: it asserts
-#                             traffic is quiesced or a maintenance window is in effect. Same gate, and the same
-#                             read exposure, as the --wrap-only in exchange_and_wrap.sh that this reverses.
+#                             only writes, so no ingestion-side setting can discharge this flag: it asserts traffic is
+#                             quiesced or a maintenance window is in effect. Same gate, and the same read exposure, as
+#                             the wrap in exchange_and_wrap.sh that this reverses.
 
 set -euo pipefail
 
@@ -278,9 +278,9 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
         echo "ERROR: --unwrap-only requires --confirm-maintenance. It renames the live 'traces': gapless per node, but with" >&2
         echo "       a brief cross-node ON CLUSTER skew during which a lagging replica still resolves the wrapper's" >&2
         echo "       'traces_local' target, which the already-renamed replicas no longer have — so a query routed there can" >&2
-        echo "       fail with UNKNOWN_TABLE. That hits READS as well as writes, so the async-insert buffer alone does not" >&2
-        echo "       cover it: quiesce traffic or take a maintenance window (the mirror of the window exchange_and_wrap.sh" >&2
-        echo "       gates for the --wrap-only this reverses), then re-run with the flag." >&2
+        echo "       fail with UNKNOWN_TABLE. That hits READS as well as writes, so no ingestion-side setting covers it:" >&2
+        echo "       quiesce traffic or take a maintenance window (the mirror of the window exchange_and_wrap.sh gates for" >&2
+        echo "       the wrap this reverses), then re-run with the flag." >&2
         exit 2
     fi
 fi
@@ -635,7 +635,7 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     echo "     Do it in THIS order (DDL first, flag second), which is the inverse of the forward wrap and keeps the failure"
     echo "     on the same side: until the restart completes, trace DELETES target the now-absent 'traces_local' and fail"
     echo "     with Code 60 UNKNOWN_TABLE. Reverting the flag first instead would point them at a 'traces' that is still"
-    echo "     Distributed, which rejects mutations (Code 36) AND exposes the cross-node skew unbuffered. Either window is"
+    echo "     Distributed, which rejects mutations (Code 36) AND exposes the cross-node skew to reads too. Either window is"
     echo "     delete-path-only — reads and inserts never consult the flag — so keep it short and fail loud."
     echo "  2. Leave databaseAnalyticsDataModel.traceColumnsNonNullable=true: the live table keeps the successor's sentinel"
     echo "     schema. Step 1's wrap flag is the only one this stage reverts, and trace-delete partition pruning is not a"

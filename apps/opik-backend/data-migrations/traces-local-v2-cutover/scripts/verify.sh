@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Fidelity QA driver for the buffered traces cutover (runbook: ../README.md, "Verifying the migration").
+# Fidelity QA driver for the traces cutover (runbook: ../README.md, "Verifying the migration").
 #
 # Compares the migrated data on the old-schema and new-schema tables, week by week (created_at), using a NORMALIZED
 # fingerprint so sentinel/precision differences (end_time NULL<->epoch, ttft NULL<->NaN, ns<->us) do not count as

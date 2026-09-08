@@ -41,7 +41,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * End-to-end validation of the buffered cutover that migrates {@code traces} to its partitioned, sharding-ready
+ * End-to-end validation of the cutover that migrates {@code traces} to its partitioned, sharding-ready
  * successor {@code traces_local_v2}. It rehearses the full sequence against a fresh ClickHouse in raw SQL — the same
  * steps an operator runs from the {@code data-migrations/traces-local-v2-cutover} runbook — and pins the properties
  * the cutover's correctness depends on.
@@ -83,7 +83,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>It also confirms {@code EXCHANGE TABLES ... ON CLUSTER} on the single-shard cluster, the sharding-ready
  * {@code Distributed} wrapper reading transparently on one shard, newest-version-wins for concurrent upserts, and it
- * measures the replay wall time so the runbook can size it against the ingestion buffer window. Finally it proves the
+ * measures the replay wall time so the runbook can size the cutover tail against a real workload. Finally it proves the
  * cutover is reversible: the post-wrap rollback drops the wrapper, promotes the parked old data back to {@code traces},
  * and reverse-replays so a post-cutover delete does not resurrect — and, separately, that the wrap alone can be
  * reversed ({@code --unwrap-only}) leaving the partitioned successor and its post-cutover writes live, with no parked
@@ -339,7 +339,7 @@ class TracesLocalV2CutoverTest {
     }
 
     @Test
-    void bufferedCutoverPreservesEveryDeletionAcrossExchange() {
+    void cutoverPreservesEveryDeletionAcrossExchange() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var otherProjectId = ID_GENERATOR.generateId();
@@ -425,8 +425,8 @@ class TracesLocalV2CutoverTest {
         // Deletion replay: read the bridge for the window and re-issue the deletes against the destination, matched on
         // the full key so a reused id in another project is untouched.
         // Measured and logged (not asserted): replay wall time is environment-sensitive (container startup, CI
-        // contention), so a hard bound here would be a flaky gate on a non-correctness property. The runbook sizes it
-        // against the buffer window during the cutover rehearsal; correctness is asserted below (the mask is applied).
+        // contention), so a hard bound here would be a flaky gate on a non-correctness property. The runbook sizes the
+        // cutover tail from it during the rehearsal; correctness is asserted below (the mask is applied).
         var replayMillis = replayDeletions(backfillStart);
         log.info("Deletion replay covered {} ids in {} ms", leakedIds.size() + 1, replayMillis);
 
@@ -1758,7 +1758,7 @@ class TracesLocalV2CutoverTest {
      * events match the full key {@code (workspace_id, project_id, id)} (exact; a reused id in another project is
      * untouched) — without this replay those deletions silently leak across the swap. The branch also requires the id is
      * NOT currently live on the source (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns
-     * the wall time so the runbook can size it against the buffer window.
+     * the wall time so the runbook can size the cutover tail from it.
      */
     private long replayDeletions(String backfillStart) {
         var start = System.nanoTime();
