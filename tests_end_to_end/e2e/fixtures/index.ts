@@ -1,4 +1,4 @@
-export { test, expect } from './alert.fixture';
+export { test, expect } from './summarised-datasets.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -113,4 +113,16 @@ export type {
   AlertFixtures,
 } from './alert.fixture';
 export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
+export type {
+  ModelCostSpanSeed,
+  ModelCostSpansRef,
+  ModelCostSpansFixtures,
+} from './model-cost-spans.fixture';
+export type {
+  SummarisedDatasetShape,
+  SummarisedDatasetRef,
+  SummarisedDatasetsRef,
+  SummarisedDatasetsFixtures,
+} from './summarised-datasets.fixture';
+export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
 export type { ProjectRef } from '../core/backend';

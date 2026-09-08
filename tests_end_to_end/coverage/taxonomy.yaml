@@ -14,6 +14,13 @@
 #
 # SCOPE: tests_end_to_end/ only — e2e (Playwright) + visual-tests. Nothing else.
 #
+# Every `specs:` list is kept in sorted order, and a new spec goes in its sorted
+# position rather than at the end. Appending put every concurrent addition on the
+# same last line, so two open spec PRs in one area always conflicted here — this
+# file was the single most-conflicted in the QA queue, touched by 4 of 4 open spec
+# PRs at one point. Sorted insertion lands them on different lines, which git
+# merges without a conflict. Nothing reads the order, so it costs nothing.
+#
 # Verified against main @ c54a6a99d7 (2026-07-29):
 #   24 e2e specs across 13 dirs, 3 visual specs.
 #
@@ -244,13 +251,14 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
-      - trace-explore/trace-explore-smoke.spec.ts
-      - trace-explore/trace-spans-depth.spec.ts
-      - trace-explore/trace-delete.spec.ts
-      - trace-explore/trace-filters.spec.ts
+      - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/trace-attachments.spec.ts
+      - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-explore-smoke.spec.ts
+      - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-id-time-window.spec.ts
       - trace-explore/trace-partial-update-merge.spec.ts
+      - trace-explore/trace-spans-depth.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -258,7 +266,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
@@ -321,9 +329,9 @@ areas:
     routes: ["/projects/$projectId/logs?type=threads"]
     spec_dir: trace-explore
     specs:
-      - trace-explore/thread-logging-smoke.spec.ts
-      - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-evaluation.spec.ts
+      - trace-explore/thread-id-prefilter.spec.ts
+      - trace-explore/thread-logging-smoke.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
@@ -371,9 +379,9 @@ areas:
     routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
     spec_dir: dashboards
     specs:
-      - dashboards/workspace-span-metrics.spec.ts
-      - dashboards/project-span-metrics.spec.ts
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-span-metrics.spec.ts
+      - dashboards/workspace-span-metrics.spec.ts
     capabilities:
       list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
@@ -397,8 +405,9 @@ areas:
     routes: ["/projects/$projectId/prompts", "/prompts/$promptId"]
     spec_dir: prompts
     specs:
-      - prompts/prompt-library-smoke.spec.ts
       - prompts/prompt-delete.spec.ts
+      - prompts/prompt-library-smoke.spec.ts
+      - prompts/prompt-version-pagination.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -406,8 +415,8 @@ areas:
       sdk-seeded-visible:      { covered: true,  tier: t1-smoke }
       edit-creates-version:    { covered: true,  tier: t1-smoke }
       old-version-preserved:   { covered: true,  tier: t1-smoke }
-      version-history:         { covered: true,  tier: t1-smoke }
-      compare-versions:        { covered: false }
+      version-history:         { covered: true,  tier: t1-smoke, note: "smoke covers select-a-version on a 2-version prompt; prompt-version-pagination adds the 31-version case — the timeline pages, the labels come from version_number, a version deep-linked onto page 2 renders its own template, and the Compare-against menu lists every version rather than only the page that had loaded" }
+      compare-versions:        { covered: false, note: "prompt-version-pagination asserts the Compare-against menu's contents label by label, but never selects an entry — nothing yet opens the compare sheet or asserts a rendered diff, so a broken comparison would not fail any test. The menu assertion counts under version-history instead." }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
       delete-prompt:           { covered: true,  tier: t2-cuj }
 
@@ -422,8 +431,8 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
-      - playground/playground-smoke.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -505,16 +514,18 @@ areas:
     spec_dir: datasets
     specs:
       - datasets/dataset-crud-smoke.spec.ts
-      - datasets/dataset-items.spec.ts
-      - datasets/dataset-items-filter-scope.spec.ts
-      - datasets/dataset-version-counters.spec.ts
-      - datasets/dataset-version-repeated-item-id.spec.ts
-      - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-insert-deduplication.spec.ts
       - datasets/dataset-item-count.spec.ts
+      - datasets/dataset-items-filter-scope.spec.ts
+      - datasets/dataset-items.spec.ts
+      - datasets/dataset-list-summary-columns.spec.ts
       - datasets/dataset-parallel-item-read.spec.ts
       - datasets/dataset-read-version-pinning.spec.ts
+      - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-version-counters.spec.ts
+      - datasets/dataset-version-repeated-item-id.spec.ts
     capabilities:
-      list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 also asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete" }
+      list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete; t2 also asserts the rest of the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version — per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages, and on screen the Item count plus the two recency columns populated on exactly the right rows" }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
       create-dataset-sdk:     { covered: true,  tier: t1-smoke }
       view-items:             { covered: true,  tier: t1-smoke }
@@ -524,8 +535,8 @@ areas:
       filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
       filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
-      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read" }
-      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50) and a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent)" }
+      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + first item read back through the SDK, single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read, and Dataset.insert's deduplication flag both ways (deduplication=False stores every duplicate under its own id and cuts a version per insert; the default collapses the duplicate and cuts no second version), paired against a control dataset and asserted in the API and on the Records tab" }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
@@ -547,13 +558,26 @@ areas:
     routes: ["/projects/$projectId/test-suites", "/test-suites/$suiteId/items"]
     spec_dir: test-suites
     specs:
-      - test-suites/test-suites-smoke.spec.ts
       - test-suites/test-suite-delete.spec.ts
+      - test-suites/test-suite-insert-dedup-listed-suite.spec.ts
+      - test-suites/test-suite-insert-deduplication.spec.ts
+      - test-suites/test-suites-smoke.spec.ts
     capabilities:
-      list-suites:           { covered: true,  tier: t1-smoke }
+      # The t2 spec drives `get_test_suites()`, the listing factory nothing else
+      # in the estate reaches, and asserts that a suite reached through it
+      # deduplicates an insert of an item it already holds. list-suites names
+      # the listing, which is genuinely the path the spec goes through, and it
+      # was already covered before that spec existed — so nothing flips here.
+      #
+      # OPEN, needs a human call: the DEDUP half has no capability of its own in
+      # this area. It rides on list-suites for want of a better key. Either add a
+      # capability for insert dedup or drop that half from the note and leave the
+      # behaviour honestly uncovered — do not let it sit here as a silent
+      # widening of list-suites.
+      list-suites:           { covered: true,  tier: t1-smoke, note: "t2 additionally reaches a suite through get_test_suites() and asserts insert() deduplicates an item the suite already holds, while a genuinely new item still lands" }
       create-suite-ui:       { covered: true,  tier: t1-smoke }
       create-suite-sdk:      { covered: true,  tier: t1-smoke }
-      view-suite-items:      { covered: true,  tier: t1-smoke }
+      view-suite-items:      { covered: true,  tier: t1-smoke, note: "3 SDK-seeded items render; t2 also covers TestSuite.insert's deduplication flag both ways — deduplication=False renders both identical test cases as separate rows (asserted by data-row-id, since the Test cases table shows no data columns), the default renders one" }
       run-suite-sdk:         { covered: true,  tier: t1-smoke, note: "3/3 pass experiment" }
       run-suite-playground:  { covered: true,  tier: t1-smoke }
       pass-rate-display:     { covered: true,  tier: t1-smoke }
@@ -571,11 +595,11 @@ areas:
     routes: ["/projects/$projectId/experiments", "/experiments/$datasetId/compare"]
     spec_dir: experiments
     specs:
-      - experiments/experiments-smoke.spec.ts
-      - experiments/experiments-compare.spec.ts
-      - experiments/experiment-logs-date-window.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
       - experiments/experiment-delete.spec.ts
+      - experiments/experiment-logs-date-window.spec.ts
+      - experiments/experiments-compare.spec.ts
+      - experiments/experiments-smoke.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -614,8 +638,8 @@ areas:
     # 7-day window spanning the merge reports a false gap.
     tag_aliases: [annotation-queue]
     specs:
-      - annotation-queues/annotation-queue-scoring.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
+      - annotation-queues/annotation-queue-scoring.spec.ts
     capabilities:
       score-queue-item:        { covered: true,  tier: t2-cuj }
       score-with-reason:       { covered: true,  tier: t2-cuj }
@@ -646,24 +670,52 @@ areas:
     routes: ["/projects/$projectId/online-evaluation", "/$workspaceName/automation-logs"]
     spec_dir: online-evaluation
     specs:
-      - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
+      - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
-      - online-evaluation/online-evaluation-sampling-rate.spec.ts
-      - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
+      - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-oversized-payload.spec.ts
+      - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-smoke.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line" }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
-      list-rules:              { covered: false }
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
+      list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
+      # Still false, and deliberately. online-evaluation-oversized-payload.spec.ts
+      # deliberately creates and drives a span-scope rule end to end, but this key
+      # covers BOTH the span and thread scope flags and nothing exercises thread
+      # scope. Flipping it on the span half would retire the thread half untested.
+      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags; span scope is exercised by online-evaluation-oversized-payload.spec.ts, thread scope is untouched" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
-      edit-rule:               { covered: false }
+      # Scoped, and the three parts are not equally scoped:
+      #   - plain-string prompt: the edit dialog IS opened, its hydrated prompt
+      #     asserted byte-exact, and submitted unchanged, so the UI save round
+      #     trip is real.
+      #   - content_array prompt: API-level only. The dialog renders no image
+      #     part, so the url/detail that a regression would drop are not
+      #     observable in the UI; that half is a read-then-write over REST and
+      #     no dialog gesture is made.
+      #   - model custom_parameters: the edit dialog IS opened and submitted
+      #     with no field changed, asserting the model's custom_parameters
+      #     survive — the payload the form serializes AND the persisted blob.
+      # Editing a FIELD through the dialog (renaming, changing the model,
+      # rewriting the prompt, changing variables or scope) is still uncovered by
+      # all three.
+      #
+      # OPEN, needs a human call: the content_array test asserts judge-message
+      # content-SHAPE preservation, which no capability in this area names. It
+      # rides on edit-rule for want of a better key. Either add a capability for
+      # it or drop that tag and leave the behaviour honestly uncovered — do not
+      # let it sit here as a silent widening of edit-rule.
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; model custom_parameters: rule seeded over REST, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       # Deliberately still false. online-evaluation-python-metric-errors.spec.ts
@@ -719,10 +771,10 @@ areas:
     spec_dir: ollie
     cloud_only: true   # requires AssistantSidebar plugin + OLLIE_ENABLED
     specs:
-      - ollie/ollie-smoke.spec.ts
       - ollie/ollie-agentic.spec.ts
       - ollie/ollie-connect.spec.ts
       - ollie/ollie-explain.spec.ts
+      - ollie/ollie-smoke.spec.ts
     capabilities:
       surface-mounts:          { covered: true,  tier: t1-smoke }
       sidebar-persists-nav:    { covered: true,  tier: t1-smoke }

@@ -2,6 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
 import {
+  pollSpanForFeedbackScore,
   pollTraceForFeedbackScore,
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
@@ -65,11 +66,36 @@ export interface RawApiResult {
   location?: string | null;
 }
 
+/** One row of the dataset's Version history tab. */
+export interface DatasetVersionRef {
+  versionName: string;
+  /**
+   * The version's content hash. Nullable because the API's own shape makes it
+   * optional — a caller that needs it must assert it is there rather than
+   * compare an absent value to another absent value and call that agreement.
+   */
+  versionHash: string | null;
+  itemsTotal: number;
+  itemsAdded: number;
+  itemsModified: number;
+  itemsDeleted: number;
+  isLatest: boolean;
+}
+
 /**
- * One row of `GET /v1/private/datasets`, as the Datasets list page reads it.
+ * The computed summary the datasets list attaches to each row.
  *
- * `datasetItemsCount` is the "Item count" column, and the backend answers it
- * two different ways in the same response: from the latest version's
+ * None of these values is stored on the dataset: the backend derives each from
+ * a separate lookup and zips them onto the row. That makes the failure
+ * mode a mis-attribution — a real number belonging to a different dataset —
+ * which renders as a perfectly plausible row rather than an error, so nothing
+ * here is defaulted. `null` appears only where the API genuinely answers null
+ * (a dataset with no version, no experiment or no optimization yet); an absent
+ * count throws in the mapper instead, because a `?? 0` would silently produce
+ * exactly the value an empty-dataset assertion expects.
+ *
+ * `datasetItemsCount` in particular is the "Item count" column, and the backend
+ * answers it two different ways in the same response: from the latest version's
  * `items_total` where there is one, and from a `count(DISTINCT id)` scan over
  * `dataset_items` where there is not. `latestVersionName` is what tells a test
  * which of the two a given row took — the enrichment falls back exactly when it
@@ -84,17 +110,21 @@ export interface DatasetSummaryRef {
   id: string;
   name: string;
   datasetItemsCount: number;
+  experimentCount: number;
+  optimizationCount: number;
+  latestVersionHash: string | null;
+  /**
+   * The latest version's *name*, alongside its hash above.
+   *
+   * Both are carried because they answer different questions: the hash is what
+   * the list claims is latest (asserted against the dataset's own versions
+   * endpoint), while the name is what tells a test which of the two ways the
+   * backend counted `dataset_items_count` — `items_total` off the latest
+   * version where there is one, a `count(DISTINCT id)` scan where there is not.
+   */
   latestVersionName: string | null;
-}
-
-/** One row of the dataset's Version history tab. */
-export interface DatasetVersionRef {
-  versionName: string;
-  itemsTotal: number;
-  itemsAdded: number;
-  itemsModified: number;
-  itemsDeleted: number;
-  isLatest: boolean;
+  mostRecentExperimentAt: string | null;
+  mostRecentOptimizationAt: string | null;
 }
 
 /** The windowed stats one row of the Projects table renders. */
@@ -128,6 +158,38 @@ export interface FeedbackScoreRef {
   value: number;
   reason: string | null;
   source: string;
+}
+
+/**
+ * One commit of a prompt, as the versions endpoints answer.
+ *
+ * `versionNumber` is `string | null` and never defaulted: it is the `vN` label
+ * the prompt page renders, and the backend sends null for a mask. Collapsing
+ * that into a positional index is precisely the confusion a version-label
+ * assertion exists to rule out.
+ */
+export interface PromptVersionRef {
+  id: string;
+  promptId: string;
+  versionNumber: string | null;
+  template: string;
+}
+
+/**
+ * One span reduced to what a cost assertion needs.
+ *
+ * `totalEstimatedCost` is `number | null` rather than `?? 0`: for a model whose
+ * price the server resolved, an absent cost is a regression, and only the
+ * caller knows whether it is asserting a price or the deliberate absence of one
+ * (a model id the price table must NOT match). Defaulting here would erase that
+ * difference before either could be checked.
+ */
+export interface SpanCostRef {
+  id: string;
+  name: string;
+  model: string | null;
+  provider: string | null;
+  totalEstimatedCost: number | null;
 }
 
 export interface TraceDetail {
@@ -166,6 +228,21 @@ export interface TracePayload {
   tags: string[] | null;
 }
 
+/**
+ * One span as `GET /v1/private/spans/{id}` answers it.
+ *
+ * `output` is deliberately untyped, the same reasoning as `getTraceSections`:
+ * the only caller asserts on the size of what came back, and a shaped type
+ * would force a cast at every read without buying anything.
+ */
+export interface SpanDetail {
+  id: string;
+  name: string;
+  traceId: string;
+  feedbackScores: FeedbackScoreRef[];
+  output: unknown;
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -201,12 +278,121 @@ export interface AutomationRuleDetail {
   samplingRate: number;
   /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
   triggerScope: string;
+  /**
+   * `user_defined_metric_python` | `span_user_defined_metric_python` | … — the
+   * discriminator that decides which entity the rule scores and, with it, which
+   * Redis stream carries its messages. A spec about span-scope behaviour that
+   * silently got a trace-scope rule would be exercising the wrong stream, so
+   * this is read back rather than assumed from the create payload.
+   */
+  type: string;
+}
+
+/**
+ * The score types an `llm_as_judge` output schema entry may declare, as
+ * `LlmAsJudgeOutputSchemaType` enumerates them. A union rather than `string`
+ * so a typo is a compile error here, instead of a 400 from the API mid-seed
+ * with nothing naming which entry was wrong.
+ */
+export type JudgeOutputSchemaType = 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+
+/**
+ * The `code.model` block of an `llm_as_judge` rule, exactly as REST stores it.
+ *
+ * `customParameters` is the free-form slot the provider config is carried in
+ * (`thinking`, and anything else a caller persisted alongside it). `null` is
+ * the API's own answer for "nothing set" and is kept distinct from `{}` here
+ * on purpose: a serializer that collapses one into the other is precisely what
+ * this shape is read back to catch.
+ */
+export interface LlmJudgeModelRef {
+  name: string;
+  temperature: number | null;
+  customParameters: Record<string, unknown> | null;
 }
 
 /** One line of a rule's user-facing log stream. */
 export interface AutomationRuleLogRef {
   level: string;
   message: string;
+}
+
+/**
+ * One content part of a structured (multimodal) judge message.
+ *
+ * Only the fields the specs assert on are modelled; `video_url` / `audio_url`
+ * exist on the wire too and are left off deliberately rather than typed and
+ * ignored.
+ */
+export interface JudgeMessageContentPartRef {
+  type: string;
+  text: string | null;
+  imageUrl: { url: string; detail: string | null } | null;
+}
+
+/**
+ * One judge message exactly as `GET /automations/evaluators/{id}` returns it.
+ *
+ * `content` and `contentArray` are the API's own two mutually-exclusive shapes
+ * (`LlmAsJudgeMessage`), and telling them apart is the whole point of the specs
+ * that use this: prose must come back as `content`, a genuine multimodal array
+ * must come back as `contentArray`. They are therefore kept as the nullable
+ * union the server sends rather than collapsed into one "text" field, which
+ * would erase the distinction under test.
+ */
+export interface JudgeMessageRef {
+  role: string;
+  content: string | null;
+  contentArray: JudgeMessageContentPartRef[] | null;
+}
+
+/** One content part as the create endpoint accepts it — wire keys, not the read shape. */
+export interface JudgeMessageContentPartWrite {
+  type: string;
+  text?: string;
+  image_url?: { url: string; detail?: string };
+}
+
+/**
+ * One judge message as the create endpoint accepts it.
+ *
+ * A union rather than one interface with two optional fields, so "exactly one
+ * of `content` / `contentArray`" is a compiler guarantee instead of a comment:
+ * `LlmAsJudgeMessage` accepts one shape or the other, and a message carrying
+ * both — or neither — is a 4xx the caller only discovers at run time. The
+ * `?: never` arms keep both keys readable on the union, which is what lets
+ * `createLlmJudgeRule` serialize them without narrowing first.
+ */
+export type JudgeMessageWrite =
+  | { role: 'SYSTEM' | 'USER'; content: string; contentArray?: never }
+  | {
+      role: 'SYSTEM' | 'USER';
+      content?: never;
+      contentArray: JudgeMessageContentPartWrite[];
+    };
+
+/**
+ * One page of `GET /automations/evaluators/`, status included rather than thrown.
+ *
+ * The listing answering 200 at all is the assertion in
+ * `online-evaluation-json-looking-judge-prompts.spec.ts` — the regression it
+ * guards turned the whole page into a 500 — so the status has to be a value the
+ * spec can compare, not an exception the client raises on its way out.
+ */
+export interface AutomationRuleEvaluatorPageRef {
+  status: number;
+  /** Server-reported total for the query, not the length of this page. */
+  total: number;
+  names: string[];
+  /**
+   * The server's own reason on a non-2xx, `null` on success.
+   *
+   * Carried because the failure this type exists to describe is a 500, and
+   * `expect(listing.status).toBe(200)` alone reports "expected 200, received
+   * 500" — true, and useless. The stack trace naming the unreadable rule is in
+   * the response body, so a spec that fails at 3am should print it.
+   */
+  message: string | null;
 }
 
 /**
@@ -324,6 +510,49 @@ export interface OptimizationRef {
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
+
+/**
+ * Map one dataset row — from the list or from a detail read, which answer the
+ * same shape — onto `DatasetSummaryRef`.
+ *
+ * Every count is required. `?? 0` is deliberately absent: the empty-dataset
+ * case is asserted to report zeros, so defaulting a missing count to 0 would
+ * make that assertion pass on a response that carried no count at all.
+ */
+function toDatasetSummary(row: unknown): DatasetSummaryRef {
+  const d = row as {
+    id?: string;
+    name?: string;
+    dataset_items_count?: number;
+    experiment_count?: number;
+    optimization_count?: number;
+    most_recent_experiment_at?: string | null;
+    most_recent_optimization_at?: string | null;
+    latest_version?: { version_hash?: string; version_name?: string } | null;
+  };
+  const requireCount = (value: number | undefined, field: string): number => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      throw new Error(
+        `toDatasetSummary: dataset '${d.name ?? d.id}' returned no numeric ${field}`,
+      );
+    }
+    return value;
+  };
+  if (typeof d.id !== 'string' || typeof d.name !== 'string') {
+    throw new Error('toDatasetSummary: dataset row carried no id/name');
+  }
+  return {
+    id: d.id,
+    name: d.name,
+    datasetItemsCount: requireCount(d.dataset_items_count, 'dataset_items_count'),
+    experimentCount: requireCount(d.experiment_count, 'experiment_count'),
+    optimizationCount: requireCount(d.optimization_count, 'optimization_count'),
+    latestVersionHash: d.latest_version?.version_hash ?? null,
+    latestVersionName: d.latest_version?.version_name ?? null,
+    mostRecentExperimentAt: d.most_recent_experiment_at ?? null,
+    mostRecentOptimizationAt: d.most_recent_optimization_at ?? null,
+  };
+}
 
 /** One clause of the `sorting` query param the grids serialise. */
 export interface BackendSort {
@@ -509,6 +738,49 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
+  /**
+   * A seed write whose id the caller chose, expecting 201, retrying 5xx.
+   *
+   * The ingress in front of the ingest endpoints intermittently answers 502 or
+   * 500 in short bursts — roughly 1 write in 20, uncorrelated with payload size
+   * (a 0-byte span fails as readily as a 25MB one), and clearing within a few
+   * seconds. Without this, every spec that seeds through REST inherits that as
+   * flake, and the failure it reports names the suite rather than the burst.
+   *
+   * Retrying is safe only because these writes are keyed on a caller-supplied
+   * id and are upserts on it: a request that actually landed before the gateway
+   * gave up is overwritten, not duplicated. Only 5xx is retried — a 4xx is this
+   * suite sending something the API rejects, and repeating it would just delay
+   * the message that says so.
+   *
+   * The backoff exists because retrying instantly is no retry at all: the three
+   * attempts land inside the same burst and all fail.
+   */
+  const postSeedWrite = async (path: string, describe: string, body: unknown): Promise<void> => {
+    const backoffMs = [1_000, 3_000, 8_000];
+    let last: RawApiResult = { status: 0, message: '<no response>', location: null };
+    // Counted as requests are made, not inferred from the final status: a 502
+    // that retried into a 400 really did cost two requests, and a message that
+    // says "1 attempt" sends the reader looking for a burst that was already
+    // survived.
+    let attempted = 0;
+
+    for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+      attempted++;
+      const { status, message, location } = await rawFetch('POST', path, { body });
+      if (status === 201) return;
+      last = { status, message, location };
+      if (status < 500) break;
+      if (attempt < backoffMs.length) {
+        await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+      }
+    }
+
+    throw new Error(
+      `${describe}: expected 201, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
+    );
+  };
+
   /** Authorization + workspace headers, for calls that bypass `rawFetch`. */
   const workspaceHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Comet-Workspace': env.workspace };
@@ -559,6 +831,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           source: String(fs.source),
         })),
         input: (t.input as Record<string, unknown> | undefined) ?? null,
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  };
+
+  // Hoisted for the same reason as `localGetTrace`: the span poller is a free
+  // function and cannot reach the not-yet-constructed return object.
+  const localGetSpan = async (spanId: string): Promise<SpanDetail | null> => {
+    try {
+      const s = await withReadRetry(() => opik.api.spans.getSpanById(spanId));
+      return {
+        id: String(s.id),
+        name: s.name ?? '',
+        traceId: String(s.traceId ?? ''),
+        feedbackScores: (s.feedbackScores ?? []).map((fs) => ({
+          name: fs.name,
+          value: Number(fs.value),
+          reason: fs.reason ?? null,
+          source: String(fs.source),
+        })),
+        output: s.output ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -732,65 +1027,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
-    /**
-     * One page of `GET /v1/private/datasets` for a project, with the two fields
-     * the Datasets list renders its "Item count" column from — exactly the read
-     * the page issues.
-     *
-     * Through `rawFetch` rather than the pinned SDK because `latest_version` is
-     * the only signal for *which* branch of the count enrichment a row took, and
-     * the generated client drops it.
-     *
-     * `total` comes back alongside the rows so a caller can assert the whole
-     * project fitted in this single request: the enrichment mixes versioned and
-     * fallback rows per response, so a spec about that mix is only asserting it
-     * if every seeded dataset was on the one page.
-     *
-     * Both fields are required rather than defaulted. `dataset_items_count` is
-     * `@Nullable` in the API, and defaulting a missing count to 0 would read as
-     * "an empty dataset" — indistinguishable from the answer for a genuinely
-     * empty one, and so a count assertion that cannot fail.
-     */
-    async listDatasetSummaries(args: {
-      projectId: string;
-      size?: number;
-    }): Promise<{ rows: DatasetSummaryRef[]; total: number }> {
-      const query = new URLSearchParams({
-        project_id: args.projectId,
-        page: '1',
-        size: String(args.size ?? 100),
-      });
-      const { status, message, json } = await rawFetch('GET', '/v1/private/datasets', { query });
-      if (status !== 200) {
-        throw new Error(`listDatasetSummaries: GET /v1/private/datasets -> ${status}: ${message}`);
-      }
-      const page = json as {
-        content?: Array<{
-          id?: string;
-          name?: string;
-          dataset_items_count?: number | null;
-          latest_version?: { version_name?: string } | null;
-        }>;
-        total?: number;
-      };
-      const rows = (page.content ?? []).map((d) => {
-        if (typeof d.dataset_items_count !== 'number') {
-          throw new Error(
-            `listDatasetSummaries: dataset '${d.name}' came back without a ` +
-              `dataset_items_count (${JSON.stringify(d.dataset_items_count)}) — ` +
-              `there is no count to assert on.`,
-          );
-        }
-        return {
-          id: String(d.id),
-          name: String(d.name),
-          datasetItemsCount: d.dataset_items_count,
-          latestVersionName: d.latest_version?.version_name ?? null,
-        };
-      });
-      return { rows, total: Number(page.total ?? rows.length) };
-    },
-
     async findDatasetByName(name: string, projectName?: string): Promise<DatasetRef | null> {
       try {
         const dataset = await opik.api.datasets.getDatasetByIdentifier({
@@ -852,6 +1088,70 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One `POST /v1/private/prompts/versions` — a new commit on `name`, or the
+     * prompt itself when it does not exist yet.
+     *
+     * Returns the backend's own `versionNumber` rather than letting a caller
+     * count creates: the label the prompt page renders comes from this field,
+     * so a spec asserting on labels must compare against what the server said,
+     * not against the order the fixture happened to write in.
+     */
+    async createPromptVersion(args: {
+      name: string;
+      template: string;
+      projectId?: string;
+      changeDescription?: string;
+    }): Promise<PromptVersionRef> {
+      const created = await opik.api.prompts.createPromptVersion({
+        name: args.name,
+        version: {
+          template: args.template,
+          ...(args.changeDescription ? { changeDescription: args.changeDescription } : {}),
+        },
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+      });
+      const id = created.id;
+      if (typeof id !== 'string' || id === '') {
+        throw new Error(`createPromptVersion(${args.name}) returned no version id`);
+      }
+      return {
+        id,
+        promptId: created.promptId ? String(created.promptId) : '',
+        // Absent, not defaulted: a version with no `version_number` is a mask
+        // (or a backend that stopped sending the field), and either is a real
+        // answer a label assertion must be able to see.
+        versionNumber: created.versionNumber ?? null,
+        template: created.template,
+      };
+    },
+
+    /**
+     * Every version of a prompt, newest first — the same ordering the prompt
+     * page's version timeline requests.
+     *
+     * Paged through in full rather than read with one large `size`: the point
+     * of the callers using this is prompts with more versions than one page
+     * holds, which is exactly the case a single request would silently cut off.
+     */
+    async listPromptVersions(promptId: string): Promise<PromptVersionRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.prompts.getPromptVersions(promptId, {
+            page,
+            size: 100,
+            sorting: JSON.stringify([{ field: 'created_at', direction: 'DESC' }]),
+          }),
+        100,
+      );
+      return content.map((v) => ({
+        id: String(v.id ?? ''),
+        promptId: v.promptId ? String(v.promptId) : promptId,
+        versionNumber: v.versionNumber ?? null,
+        template: v.template,
+      }));
+    },
+
+    /**
      * One `PUT /v1/private/datasets/items` batch, with explicit control over
      * `batch_group_id` — the field that decides whether the write commits a new
      * dataset version (grouped: every batch sharing an id collapses into one)
@@ -886,6 +1186,86 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       });
     },
 
+    /**
+     * One page of `GET /v1/private/projects/{projectId}/datasets` with the
+     * computed summary each row carries — the exact read the Datasets list
+     * issues (`DatasetListPage.tsx` → `useProjectDatasetsList`).
+     *
+     * The project-scoped resource rather than `GET /v1/private/datasets?project_id=`:
+     * both build the same `DatasetCriteria` and funnel into one
+     * `DatasetService.find`, so the enrichment under test is shared — but only
+     * one of them is the read the page makes, and a helper that claims to be
+     * that read has to be it. `ProjectDatasetsResource` has its own param
+     * plumbing and permission annotation, which the query-param resource does
+     * not cover.
+     *
+     * Through `rawFetch` rather than the pinned SDK because the SDK's dataset
+     * shape does not surface `latest_version`, and the summary is the whole
+     * point of the read.
+     *
+     * `page`/`size` are exposed so a caller can prove the summary survives
+     * pagination: the counts are zipped onto the page's rows, so a rewrite that
+     * zips them in the wrong order is visible only when a page holds a subset.
+     *
+     * `total` comes back alongside the rows so a caller can assert the whole
+     * project fitted in this single request: the enrichment mixes versioned and
+     * fallback rows per response, so a spec about that mix is only asserting it
+     * if every seeded dataset was on the one page.
+     *
+     * Counts are required rather than defaulted (see `toDatasetSummary`).
+     * `dataset_items_count` is `@Nullable` in the API, and defaulting a missing
+     * count to 0 would read as "an empty dataset" — indistinguishable from the
+     * answer for a genuinely empty one, and so a count assertion that cannot
+     * fail.
+     */
+    async listDatasetSummaries(args: {
+      projectId: string;
+      page?: number;
+      size?: number;
+    }): Promise<{ total: number; rows: DatasetSummaryRef[] }> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/projects/${args.projectId}/datasets`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listDatasetSummaries: project ${args.projectId} answered ${status}: ${message}`,
+        );
+      }
+      const page = json as { total?: number; content?: unknown[] };
+      if (typeof page.total !== 'number') {
+        throw new Error('listDatasetSummaries: response carried no `total`');
+      }
+      return {
+        total: page.total,
+        rows: (page.content ?? []).map(toDatasetSummary),
+      };
+    },
+
+    /**
+     * The same computed summary as it appears on one dataset's own detail read.
+     *
+     * The list and the detail are different code paths over the same four
+     * lookups, so disagreeing is itself the bug: whichever of the two is wrong,
+     * a user reading a number off the list and then opening the dataset sees
+     * two different truths.
+     */
+    async getDatasetSummary(datasetId: string): Promise<DatasetSummaryRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getDatasetSummary: ${datasetId} answered ${status}: ${message}`);
+      }
+      return toDatasetSummary(json);
+    },
+
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
       const page = await opik.api.datasets.getDatasetItems(datasetId);
       const content = page.content ?? [];
@@ -904,6 +1284,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const content = page.content ?? [];
       return content.map((v) => ({
         versionName: String(v.versionName ?? ''),
+        versionHash: v.versionHash ?? null,
         itemsTotal: Number(v.itemsTotal ?? 0),
         itemsAdded: Number(v.itemsAdded ?? 0),
         itemsModified: Number(v.itemsModified ?? 0),
@@ -1536,6 +1917,52 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Every span on a trace, reduced to the fields a price resolution decides.
+     *
+     * Scoped by `projectId` as well as `traceId` because the spans listing is
+     * project-scoped: without it the backend falls back to the Default Project
+     * and answers with an empty page, which reads identically to "the trace has
+     * no spans".
+     */
+    async listSpanCosts(args: { projectId: string; traceId: string }): Promise<SpanCostRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            traceId: args.traceId,
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
+      }));
+    },
+
+    /**
+     * A trace's rolled-up estimated cost — the number the trace panel's stats
+     * row renders, aggregated server-side over the trace's spans.
+     *
+     * Null on 404 like `getTrace`, and null (not 0) when the trace carries no
+     * cost at all: a trace whose spans were all priced at zero and a trace the
+     * aggregate never reached are different answers.
+     */
+    async getTraceCost(traceId: string): Promise<number | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return t.totalEstimatedCost ?? null;
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
      * `PATCH /v1/private/traces/{id}` carrying tags and nothing else — the
      * update path's smallest possible partial write.
      *
@@ -1563,6 +1990,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       opts: PollFeedbackScoreOpts = {},
     ): Promise<FeedbackScoreRef> {
       return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
+    },
+
+    /** One span by id, or null while it is not yet readable. */
+    async getSpan(spanId: string): Promise<SpanDetail | null> {
+      return localGetSpan(spanId);
+    },
+
+    async pollSpanForFeedbackScore(
+      spanId: string,
+      scoreName: string,
+      opts: PollFeedbackScoreOpts = {},
+    ): Promise<FeedbackScoreRef> {
+      return pollSpanForFeedbackScore(localGetSpan, spanId, scoreName, opts);
     },
 
     async waitForTraceScoresSettled(
@@ -1611,6 +2051,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       metric: string;
       /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
       arguments: Record<string, string>;
+      /**
+       * Which entity the rule scores. Defaults to the trace-scope evaluator.
+       * `span_user_defined_metric_python` is the same metric contract applied to
+       * spans — and, because scope decides the Redis stream, the only way to
+       * assert on span-scope online scoring at all.
+       */
+      type?: 'user_defined_metric_python' | 'span_user_defined_metric_python';
       triggerScope?: 'production' | 'experiment' | 'both';
       enabled?: boolean;
     }): Promise<string> {
@@ -1619,7 +2066,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         '/v1/private/automations/evaluators/',
         {
           body: {
-            type: 'user_defined_metric_python',
+            type: args.type ?? 'user_defined_metric_python',
             action: 'evaluator',
             name: args.name,
             project_ids: [args.projectId],
@@ -1645,6 +2092,336 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return id;
     },
 
+    /**
+     * Create an LLM-as-judge rule and return its id.
+     *
+     * Separate from `createAutomationRule` (which only builds
+     * `user_defined_metric_python` rules) because the judge shape is what these
+     * specs are about: the message `content` / `content_array` split, which the
+     * python shape has no equivalent of.
+     *
+     * `rawFetch` again, for the same two reasons as the python creator: the
+     * pinned SDK has no `trigger_scope`, and creation answers 201 with an empty
+     * body so the id only exists in the `Location` header.
+     *
+     * No provider key is required — the backend validates neither the model name
+     * nor its availability at create time, so a rule can be seeded on a
+     * workspace with no LLM provider configured. It simply never scores, which
+     * is what the listing / read-back specs want.
+     */
+    async createLlmJudgeRule(args: {
+      projectId: string;
+      name: string;
+      messages: JudgeMessageWrite[];
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate?: number;
+      /** Provider model identifier, e.g. `gpt-4o`. */
+      model?: string;
+      /** `score()` variable name -> extraction path (e.g. `output.output`). */
+      variables?: Record<string, string>;
+      /**
+       * Name of the single output-schema entry. Deliberately NOT defaulted to
+       * the rule name: rule names carry the run namespace and can approach the
+       * 150-char column bound, while a score name is a short human label, and
+       * the edit dialog renders it as one.
+       *
+       * Ignored when `schema` is given explicitly.
+       */
+      scoreName?: string;
+      temperature?: number;
+      /**
+       * The model block's free-form slot (`thinking`, and anything else a
+       * caller persists alongside it). Omitted from the request entirely when
+       * not given, rather than sent as `null`: the round-trip specs assert that
+       * the value the caller chose is the value that comes back, so the two
+       * cases have to stay distinguishable.
+       */
+      customParameters?: Record<string, unknown> | null;
+      /**
+       * The whole output schema, for a caller that needs more than the single
+       * INTEGER entry `scoreName` builds — a BOOLEAN judge, or several scores.
+       */
+      schema?: Array<{ name: string; type: JudgeOutputSchemaType; description: string }>;
+      enabled?: boolean;
+    }): Promise<string> {
+      const scoreName = args.scoreName ?? 'Accuracy';
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate ?? 1,
+            enabled: args.enabled ?? true,
+            code: {
+              model: {
+                name: args.model ?? 'gpt-4o',
+                temperature: args.temperature ?? 0,
+                ...(args.customParameters === undefined
+                  ? {}
+                  : { custom_parameters: args.customParameters }),
+              },
+              messages: args.messages.map((m) => ({
+                role: m.role,
+                ...(m.content === undefined ? {} : { content: m.content }),
+                ...(m.contentArray === undefined ? {} : { content_array: m.contentArray }),
+              })),
+              variables: args.variables ?? { output: 'output.output' },
+              schema: args.schema ?? [
+                {
+                  name: scoreName,
+                  type: 'INTEGER',
+                  description: 'Score assigned by the judge.',
+                },
+              ],
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createLlmJudgeRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createLlmJudgeRule: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * The `code.model` block of an `llm_as_judge` rule.
+     *
+     * Throws rather than returning a partial shape when the rule is not an
+     * llm-judge or carries no model: a caller reading this is asserting on what
+     * the model block holds, and an `undefined` threaded into that assertion
+     * would read as "the value changed" when the truth is "the rule is not the
+     * one you think". `custom_parameters` is the one field allowed to be
+     * absent, and it is normalised to `null` — the API's own "nothing set" —
+     * but a present value that is not an object throws rather than being cast,
+     * because the backend types it as a bare `JsonNode`.
+     */
+    async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeModel: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        type?: string;
+        code?: {
+          model?: {
+            name?: string;
+            temperature?: number;
+            custom_parameters?: unknown;
+          };
+        };
+      };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      const model = rule.code?.model;
+      if (!model || typeof model.name !== 'string') {
+        throw new Error(`getLlmJudgeModel: ${ruleId} returned no code.model.name`);
+      }
+      // `LlmAsJudgeModelParameters.customParameters` is a bare `JsonNode`, so
+      // an array or a scalar is representable even though the product only
+      // ever writes an object there. Checked rather than cast, so the
+      // `Record` on LlmJudgeModelRef is an invariant a caller can rely on
+      // instead of a claim about a shape nothing verified.
+      const raw = model.custom_parameters;
+      if (raw !== undefined && raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} returned code.model.custom_parameters as ` +
+            `${Array.isArray(raw) ? 'an array' : typeof raw}, not an object`,
+        );
+      }
+      return {
+        name: model.name,
+        temperature: typeof model.temperature === 'number' ? model.temperature : null,
+        customParameters: (raw as Record<string, unknown> | null | undefined) ?? null,
+      };
+    },
+
+    /**
+     * One page of the evaluators listing, reporting the HTTP status rather than
+     * throwing on it.
+     *
+     * `projectId` omitted issues the workspace-wide listing — the same read the
+     * online-scoring sampler's `findAll()` performs, and the one that a single
+     * unreadable rule used to take down for every project at once.
+     *
+     * `size` defaults to 100 rather than the endpoint's own 10: a spec that
+     * seeds n rules and then reads a silently-truncated first page would assert
+     * against a subset without noticing.
+     */
+    async findAutomationRuleEvaluatorsPage(
+      opts: { projectId?: string; page?: number; size?: number } = {},
+    ): Promise<AutomationRuleEvaluatorPageRef> {
+      const query = new URLSearchParams();
+      if (opts.projectId) query.set('project_id', opts.projectId);
+      query.set('page', String(opts.page ?? 1));
+      query.set('size', String(opts.size ?? 100));
+
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/automations/evaluators/',
+        { query },
+      );
+      // A non-200 is a legitimate result here, not an error to translate: the
+      // caller asserts on it. Only the shape of a 200 is trusted. The message
+      // rides along so the assertion that fails can name the server's reason
+      // rather than just the number it did not want.
+      if (status !== 200) return { status, total: 0, names: [], message };
+
+      const page = json as { total?: number; content?: Array<{ name?: string }> };
+      const content = page.content ?? [];
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `findAutomationRuleEvaluatorsPage: 200 response carried no 'total' — ` +
+            `cannot assert the listing is complete.`,
+        );
+      }
+      return {
+        status,
+        total: page.total,
+        names: content.map((r) => String(r.name ?? '')),
+        message: null,
+      };
+    },
+
+    /**
+     * The judge messages of one rule, as the read-back mapper produces them.
+     *
+     * This is the surface OPIK-8250 broke: the mapper infers the stored shape
+     * from the content string, so a prose prompt that happens to open with `[`
+     * has to come back as `content`, and a genuine multimodal array has to come
+     * back as `contentArray`. Both fields are surfaced verbatim so a spec can
+     * assert which one the server chose.
+     */
+    async getLlmJudgeMessages(ruleId: string): Promise<JudgeMessageRef[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeMessages: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as { code?: { messages?: unknown } };
+      const messages = rule.code?.messages;
+      if (!Array.isArray(messages)) {
+        throw new Error(
+          `getLlmJudgeMessages: ${ruleId} returned no code.messages — not a judge rule?`,
+        );
+      }
+      return messages.map((raw) => {
+        const m = raw as {
+          role?: string;
+          content?: string | null;
+          content_array?: Array<{
+            type?: string;
+            text?: string | null;
+            image_url?: { url?: string; detail?: string | null } | null;
+          }> | null;
+        };
+        return {
+          role: String(m.role ?? ''),
+          content: m.content ?? null,
+          contentArray:
+            m.content_array?.map((part) => ({
+              type: String(part.type ?? ''),
+              text: part.text ?? null,
+              imageUrl: part.image_url
+                ? { url: String(part.image_url.url ?? ''), detail: part.image_url.detail ?? null }
+                : null,
+            })) ?? null,
+        };
+      });
+    },
+
+    /**
+     * Read a rule and write back exactly what was read — the edit dialog's own
+     * save shape, with nothing edited.
+     *
+     * This is the round trip that turned OPIK-8250's read bug into permanent
+     * data loss: a truncated read fed straight back into a save persisted the
+     * truncation, so the prompt the user typed was gone even after the read was
+     * fixed. Echoing the server's own `code` verbatim is the point — building a
+     * fresh payload here would test this client's serializer instead.
+     *
+     * "Exactly what was read" is meant literally, and two fields make that
+     * harder than it looks:
+     *
+     *   - `filters` is `@JsonIgnore` on the evaluator base class but re-exposed
+     *     by each concrete subtype under `@JsonView({Public, Write})`, so it is
+     *     both returned by this GET and accepted by this PATCH. Omitting it
+     *     hands the update constructor a null and silently clears a filtered
+     *     rule's filters — a "no-op" that is not one.
+     *   - the write side wants `project_ids`, which the public read does NOT
+     *     return (it is `@JsonView(Write)`); the public read returns `projects`,
+     *     a sorted set of `{project_id, project_name}`. Echoing the caller's one
+     *     project id instead would detach a multi-project rule from every other
+     *     project it targets, because the PATCH replaces the association set
+     *     rather than adding to it.
+     *
+     * So both are derived from the read-back, and `projectId` is only the
+     * fallback for a response that carried no `projects`.
+     */
+    async resaveAutomationRuleFromReadBack(ruleId: string, projectId: string): Promise<void> {
+      const read = await rawFetch('GET', `/v1/private/automations/evaluators/${ruleId}`);
+      if (read.status !== 200) {
+        throw new Error(
+          `resaveAutomationRuleFromReadBack: GET ${ruleId} answered ${read.status}: ${read.message}`,
+        );
+      }
+      const rule = read.json as {
+        type?: string;
+        name?: string;
+        sampling_rate?: number;
+        enabled?: boolean;
+        trigger_scope?: string;
+        filters?: unknown;
+        projects?: Array<{ project_id?: string }>;
+        code?: unknown;
+      };
+      const readBackProjectIds = (rule.projects ?? [])
+        .map((p) => p.project_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const projectIds = readBackProjectIds.length > 0 ? readBackProjectIds : [projectId];
+      const { status, message } = await rawFetch(
+        'PATCH',
+        `/v1/private/automations/evaluators/${ruleId}`,
+        {
+          body: {
+            type: rule.type,
+            name: rule.name,
+            project_ids: projectIds,
+            sampling_rate: rule.sampling_rate,
+            enabled: rule.enabled,
+            trigger_scope: rule.trigger_scope,
+            ...(rule.filters === undefined ? {} : { filters: rule.filters }),
+            code: rule.code,
+          },
+        },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `resaveAutomationRuleFromReadBack: PATCH ${ruleId} expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
     /** One rule by id, including the `triggerScope` the pinned SDK cannot see. */
     async getAutomationRule(ruleId: string): Promise<AutomationRuleDetail> {
       const { status, message, json } = await rawFetch(
@@ -1660,6 +2437,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         enabled?: boolean;
         sampling_rate?: number;
         trigger_scope?: string;
+        type?: string;
       };
       // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
       // scope would present as the server's default, which is exactly the value
@@ -1670,12 +2448,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (typeof rule.trigger_scope !== 'string') {
         throw new Error(`getAutomationRule: ${ruleId} returned no trigger_scope`);
       }
+      if (typeof rule.type !== 'string') {
+        throw new Error(`getAutomationRule: ${ruleId} returned no type`);
+      }
       return {
         id: String(rule.id ?? ruleId),
         name: String(rule.name ?? ''),
         enabled: rule.enabled ?? true,
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
+        type: rule.type,
       };
     },
 
@@ -1859,24 +2641,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        */
       endTime?: Date;
     }): Promise<string> {
-      const { status, message } = await rawFetch('POST', '/v1/private/traces', {
-        body: {
-          id: args.id,
-          project_name: args.projectName,
-          name: args.name,
-          source: args.source,
-          start_time: (args.startTime ?? new Date()).toISOString(),
-          ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
-          ...(args.input === undefined ? {} : { input: args.input }),
-          ...(args.output === undefined ? {} : { output: args.output }),
-          ...(args.metadata ? { metadata: args.metadata } : {}),
-        },
+      await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
+        id: args.id,
+        project_name: args.projectName,
+        name: args.name,
+        source: args.source,
+        start_time: (args.startTime ?? new Date()).toISOString(),
+        ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+        ...(args.input === undefined ? {} : { input: args.input }),
+        ...(args.output === undefined ? {} : { output: args.output }),
+        ...(args.metadata ? { metadata: args.metadata } : {}),
       });
-      if (status !== 201) {
-        throw new Error(
-          `createTraceWithSource: expected 201 for '${args.name}', got ${status}: ${message}`,
-        );
-      }
+      return args.id;
+    },
+
+    /**
+     * Create one span under an existing trace, with an explicit id and `source`.
+     *
+     * There is no span equivalent of the `trace` fixture because the estate's
+     * only span seeder is `sdkClient.python.createNestedTrace`, which writes a
+     * whole trace and its spans in one call. A spec whose subject is the ORDER
+     * in which spans reach the online-scoring stream needs them written one at a
+     * time, each with its own confirmed 201.
+     *
+     * `source: 'sdk'` is mandatory for online scoring: `OnlineScoringSpanSampler`
+     * keeps only spans whose source `isLoggingSource`, so a span written without
+     * it is dropped before any rule sees it — silently, which is exactly how a
+     * scoring spec ends up asserting nothing.
+     */
+    async createSpan(args: {
+      id: string;
+      traceId: string;
+      projectName: string;
+      name: string;
+      source: 'sdk' | 'experiment' | 'playground' | 'optimization';
+      type?: 'general' | 'llm' | 'tool';
+      input?: TraceJsonSection;
+      output?: TraceJsonSection;
+      startTime?: Date;
+      endTime?: Date;
+    }): Promise<string> {
+      const now = new Date();
+      await postSeedWrite('/v1/private/spans', `createSpan '${args.name}'`, {
+        id: args.id,
+        trace_id: args.traceId,
+        project_name: args.projectName,
+        name: args.name,
+        type: args.type ?? 'general',
+        source: args.source,
+        start_time: (args.startTime ?? now).toISOString(),
+        end_time: (args.endTime ?? now).toISOString(),
+        ...(args.input === undefined ? {} : { input: args.input }),
+        ...(args.output === undefined ? {} : { output: args.output }),
+      });
       return args.id;
     },
 
@@ -2044,6 +2861,39 @@ async function fetchAllPages<T>(
     all.push(...content);
     if (content.length < pageSize || (res.total !== undefined && all.length >= res.total)) {
       return all;
+    }
+  }
+}
+
+/** The HTTP status the pinned SDK stamps on a thrown error, when it has one. */
+function statusCodeOf(err: unknown): number | null {
+  if (typeof err !== 'object' || err === null || !('statusCode' in err)) return null;
+  const code = (err as { statusCode: unknown }).statusCode;
+  return typeof code === 'number' ? code : null;
+}
+
+/**
+ * Run an idempotent read, retrying a 5xx with a short backoff.
+ *
+ * The mirror image of `postSeedWrite`, for the same reason: the ingress in
+ * front of a deployed environment answers 502 in short bursts, and a read that
+ * gives up on the first one turns infrastructure noise into a test failure that
+ * names the suite. A read is idempotent, so a retry cannot change any state.
+ *
+ * A persistent 5xx still throws — this hides a blip, not an outage. Applied
+ * here to the span read only, because that is the read this change introduces;
+ * whether the suite's other reads should get the same treatment is a call for
+ * the estate's owners, not a decision to smuggle in with one spec.
+ */
+async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
+  const backoffMs = [1_000, 3_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (err) {
+      const status = statusCodeOf(err);
+      if (status === null || status < 500 || attempt >= backoffMs.length) throw err;
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]));
     }
   }
 }

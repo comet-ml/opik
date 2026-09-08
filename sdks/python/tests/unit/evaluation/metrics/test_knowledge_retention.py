@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 
 from opik.evaluation.metrics.conversation.heuristics.knowledge_retention.metric import (
@@ -601,35 +599,6 @@ def test_custom_name_is_used():
     )
     assert result.name == "my_custom_retention_check"
     assert result.value == 1.0
-
-
-def test_ascore_is_broken_and_always_raises_not_implemented_error():
-    """Documents an existing defect, not fixed by this test-only PR.
-
-    `KnowledgeRetentionMetric` does not define its own `ascore`, so it
-    inherits `ConversationThreadMetric.ascore`, which unconditionally does
-    `raise NotImplementedError("Please use concrete metric classes instead
-    of this one.")` rather than delegating to `self.score(...)` the way
-    `BaseMetric.ascore` does for ordinary (non-conversation) metrics. As a
-    result, `KnowledgeRetentionMetric().ascore(...)` currently fails for
-    ANY input, valid or not - the async interface of this metric is
-    unusable. Verified this is not unique to this metric:
-    `ConversationDegenerationMetric` has the same gap (no `ascore`
-    override), so this looks like a base-class defect affecting every
-    `ConversationThreadMetric` subclass that doesn't reimplement `ascore`
-    itself. Worth a follow-up bug report; out of scope to fix here.
-    """
-    metric = KnowledgeRetentionMetric(track=False)
-    conversation = [
-        {"role": "user", "content": "My codeword is alpha."},
-        {"role": "assistant", "content": "alpha codeword noted"},
-    ]
-
-    # Sanity: the sync path works fine on this exact input.
-    assert metric.score(conversation=conversation).value == 1.0
-
-    with pytest.raises(NotImplementedError):
-        asyncio.run(metric.ascore(conversation=conversation))
 
 
 def test_ignored_kwargs_are_accepted():

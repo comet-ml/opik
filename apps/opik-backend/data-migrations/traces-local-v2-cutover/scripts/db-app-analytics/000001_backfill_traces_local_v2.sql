@@ -16,6 +16,22 @@
 --                                          SETTINGS line when --max-insert-threads is unset, so the server's
 --                                          value is inherited; an explicit 0 forces no parallel execution.
 --
+-- EVERY WINDOW BOUND IN THIS RUNBOOK PINS 'UTC'. Unpinned, a literal is parsed in the SERVER timezone while these
+-- columns are DateTime64(n, 'UTC'), so on a non-UTC server a bound resolves to a different instant than intended --
+-- and a bound that lands LATER silently drops the rows in the gap, which the delta and the deletion replay both miss
+-- because they share it. Where a bound is a value the driver captured, the capture pins 'UTC' too: see
+-- ${BACKFILL_START} in 000002.
+--
+-- The epoch sentinel below is the deliberate exception: it stays unpinned, matching the destination table's own
+-- DEFAULT and duration expression and the application's embedded SQL comparisons. Pinning it here alone would give
+-- migrated rows a sentinel none of those match -- duration would read a large number instead of NaN.
+--
+-- What remains is asymmetric. Those readers all shift with the server; the Java one does not, comparing against an
+-- absolute Instant.EPOCH. So on a non-UTC server the API stops recognising the value this writes and returns an
+-- instant for a trace that never ended, while rows the app inserts later carry absolute 0 -- two encodings of
+-- "absent", each matched by only some readers. The design assumes a UTC server, and removing that assumption means
+-- pinning the schema and the embedded SQL together.
+--
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
 --   * The SOURCE is sliced by created_at (immutable across upserts, backed by a minmax skip index). The DESTINATION's
