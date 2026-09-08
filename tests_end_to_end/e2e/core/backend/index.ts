@@ -26,6 +26,7 @@ export {
   type SpanCostRef,
   type TraceDetail,
   type TracePayload,
+  type SpanDetail,
   type AutomationRuleRef,
   type AutomationRuleDetail,
   type AutomationRuleLogRef,
