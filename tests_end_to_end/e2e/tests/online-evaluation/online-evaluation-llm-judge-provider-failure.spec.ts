@@ -152,10 +152,16 @@ test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-c
       // that also rendered another rule's lines, or dropped one, is the failure
       // this assertion exists to catch. Collapsed cells show the first line
       // only, so the API side is reduced the same way.
+      //
+      // Positional, not set-wise: the API already returns newest-first
+      // (AutomationRuleEvaluatorLogsDAO's FIND_ALL is `ORDER BY timestamp DESC`)
+      // and the page re-sorts on the same key with a stable sort, so the two
+      // sequences must agree line for line. Sorting both sides before comparing
+      // would accept a page that shuffled the stream.
       expect(
-        rendered.map((r) => `${r.level}|${r.message}`).sort(),
-        'every API log line renders, and nothing else does',
-      ).toEqual(judgeLogs.map((l) => `${l.level}|${firstLine(l.message)}`).sort());
+        rendered.map((r) => `${r.level}|${r.message}`),
+        'every API log line renders, in the order the API reports it, and nothing else does',
+      ).toEqual(judgeLogs.map((l) => `${l.level}|${firstLine(l.message)}`));
 
       expect(
         new Set(rendered.map((r) => r.traceId)),
@@ -164,7 +170,9 @@ test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-c
 
       // Newest first: the refusal is the last line written, so it heads the
       // table. A page that ordered oldest-first would bury a failure below the
-      // routine lines on a busy rule.
+      // routine lines on a busy rule. Not implied by the comparison above —
+      // that one only proves the page did not reorder what the API gave it, and
+      // would still pass if the API itself started serving oldest-first.
       expect(rendered[0]?.level, 'the newest line is the ERROR, at the top').toBe('ERROR');
     });
 
@@ -178,9 +186,11 @@ test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-c
       ).toContainText(PROVIDER_REFUSAL);
     });
 
-    await test.step('A judge that never reached its provider writes no score', async () => {
+    await test.step('A judge whose provider refused it writes no score', async () => {
       // The complement of the control. A rule that failed and still stored
-      // something would be worse than one that failed loudly.
+      // something would be worse than one that failed loudly. The judge did
+      // reach its provider — the `to LLM` line above says so — and was refused;
+      // what must not survive that is a score.
       const detail = await backendClient.getTrace(trace.id);
       expect(detail, 'the seeded trace must still exist to be asserted about').not.toBeNull();
       expect(
