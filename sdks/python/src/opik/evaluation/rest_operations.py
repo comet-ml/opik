@@ -94,9 +94,9 @@ def log_test_result_feedback_scores(
     assertion_results: List[BatchAssertionResultDict] = []
 
     for score_result_ in score_results:
-        if score_result_.scoring_failed:
-            continue
-
+        # Failed scores are uploaded at their recorded 0.0 with the error in
+        # ``reason``: dropping them makes backend averages silently diverge
+        # from the local ones and hides crashes from the experiment (#8134).
         if score_result_.category_name == SUITE_ASSERTION_CATEGORY:
             assertion_results.append(
                 BatchAssertionResultDict(
