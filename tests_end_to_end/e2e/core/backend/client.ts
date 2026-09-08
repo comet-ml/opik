@@ -1690,7 +1690,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * document) can read, and the paged `GET /traces` has no cursor at all.
      *
      * Ids only, like `listTraceIds` — what a cursor test asserts is *which*
-     * rows a page is entitled to and in what order, never their content.
+     * rows a page includes and in what order, never their content.
      */
     async searchTraceIds(
       args: { projectId: string; lastRetrievedId?: string; limit?: number } & ReadWindow,

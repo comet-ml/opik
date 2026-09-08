@@ -64,111 +64,129 @@ const SEED_VISIBLE_TIMEOUT_MS = 120_000;
  *
  * Teardown deletes the traces explicitly: `ProjectService.delete` removes only
  * the project row, so traces do not cascade with it, and `global-teardown`'s
- * run-prefix sweep does not know about traces either.
+ * run-prefix sweep does not know about traces either. Each id is registered for
+ * deletion the moment it is written and the cleanup runs in a `finally`, so a
+ * rejection from a later seed, the readiness poll or the far-future check still
+ * takes the rows already written with it — registering only after the whole
+ * setup succeeded would orphan them.
  */
 export const test = baseTest.extend<FarFutureTracesFixtures>({
   farFutureTraces: async ({ backendClient, project, testNamespace }, use, testInfo) => {
     const now = Date.now();
     const presentThreadId = `${testNamespace}-present-thread`;
     const farFutureThreadId = `${testNamespace}-future-thread`;
+    const seededIds: string[] = [];
 
-    const farFuture = {
-      id: uuid7(FAR_FUTURE_AT),
-      name: `${testNamespace}-far-future`,
-      threadId: farFutureThreadId,
-      at: FAR_FUTURE_AT,
-    };
-    await backendClient.createTraceWithSource({
-      id: farFuture.id,
-      projectName: project.name,
-      name: farFuture.name,
-      source: 'sdk',
-      threadId: farFutureThreadId,
-      input: { question: 'seeded at 2200-06-15' },
-      output: { answer: 'seeded at 2200-06-15' },
-      startTime: FAR_FUTURE_AT,
-      endTime: new Date(FAR_FUTURE_AT.getTime() + 1_000),
-    });
-
-    // Minutes back, not "now": a row stamped against the runner's clock can
-    // land marginally ahead of the backend's and then sit outside a window
-    // ending at now, which reads as a wrong answer rather than a bad seed.
-    // Five-minute spacing also fixes the descending-id order the reads return.
-    const present: Array<{ id: string; name: string }> = [];
-    for (let i = 0; i < PRESENT_TRACE_COUNT; i++) {
-      const at = new Date(now - (i + 1) * 5 * MINUTE_MS);
-      const seed = { id: uuid7(at), name: `${testNamespace}-present-${i + 1}` };
+    try {
+      const farFuture = {
+        id: uuid7(FAR_FUTURE_AT),
+        name: `${testNamespace}-far-future`,
+        threadId: farFutureThreadId,
+        at: FAR_FUTURE_AT,
+      };
       await backendClient.createTraceWithSource({
-        id: seed.id,
+        id: farFuture.id,
         projectName: project.name,
-        name: seed.name,
+        name: farFuture.name,
         source: 'sdk',
-        threadId: presentThreadId,
-        input: { question: `present-day trace ${i + 1}` },
-        output: { answer: `present-day trace ${i + 1}` },
-        startTime: at,
-        endTime: new Date(at.getTime() + 1_000),
+        threadId: farFutureThreadId,
+        input: { question: 'seeded at 2200-06-15' },
+        output: { answer: 'seeded at 2200-06-15' },
+        startTime: FAR_FUTURE_AT,
+        endTime: new Date(FAR_FUTURE_AT.getTime() + 1_000),
       });
-      present.push(seed);
-    }
+      seededIds.push(farFuture.id);
 
-    const allIdsNewestFirst = [farFuture.id, ...present.map((p) => p.id)];
+      // Minutes back, not "now": a row stamped against the runner's clock can
+      // land marginally ahead of the backend's and then sit outside a window
+      // ending at now, which reads as a wrong answer rather than a bad seed.
+      // Five-minute spacing also fixes the descending-id order the reads return.
+      const present: Array<{ id: string; name: string }> = [];
+      for (let i = 0; i < PRESENT_TRACE_COUNT; i++) {
+        const at = new Date(now - (i + 1) * 5 * MINUTE_MS);
+        const seed = { id: uuid7(at), name: `${testNamespace}-present-${i + 1}` };
+        await backendClient.createTraceWithSource({
+          id: seed.id,
+          projectName: project.name,
+          name: seed.name,
+          source: 'sdk',
+          threadId: presentThreadId,
+          input: { question: `present-day trace ${i + 1}` },
+          output: { answer: `present-day trace ${i + 1}` },
+          startTime: at,
+          endTime: new Date(at.getTime() + 1_000),
+        });
+        seededIds.push(seed.id);
+        present.push(seed);
+      }
 
-    // Ingestion is asynchronous, so wait for the whole set before any spec
-    // reads. Polling the *unwindowed* list on purpose: it is the one read the
-    // wrap never affected, so a timeout here is a slow write, not the behaviour
-    // under test masquerading as one.
-    const deadline = Date.now() + SEED_VISIBLE_TIMEOUT_MS;
-    let visible: string[] = [];
-    for (;;) {
-      const ids = await backendClient.listTraceIds({ projectId: project.id });
-      visible = allIdsNewestFirst.filter((id) => ids.includes(id));
-      if (visible.length === allIdsNewestFirst.length) break;
-      if (Date.now() > deadline) {
+      const allIdsNewestFirst = [farFuture.id, ...present.map((p) => p.id)];
+
+      // Ingestion is asynchronous, so wait for the whole set before any spec
+      // reads. Polling the *unwindowed* list on purpose: it is the one read the
+      // wrap never affected, so a timeout here is a slow write, not the behaviour
+      // under test masquerading as one.
+      const deadline = Date.now() + SEED_VISIBLE_TIMEOUT_MS;
+      let visible: string[] = [];
+      for (;;) {
+        const ids = await backendClient.listTraceIds({ projectId: project.id });
+        visible = allIdsNewestFirst.filter((id) => ids.includes(id));
+        if (visible.length === allIdsNewestFirst.length) break;
+        if (Date.now() > deadline) {
+          throw new Error(
+            `[farFutureTraces fixture] only ${visible.length}/${allIdsNewestFirst.length} seeded traces ` +
+              `became queryable within ${SEED_VISIBLE_TIMEOUT_MS}ms — missing ` +
+              allIdsNewestFirst.filter((id) => !visible.includes(id)).join(', '),
+          );
+        }
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
+
+      // The seed only discriminates if the far-future row really is far-future.
+      // A backend that clamped the id or `start_time` on write would leave every
+      // window assertion in these specs trivially true, and nothing else would
+      // notice — the row would still be there, just not where it claims to be.
+      //
+      // Note the limit of this check. A window ending now excludes this id on
+      // the id bound alone, so the check catches a clamped *id* but says
+      // nothing about `traces.id_at` — the column the week bound actually
+      // reads, and a 32-bit `DateTime` that truncates a 2200 instant on write.
+      // Establishing that the far-future instant survived storage needs a probe
+      // this fixture does not have; see the review note on OPIK-7791.
+      const beforeNow = await backendClient.listTraceIds({
+        projectId: project.id,
+        toTime: new Date(now),
+      });
+      if (beforeNow.includes(farFuture.id)) {
         throw new Error(
-          `[farFutureTraces fixture] only ${visible.length}/${allIdsNewestFirst.length} seeded traces ` +
-            `became queryable within ${SEED_VISIBLE_TIMEOUT_MS}ms — missing ` +
-            allIdsNewestFirst.filter((id) => !visible.includes(id)).join(', '),
+          `[farFutureTraces fixture] ${farFuture.id} is inside a window ending now — ` +
+            'it was not stored with a far-future timestamp, so the seed proves nothing',
         );
       }
-      await new Promise((r) => setTimeout(r, 1_000));
-    }
 
-    // The seed only discriminates if the far-future row really is far-future.
-    // A backend that clamped the id or `start_time` on write would leave every
-    // window assertion in these specs trivially true, and nothing else would
-    // notice — the row would still be there, just not where it claims to be.
-    const beforeNow = await backendClient.listTraceIds({
-      projectId: project.id,
-      toTime: new Date(now),
-    });
-    if (beforeNow.includes(farFuture.id)) {
-      throw new Error(
-        `[farFutureTraces fixture] ${farFuture.id} is inside a window ending now — ` +
-          'it was not stored with a far-future timestamp, so the seed proves nothing',
-      );
-    }
+      const ref: FarFutureTracesRef = {
+        farFuture,
+        present,
+        presentThreadId,
+        allIdsNewestFirst,
+        windowStart: new Date(now - WEEK_MS),
+      };
 
-    const ref: FarFutureTracesRef = {
-      farFuture,
-      present,
-      presentThreadId,
-      allIdsNewestFirst,
-      windowStart: new Date(now - WEEK_MS),
-    };
+      await testInfo.attach('opik.farFutureTraces', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
 
-    await testInfo.attach('opik.farFutureTraces', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteTraces(allIdsNewestFirst);
-      } catch (err) {
-        console.warn('[farFutureTraces fixture] trace delete warning:', err);
+      await use(ref);
+    } finally {
+      if (!shouldLeaveArtifacts(testInfo) && seededIds.length > 0) {
+        try {
+          await backendClient.deleteTraces(seededIds);
+        } catch (err) {
+          // Never rethrow from cleanup: a delete failure must not replace the
+          // test's own error with a less useful one.
+          console.warn('[farFutureTraces fixture] trace delete warning:', err);
+        }
       }
     }
   },
