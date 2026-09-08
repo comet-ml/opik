@@ -595,16 +595,18 @@ client. Most problems end there.
 
     - Start a new session, then trigger sign-in from the client: `/mcp` in Claude
       Code, the MCP settings panel in Cursor, `codex mcp login opik-mcp` in Codex.
-    - On a corporate network, allow `www.comet.com`.
+    - On a corporate network, allow `www.comet.com`. On self-hosted Opik, allow your
+      deployment's domain and its identity provider instead.
     - Sessions expire. When that happens, the client asks you to sign in again.
   </Accordion>
   <Accordion title="Opik does not show up in the client, or shows no tools">
     Clients read MCP servers and skills when a session starts.
 
     - Start a new session.
-    - Run `uvx opik mcp status`. It lists every client that has the server and the
-      config file it lives in. If your client is missing, run
-      `uvx opik mcp configure` again.
+    - Run `uvx opik mcp status`. It lists the clients the CLI knows (Claude Code,
+      Cursor, VS Code Copilot, Codex, opencode) that have the server, and the config
+      file it lives in. If your client is missing, run `uvx opik mcp configure`
+      again. Clients you configured by hand are not listed; check their config file.
     - If setup printed `exists but is not a valid JSON object`, that client's config
       has comments in it. Paste the block the CLI printed into the file by hand.
   </Accordion>
@@ -671,8 +673,9 @@ client. Most problems end there.
     server: your client signs in through the browser and nothing is stored in its
     config. Everywhere else, or with `--local-server`, you get the local server:
     `uvx opik-mcp` runs on your machine with `OPIK_API_KEY` and `OPIK_WORKSPACE` in
-    the client's `env` block. `uvx opik mcp status` shows which one each client
-    uses.
+    the client's `env` block (`environment` in opencode). If setup could not reach
+    your deployment to detect the hosted server, it falls back to the local one, so
+    check `uvx opik mcp status`: it shows which server each client uses.
   </Accordion>
   <Accordion title="Is it safe to let an agent write to my workspace?">
     The agent acts with your permissions and cannot exceed them. One tool,
@@ -698,9 +701,10 @@ client. Most problems end there.
     Not yet. Until then, use your client's tool approval to gate the `write` tool.
   </Accordion>
   <Accordion title="How do I update?">
-    `uvx opik@latest mcp configure`. It rewrites the client config and refreshes the
-    skill pack. Plain `uvx opik` reuses the version it already has cached. Start a
-    new session afterwards.
+    `uvx opik@latest mcp configure`. It re-runs setup for each client, reports the
+    result per client, and refreshes the skill pack; a client whose config it could
+    not write is reported, not silently skipped. Plain `uvx opik` reuses the version
+    it already has cached. Start a new session afterwards.
   </Accordion>
   <Accordion title="How do I remove it?">
     There is no remove command. Use `claude mcp remove opik-mcp` or
