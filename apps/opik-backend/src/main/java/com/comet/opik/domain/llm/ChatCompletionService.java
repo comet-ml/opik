@@ -141,7 +141,7 @@ public class ChatCompletionService {
             log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             chatResponse = retryPolicy.withRetry(
-                    () -> failFastOnUnretryableFailure(() -> languageModelClient.chat(chatRequest)));
+                    () -> failFastOnNonRetriableFailure(() -> languageModelClient.chat(chatRequest)));
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
@@ -194,20 +194,28 @@ public class ChatCompletionService {
     }
 
     /**
-     * The scoreTrace fail-fast. Review finding on #8169: this used to be {@code failFastOnPermanentFailure} wrapped
-     * around {@code failFastOnUnsupportedFeature} at the call site — two levels of indirection for what is one
-     * decision, and awkward to reason about because neither level named what it was really asking.
+     * Fails fast for {@code scoreTrace} when the failure can never succeed, so the in-process retry budget is not
+     * spent on a doomed call.
      *
-     * <p>Both conditions mean the same thing, that this exact call can never succeed, and both are raised the same
-     * way by {@link #failFastWhen}. So they belong in one predicate that names each reason instead of one wrapper
-     * per reason. Each reason is a method of its own, so it can be read — and exercised — independently.
+     * <p>Review finding on #8169: this used to be {@code failFastOnPermanentFailure} wrapped around
+     * {@code failFastOnUnsupportedFeature} at the call site — two levels of indirection for what is one decision,
+     * and awkward to reason about because neither level named what it was really asking. Both conditions mean the
+     * same thing and both are raised the same way by {@link #failFastWhen}, so they are one predicate here, with
+     * each reason its own named method so it can be read — and exercised — independently.
+     *
+     * <p>Permanence is deliberately narrow, and broadening it silently loses evaluations.
+     * {@link HttpStatusRetryability} carves 408, 425 and 429 out of the client-error family because they mean "not
+     * now" rather than "not ever" — diverging from langchain4j on 425 per RFC 8470 — and a failure that never
+     * reached the wire yields no status at all, so it stays retryable. Both carve-outs matter beyond this method:
+     * the status thrown from the catch block is also what {@code BaseRedisSubscriber} classifies by, so anything
+     * treated as permanent is acked and dropped on its first delivery instead of being redelivered.
      *
      * <p>Only scoreTrace fails fast on a permanent status: {@code create()} answers an HTTP caller, and narrowing
      * its retry behaviour is not this change's business. The permanent check is mainly reached for VertexAI, whose
      * GAX exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail
      * fast on their own. The cause is preserved either way, so the catch block still classifies from the same status.
      */
-    private <T> T failFastOnUnretryableFailure(Callable<T> action) throws Exception {
+    private <T> T failFastOnNonRetriableFailure(Callable<T> action) throws Exception {
         return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
                 || isPermanentProviderFailure(runtimeException));
     }
@@ -316,6 +324,11 @@ public class ChatCompletionService {
      * chain before any typed exception is considered, because it carries the upstream code verbatim: langchain4j's
      * {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))}, and taking the outermost
      * match would collapse that 503 into the flat 500 the typed exception implies.
+     *
+     * <p>Review finding on #8170 asked whether an outer wrapper's status can shadow a nested provider one, since
+     * {@code ExceptionUtils} lists the chain outermost-first. It cannot: {@code HttpException}'s only constructor is
+     * {@code (int, String)}, so it never carries a cause and is always terminal in the chain. At most one can appear,
+     * and the {@code findFirst} here is therefore not a precedence choice between rival wire statuses.
      */
     private Optional<Integer> findProviderHttpStatus(Throwable throwable) {
         List<Throwable> chain = ExceptionUtils.getThrowableList(throwable);
@@ -357,7 +370,11 @@ public class ChatCompletionService {
      * the gRPC and HTTP-JSON transports, rather than a table of our own.
      *
      * <p>An exception GAX marks retryable yields no status, so <em>within this method</em> the mapping can only
-     * prevent a drop, never cause one. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
+     * prevent a drop, never cause one. That costs reporting fidelity — such a failure is reported as a flat 500
+     * rather than, say, the 503 GAX translated — and it is kept deliberately: returning the status regardless would
+     * let a GAX-retryable client-error code that {@link HttpStatusRetryability} does not carve out (ABORTED maps to
+     * 409, for instance) be classified permanent, and both this fail-fast and {@code BaseRedisSubscriber} would then
+     * drop an evaluation GAX itself says is worth retrying. Trading a precise status for that is not worth it. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
      * {@code HttpException} in the chain first, and a wire status legitimately outranks GAX's {@code isRetryable},
      * which is a configured judgment rather than something the server said. Not reachable for VertexAI in any case —
      * {@code VertexAiGeminiChatModel} goes through the Google Cloud SDK and never produces a langchain4j

@@ -648,12 +648,12 @@ class ChatCompletionServiceTest {
         private static final Set<Integer> PERMANENT_STATUSES = Set.of(400, 401, 402, 403, 404, 413, 422, 499);
 
         /** The shared rows whose status is permanent, so their scoreTrace case needs no branch. */
-        private static Stream<Arguments> permanentProviderStatuses() {
+        private static Stream<Arguments> permanentProviderErrorCases() {
             return providerStatusProvider().filter(row -> PERMANENT_STATUSES.contains(row.get()[2]));
         }
 
         /** The complement, kept separate for the same reason. */
-        private static Stream<Arguments> transientProviderStatuses() {
+        private static Stream<Arguments> transientProviderErrorCases() {
             return providerStatusProvider().filter(row -> !PERMANENT_STATUSES.contains(row.get()[2]));
         }
 
@@ -877,7 +877,7 @@ class ChatCompletionServiceTest {
          * failures that could never succeed (the redaction-limit incident).
          */
         @ParameterizedTest(name = "scoreTrace: when {0}, then non-retryable {2}")
-        @MethodSource("permanentProviderStatuses")
+        @MethodSource("permanentProviderErrorCases")
         @DisplayName("Online scoring drops a permanent provider status instead of replaying it")
         void scoreTrace__whenPermanentProviderErrorUnparsed__thenNonRetryable(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
@@ -888,7 +888,7 @@ class ChatCompletionServiceTest {
         }
 
         @ParameterizedTest(name = "scoreTrace: when {0}, then retryable as {2}")
-        @MethodSource("transientProviderStatuses")
+        @MethodSource("transientProviderErrorCases")
         @DisplayName("Online scoring keeps a transient provider status retryable, honouring maxRetries")
         void scoreTrace__whenTransientProviderErrorUnparsed__thenRetryable(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
