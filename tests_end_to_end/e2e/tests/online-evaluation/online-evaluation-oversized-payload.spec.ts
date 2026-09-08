@@ -43,6 +43,15 @@ const OVERSIZED_CHARS = 21_000_000;
 const SCORING_TIMEOUT_MS = 180_000;
 
 /**
+ * How long the oversized span may take to become readable back. A separate
+ * budget from `SCORING_TIMEOUT_MS` on purpose — it covers ingest and query, not
+ * scoring, and the two would want to move independently: reading 21,000,000
+ * characters back is slow for reasons that have nothing to do with the Redis
+ * stream this spec is about.
+ */
+const OVERSIZED_READBACK_TIMEOUT_MS = 180_000;
+
+/**
  * Span scope, not trace scope, and that is a deliberate narrowing.
  *
  * The two scopes ride separate Redis streams
@@ -200,7 +209,7 @@ test.describe('Online Evaluation — oversized payloads', { tag: ['@t3-nightly',
             return typeof output?.blob === 'string' ? output.blob.length : null;
           },
           {
-            timeout: 180_000,
+            timeout: OVERSIZED_READBACK_TIMEOUT_MS,
             intervals: [2_000, 5_000],
             message:
               `span ${oversized.spanId} never read back a full-length blob — the payload ` +
@@ -263,7 +272,10 @@ test.describe('Online Evaluation — oversized payloads', { tag: ['@t3-nightly',
           panel.feedbackScoreRow(ruleName),
           `the panel must show exactly one ${ruleName} row for ${seeded.spanName}`,
         ).toHaveCount(1);
-        expect(await panel.readFeedbackScoreValue(ruleName)).toBe(1.0);
+        expect(
+          await panel.readFeedbackScoreValue(ruleName),
+          `the panel must render the constant metric's 1.0 for ${seeded.spanName}, not just a row`,
+        ).toBe(1.0);
       }
     });
   });
