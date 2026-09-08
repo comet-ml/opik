@@ -101,13 +101,22 @@ python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 3 --dura
 $RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-seconds 1
 
 # 5. Delta + deletion replay, anchored at that backfill_start.
-$RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start>'
+$RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
 
 # 6. QA the copy BEFORE the swap: normalized fidelity compare of source vs destination.
-$RUNBOOK/scripts/verify.sh --database opik            # add --drill-down to list differing keys on a mismatch
+$RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the differing keys of ANY differing window
 #    Locally there is no async-insert buffer, so in-flight writes may still be settling: once traffic has stopped,
-#    re-run delta_replay.sh then verify.sh until it reports "PASSED: all N windows match" (convergence). In production
-#    the buffer holds writes during the cutover window instead.
+#    re-run delta_replay.sh then verify.sh until it reports "PASSED" (convergence). In production the buffer holds
+#    writes during the cutover window instead.
+#
+#    Re-running only converges a MISMATCH. The other two non-zero verdicts do not resolve by re-copying, so do not
+#    loop on them:
+#      * INCONCLUSIVE   a version tie left FINAL's choice arbitrary, so the re-check's "no genuine difference" cannot
+#                       be relied on, and copying again does not break the tie. Triage it per the runbook's "a version
+#                       tie"; in a rehearsal the usual cause is seeding two rows for one key at one last_updated_at.
+#      * UNCERTIFIABLE  the tie check did not return counts, so the window is neither certified nor shown to differ.
+#                       That is a read or client failure, not a data one: fix the cause and re-run those windows.
+#    "OK -- superseded-version artifact" is a PASS that differs, so it needs no action.
 
 # 7. MANDATORY CONFIG STEP, and the one most easily skipped in a rehearsal: roll out traceColumnsNonNullable=true
 #    BEFORE the EXCHANGE (runbook "The final cutover window"), and raise the buffer ceiling so the --confirm-buffer-raised
@@ -125,8 +134,8 @@ recreate_backend
 #    cutover and leaves traces a MergeTree so the backend's deletes keep working; it also renames the displaced old data
 #    to traces_pre_cutover_backup. --skip-wrap defers the sharding-ready Distributed wrap (step 10).
 #    --confirm-retention-paused holds trivially here (retention is disabled by default).
-$RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start>'
-$RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start>' \
+$RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
+$RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start> UTC' \
     --confirm-buffer-raised --confirm-retention-paused --skip-wrap
 #    Record the cutover_start it prints. Run the post-swap compare NOW, while writes are still held — and UNBOUNDED,
 #    because the current week is where the delta and the final deletion replay just landed, making it the week most worth
@@ -195,20 +204,20 @@ $RUNBOOK/scripts/rollback.sh --database opik --stage A
 # resurrection guard — rollback discards post-cutover writes while honoring post-cutover deletes).
 python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 4 --duration 45 --resurrect-ratio 0.25
 python tests_load/tests/traces-local-v2-cutover/live_traffic.py   --tps 4 --duration 30   # -> the discarded writes
-$RUNBOOK/scripts/rollback.sh --database opik --stage B --cutover-start '<cutover_start>' \
+$RUNBOOK/scripts/rollback.sh --database opik --stage B --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused --accept-post-cutover-write-loss
 
 # Stage C — after the wrap. The post-cutover deletes can be issued AFTER the wrap: with
 # tracesDistributedWrapEnabled=true (which the wrap requires anyway) TraceDAO targets `traces_local`, so the product's
 # delete path keeps working — only a DIRECT `DELETE FROM traces` against the Distributed wrapper is rejected (code 36).
 python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 4 --duration 45 --resurrect-ratio 0.25
-$RUNBOOK/scripts/rollback.sh --database opik --stage C --cutover-start '<cutover_start>' \
+$RUNBOOK/scripts/rollback.sh --database opik --stage C --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused --accept-post-cutover-write-loss
 # Worth triggering once: leave the toggle true after stage C and try a delete — it fails loudly with
 # "Code: 60 ... Table opik.traces_local does not exist", the documented inverse mismatch. Then set it false + restart.
 
 # If a stage B/C run's reverse-replay was interrupted, re-apply just it (idempotent):
-$RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start>' \
+$RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused
 
 # Un-wrap — reverses the WRAP while keeping the cutover, landing in the post-EXCHANGE/pre-wrap state. Needs no

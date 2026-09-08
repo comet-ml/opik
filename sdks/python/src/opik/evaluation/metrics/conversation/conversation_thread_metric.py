@@ -1,3 +1,4 @@
+import asyncio
 from typing import Union, List, Any
 
 from . import types
@@ -79,6 +80,4 @@ class ConversationThreadMetric(base_metric.BaseMetric):
             A ScoreResult object or list of ScoreResult objects containing the evaluation score,
             metric name, and optional reasoning.
         """
-        raise NotImplementedError(
-            "Please use concrete metric classes instead of this one."
-        )
+        return await asyncio.to_thread(self.score, conversation, **kwargs)
