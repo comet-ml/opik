@@ -24,9 +24,6 @@ const DataTab = ({
   datasetItemId,
 }: DataTabProps) => {
   const renderExperimentsSection = () => {
-    // One panel per slot: the index is stable across dataset items, unlike the
-    // experiment item id, and unique, unlike the experiment id when an
-    // experiment run contributes several items per dataset item.
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={idx}>
         <ResizablePanel
