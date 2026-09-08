@@ -141,8 +141,7 @@ public class ChatCompletionService {
             log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             chatResponse = retryPolicy.withRetry(
-                    () -> failFastOnPermanentFailure(
-                            () -> failFastOnUnsupportedFeature(() -> languageModelClient.chat(chatRequest))));
+                    () -> failFastOnUnretryableFailure(() -> languageModelClient.chat(chatRequest)));
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
@@ -191,27 +190,44 @@ public class ChatCompletionService {
      * original exception is kept as the cause, so {@link #failIfUnsupportedFeature} still recognises it downstream.
      */
     private <T> T failFastOnUnsupportedFeature(Callable<T> action) throws Exception {
-        return failFastWhen(action, runtimeException -> findUnsupportedFeature(runtimeException).isPresent());
+        return failFastWhen(action, this::isUnsupportedFeature);
     }
 
     /**
-     * Skips the in-process retries for a provider status that can never succeed, mirroring
-     * {@link #failFastOnUnsupportedFeature}. Applied only on the scoreTrace path: {@code create()} answers an HTTP
-     * caller, and narrowing its retry behaviour is not this change's business. Mainly reached for VertexAI, whose GAX
-     * exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail fast
-     * on their own. The cause is preserved, so the catch block still classifies from the same status.
+     * The scoreTrace fail-fast. Review finding on #8169: this used to be {@code failFastOnPermanentFailure} wrapped
+     * around {@code failFastOnUnsupportedFeature} at the call site — two levels of indirection for what is one
+     * decision, and awkward to reason about because neither level named what it was really asking.
+     *
+     * <p>Both conditions mean the same thing, that this exact call can never succeed, and both are raised the same
+     * way by {@link #failFastWhen}. So they belong in one predicate that names each reason instead of one wrapper
+     * per reason. Each reason is a method of its own, so it can be read — and exercised — independently.
+     *
+     * <p>Only scoreTrace fails fast on a permanent status: {@code create()} answers an HTTP caller, and narrowing
+     * its retry behaviour is not this change's business. The permanent check is mainly reached for VertexAI, whose
+     * GAX exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail
+     * fast on their own. The cause is preserved either way, so the catch block still classifies from the same status.
      */
-    private <T> T failFastOnPermanentFailure(Callable<T> action) throws Exception {
-        return failFastWhen(action,
-                runtimeException -> findProviderHttpStatus(runtimeException)
-                        .filter(HttpStatusRetryability::isPermanent)
-                        .isPresent());
+    private <T> T failFastOnUnretryableFailure(Callable<T> action) throws Exception {
+        return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isPermanentProviderFailure(runtimeException));
+    }
+
+    /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
+    private boolean isUnsupportedFeature(RuntimeException runtimeException) {
+        return findUnsupportedFeature(runtimeException).isPresent();
+    }
+
+    /** A status the provider actually sent that {@link HttpStatusRetryability} classifies as never succeeding. */
+    private boolean isPermanentProviderFailure(RuntimeException runtimeException) {
+        return findProviderHttpStatus(runtimeException)
+                .filter(HttpStatusRetryability::isPermanent)
+                .isPresent();
     }
 
     /**
-     * Shared mechanism for both fail-fast wrappers: run the action, and rewrap a matching failure as
+     * Shared mechanism for the fail-fast wrappers: run the action, and rewrap a matching failure as
      * {@link NonRetriableException} so {@code RetryPolicy.withRetry} gives up on the first attempt. Only the
-     * predicate differs between the two, so keeping one copy of the propagation means a future change to how
+     * predicate differs between them, so keeping one copy of the propagation means a future change to how
      * NonRetriableException is raised cannot apply to one and not the other. The cause is always preserved.
      */
     private <T> T failFastWhen(Callable<T> action, Predicate<RuntimeException> nonRetriable) throws Exception {

@@ -24,7 +24,9 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -47,6 +49,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -130,7 +133,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(expectedMessagePart)
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -151,7 +154,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(errorMessage)
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -171,7 +174,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("RuntimeException")
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -194,7 +197,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(rootCauseMessage)
                     .hasCauseInstanceOf(RuntimeException.class);
@@ -272,7 +275,7 @@ class ChatCompletionServiceTest {
 
             // Then
             assertThat(thrown)
-                    .isInstanceOf(BadRequestException.class)
+                    .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Unsupported feature for the selected LLM provider")
                     .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
             assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
@@ -300,7 +303,7 @@ class ChatCompletionServiceTest {
 
             // Then
             assertThat(thrown)
-                    .isInstanceOf(BadRequestException.class)
+                    .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Unsupported feature for the selected LLM provider")
                     .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
             assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
@@ -323,7 +326,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId))
-                    .isInstanceOf(BadRequestException.class);
+                    .isExactlyInstanceOf(BadRequestException.class);
 
             // The provider was never reached, so there is no provider error to map.
             verify(llmProviderFactory, never()).getService(anyString(), anyString());
@@ -395,7 +398,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> retryingService.create(request, workspaceId))
-                    .isInstanceOf(BadRequestException.class);
+                    .isExactlyInstanceOf(BadRequestException.class);
 
             // UnsupportedFeatureException extends LangChain4jException, not NonRetriableException, so without the
             // fail-fast wrapper langchain4j's RetryPolicy would retry a call that can never succeed.
@@ -418,7 +421,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> retryingService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class);
+                    .isExactlyInstanceOf(InternalServerErrorException.class);
 
             verify(llmProviderService, atLeast(2)).generate(any(), anyString());
         }
@@ -471,7 +474,7 @@ class ChatCompletionServiceTest {
             // When & Then — createAndStreamResponse runs before Response.ok() is built, so nothing is committed yet
             // and this surfaces as a genuine 400
             assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
-                    .isInstanceOf(BadRequestException.class)
+                    .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining(ChatCompletionService.ERROR_EMPTY_MESSAGES);
 
             verify(handlers, never()).handleError(any());
@@ -515,7 +518,7 @@ class ChatCompletionServiceTest {
 
             // When & Then — not a client error, so it keeps its existing behaviour rather than becoming a 200
             assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isExactlyInstanceOf(IllegalStateException.class)
                     .hasMessage("connection pool exhausted");
 
             verify(handlers, never()).handleError(any());
@@ -534,7 +537,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider");
         }
     }
@@ -775,7 +778,7 @@ class ChatCompletionServiceTest {
 
             var fromCreate = catchThrowable(() -> chatCompletionService.create(request, "test-workspace-id"));
 
-            assertThat(fromCreate).isInstanceOf(WebApplicationException.class);
+            assertThat(fromCreate).isExactlyInstanceOf(ClientErrorException.class);
             assertThat(((WebApplicationException) fromCreate).getResponse().getStatus())
                     .as("create() answers a caller who reads the body, so the parsed status wins")
                     .isEqualTo(401);
@@ -1189,7 +1192,7 @@ class ChatCompletionServiceTest {
                     .contains(expectedStatus);
             assertThat(thrown)
                     .as("a permanent status must arrive as ClientErrorException, which the subscriber retires")
-                    .isInstanceOf(ClientErrorException.class);
+                    .isExactlyInstanceOf(ClientErrorException.class);
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
@@ -1212,6 +1215,14 @@ class ChatCompletionServiceTest {
         private void assertRetryable(Throwable thrown) {
             assertThat(thrown).isInstanceOf(WebApplicationException.class);
             var status = ((WebApplicationException) thrown).getResponse().getStatus();
+            // Exact, not just assignable: scoreTrace raises only these two, and asserting
+            // ServerErrorException exactly is what fails if the blanket InternalServerErrorException(500)
+            // workaround is ever reintroduced -- it is a subclass, so isInstanceOf would still pass.
+            assertThat(thrown)
+                    .as("status %d must arrive as the type its family implies", status)
+                    .isExactlyInstanceOf(familyOf(status) == Response.Status.Family.CLIENT_ERROR
+                            ? ClientErrorException.class
+                            : ServerErrorException.class);
             assertThat(PERMANENT_STATUSES)
                     .as("status %d must stay retryable so the subscriber redelivers it", status)
                     .doesNotContain(status);
@@ -1302,7 +1313,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessage(expectedMessage);
         }
 
@@ -1322,7 +1333,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("Service is unreachable")
                     .hasMessageContaining(customMessage);
