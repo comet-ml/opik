@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -407,10 +407,31 @@ class TestSuiteInsertItemsRequest(BaseModel):
     # `__internal_api__insert_items_as_dataclasses__`.
     deduplication: bool = True
     workspace: str | None = None
+    # How the suite object being inserted into is obtained. The two factories
+    # build a suite whose local content-hash state differs, and dedup is decided
+    # from that state, so which one a caller went through is part of the
+    # scenario rather than an implementation detail:
+    #   get_or_create - get_test_suite(), falling back to create (the default,
+    #                   and what every other route uses)
+    #   list          - get_test_suites(), selecting the suite by name, and
+    #                   answering 404 when it matches other than exactly one
+    #                   suite. Deliberately no create fallback: a caller asking
+    #                   for the listing path is testing that path, so silently
+    #                   substituting another one would turn a real regression
+    #                   into a pass.
+    resolve_via: Literal["get_or_create", "list"] = "get_or_create"
 
 
 class TestSuiteInsertItemsResponse(BaseModel):
     suite_id: str
+    # Items handed to `suite.insert()`, NOT rows written. `insert` deduplicates
+    # on the suite's local content hashes, so a request repeating an item the
+    # suite already holds still reports it here. Anything asserting on what
+    # actually landed has to read the suite back — which is what
+    # test-suite-insert-dedup-listed-suite.spec.ts does, and why this field is
+    # left as the submitted count rather than given a meaning the SDK does not
+    # expose. (`inserted` carries the same "submitted" sense on the dataset
+    # routes; changing that is an estate-wide rename, not a per-route fix.)
     inserted: int
 
 

@@ -66,11 +66,36 @@ export interface RawApiResult {
   location?: string | null;
 }
 
+/** One row of the dataset's Version history tab. */
+export interface DatasetVersionRef {
+  versionName: string;
+  /**
+   * The version's content hash. Nullable because the API's own shape makes it
+   * optional — a caller that needs it must assert it is there rather than
+   * compare an absent value to another absent value and call that agreement.
+   */
+  versionHash: string | null;
+  itemsTotal: number;
+  itemsAdded: number;
+  itemsModified: number;
+  itemsDeleted: number;
+  isLatest: boolean;
+}
+
 /**
- * One row of `GET /v1/private/datasets`, as the Datasets list page reads it.
+ * The computed summary the datasets list attaches to each row.
  *
- * `datasetItemsCount` is the "Item count" column, and the backend answers it
- * two different ways in the same response: from the latest version's
+ * None of these values is stored on the dataset: the backend derives each from
+ * a separate lookup and zips them onto the row. That makes the failure
+ * mode a mis-attribution — a real number belonging to a different dataset —
+ * which renders as a perfectly plausible row rather than an error, so nothing
+ * here is defaulted. `null` appears only where the API genuinely answers null
+ * (a dataset with no version, no experiment or no optimization yet); an absent
+ * count throws in the mapper instead, because a `?? 0` would silently produce
+ * exactly the value an empty-dataset assertion expects.
+ *
+ * `datasetItemsCount` in particular is the "Item count" column, and the backend
+ * answers it two different ways in the same response: from the latest version's
  * `items_total` where there is one, and from a `count(DISTINCT id)` scan over
  * `dataset_items` where there is not. `latestVersionName` is what tells a test
  * which of the two a given row took — the enrichment falls back exactly when it
@@ -85,17 +110,21 @@ export interface DatasetSummaryRef {
   id: string;
   name: string;
   datasetItemsCount: number;
+  experimentCount: number;
+  optimizationCount: number;
+  latestVersionHash: string | null;
+  /**
+   * The latest version's *name*, alongside its hash above.
+   *
+   * Both are carried because they answer different questions: the hash is what
+   * the list claims is latest (asserted against the dataset's own versions
+   * endpoint), while the name is what tells a test which of the two ways the
+   * backend counted `dataset_items_count` — `items_total` off the latest
+   * version where there is one, a `count(DISTINCT id)` scan where there is not.
+   */
   latestVersionName: string | null;
-}
-
-/** One row of the dataset's Version history tab. */
-export interface DatasetVersionRef {
-  versionName: string;
-  itemsTotal: number;
-  itemsAdded: number;
-  itemsModified: number;
-  itemsDeleted: number;
-  isLatest: boolean;
+  mostRecentExperimentAt: string | null;
+  mostRecentOptimizationAt: string | null;
 }
 
 /** The windowed stats one row of the Projects table renders. */
@@ -304,6 +333,29 @@ export type CreatePythonRuleArgs =
       arguments?: never;
     });
 
+/**
+ * The score types an `llm_as_judge` output schema entry may declare, as
+ * `LlmAsJudgeOutputSchemaType` enumerates them. A union rather than `string`
+ * so a typo is a compile error here, instead of a 400 from the API mid-seed
+ * with nothing naming which entry was wrong.
+ */
+export type JudgeOutputSchemaType = 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+
+/**
+ * The `code.model` block of an `llm_as_judge` rule, exactly as REST stores it.
+ *
+ * `customParameters` is the free-form slot the provider config is carried in
+ * (`thinking`, and anything else a caller persisted alongside it). `null` is
+ * the API's own answer for "nothing set" and is kept distinct from `{}` here
+ * on purpose: a serializer that collapses one into the other is precisely what
+ * this shape is read back to catch.
+ */
+export interface LlmJudgeModelRef {
+  name: string;
+  temperature: number | null;
+  customParameters: Record<string, unknown> | null;
+}
+
 /** One line of a rule's user-facing log stream. */
 export interface AutomationRuleLogRef {
   level: string;
@@ -503,6 +555,49 @@ export interface OptimizationRef {
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
+
+/**
+ * Map one dataset row — from the list or from a detail read, which answer the
+ * same shape — onto `DatasetSummaryRef`.
+ *
+ * Every count is required. `?? 0` is deliberately absent: the empty-dataset
+ * case is asserted to report zeros, so defaulting a missing count to 0 would
+ * make that assertion pass on a response that carried no count at all.
+ */
+function toDatasetSummary(row: unknown): DatasetSummaryRef {
+  const d = row as {
+    id?: string;
+    name?: string;
+    dataset_items_count?: number;
+    experiment_count?: number;
+    optimization_count?: number;
+    most_recent_experiment_at?: string | null;
+    most_recent_optimization_at?: string | null;
+    latest_version?: { version_hash?: string; version_name?: string } | null;
+  };
+  const requireCount = (value: number | undefined, field: string): number => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      throw new Error(
+        `toDatasetSummary: dataset '${d.name ?? d.id}' returned no numeric ${field}`,
+      );
+    }
+    return value;
+  };
+  if (typeof d.id !== 'string' || typeof d.name !== 'string') {
+    throw new Error('toDatasetSummary: dataset row carried no id/name');
+  }
+  return {
+    id: d.id,
+    name: d.name,
+    datasetItemsCount: requireCount(d.dataset_items_count, 'dataset_items_count'),
+    experimentCount: requireCount(d.experiment_count, 'experiment_count'),
+    optimizationCount: requireCount(d.optimization_count, 'optimization_count'),
+    latestVersionHash: d.latest_version?.version_hash ?? null,
+    latestVersionName: d.latest_version?.version_name ?? null,
+    mostRecentExperimentAt: d.most_recent_experiment_at ?? null,
+    mostRecentOptimizationAt: d.most_recent_optimization_at ?? null,
+  };
+}
 
 /** One clause of the `sorting` query param the grids serialise. */
 export interface BackendSort {
@@ -977,65 +1072,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
-    /**
-     * One page of `GET /v1/private/datasets` for a project, with the two fields
-     * the Datasets list renders its "Item count" column from — exactly the read
-     * the page issues.
-     *
-     * Through `rawFetch` rather than the pinned SDK because `latest_version` is
-     * the only signal for *which* branch of the count enrichment a row took, and
-     * the generated client drops it.
-     *
-     * `total` comes back alongside the rows so a caller can assert the whole
-     * project fitted in this single request: the enrichment mixes versioned and
-     * fallback rows per response, so a spec about that mix is only asserting it
-     * if every seeded dataset was on the one page.
-     *
-     * Both fields are required rather than defaulted. `dataset_items_count` is
-     * `@Nullable` in the API, and defaulting a missing count to 0 would read as
-     * "an empty dataset" — indistinguishable from the answer for a genuinely
-     * empty one, and so a count assertion that cannot fail.
-     */
-    async listDatasetSummaries(args: {
-      projectId: string;
-      size?: number;
-    }): Promise<{ rows: DatasetSummaryRef[]; total: number }> {
-      const query = new URLSearchParams({
-        project_id: args.projectId,
-        page: '1',
-        size: String(args.size ?? 100),
-      });
-      const { status, message, json } = await rawFetch('GET', '/v1/private/datasets', { query });
-      if (status !== 200) {
-        throw new Error(`listDatasetSummaries: GET /v1/private/datasets -> ${status}: ${message}`);
-      }
-      const page = json as {
-        content?: Array<{
-          id?: string;
-          name?: string;
-          dataset_items_count?: number | null;
-          latest_version?: { version_name?: string } | null;
-        }>;
-        total?: number;
-      };
-      const rows = (page.content ?? []).map((d) => {
-        if (typeof d.dataset_items_count !== 'number') {
-          throw new Error(
-            `listDatasetSummaries: dataset '${d.name}' came back without a ` +
-              `dataset_items_count (${JSON.stringify(d.dataset_items_count)}) — ` +
-              `there is no count to assert on.`,
-          );
-        }
-        return {
-          id: String(d.id),
-          name: String(d.name),
-          datasetItemsCount: d.dataset_items_count,
-          latestVersionName: d.latest_version?.version_name ?? null,
-        };
-      });
-      return { rows, total: Number(page.total ?? rows.length) };
-    },
-
     async findDatasetByName(name: string, projectName?: string): Promise<DatasetRef | null> {
       try {
         const dataset = await opik.api.datasets.getDatasetByIdentifier({
@@ -1195,6 +1231,86 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       });
     },
 
+    /**
+     * One page of `GET /v1/private/projects/{projectId}/datasets` with the
+     * computed summary each row carries — the exact read the Datasets list
+     * issues (`DatasetListPage.tsx` → `useProjectDatasetsList`).
+     *
+     * The project-scoped resource rather than `GET /v1/private/datasets?project_id=`:
+     * both build the same `DatasetCriteria` and funnel into one
+     * `DatasetService.find`, so the enrichment under test is shared — but only
+     * one of them is the read the page makes, and a helper that claims to be
+     * that read has to be it. `ProjectDatasetsResource` has its own param
+     * plumbing and permission annotation, which the query-param resource does
+     * not cover.
+     *
+     * Through `rawFetch` rather than the pinned SDK because the SDK's dataset
+     * shape does not surface `latest_version`, and the summary is the whole
+     * point of the read.
+     *
+     * `page`/`size` are exposed so a caller can prove the summary survives
+     * pagination: the counts are zipped onto the page's rows, so a rewrite that
+     * zips them in the wrong order is visible only when a page holds a subset.
+     *
+     * `total` comes back alongside the rows so a caller can assert the whole
+     * project fitted in this single request: the enrichment mixes versioned and
+     * fallback rows per response, so a spec about that mix is only asserting it
+     * if every seeded dataset was on the one page.
+     *
+     * Counts are required rather than defaulted (see `toDatasetSummary`).
+     * `dataset_items_count` is `@Nullable` in the API, and defaulting a missing
+     * count to 0 would read as "an empty dataset" — indistinguishable from the
+     * answer for a genuinely empty one, and so a count assertion that cannot
+     * fail.
+     */
+    async listDatasetSummaries(args: {
+      projectId: string;
+      page?: number;
+      size?: number;
+    }): Promise<{ total: number; rows: DatasetSummaryRef[] }> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/projects/${args.projectId}/datasets`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listDatasetSummaries: project ${args.projectId} answered ${status}: ${message}`,
+        );
+      }
+      const page = json as { total?: number; content?: unknown[] };
+      if (typeof page.total !== 'number') {
+        throw new Error('listDatasetSummaries: response carried no `total`');
+      }
+      return {
+        total: page.total,
+        rows: (page.content ?? []).map(toDatasetSummary),
+      };
+    },
+
+    /**
+     * The same computed summary as it appears on one dataset's own detail read.
+     *
+     * The list and the detail are different code paths over the same four
+     * lookups, so disagreeing is itself the bug: whichever of the two is wrong,
+     * a user reading a number off the list and then opening the dataset sees
+     * two different truths.
+     */
+    async getDatasetSummary(datasetId: string): Promise<DatasetSummaryRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getDatasetSummary: ${datasetId} answered ${status}: ${message}`);
+      }
+      return toDatasetSummary(json);
+    },
+
     async getDatasetItems(datasetId: string): Promise<DatasetItemRef[]> {
       const page = await opik.api.datasets.getDatasetItems(datasetId);
       const content = page.content ?? [];
@@ -1213,6 +1329,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const content = page.content ?? [];
       return content.map((v) => ({
         versionName: String(v.versionName ?? ''),
+        versionHash: v.versionHash ?? null,
         itemsTotal: Number(v.itemsTotal ?? 0),
         itemsAdded: Number(v.itemsAdded ?? 0),
         itemsModified: Number(v.itemsModified ?? 0),
@@ -2044,8 +2161,24 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the rule name: rule names carry the run namespace and can approach the
        * 150-char column bound, while a score name is a short human label, and
        * the edit dialog renders it as one.
+       *
+       * Ignored when `schema` is given explicitly.
        */
       scoreName?: string;
+      temperature?: number;
+      /**
+       * The model block's free-form slot (`thinking`, and anything else a
+       * caller persists alongside it). Omitted from the request entirely when
+       * not given, rather than sent as `null`: the round-trip specs assert that
+       * the value the caller chose is the value that comes back, so the two
+       * cases have to stay distinguishable.
+       */
+      customParameters?: Record<string, unknown> | null;
+      /**
+       * The whole output schema, for a caller that needs more than the single
+       * INTEGER entry `scoreName` builds — a BOOLEAN judge, or several scores.
+       */
+      schema?: Array<{ name: string; type: JudgeOutputSchemaType; description: string }>;
       enabled?: boolean;
     }): Promise<string> {
       const scoreName = args.scoreName ?? 'Accuracy';
@@ -2061,14 +2194,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate ?? 1,
             enabled: args.enabled ?? true,
             code: {
-              model: { name: args.model ?? 'gpt-4o', temperature: 0 },
+              model: {
+                name: args.model ?? 'gpt-4o',
+                temperature: args.temperature ?? 0,
+                ...(args.customParameters === undefined
+                  ? {}
+                  : { custom_parameters: args.customParameters }),
+              },
               messages: args.messages.map((m) => ({
                 role: m.role,
                 ...(m.content === undefined ? {} : { content: m.content }),
                 ...(m.contentArray === undefined ? {} : { content_array: m.contentArray }),
               })),
               variables: args.variables ?? { output: 'output.output' },
-              schema: [
+              schema: args.schema ?? [
                 {
                   name: scoreName,
                   type: 'INTEGER',
@@ -2092,6 +2231,64 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
       }
       return id;
+    },
+
+    /**
+     * The `code.model` block of an `llm_as_judge` rule.
+     *
+     * Throws rather than returning a partial shape when the rule is not an
+     * llm-judge or carries no model: a caller reading this is asserting on what
+     * the model block holds, and an `undefined` threaded into that assertion
+     * would read as "the value changed" when the truth is "the rule is not the
+     * one you think". `custom_parameters` is the one field allowed to be
+     * absent, and it is normalised to `null` — the API's own "nothing set" —
+     * but a present value that is not an object throws rather than being cast,
+     * because the backend types it as a bare `JsonNode`.
+     */
+    async getLlmJudgeModel(ruleId: string): Promise<LlmJudgeModelRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeModel: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        type?: string;
+        code?: {
+          model?: {
+            name?: string;
+            temperature?: number;
+            custom_parameters?: unknown;
+          };
+        };
+      };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      const model = rule.code?.model;
+      if (!model || typeof model.name !== 'string') {
+        throw new Error(`getLlmJudgeModel: ${ruleId} returned no code.model.name`);
+      }
+      // `LlmAsJudgeModelParameters.customParameters` is a bare `JsonNode`, so
+      // an array or a scalar is representable even though the product only
+      // ever writes an object there. Checked rather than cast, so the
+      // `Record` on LlmJudgeModelRef is an invariant a caller can rely on
+      // instead of a claim about a shape nothing verified.
+      const raw = model.custom_parameters;
+      if (raw !== undefined && raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
+        throw new Error(
+          `getLlmJudgeModel: ${ruleId} returned code.model.custom_parameters as ` +
+            `${Array.isArray(raw) ? 'an array' : typeof raw}, not an object`,
+        );
+      }
+      return {
+        name: model.name,
+        temperature: typeof model.temperature === 'number' ? model.temperature : null,
+        customParameters: (raw as Record<string, unknown> | null | undefined) ?? null,
+      };
     },
 
     /**

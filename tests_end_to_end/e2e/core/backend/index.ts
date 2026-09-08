@@ -36,6 +36,8 @@ export {
   type JudgeMessageContentPartRef,
   type JudgeMessageWrite,
   type JudgeMessageContentPartWrite,
+  type LlmJudgeModelRef,
+  type JudgeOutputSchemaType,
   type TraceJsonSection,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
