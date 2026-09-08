@@ -52,6 +52,27 @@ const SCORING_TIMEOUT_MS = 180_000;
 const OVERSIZED_READBACK_TIMEOUT_MS = 180_000;
 
 /**
+ * Everything the three polls above do not cover: creating the rule and reading
+ * it back, the 21,000,000-character write itself, and the two trace-panel loads
+ * the spec finishes on. Kept separate rather than folded into a round number so
+ * the sum below stays legible.
+ */
+const SETUP_AND_UI_BUDGET_MS = 240_000;
+
+/**
+ * Derived, not chosen — and that is the point. The three polls may each
+ * legitimately run to their full budget, 540,000ms between them, so a flat
+ * 600,000ms test timeout left 60,000ms for the write and both panel loads.
+ * Playwright would then abort mid-UI-step and report its own timeout, masking
+ * which step actually stalled — and "the run timed out" reads nothing like
+ * "the scoring stream wedged", which is the only failure this spec exists to
+ * report. Summing the parts means raising any one budget cannot re-create that
+ * silently.
+ */
+const TEST_TIMEOUT_MS =
+  SCORING_TIMEOUT_MS * 2 + OVERSIZED_READBACK_TIMEOUT_MS + SETUP_AND_UI_BUDGET_MS;
+
+/**
  * Span scope, not trace scope, and that is a deliberate narrowing.
  *
  * The two scopes ride separate Redis streams
@@ -89,7 +110,7 @@ test.describe('Online Evaluation — oversized payloads', { tag: ['@t3-nightly',
     page,
     automationRulesCleanup,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(TEST_TIMEOUT_MS);
 
     const ruleName = `${testNamespace}-span-rule`;
 
