@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,9 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import { SelectItem } from "@/ui/select";
 import { DropdownOption } from "@/types/shared";
 import { Textarea } from "@/ui/textarea";
+
+const MAX_ANNOTATE_ROWS = 500;
+const MAX_CONCURRENT_ANNOTATIONS = 5;
 
 type AnnotateTracesDialogProps = {
   rows: Array<Trace | Span>;
@@ -82,26 +85,43 @@ const AnnotateTracesDialog: React.FunctionComponent<
     return true;
   }, [selectedDefinition, draft.value]);
 
+  useEffect(() => {
+    if (open && rows.length > MAX_ANNOTATE_ROWS) {
+      toast({
+        title: "Error",
+        description: `You can only annotate up to ${MAX_ANNOTATE_ROWS} ${entityCopy} at a time. Please select fewer items.`,
+        variant: "destructive",
+      });
+      setOpen(false);
+    }
+  }, [open, rows.length, entityCopy, setOpen, toast]);
+
   const handleScoreNameChange = useCallback((name: string) => {
-    setDraft({ name });
+    setDraft((d) => ({
+      name,
+      value: undefined,
+      categoryName: undefined,
+      reason: d.reason,
+    }));
   }, []);
 
   const handleNumericValueChange = useCallback(
     (value: string | number | readonly string[] | undefined) => {
       const num =
         typeof value === "string" && value !== "" ? Number(value) : value;
-      if (typeof num !== "number" || Number.isNaN(num) || !selectedDefinition) {
-        setDraft((d) => ({ ...d, value: undefined }));
-        return;
-      }
       if (
-        isNumericFeedbackScoreValid(
+        typeof num !== "number" ||
+        Number.isNaN(num) ||
+        !selectedDefinition ||
+        !isNumericFeedbackScoreValid(
           selectedDefinition.details as { min: number; max: number },
           num,
         )
       ) {
-        setDraft((d) => ({ ...d, value: num }));
+        setDraft((d) => ({ ...d, value: undefined }));
+        return;
       }
+      setDraft((d) => ({ ...d, value: num }));
     },
     [selectedDefinition],
   );
@@ -113,18 +133,36 @@ const AnnotateTracesDialog: React.FunctionComponent<
 
     setIsSubmitting(true);
 
-    const results = await Promise.allSettled(
-      rows.map((row) => {
-        const isSpan = isSpanType;
-        return setFeedbackScore({
+    const results: Array<PromiseSettledResult<void>> = [];
+    const queue = [...rows];
+    const submitOne = async (row: Trace | Span) => {
+      try {
+        await setFeedbackScore({
           name: draft.name!,
           value: draft.value!,
           categoryName: draft.categoryName,
           reason: draft.reason || undefined,
-          traceId: isSpan ? (row as Span).trace_id : (row as Trace).id,
-          spanId: isSpan ? (row as Span).id : undefined,
+          traceId: isSpanType ? (row as Span).trace_id : (row as Trace).id,
+          spanId: isSpanType ? (row as Span).id : undefined,
         });
-      }),
+        results.push({ status: "fulfilled", value: undefined });
+      } catch (error) {
+        results.push({ status: "rejected", reason: error });
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(MAX_CONCURRENT_ANNOTATIONS, queue.length) },
+        async () => {
+          while (queue.length > 0) {
+            const row = queue.shift();
+            if (!row) {
+              break;
+            }
+            await submitOne(row);
+          }
+        },
+      ),
     );
 
     const failed = results.filter(
@@ -256,6 +294,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
             }));
           }}
           className="my-0.5 h-8 min-w-[160px] py-1"
+          testId="annotate-bulk-category-select"
           renderTrigger={(value) => {
             if (!value) {
               return <div className="truncate">Select a category</div>;
@@ -267,7 +306,6 @@ const AnnotateTracesDialog: React.FunctionComponent<
               {option.value} ({option.description})
             </SelectItem>
           )}
-          data-testid="annotate-bulk-category-select"
         />
       );
     }
@@ -295,6 +333,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
               }))}
               onChange={handleScoreNameChange}
               className="h-8 min-w-[200px] py-1"
+              testId="annotate-bulk-score-select"
               renderTrigger={(value) => {
                 if (!value) {
                   return <div className="truncate">Select a score</div>;
@@ -306,7 +345,6 @@ const AnnotateTracesDialog: React.FunctionComponent<
                   {option.label}
                 </SelectItem>
               )}
-              data-testid="annotate-bulk-score-select"
             />
           </div>
           {selectedDefinition && (
