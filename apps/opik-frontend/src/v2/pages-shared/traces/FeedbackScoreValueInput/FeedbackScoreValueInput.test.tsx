@@ -29,6 +29,13 @@ vi.mock("@/shared/SelectBox/SelectBox", () => ({
           {option.label}
         </button>
       ))}
+      <button
+        type="button"
+        data-testid={`${testId}-clear`}
+        onClick={() => onChange("")}
+      >
+        Clear selection
+      </button>
     </div>
   ),
 }));
@@ -171,16 +178,32 @@ describe("FeedbackScoreValueInput", () => {
     });
   });
 
-  it("treats empty-string selection as a clear only when no empty key exists", () => {
+  it("emits a clear event when no empty-string key exists", () => {
     const onChange = vi.fn();
     renderInput(categoricalLongDef as unknown as FeedbackDefinition, onChange);
 
-    // SelectBox mock only fires real option values; simulate a clear
-    // selection through the same onChange contract used by SelectBox.
-    const select = screen.getByTestId("fsvi-category-select");
-    fireEvent.click(select); // no-op click; ensure no clear event was emitted
-    expect(onChange).not.toHaveBeenCalledWith(
-      expect.objectContaining({ value: undefined }),
-    );
+    fireEvent.click(screen.getByTestId("fsvi-category-select-clear"));
+
+    expect(onChange).toHaveBeenCalledWith({
+      value: undefined,
+      categoryName: undefined,
+    });
+  });
+
+  it("treats an empty-string key as a selectable category when defined", () => {
+    const onChange = vi.fn();
+    const emptyKeyDef = {
+      name: "satisfaction",
+      type: FEEDBACK_DEFINITION_TYPE.categorical,
+      details: { categories: { "": 0, good: 1, great: 2 } },
+    };
+    renderInput(emptyKeyDef as unknown as FeedbackDefinition, onChange);
+
+    fireEvent.click(screen.getByTestId("fsvi-category-select-clear"));
+
+    expect(onChange).toHaveBeenCalledWith({
+      value: 0,
+      categoryName: "",
+    });
   });
 });
