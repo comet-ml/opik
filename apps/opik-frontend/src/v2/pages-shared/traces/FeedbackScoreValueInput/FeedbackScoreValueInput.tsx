@@ -12,11 +12,18 @@ import { SelectItem } from "@/ui/select";
 import { DropdownOption } from "@/types/shared";
 import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
 
-const SET_VALUE_DEBOUNCE_DELAY = 500;
+export const SET_VALUE_DEBOUNCE_DELAY = 500;
 
 export type FeedbackScoreValue = {
   value?: number;
   categoryName?: string;
+  /**
+   * Why the numeric value changed: "empty" = the user cleared the input,
+   * "invalid" = out-of-range/non-numeric input was rejected, "valid" = a
+   * usable value was entered. Callers use this to distinguish clearing a
+   * score (delete) from merely ignoring bad input.
+   */
+  status?: "empty" | "invalid" | "valid";
 };
 
 type FeedbackScoreValueInputProps = {
@@ -42,10 +49,11 @@ const FeedbackScoreValueInput: React.FunctionComponent<
 
   const handleNumericChange = useCallback(
     (inputValue: string | number | readonly string[] | undefined) => {
-      const num =
-        typeof inputValue === "string" && inputValue !== ""
-          ? Number(inputValue)
-          : inputValue;
+      if (inputValue === undefined || inputValue === "") {
+        onChange({ value: undefined, status: "empty" });
+        return;
+      }
+      const num = Number(inputValue);
       if (
         typeof num !== "number" ||
         Number.isNaN(num) ||
@@ -54,10 +62,10 @@ const FeedbackScoreValueInput: React.FunctionComponent<
           num,
         )
       ) {
-        onChange({ value: undefined });
+        onChange({ value: undefined, status: "invalid" });
         return;
       }
-      onChange({ value: num });
+      onChange({ value: num, status: "valid" });
     },
     [feedbackDefinition, onChange],
   );
@@ -75,6 +83,7 @@ const FeedbackScoreValueInput: React.FunctionComponent<
         placeholder="Score"
         type="number"
         value={value}
+        aria-label={feedbackDefinition.name}
         data-testid={`${prefix}-score-input`}
       />
     );
@@ -126,7 +135,13 @@ const FeedbackScoreValueInput: React.FunctionComponent<
 
   if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
     const onCategoricalValueChange = (label?: string) => {
-      if (!label || label === "") {
+      // An empty-string category can be a legitimate key; only treat "" as
+      // "clear" when no such key exists in the definition.
+      const hasEmptyKey = Object.prototype.hasOwnProperty.call(
+        feedbackDefinition.details.categories,
+        "",
+      );
+      if (!label && !hasEmptyKey) {
         onChange({ value: undefined, categoryName: undefined });
         return;
       }
