@@ -36,7 +36,16 @@ import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
  * silently.
  */
 
-/** How far to drag the first divider. Comfortably past any min-width floor. */
+/**
+ * How far to drag the first divider — a fifth or so of the panel group's width
+ * at the 1280px default viewport, so the layout it settles on is unmistakably a
+ * different one and not a rounding artefact.
+ *
+ * Deliberately far enough that the neighbouring panel ends up below its
+ * `min-w-72` CSS floor: the group has no matching `minSize` prop, so it assigns
+ * the percentage anyway and only the *rendered* width clamps. That is why every
+ * assertion here reads the group's percentages rather than measured widths.
+ */
 const DRAG_PX = 200;
 
 test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-cuj', '@area:experiments'] }, () => {
@@ -129,8 +138,10 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
       await test.step('Dragging the first divider resizes the panels', async () => {
         expect(await compare.countPanelDividers(), 'dividers for a two-experiment comparison').toBe(2);
 
-        const initialLayout = await compare.panelLayout();
-        expect(initialLayout, 'dataset panel plus one per compared experiment').toHaveLength(3);
+        // Dataset panel plus one per compared experiment, each already sized:
+        // reading before they register would give three blanks, and the
+        // "the drag moved the divider" check below would then pass on nothing.
+        const initialLayout = await compare.waitForPanelLayout(3);
 
         draggedLayout = await compare.dragPanelDivider(0, DRAG_PX);
         expect(draggedLayout, 'the drag actually moved the divider').not.toEqual(initialLayout);
@@ -156,7 +167,7 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
           metricName: comparison.evaluator.name,
         });
 
-        expect(await compare.panelLayout(), 'panel layout after Next').toEqual(draggedLayout);
+        await compare.expectPanelLayout(draggedLayout);
       });
 
       await test.step('Stepping back keeps them too', async () => {
@@ -168,7 +179,7 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
           metricName: comparison.evaluator.name,
         });
 
-        expect(await compare.panelLayout(), 'panel layout after Previous').toEqual(draggedLayout);
+        await compare.expectPanelLayout(draggedLayout);
       });
 
       await test.step('Neither step reloaded the page', async () => {

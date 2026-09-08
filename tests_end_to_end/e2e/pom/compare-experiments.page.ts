@@ -203,6 +203,47 @@ export class CompareExperimentsPage {
   }
 
   /**
+   * Waits until every panel in the group has registered a size with it, and
+   * returns that layout.
+   *
+   * A panel that has not yet registered carries no `data-panel-size` at all, so
+   * a layout read too early is a row of blanks — which would make a later
+   * "the drag changed something" comparison pass without the drag doing
+   * anything. Asserts the panel count in the same poll, so a group that renders
+   * the wrong number of panels fails here rather than further down.
+   */
+  async waitForPanelLayout(panelCount: number): Promise<string[]> {
+    return test.step(`wait for all ${panelCount} row-detail panels to register a size`, async () => {
+      await expect
+        .poll(
+          async () => {
+            const sizes = await this.panelLayout();
+            return { panels: sizes.length, sized: sizes.filter((size) => size !== '').length };
+          },
+          { message: 'row-detail panels rendered, and how many have registered a size' },
+        )
+        .toEqual({ panels: panelCount, sized: panelCount });
+      return this.panelLayout();
+    });
+  }
+
+  /**
+   * Waits for the row-detail panel's layout to settle on `expected`.
+   *
+   * Polled rather than read once because the panel re-renders asynchronously
+   * after a navigation, and a single read can catch it mid-settle and report a
+   * transient as a regression. Polling cannot hide a real one: a layout that
+   * never comes back still fails on timeout.
+   */
+  async expectPanelLayout(expected: string[]): Promise<void> {
+    await test.step(`panel layout settles on ${JSON.stringify(expected)}`, async () => {
+      await expect
+        .poll(() => this.panelLayout(), { message: 'row-detail panel layout' })
+        .toEqual(expected);
+    });
+  }
+
+  /**
    * Drags one of the row-detail panel's resize dividers horizontally and
    * returns the layout it settles on.
    *
