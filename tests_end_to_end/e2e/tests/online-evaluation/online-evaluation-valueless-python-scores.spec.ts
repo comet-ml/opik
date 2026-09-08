@@ -276,10 +276,15 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
       // The rules have all reported storing their scores, but the write and the
       // log line are separate hops. A short quiet period closes that gap
       // without a fixed sleep.
+      // minScores is the three survivors, not 1: a settle that returned early
+      // with a partial set would fail on the set comparison below with a diff
+      // that reads like "the backend stored the wrong scores", when the real
+      // cause is that this wait gave up too soon. Naming the number here makes
+      // that case fail as "only N feedback score(s) ever appeared" instead.
       return backendClient.waitForTraceScoresSettled(traceId, {
         quietPeriodMs: 5_000,
         timeoutMs: 60_000,
-        minScores: 1,
+        minScores: 3,
       });
     });
 
