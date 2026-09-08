@@ -75,7 +75,7 @@ def llm_unit(
                 test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
             except Exception:
                 LOGGER.error(
-                    "Unexpected exception occured during llm_unit test tracking for test %s",
+                    "Unexpected exception occurred during llm_unit test tracking for test %s",
                     func.__name__,
                     exc_info=True,
                 )
