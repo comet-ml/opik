@@ -13,12 +13,15 @@
 -- one here: rollback abandons all post-cutover writes on the successor (they are being discarded) while still honoring
 -- post-cutover deletes. `traces` here is the RESTORED ORIGINAL, so a bridged id is present as its pre-cutover version; a
 -- liveness guard would spare it and thereby UNDO the user's post-cutover delete (resurrecting stale content). Masking it
--- unconditionally is the correct rollback semantics.
+-- unconditionally is the correct rollback semantics. Nor a guard reading the parked successor as a proxy for "the delete
+-- applied": an id deleted and then RE-CREATED post-cutover is live there too, so that one would spare it just the same.
 --
 -- One consequence, given the capture ordering (OPIK-8141): capture runs before the lightweight delete, so the bridge can
 -- name an id whose delete then errored and never applied. Having no liveness guard, this replay masks it on the restored
 -- original anyway. Accepted — the user did ask for that delete — and the alternative ordering instead loses genuine
--- deletes, which resurrect here with the postcondition check reading the same bridge and so reporting 0.
+-- deletes, which resurrect here with the postcondition check reading the same bridge and so reporting 0. Such an id is
+-- recoverable while the rollback window is open: this statement touches only `traces`, so the row is still live on the
+-- parked successor (`traces_post_rollback_backup`) until finalize.sh drops it — the point of no return.
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE (workspace_id, project_id, id) IN (
     SELECT

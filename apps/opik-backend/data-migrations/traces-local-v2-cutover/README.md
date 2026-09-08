@@ -1213,7 +1213,9 @@ logs), so the exposure is small — but `0` means "every recorded delete is mask
 that merely *errored* stopped being one of those cases in OPIK-8141: capture goes first, so it is recorded regardless.
 
 The reverse case is a recorded delete that never applied, which this replay masks anyway — it carries no liveness guard,
-by design (see `000004_rollback_reverse_replay.sql`). Accepted: the user did ask for that delete.
+by design (see `000004_rollback_reverse_replay.sql`). Accepted: the user did ask for that delete. It also stays
+recoverable while the window is open, since the replay touches only `traces` and the row is still live on the parked
+`traces_post_rollback_backup` until `finalize.sh` drops it.
 
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
 statements. Note what that means even when both succeed: from the moment the promote lands until the replay finishes,
