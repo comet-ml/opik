@@ -124,10 +124,17 @@ test.describe(
           // The number on the page is only worth anything if the dataset
           // actually holds that many rows — a version total that outruns the
           // stored items is exactly the disagreement this catches.
+          //
+          // Row count and distinct-id count are asserted separately and both
+          // against the same total: a de-duplicated count alone would still
+          // read 5 if the rewrite had landed as a sixth row carrying a
+          // duplicate id, which is the specific failure "updated in place, not
+          // duplicated" is claiming did not happen.
           const itemIds = await backendClient.listDatasetItemIds(dataset.id);
-          expect(new Set(itemIds).size, 'the dataset holds the total v2 reports').toBe(
+          expect(itemIds, 'the dataset holds the total v2 reports, one row per item').toHaveLength(
             TOTAL_AFTER_COMMIT,
           );
+          expect(new Set(itemIds).size, 'no id appears on two rows').toBe(TOTAL_AFTER_COMMIT);
           expect(itemIds, 'the rewritten item was updated in place, not duplicated').toContain(
             rewrittenItemId,
           );

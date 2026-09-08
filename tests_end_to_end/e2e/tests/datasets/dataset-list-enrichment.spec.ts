@@ -18,12 +18,19 @@ import type { EnrichedDatasetRef } from '@e2e/core/backend';
  * a page that looks perfectly healthy, which is why this asserts values rather
  * than presence.
  *
- * Surface is deliberately both. The API half pins the exact values including
- * timestamps; the UI half proves those values are what the page renders, on the
- * right row. Comparing the multi-row list to the single-dataset read is the
- * part that catches cross-wiring specifically: `GET /datasets/{id}` takes the
- * same enrichment path with a one-element `ids` set, so the two agreeing is a
- * fact about the fan-out, not about either read alone.
+ * Surface is deliberately both, but the two halves do not cover the same
+ * fields, and the split is the shape of the page rather than a shortcut. The
+ * API half pins the exact value of all four counters and both timestamps. The
+ * UI half can only reach the subset `DatasetListPage` has columns for:
+ * `dataset_items_count`, `most_recent_experiment_at` and
+ * `most_recent_optimization_at`. The list has no experiment-count or
+ * optimization-count column at all, so those two are asserted against the API
+ * only — see the taxonomy note on `datasets.list-datasets`.
+ *
+ * Comparing the multi-row list to the single-dataset read is the part that
+ * catches cross-wiring specifically: `GET /datasets/{id}` takes the same
+ * enrichment path with a one-element `ids` set, so the two agreeing is a fact
+ * about the fan-out, not about either read alone.
  */
 
 /**
@@ -110,7 +117,7 @@ test.describe('Datasets list — per-row enrichment', { tag: ['@t2-cuj', '@area:
         }
       });
 
-      await test.step('The Datasets page renders those counters on the right rows', async () => {
+      await test.step('The Datasets page renders the columns it has, on the right rows', async () => {
         const datasets = new DatasetsPage(page);
         await datasets.goto(projectId);
         await datasets.waitForReady();

@@ -126,6 +126,19 @@ export interface EnrichedDatasetPage {
   rows: EnrichedDatasetRef[];
 }
 
+/**
+ * The `type` filter `DatasetListPage` sends with every Datasets-list read, so
+ * `listEnrichedDatasets` sees the rows the page sees and nothing else.
+ *
+ * No `type` key on the filter itself: `DatasetFilter`'s `@JsonCreator` accepts
+ * only field/operator/key/value, and `DatasetField.TYPE` already declares the
+ * field as an ENUM backend-side. The value is the stored discriminator, which
+ * for a test suite is still `evaluation_suite` (see OPIK-5795).
+ */
+const DATASETS_ONLY_FILTER: BackendFilter[] = [
+  { field: 'type', operator: '=', value: 'dataset' },
+];
+
 /** The windowed stats one row of the Projects table renders. */
 export interface ProjectStatsRef {
   projectId: string;
@@ -1043,6 +1056,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * enrichment has to be able to assert *which* rows came back, not just that
      * its own are among them: a project scoped read that leaked a sibling's
      * datasets would otherwise pass.
+     *
+     * That strictness is only sound with the `type` filter below. Datasets and
+     * test suites are the same entity behind one endpoint, distinguished only
+     * by `type`, and `DatasetListPage` sends `type = dataset` on every read.
+     * Without it `findDatasets` also answers with `evaluation_suite` rows and
+     * counts them in `total`, so a project that happens to hold a test suite
+     * would fail an exact-`total` assertion against a page that never showed
+     * it.
      */
     async listEnrichedDatasets(args: {
       projectId: string;
@@ -1052,6 +1073,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         projectId: args.projectId,
         page: 1,
         size: args.size ?? 100,
+        filters: JSON.stringify(DATASETS_ONLY_FILTER),
       });
       return {
         total: Number(page.total ?? 0),
