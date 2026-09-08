@@ -32,6 +32,8 @@ import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -375,12 +377,14 @@ public class JsonUtils {
     }
 
     private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
-        for (var current = throwable; current != null; current = current.getCause()) {
+        // Cause chains are not guaranteed acyclic. A self-reference (A -> A) or a longer cycle
+        // (A -> B -> A) would otherwise spin here and hang the request thread after serialization
+        // has already aborted. Tracking visited throwables by identity terminates on both, since
+        // revisiting an instance can only mean a cycle.
+        var visited = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+        for (var current = throwable; current != null && visited.add(current); current = current.getCause()) {
             if (type.isInstance(current)) {
                 return true;
-            }
-            if (current.getCause() == current) {
-                break;
             }
         }
         return false;
