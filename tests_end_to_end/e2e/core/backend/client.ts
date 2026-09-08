@@ -632,8 +632,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
   const postSeedWrite = async (path: string, describe: string, body: unknown): Promise<void> => {
     const backoffMs = [1_000, 3_000, 8_000];
     let last: RawApiResult = { status: 0, message: '<no response>', location: null };
+    // Counted as requests are made, not inferred from the final status: a 502
+    // that retried into a 400 really did cost two requests, and a message that
+    // says "1 attempt" sends the reader looking for a burst that was already
+    // survived.
+    let attempted = 0;
 
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+      attempted++;
       const { status, message, location } = await rawFetch('POST', path, { body });
       if (status === 201) return;
       last = { status, message, location };
@@ -643,7 +649,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     }
 
-    const attempted = last.status >= 500 ? backoffMs.length + 1 : 1;
     throw new Error(
       `${describe}: expected 201, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
     );

@@ -13,8 +13,9 @@ const ANSWER = 'ok';
 
 /**
  * 21,000,000 characters: one step over Jackson's `DEFAULT_MAX_STRING_LEN`
- * (20,000,000), which is the limit the online-scoring Redis codec actually ran
- * on before OPIK-8164 whatever `JACKSON_MAX_STRING_LENGTH` was configured to.
+ * (20,000,000). That default, not whatever `JACKSON_MAX_STRING_LENGTH` was
+ * configured to, is the limit the online-scoring Redis codec actually ran on
+ * before OPIK-8164.
  *
  * The size is what makes this spec worth its runtime. A decode failure at that
  * ceiling happens inside Redisson's `CommandDecoder`, below the subscriber and
@@ -64,6 +65,12 @@ const SCORING_TIMEOUT_MS = 180_000;
  * clean (0 failures in 340 requests, twice) — so the trigger is specifically an
  * oversized span meeting an active online-scoring rule. Until that is explained,
  * treat this spec as needing a disposable environment or its own shard.
+ *
+ * That measurement was taken on the #8060 preview environment, i.e. BEFORE the
+ * OPIK-8164 codec fix and the OPIK-8192 undecodable-message drop landed on main.
+ * The degradation may well be gone. It has not been re-measured against a build
+ * carrying both, so the warning above stands until someone does — but re-measure
+ * before deciding this spec needs its own shard forever.
  */
 test.describe('Online Evaluation — oversized payloads', { tag: ['@t3-nightly', '@area:online-evaluation'] }, () => {
   test('A span too large for the scoring stream does not stop the rule scoring the spans behind it', { tag: ['@cap:online-evaluation.python-rule-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
@@ -173,8 +180,18 @@ test.describe('Online Evaluation — oversized payloads', { tag: ['@t3-nightly',
       // really over the codec's ceiling.
       //
       // Polled because the REST write answers 201 before the row is queryable.
-      // The round trip doubles as the barrier that puts this span on the stream
-      // ahead of the one seeded next.
+      //
+      // KNOWN LIMIT of this barrier, and do not read more into it than it
+      // gives: a queryable row proves the span was INGESTED before the `after`
+      // span below, not that its scoring message reached the Redis stream
+      // first. Publication to the stream is asynchronous, so in principle the
+      // `after` message could overtake it and this spec could pass green
+      // without the oversized message ever having been in front of it. In
+      // practice the readback of a 21M-character span takes seconds and the
+      // enqueue is sub-second, so the ordering holds — but it holds by timing,
+      // not by construction. Closing that gap needs an observable enqueue or
+      // consumer position, which this suite has no read for today; see the
+      // review note on OPIK-8164 rather than assuming this line is a guarantee.
       await expect
         .poll(
           async () => {
@@ -193,11 +210,12 @@ test.describe('Online Evaluation — oversized payloads', { tag: ['@t3-nightly',
         .toBe(OVERSIZED_CHARS);
 
       // Deliberately NOT asserted: whether this span itself gets a score.
-      // Whether an over-ceiling message is dropped, decoded or refused depends
-      // on the deployment's configured Jackson limits and on the opt-in
-      // `REDIS_SCORING_DROP_OVERSIZED_PAYLOADS` guard, so pinning it either way
-      // here would assert the environment rather than the product. What must
-      // hold on every configuration is the step below.
+      // Whether an over-ceiling message is decoded, refused or retired depends
+      // on the deployment's configured Jackson stream-read limits — a pod with
+      // a higher `maxStringLength` reads the very same bytes another pod cannot
+      // — so pinning it either way here would assert the environment rather
+      // than the product. What must hold on every configuration is the step
+      // below: the messages queued behind it still get scored.
     });
 
     const after = await test.step(
