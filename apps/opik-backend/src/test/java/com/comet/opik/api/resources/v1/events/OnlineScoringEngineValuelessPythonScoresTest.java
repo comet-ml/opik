@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,6 +52,30 @@ class OnlineScoringEngineValuelessPythonScoresTest {
 
             assertThat(split.storable()).containsExactly(valued);
             assertThat(split.valuelessNames()).containsExactly("hallucination");
+        }
+
+        @Test
+        void countsAScoreWithNoNameAmongTheDropped() {
+            // A metric can leave a score unnamed. The collected names go through List.copyOf, which rejects
+            // a null element — so an unnamed valueless score used to fail the batch from inside this helper.
+            var unnamed = PythonScoreResult.builder().build();
+            var valued = PythonScoreResult.builder().name("relevance").value(BigDecimal.ONE).build();
+
+            var split = OnlineScoringEngine.toStorablePythonScores(List.of(valued, unnamed));
+
+            assertThat(split.storable()).containsExactly(valued);
+            assertThat(split.valuelessNames()).containsExactly("");
+        }
+
+        @Test
+        void countsANullEntryAmongTheDroppedWithoutDereferencingIt() {
+            // A JSON `null` in the evaluator's array deserializes to a null element.
+            var valued = PythonScoreResult.builder().name("relevance").value(BigDecimal.ONE).build();
+
+            var split = OnlineScoringEngine.toStorablePythonScores(Arrays.asList(valued, null));
+
+            assertThat(split.storable()).containsExactly(valued);
+            assertThat(split.valuelessNames()).containsExactly("");
         }
 
         @Test
@@ -106,6 +131,13 @@ class OnlineScoringEngineValuelessPythonScoresTest {
         @Test
         void rendersAnUnnamedScoreRatherThanDroppingIt() {
             var rendered = logAndCaptureNames(List.of(""), "traceId", UUID.randomUUID());
+
+            assertThat(rendered).asString().contains("<unnamed>");
+        }
+
+        @Test
+        void rendersAScoreWhoseNameIsNullRatherThanFailing() {
+            var rendered = logAndCaptureNames(Arrays.asList((String) null), "traceId", UUID.randomUUID());
 
             assertThat(rendered).asString().contains("<unnamed>");
         }

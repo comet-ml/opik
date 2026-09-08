@@ -1562,11 +1562,19 @@ public class OnlineScoringEngine {
         var valuelessNames = new ArrayList<String>();
 
         scoreResults.forEach(scoreResult -> {
-            if (scoreResult.value() == null) {
-                valuelessNames.add(scoreResult.name());
-            } else {
+            // A null entry is what a JSON `null` inside the evaluator's array deserializes to. It carries no
+            // value either, so it joins the dropped scores rather than being dereferenced — one unusable
+            // entry must not cost the batch, which is the whole point of this split.
+            if (scoreResult != null && scoreResult.value() != null) {
                 storable.add(scoreResult);
+                return;
             }
+
+            // Normalized on collection, because a metric may leave a score unnamed and List.copyOf rejects a
+            // null element — that would fail the batch from inside the code meant to save it. Rendered as
+            // <unnamed> when the name is reported.
+            var name = scoreResult == null ? null : scoreResult.name();
+            valuelessNames.add(StringUtils.defaultString(name));
         });
 
         return new StorablePythonScores(List.copyOf(storable), List.copyOf(valuelessNames));
