@@ -50,7 +50,11 @@ function countMatching(
 test.describe('Dataset insert — deduplication flag', { tag: ['@area:datasets'] }, () => {
   test(
     'deduplication=false stores every duplicate and counts it; the default collapses duplicates into one item and one version',
-    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip'] },
+    // `version-history-view` as well as the round trip: the last two steps
+    // assert the Version history tab's Item count and Changes ("+ N") cells,
+    // which is that capability's surface. Untagged, that assertion would be
+    // invisible coverage.
+    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip', '@cap:datasets.version-history-view'] },
     async ({
       project,
       sdkClient,
