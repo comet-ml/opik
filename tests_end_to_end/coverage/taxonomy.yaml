@@ -14,6 +14,13 @@
 #
 # SCOPE: tests_end_to_end/ only — e2e (Playwright) + visual-tests. Nothing else.
 #
+# Every `specs:` list is kept in sorted order, and a new spec goes in its sorted
+# position rather than at the end. Appending put every concurrent addition on the
+# same last line, so two open spec PRs in one area always conflicted here — this
+# file was the single most-conflicted in the QA queue, touched by 4 of 4 open spec
+# PRs at one point. Sorted insertion lands them on different lines, which git
+# merges without a conflict. Nothing reads the order, so it costs nothing.
+#
 # Verified against main @ c54a6a99d7 (2026-07-29):
 #   24 e2e specs across 13 dirs, 3 visual specs.
 #
@@ -244,13 +251,13 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
-      - trace-explore/trace-explore-smoke.spec.ts
-      - trace-explore/trace-spans-depth.spec.ts
-      - trace-explore/trace-delete.spec.ts
-      - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-attachments.spec.ts
+      - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-explore-smoke.spec.ts
+      - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-id-time-window.spec.ts
       - trace-explore/trace-partial-update-merge.spec.ts
+      - trace-explore/trace-spans-depth.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -321,9 +328,9 @@ areas:
     routes: ["/projects/$projectId/logs?type=threads"]
     spec_dir: trace-explore
     specs:
-      - trace-explore/thread-logging-smoke.spec.ts
-      - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-evaluation.spec.ts
+      - trace-explore/thread-id-prefilter.spec.ts
+      - trace-explore/thread-logging-smoke.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
@@ -371,9 +378,9 @@ areas:
     routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
     spec_dir: dashboards
     specs:
-      - dashboards/workspace-span-metrics.spec.ts
-      - dashboards/project-span-metrics.spec.ts
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-span-metrics.spec.ts
+      - dashboards/workspace-span-metrics.spec.ts
     capabilities:
       list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
@@ -397,8 +404,8 @@ areas:
     routes: ["/projects/$projectId/prompts", "/prompts/$promptId"]
     spec_dir: prompts
     specs:
-      - prompts/prompt-library-smoke.spec.ts
       - prompts/prompt-delete.spec.ts
+      - prompts/prompt-library-smoke.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -422,8 +429,8 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
-      - playground/playground-smoke.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -505,14 +512,14 @@ areas:
     spec_dir: datasets
     specs:
       - datasets/dataset-crud-smoke.spec.ts
-      - datasets/dataset-items.spec.ts
-      - datasets/dataset-items-filter-scope.spec.ts
-      - datasets/dataset-version-counters.spec.ts
-      - datasets/dataset-version-repeated-item-id.spec.ts
-      - datasets/dataset-version-concurrent-writes.spec.ts
       - datasets/dataset-item-count.spec.ts
+      - datasets/dataset-items-filter-scope.spec.ts
+      - datasets/dataset-items.spec.ts
       - datasets/dataset-parallel-item-read.spec.ts
       - datasets/dataset-read-version-pinning.spec.ts
+      - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-version-counters.spec.ts
+      - datasets/dataset-version-repeated-item-id.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 also asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete" }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
@@ -547,8 +554,8 @@ areas:
     routes: ["/projects/$projectId/test-suites", "/test-suites/$suiteId/items"]
     spec_dir: test-suites
     specs:
-      - test-suites/test-suites-smoke.spec.ts
       - test-suites/test-suite-delete.spec.ts
+      - test-suites/test-suites-smoke.spec.ts
     capabilities:
       list-suites:           { covered: true,  tier: t1-smoke }
       create-suite-ui:       { covered: true,  tier: t1-smoke }
@@ -571,11 +578,11 @@ areas:
     routes: ["/projects/$projectId/experiments", "/experiments/$datasetId/compare"]
     spec_dir: experiments
     specs:
-      - experiments/experiments-smoke.spec.ts
-      - experiments/experiments-compare.spec.ts
-      - experiments/experiment-logs-date-window.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
       - experiments/experiment-delete.spec.ts
+      - experiments/experiment-logs-date-window.spec.ts
+      - experiments/experiments-compare.spec.ts
+      - experiments/experiments-smoke.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -614,8 +621,8 @@ areas:
     # 7-day window spanning the merge reports a false gap.
     tag_aliases: [annotation-queue]
     specs:
-      - annotation-queues/annotation-queue-scoring.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
+      - annotation-queues/annotation-queue-scoring.spec.ts
     capabilities:
       score-queue-item:        { covered: true,  tier: t2-cuj }
       score-with-reason:       { covered: true,  tier: t2-cuj }
@@ -646,14 +653,14 @@ areas:
     routes: ["/projects/$projectId/online-evaluation", "/$workspaceName/automation-logs"]
     spec_dir: online-evaluation
     specs:
-      - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
-      - online-evaluation/online-evaluation-sampling-rate.spec.ts
-      - online-evaluation/online-evaluation-python-metric-errors.spec.ts
-      - online-evaluation/online-evaluation-non-object-sections.spec.ts
       - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
       - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
+      - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-smoke.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -737,10 +744,10 @@ areas:
     spec_dir: ollie
     cloud_only: true   # requires AssistantSidebar plugin + OLLIE_ENABLED
     specs:
-      - ollie/ollie-smoke.spec.ts
       - ollie/ollie-agentic.spec.ts
       - ollie/ollie-connect.spec.ts
       - ollie/ollie-explain.spec.ts
+      - ollie/ollie-smoke.spec.ts
     capabilities:
       surface-mounts:          { covered: true,  tier: t1-smoke }
       sidebar-persists-nav:    { covered: true,  tier: t1-smoke }
