@@ -7,6 +7,7 @@ import tempfile
 import pytest
 from unittest import mock
 
+from opik import exceptions as opik_exceptions
 from opik.api_objects.dataset.test_suite import test_suite
 from opik.api_objects.dataset.test_suite import suite_result_constructor
 from opik.api_objects.dataset.test_suite import types as suite_types
@@ -1069,3 +1070,23 @@ class TestImportExport:
         assert inserted[0].execution_policy is not None
         assert inserted[0].execution_policy.runs_per_item == 3
         assert inserted[0].execution_policy.pass_threshold == 2
+
+
+def test_update__item_without_id__raises_with_item_in_message():
+    mock_dataset = mock.Mock()
+    mock_dataset.get_items.return_value = []
+
+    suite = test_suite.TestSuite(
+        name="test-suite",
+        dataset_=mock_dataset,
+    )
+
+    item = {"input": {"key": "value"}}
+
+    with pytest.raises(
+        opik_exceptions.DatasetItemUpdateOperationRequiresItemId,
+        match=r"Missing id for test suite item to update: .*'input'.*",
+    ):
+        suite.update([item])
+
+    mock_dataset.insert.assert_not_called()

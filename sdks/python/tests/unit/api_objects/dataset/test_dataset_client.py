@@ -8,6 +8,7 @@ import pytest
 from opik.api_objects import constants
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
+from opik import exceptions
 
 
 def _make_items(count: int) -> list:
@@ -736,3 +737,24 @@ def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
         "Parallel upload is the default, so the version gate must be probed once "
         "per dataset rather than once per insert"
     )
+
+
+def test_update__item_without_id__raises_with_item_in_message():
+    mock_rest_client = Mock()
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    item = {"input": {"key": "value"}}
+
+    with pytest.raises(
+        exceptions.DatasetItemUpdateOperationRequiresItemId,
+        match=r"Missing id for dataset item to update: .*'input'.*",
+    ):
+        dataset.update([item])
+
+    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
