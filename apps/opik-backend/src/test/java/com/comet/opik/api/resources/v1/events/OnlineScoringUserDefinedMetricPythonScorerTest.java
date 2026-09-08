@@ -218,7 +218,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     contains("because the metric returned no value"),
                     eq("hallucination"),
                     eq("traceId"),
-                    eq(traceId));
+                    eq(traceId.toString()));
         }
 
         @Test

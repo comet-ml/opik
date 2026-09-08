@@ -277,10 +277,16 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfSpans(scoresCaptor.capture());
 
-            List<FeedbackScoreBatchItem> scores = scoresCaptor.getValue();
-            assertThat(scores).hasSize(1);
-            assertThat(scores.get(0).name()).isEqualTo("answer_relevance");
-            assertThat(scores.get(0).value()).isEqualByComparingTo(BigDecimal.valueOf(0.75));
+            FeedbackScoreBatchItem expected = FeedbackScoreBatchItem.builder()
+                    .id(spanId)
+                    .projectId(projectId)
+                    .projectName("test-project")
+                    .name("answer_relevance")
+                    .value(BigDecimal.valueOf(0.75))
+                    .reason("relevant")
+                    .source(ScoreSource.ONLINE_SCORING)
+                    .build();
+            assertThat(scoresCaptor.getValue()).usingRecursiveComparison().isEqualTo(List.of(expected));
         }
 
         @Test

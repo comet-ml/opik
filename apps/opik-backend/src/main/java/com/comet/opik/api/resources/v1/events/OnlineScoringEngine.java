@@ -1578,7 +1578,11 @@ public class OnlineScoringEngine {
     /**
      * Reports the dropped scores on the rule's log stream, one line per score, so the user can see which
      * metric returned no value instead of inferring it from a batch that stored fewer scores than it ran.
-     * Names come from user code, hence the same sanitizing the judge path applies to judge-chosen text.
+     *
+     * <p>Both interpolated values are user-controlled and get the same sanitizing the judge path applies to
+     * judge-chosen text: the score name comes from the metric's code, and {@code entityId} is a UUID on the
+     * trace and span paths but the caller-supplied thread id on the thread one — a CR/LF in it would forge
+     * entries in the rule's log, and an oversized one would flood it.
      */
     public static void logValuelessPythonScores(
             @NonNull Logger userFacingLogger,
@@ -1591,9 +1595,10 @@ public class OnlineScoringEngine {
         }
 
         try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            var safeEntityId = sanitize(String.valueOf(entityId));
             valuelessNames.forEach(name -> userFacingLogger.warn(
                     "Skipped score '{}' for {} '{}' because the metric returned no value",
-                    StringUtils.isBlank(name) ? "<unnamed>" : sanitize(name), entityLabel, entityId));
+                    StringUtils.isBlank(name) ? "<unnamed>" : sanitize(name), entityLabel, safeEntityId));
         }
     }
 
