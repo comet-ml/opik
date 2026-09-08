@@ -12,6 +12,13 @@ export interface EnrichedDatasetSeedRef {
 export interface EnrichedDatasetsRef {
   projectId: string;
   projectName: string;
+  /**
+   * ISO-8601 instant captured immediately before the first seed write, so a
+   * spec can bound the recency timestamps enrichment reports against the window
+   * they must have been produced in. Absent this, "not null" is the strongest
+   * claim available and a malformed or stale instant reads as healthy.
+   */
+  seededAt: string;
   /** 7 items, one experiment (2 experiment items) and one optimization. */
   busy: EnrichedDatasetSeedRef;
   /** 3 items and nothing else — the sibling every counter must stay off. */
@@ -73,6 +80,7 @@ export const test = baseTest.extend<EnrichedDatasetsFixtures>({
     use,
     testInfo,
   ) => {
+    const seededAt = new Date().toISOString();
     const busyName = `${testNamespace}-busy-ds`;
     const quietName = `${testNamespace}-quiet-ds`;
     const experimentId = uuid7();
@@ -143,6 +151,7 @@ export const test = baseTest.extend<EnrichedDatasetsFixtures>({
     const ref: EnrichedDatasetsRef = {
       projectId: project.id,
       projectName: project.name,
+      seededAt,
       busy,
       quiet,
       experimentId,

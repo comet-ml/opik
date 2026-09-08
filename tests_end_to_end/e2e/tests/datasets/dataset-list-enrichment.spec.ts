@@ -103,6 +103,36 @@ test.describe('Datasets list — per-row enrichment', { tag: ['@t2-cuj', '@area:
         return rows;
       });
 
+      await test.step('The used dataset\'s recency timestamps are real instants from this run', async () => {
+        // `summarise` above reduces these to present/absent, which a malformed
+        // or stale instant satisfies just as well as a correct one — and the
+        // list-vs-by-id comparison below agrees on a bad value as readily as a
+        // good one, since both reads share the enrichment path. Bounding them
+        // against the seed window is what makes them assertions about the
+        // enrichment rather than about nullness.
+        const busyRow = listed.find((row) => row.id === busy.id);
+        expect(busyRow, `${busy.name} is in the list answer`).toBeDefined();
+
+        // Generous on both ends: the instants are minted by the backend, whose
+        // clock is not this process's, so a tight window would fail on skew
+        // rather than on a defect. Wide enough to stay quiet on skew, narrow
+        // enough that epoch-zero, a far-future value or an unparseable string
+        // still fails.
+        const SKEW_MS = 6 * 60 * 60 * 1000;
+        const lowerBound = Date.parse(enrichedDatasets.seededAt) - SKEW_MS;
+        const upperBound = Date.now() + SKEW_MS;
+
+        for (const field of ['mostRecentExperimentAt', 'mostRecentOptimizationAt'] as const) {
+          const raw = busyRow![field];
+          const parsed = Date.parse(raw ?? '');
+          expect(parsed, `${field} (${raw}) parses as an instant`).not.toBeNaN();
+          expect(parsed, `${field} (${raw}) falls in this run's seed window`)
+            .toBeGreaterThanOrEqual(lowerBound);
+          expect(parsed, `${field} (${raw}) falls in this run's seed window`)
+            .toBeLessThanOrEqual(upperBound);
+        }
+      });
+
       await test.step('Every enriched field matches the single-dataset read of the same dataset', async () => {
         for (const seeded of [busy, quiet]) {
           const fromList = listed.find((row) => row.id === seeded.id);
