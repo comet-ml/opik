@@ -22,6 +22,8 @@ export {
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
   type FeedbackScoreRef,
+  type PromptVersionRef,
+  type SpanCostRef,
   type TraceDetail,
   type TracePayload,
   type AutomationRuleRef,

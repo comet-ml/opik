@@ -83,6 +83,31 @@ export class TracePanelPage {
     return this.root.getByText(value);
   }
 
+  /**
+   * The detail half of the panel — the pane that renders whichever entity is
+   * selected in the span tree, as opposed to the tree itself.
+   */
+  get dataViewer(): Locator {
+    return this.root.locator('#data-viewer');
+  }
+
+  /**
+   * The estimated-cost stat in the data viewer's header row, as it is formatted.
+   *
+   * Scoped to the viewer, not the whole panel: the span tree renders a cost per
+   * node too, so a panel-wide lookup matches the tree row and the header both.
+   * Exact, not substring: `$3` must not pass for `$30`, and `$6` must not pass
+   * for `$6.25`. Whose cost it reads follows the panel's own selection — the
+   * trace's rolled-up total while the trace is selected, that span's own once a
+   * span is. `TraceStatsDisplay` carries no `data-testid`, so the formatted
+   * amount is the handle; adding one is a worthwhile follow-up, but a spec
+   * verified against a deployed build cannot depend on an attribute that build
+   * does not have.
+   */
+  estimatedCost(formatted: string): Locator {
+    return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
   // --- Attachments ---
 
   /**
