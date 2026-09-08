@@ -181,8 +181,9 @@ SETTINGS allow_nondeterministic_mutations = 1,
          log_comment = 'traces_local_v2_cutover:deletion_replay';
 -- >>> END deletion-replay
 
--- Step 4: Measure the replay. Its wall time sizes the tail — it is part of the final-delta -> EXCHANGE gap, and that
--- gap is where tail writes are left behind (OPIK-8238), so keeping it short keeps that set small. Re-run
+-- Step 4: Measure the replay. Its wall time is the first half of the final-delta -> EXCHANGE gap (exchange_and_wrap.sh
+-- reports the second half, its own run through the swap), and that gap is where tail writes are left behind
+-- (OPIK-8238), so keeping it short keeps that set small. Re-run
 -- steps 2-3 if new rows/deletes accumulated during the replay itself. Note the anchor is fixed, so a re-run re-copies
 -- the WHOLE window rather than only what is new — the statement does not get cheaper, and ReplacingMergeTree dedups the
 -- re-copies. What shrinks is the residual: after each pass, only the writes that arrived during that pass are uncaught.

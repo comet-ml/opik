@@ -142,28 +142,31 @@ render_block() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${SAMPLE_MOD}'/$SAMPLE_MOD}"
     # A renamed, moved or split marker yields text that is empty or only the block's own comments, and clickhouse-client
-    # exits 0 on either, so the caller would read "no output" as a verdict rather than as a failure to ask. Tested on
-    # comment-masked text because comments are not whitespace.
+    # exits 0 on either, so the caller would read "no output" as a verdict rather than as a failure to ask.
     #
     # RETURN, not exit: every caller invokes this inside a command substitution, where an exit ends only the subshell
     # and would leave the outer clickhouse-client running with an empty --query. The callers assign first, so a
     # non-zero return trips `set -e` there.
+    #
+    # Masked first because every check below needs the executable text: comments are not whitespace, and a block's own
+    # prose can contain the token that identifies it.
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         log "ERROR: the '$block' block from $VERIFY_SQL rendered no executable SQL (empty, or comments only)." >&2
         log "       Expected the exact marker lines '-- >>> BEGIN $block' and '-- >>> END $block'." >&2
         return 1
     fi
-    # A block whose markers moved around the wrong statement is plenty of text, so emptiness cannot catch it, and an
-    # unsubstituted placeholder would reach ClickHouse as a literal. Both would turn a mis-marked file into a wrong
-    # verdict rather than a refusal — which is worse here than in a driver that only executes, because this driver's
-    # output IS the go/no-go. Checked on the comment-masked text: comments are not whitespace and a block's own prose
-    # can contain the phrase that identifies it.
+    # Markers that slipped onto prose or a non-statement leave plenty of text, so emptiness cannot catch that; every
+    # block here is a read, so requiring a SELECT does. Note the limit: this cannot tell one block's SELECT from
+    # another's, which would need a per-block token. It does not have to — the callers validate the shape of what comes
+    # back (`ok` must be 1, confirm-keys must be a count), so a block swapped for another read fails closed there.
     if ! grep -qF 'SELECT' <<<"$masked"; then
-        log "ERROR: the '$block' block from $VERIFY_SQL has no SELECT outside its comments, so the markers are around" >&2
-        log "       the wrong statement. Refusing to run it." >&2
+        log "ERROR: the '$block' block from $VERIFY_SQL has no SELECT outside its comments, so the markers are not" >&2
+        log "       around a statement. Refusing to run it." >&2
         return 1
     fi
+    # A surviving placeholder means a substitution was missed — a moved marker, or one added to the block and not to the
+    # list above. ClickHouse would reject the literal anyway; refusing here names the actual cause instead.
     if grep -qF '${' <<<"$masked"; then
         log "ERROR: the '$block' block from $VERIFY_SQL still holds an unsubstituted \${...} placeholder after" >&2
         log "       rendering. Refusing to send SQL containing a literal placeholder." >&2

@@ -375,9 +375,9 @@ The queue verdict is a **snapshot** over the last sample read, in both the polle
 compares consecutive samples. Polling buys the queue time to drain, and a genuinely stuck entry time to age past the
 thresholds; that is all, so a shorter `--settle-timeout` is a weaker gate by exactly that much.
 
-Raise `--settle-timeout` (0–3600s) for a slow-but-progressing cluster, at a price: the gate sits between the final
-delta and the `EXCHANGE`, so whatever it waits is added to the tail write-gap. The driver prints the wait alongside its
-elapsed-through-`EXCHANGE` so the gap can be sized with it included. `--force` skips the gate entirely and is a
+`--settle-timeout` accepts 0–3600s; raise it for a slow-but-progressing cluster, at a price — the gate sits between the
+final delta and the `EXCHANGE`, so whatever it waits is added to the tail write-gap. The driver prints the wait
+alongside its elapsed-through-`EXCHANGE`, so the gap can be sized with it included. `--force` skips the gate and is a
 production No-Go: the gate is permissive enough that reaching its failure path means something is genuinely wrong.
 
 ### The final cutover window
@@ -1697,7 +1697,8 @@ the `scripts/` drivers is exercised by it. **Unit-testing them is deliberately o
 rather than feasibility**: the repo does run bash suites elsewhere (`test_rebaseline_db_changelog.sh`,
 `test_precommit_wrappers.sh`) and stubbing `clickhouse-client` would work. But this is migration tooling with a finite
 life — once the cutover and its soak are done it stops changing, `spans` gets its own parallel directory rather than
-reusing these files, and a harness over eight drivers would be permanent maintenance on code heading for the archive.
+reusing these files, and a harness over every driver in `scripts/` would be permanent maintenance on code heading for
+the archive.
 
 **The sanctioned validation is performing the procedure** — the forward cutover, the wrap, and the rollback of each
 (stage A/B/C and `--unwrap-only`) — on a local or test environment. That exercises the drivers against a real
@@ -1729,9 +1730,10 @@ number — so it needs the rehearsal too, under **live ingestion**, in both dire
 
 The **argument guards** fail fast, before touching ClickHouse, so they are cheap to exercise by hand after any change
 here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-maintenance`, and `--settle-timeout` must
-refuse anything outside 0–3600 as well as a leading zero. That last one is not cosmetic: bash arithmetic wraps silently
-past 2^63 instead of erroring, and an out-of-range value used to leave the gate's poll count negative, which skipped
-every sample and passed the gate without reading replication at all.
+refuse a leading zero as well as anything outside 0–3600. Keep that last check **lexical**, on the digit count, rather
+than turning it into a numeric comparison: bash arithmetic wraps silently past 2^63 instead of erroring, and a wrapped
+value is negative, so it both passes a `<=` test and leaves the gate's poll count negative — which skips every sample
+and passes the gate without reading replication at all.
 
 Run it with: `mvn -o test -Dtest=TracesLocalV2CutoverTest` from `apps/opik-backend`.
 

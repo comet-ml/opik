@@ -100,7 +100,7 @@ WITH_WRAP=0
 WRAP_ONLY=0
 FORCE=0
 SETTLE_TIMEOUT=120        # seconds the settle gate polls before deciding. See --settle-timeout.
-SETTLE_TIMEOUT_MAX=3600   # accepted ceiling for it, enforced lexically at validation. See there for why.
+SETTLE_TIMEOUT_MAX=3600   # its accepted ceiling; the validation below explains why the check is lexical.
 CONFIRM_MAINTENANCE=0
 CONFIRM_DAOS_RETARGETED=0
 CONFIRM_RETENTION_PAUSED=0
@@ -137,14 +137,12 @@ done
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
-# 0 is meaningful (a single sample), so unlike the bound above this accepts it — but not a leading zero, which bash
-# arithmetic reads as octal and rejects ("value too great for base") once the gate divides by the poll interval.
-#
-# The four-digit cap is what keeps the gate honest, and it has to be LEXICAL. Past 2^63 bash arithmetic wraps silently
-# rather than erroring, so `polls` in the gate below goes negative, its `for` loop runs zero times, and the verdict then
-# reads unset sample variables as 0 and passes — a mistyped argument would swap without ever having looked at
-# replication. A numeric `<= SETTLE_TIMEOUT_MAX` test cannot catch that either, because the wrapped value is negative
-# and so compares as in-range; the digit count must be bounded before any arithmetic touches it.
+# Both halves matter, and the digit cap has to come first, before any arithmetic sees the value. A leading zero would be
+# read as octal ("value too great for base" once the gate divides by the poll interval). Past 2^63 bash arithmetic wraps
+# silently instead of erroring: `polls` in the gate below goes negative, its `for` loop runs zero times, and the verdict
+# then reads the unset sample variables as 0 and passes — so an out-of-range value would reach the EXCHANGE without
+# having read replication at all. A numeric `<= SETTLE_TIMEOUT_MAX` test cannot catch that, because the wrapped value is
+# negative and compares as in-range. 0 is accepted, and means a single sample.
 [[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] && (( SETTLE_TIMEOUT <= SETTLE_TIMEOUT_MAX )) || { echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample. An hour of pre-swap polling is already past the point of aborting and resolving the lag." >&2; exit 2; }
 
 # One place for the connection and client-side options, so every call site below carries the same host, port,
@@ -445,10 +443,9 @@ assert_replication_settled() {
         exit 1
     fi
 
-    # "Not stuck", not "moving": the verdict is a snapshot predicate over the last sample read. Neither this path nor
-    # the polled one compares consecutive samples — polling exists to give the queue time to drain (the queue == 0 exit
-    # above) or to give a genuinely stuck entry time to age past the thresholds. So a shorter --settle-timeout is a
-    # weaker gate by exactly that much, which is what the flag means.
+    # "Not stuck" rather than "moving": this is a snapshot predicate over the last sample read, and no path here
+    # compares consecutive samples. Polling only gives the queue time to drain (the queue == 0 exit above) or a stuck
+    # entry time to age past the thresholds, so a shorter --settle-timeout is a weaker gate by exactly that much.
     echo "Replication settled enough across cluster '$cluster': the deletion-replay mutation is done on every replica and"
     echo "no queue entry is stuck — $queue entries, oldest ${age}s, max num_tries=$tries, none with a last_exception."
     echo "That is ordinary ingest churn on a live table."
@@ -461,9 +458,9 @@ else
     assert_pre_exchange_topology
 fi
 
-# Timed, because this driver's own run is the second half of the final-delta -> EXCHANGE gap and the gate is the part
-# of it that varies: it can poll to --settle-timeout on a busy cluster, so calling it "fast and metadata-only" and
-# sizing the tail from the delta replay alone would understate the gap by up to that much.
+# Timed, because this driver's run is the second half of the final-delta -> EXCHANGE gap and the settle gate is the
+# part of it that varies: on a busy cluster it polls up to --settle-timeout, so the delta replay's wall time on its own
+# understates the gap by that much.
 SETTLE_SECONDS=0
 if [[ "$FORCE" == "1" ]]; then
     echo "WARNING: --force set; skipping the replication-settle gate."
@@ -555,13 +552,12 @@ echo
 echo "TAIL WRITE-GAP: traces written between the last delta and this swap — and any routed at a not-yet-swapped node"
 echo "during it — are in traces_pre_cutover_backup, NOT in live traces. Nothing in this procedure carries them across"
 echo "yet (OPIK-8238)."
-echo "  Length: ${EXCHANGE_SECONDS}s in this driver from start through the EXCHANGE, of which ${SETTLE_SECONDS}s was the settle"
-echo "  gate. Add the final delta_replay's replay time (its own --time output) for the whole final-delta -> EXCHANGE gap."
-echo "  Size it now with the post-EXCHANGE compare and --drill-down. TWO categories are gap rows, not one: keys the"
-echo "  drill-down shows backup-only (created in the tail), and keys present on BOTH sides whose hashes differ with the"
-echo "  newer last_updated_at in the backup (updated in the tail — the successor holds an older version, so a"
-echo "  presence-only check misses these). Differing hashes with the newer version live are post-swap writes and are"
-echo "  harmless, so compare last_updated_at per key to tell the two apart."
-echo "  Then either accept the gap or recover from the backup BEFORE finalize.sh retires it."
+echo "  Length: ${EXCHANGE_SECONDS}s from this driver's start through the EXCHANGE, of which ${SETTLE_SECONDS}s was the"
+echo "  settle gate. Add the final delta_replay's replay time (its --time output) for the whole gap."
+echo "  Size it now with the post-EXCHANGE compare and --drill-down. TWO of its three key shapes are gap rows: keys"
+echo "  shown backup-only (created in the tail), and keys on BOTH sides whose hashes differ with the newer"
+echo "  last_updated_at in the backup (updated in the tail — sizing by key presence alone misses these). Differing"
+echo "  hashes whose newer version is live are ordinary post-swap writes. The drill-down prints hashes, not versions,"
+echo "  so compare last_updated_at per key. Then accept the gap, or recover from the backup BEFORE finalize.sh retires it."
 echo "Then verify, and keep traces_pre_cutover_backup for the soak. No ingestion-side config was changed, so there is"
 echo "nothing to restore."
