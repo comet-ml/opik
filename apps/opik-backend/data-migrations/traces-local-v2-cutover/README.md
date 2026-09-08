@@ -29,6 +29,14 @@ The **deletion-events bridge** closes it: with `traceDeletionEventsCaptureEnable
 `(workspace_id, project_id, id)` in `deletion_events_local`; the cutover **replays** those keys as deletes against the
 new table before the EXCHANGE. The replay matches the **full key**, not `id` alone — see "Delta and replay correctness".
 
+> **Capture goes first (OPIK-8141).** The bridge insert is issued **before** the lightweight delete, not after. A delete
+> can fail its client while the server-side mutation still applies — the observed case being a client timeout on a
+> mutation that then completed — and capturing afterwards let exactly those deletes go unrecorded, which neither replay
+> direction can then re-apply. Capturing first over-records instead when the delete does fail, and the forward replay
+> already handles that: its resurrection guard skips any id still live on the source. Capture remains **best-effort** —
+> a failed insert is logged and swallowed, never failing a user's delete — so the bridge can still miss a delete, but
+> only when the capture itself fails, no longer when the delete does.
+
 > **All user-facing trace deletes route through one captured path.** Single delete, batch delete-by-project, and thread
 > deletion all funnel through `TraceService.delete(...)`, which calls `captureDeletions` for every resolved-project
 > delete — since OPIK-7483 there is no project-less branch (ids that resolve to no project are absent and skipped) — so
@@ -1196,12 +1204,18 @@ Use stage B/C while the parked original still exists.
 > shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
 
 **What the reverse replay can and cannot re-apply.** It re-applies the deletes the bridge **recorded**. Capture runs
-after the delete succeeds and is best-effort by design — an auxiliary insert must never fail a user's delete — so a
-delete whose bridge row has not landed yet, or whose capture errored, is invisible to the replay *and* to its
-postcondition check, which reads the same bridge: that trace is live again on the restored original while the check still
-reports `0`. No query here can detect it, so the bound is operational — **quiesce trace deletes before the promote**, not
-just reads, and let in-flight ones land. It takes a delete concurrent with the promote, or a capture failure (which the
-backend logs), so the exposure is small — but `0` means "every recorded delete is masked", not "no delete escaped".
+before the delete but is best-effort by design — an auxiliary insert must never fail a user's delete — so a delete still
+in flight when this runs, or one whose capture errored, is invisible to the replay *and* to its postcondition check,
+which reads the same bridge: that trace is live again on the restored original while the check still reports `0`. No
+query here can detect it, so the bound is operational — **quiesce trace deletes before the promote**, not just reads,
+and let in-flight ones land. It takes a delete concurrent with the promote, or a capture failure (which the backend
+logs), so the exposure is small — but `0` means "every recorded delete is masked", not "no delete escaped". A delete
+that merely *errored* stopped being one of those cases in OPIK-8141: capture goes first, so it is recorded regardless.
+
+The reverse case is a recorded delete that never applied, which this replay masks anyway — it carries no liveness guard,
+by design (see `000004_rollback_reverse_replay.sql`). Accepted: the user did ask for that delete. It also stays
+recoverable while the window is open, since the replay touches only `traces` and the row is still live on the parked
+`traces_post_rollback_backup` until `finalize.sh` drops it.
 
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
 statements. Note what that means even when both succeed: from the moment the promote lands until the replay finishes,

@@ -101,7 +101,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * bridge-capture helpers mirror the production write shapes ({@code TraceDAO}, {@code TraceService} delete,
  * {@code DeletionEventDAO}) and reproduce the two version-stamp regimes the delta relies on (fresh server
  * {@code created_at} vs client {@code last_updated_at}); the DAOs' own semantics are covered by their dedicated suites
- * (e.g. {@code TraceDeletionEventTest}).
+ * (e.g. {@code DeletionEventTest}).
  *
  * <p><b>Scope: this gate validates the cutover SQL logic, not the driver scripts.</b> The safety guards in the runbook's
  * bash drivers — {@code backfill.sh}'s reconciliation abort, {@code rollback.sh}'s wrong-stage topology assertions,
