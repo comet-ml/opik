@@ -10,6 +10,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
+import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
@@ -1541,6 +1542,58 @@ public class OnlineScoringEngine {
                         entityLabel, entityId, exception);
                 throw exception;
             }
+        }
+    }
+
+    /**
+     * Splits Python evaluator results into the ones that can be stored and the names of the ones that
+     * carry no value. Shared by the trace, span and thread Python scorers.
+     *
+     * <p>A user metric is free to return a score with no value — {@code ScoreResult(value=None)} for a
+     * check that did not apply, or a scoring attempt the metric itself gave up on. Such a score cannot
+     * be persisted: {@code feedback_scores.value} is not nullable and {@code FeedbackScoreItem} declares
+     * it {@code @NotNull}. It used to reach the insert bind and raise an NPE there, which failed the
+     * whole batch — every other score for the same entity was lost with it, and the rule's user saw only
+     * a generic "Unexpected error" naming neither the metric nor the reason. Dropped per score instead,
+     * mirroring how the judge path treats a null judge score.
+     */
+    public static StorablePythonScores toStorablePythonScores(@NonNull List<PythonScoreResult> scoreResults) {
+        var storable = new ArrayList<PythonScoreResult>(scoreResults.size());
+        var valuelessNames = new ArrayList<String>();
+
+        scoreResults.forEach(scoreResult -> {
+            if (scoreResult.value() == null) {
+                valuelessNames.add(scoreResult.name());
+            } else {
+                storable.add(scoreResult);
+            }
+        });
+
+        return new StorablePythonScores(List.copyOf(storable), List.copyOf(valuelessNames));
+    }
+
+    public record StorablePythonScores(List<PythonScoreResult> storable, List<String> valuelessNames) {
+    }
+
+    /**
+     * Reports the dropped scores on the rule's log stream, one line per score, so the user can see which
+     * metric returned no value instead of inferring it from a batch that stored fewer scores than it ran.
+     * Names come from user code, hence the same sanitizing the judge path applies to judge-chosen text.
+     */
+    public static void logValuelessPythonScores(
+            @NonNull Logger userFacingLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull List<String> valuelessNames,
+            @NonNull String entityLabel,
+            @NonNull Object entityId) {
+        if (valuelessNames.isEmpty()) {
+            return;
+        }
+
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            valuelessNames.forEach(name -> userFacingLogger.warn(
+                    "Skipped score '{}' for {} '{}' because the metric returned no value",
+                    StringUtils.isBlank(name) ? "<unnamed>" : sanitize(name), entityLabel, entityId));
         }
     }
 
