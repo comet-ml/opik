@@ -114,6 +114,11 @@ export type {
 } from './alert.fixture';
 export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
 export type {
+  ModelCostSpanSeed,
+  ModelCostSpansRef,
+  ModelCostSpansFixtures,
+} from './model-cost-spans.fixture';
+export type {
   SummarisedDatasetShape,
   SummarisedDatasetRef,
   SummarisedDatasetsRef,

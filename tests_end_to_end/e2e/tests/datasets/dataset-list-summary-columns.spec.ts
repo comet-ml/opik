@@ -41,7 +41,7 @@ function byName(datasets: SummarisedDatasetRef[]): string[] {
 
 test.describe('Datasets list — computed summary columns', { tag: ['@area:datasets'] }, () => {
   test(
-    'Each row of GET /datasets carries its own dataset totals, unchanged under pagination',
+    "Each row of the project's datasets list carries its own dataset totals, unchanged under pagination",
     { tag: ['@t2-cuj', '@cap:datasets.list-datasets'] },
     async ({ summarisedDatasets, backendClient }) => {
       const seeded = summarisedDatasets.datasets;

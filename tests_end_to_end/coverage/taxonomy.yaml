@@ -251,6 +251,7 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/trace-attachments.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-explore-smoke.spec.ts
@@ -265,7 +266,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
@@ -406,6 +407,7 @@ areas:
     specs:
       - prompts/prompt-delete.spec.ts
       - prompts/prompt-library-smoke.spec.ts
+      - prompts/prompt-version-pagination.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -413,8 +415,8 @@ areas:
       sdk-seeded-visible:      { covered: true,  tier: t1-smoke }
       edit-creates-version:    { covered: true,  tier: t1-smoke }
       old-version-preserved:   { covered: true,  tier: t1-smoke }
-      version-history:         { covered: true,  tier: t1-smoke }
-      compare-versions:        { covered: false }
+      version-history:         { covered: true,  tier: t1-smoke, note: "smoke covers select-a-version on a 2-version prompt; prompt-version-pagination adds the 31-version case — the timeline pages, the labels come from version_number, a version deep-linked onto page 2 renders its own template, and the Compare-against menu lists every version rather than only the page that had loaded" }
+      compare-versions:        { covered: false, note: "prompt-version-pagination asserts the Compare-against menu's contents label by label, but never selects an entry — nothing yet opens the compare sheet or asserts a rendered diff, so a broken comparison would not fail any test. The menu assertion counts under version-history instead." }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
       delete-prompt:           { covered: true,  tier: t2-cuj }
 
@@ -512,6 +514,7 @@ areas:
     spec_dir: datasets
     specs:
       - datasets/dataset-crud-smoke.spec.ts
+      - datasets/dataset-insert-deduplication.spec.ts
       - datasets/dataset-item-count.spec.ts
       - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-items.spec.ts
@@ -532,8 +535,8 @@ areas:
       filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
       filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
-      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read" }
-      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50) and a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent)" }
+      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + first item read back through the SDK, single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read, and Dataset.insert's deduplication flag both ways (deduplication=False stores every duplicate under its own id and cuts a version per insert; the default collapses the duplicate and cuts no second version), paired against a control dataset and asserted in the API and on the Records tab" }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
@@ -557,6 +560,7 @@ areas:
     specs:
       - test-suites/test-suite-delete.spec.ts
       - test-suites/test-suite-insert-dedup-listed-suite.spec.ts
+      - test-suites/test-suite-insert-deduplication.spec.ts
       - test-suites/test-suites-smoke.spec.ts
     capabilities:
       # The t2 spec drives `get_test_suites()`, the listing factory nothing else
@@ -573,7 +577,7 @@ areas:
       list-suites:           { covered: true,  tier: t1-smoke, note: "t2 additionally reaches a suite through get_test_suites() and asserts insert() deduplicates an item the suite already holds, while a genuinely new item still lands" }
       create-suite-ui:       { covered: true,  tier: t1-smoke }
       create-suite-sdk:      { covered: true,  tier: t1-smoke }
-      view-suite-items:      { covered: true,  tier: t1-smoke }
+      view-suite-items:      { covered: true,  tier: t1-smoke, note: "3 SDK-seeded items render; t2 also covers TestSuite.insert's deduplication flag both ways — deduplication=False renders both identical test cases as separate rows (asserted by data-row-id, since the Test cases table shows no data columns), the default renders one" }
       run-suite-sdk:         { covered: true,  tier: t1-smoke, note: "3/3 pass experiment" }
       run-suite-playground:  { covered: true,  tier: t1-smoke }
       pass-rate-display:     { covered: true,  tier: t1-smoke }
@@ -672,6 +676,7 @@ areas:
       - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
       - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-oversized-payload.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
@@ -679,10 +684,14 @@ areas:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line" }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
+      # Still false, and deliberately. online-evaluation-oversized-payload.spec.ts
+      # deliberately creates and drives a span-scope rule end to end, but this key
+      # covers BOTH the span and thread scope flags and nothing exercises thread
+      # scope. Flipping it on the span half would retire the thread half untested.
+      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags; span scope is exercised by online-evaluation-oversized-payload.spec.ts, thread scope is untouched" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }

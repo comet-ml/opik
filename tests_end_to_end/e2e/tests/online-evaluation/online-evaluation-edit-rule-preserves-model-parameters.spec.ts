@@ -1,5 +1,5 @@
 import { test, expect } from '@e2e/fixtures';
-import type { JudgeMessageWrite } from '@e2e/core/backend';
+import type { JudgeMessageWrite, JudgeOutputSchemaType } from '@e2e/core/backend';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 
 /**
@@ -54,7 +54,11 @@ const JUDGE_MESSAGES: JudgeMessageWrite[] = [
 
 const JUDGE_VARIABLES = { output: 'output.output' };
 
-const JUDGE_SCHEMA = [
+const JUDGE_SCHEMA: Array<{
+  name: string;
+  type: JudgeOutputSchemaType;
+  description: string;
+}> = [
   {
     name: 'Non empty',
     type: 'BOOLEAN',

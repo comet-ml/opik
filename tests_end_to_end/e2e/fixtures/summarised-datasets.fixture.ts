@@ -1,4 +1,4 @@
-import { test as baseTest } from './alert.fixture';
+import { test as baseTest } from './model-cost-spans.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7 } from '../core/backend';
 
@@ -217,4 +217,4 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
   },
 });
 
-export { expect } from './alert.fixture';
+export { expect } from './model-cost-spans.fixture';
