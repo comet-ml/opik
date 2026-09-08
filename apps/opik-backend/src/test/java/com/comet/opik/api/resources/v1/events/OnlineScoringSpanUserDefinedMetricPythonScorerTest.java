@@ -226,6 +226,64 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        @DisplayName("Should drop scores without a value and store the rest")
+        void shouldDropScoresWithoutValueAndStoreTheRest() {
+            // Given — a metric returning one usable score and one with value=None. The valueless one
+            // cannot be stored, but it must not take the batch down with it: binding it used to throw an
+            // NPE that failed the whole insert, losing the usable score too.
+            UUID spanId = UUID.randomUUID();
+            UUID projectId = UUID.randomUUID();
+
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(projectId)
+                    .projectName("test-project")
+                    .traceId(UUID.randomUUID())
+                    .name("test-span")
+                    .build();
+
+            SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
+                    "def score(input, output): return []",
+                    Map.of("input", "input.input", "output", "output.output"));
+
+            SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
+                    .span(span)
+                    .ruleId(UUID.randomUUID())
+                    .ruleName("test-rule")
+                    .code(code)
+                    .workspaceId("workspace-123")
+                    .userName("test-user")
+                    .build();
+
+            when(pythonEvaluatorService.evaluate(any(String.class), any(Map.class)))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder()
+                                    .name("answer_relevance")
+                                    .value(BigDecimal.valueOf(0.75))
+                                    .reason("relevant")
+                                    .build(),
+                            PythonScoreResult.builder()
+                                    .name("hallucination")
+                                    .reason("metric could not decide")
+                                    .build())));
+            when(feedbackScoreService.scoreBatchOfSpans(any(List.class)))
+                    .thenReturn(Mono.empty());
+
+            // When
+            scorer.score(message).block();
+
+            // Then
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfSpans(scoresCaptor.capture());
+
+            List<FeedbackScoreBatchItem> scores = scoresCaptor.getValue();
+            assertThat(scores).hasSize(1);
+            assertThat(scores.get(0).name()).isEqualTo("answer_relevance");
+            assertThat(scores.get(0).value()).isEqualByComparingTo(BigDecimal.valueOf(0.75));
+        }
+
+        @Test
         @DisplayName("Should handle multiple score results")
         void shouldHandleMultipleScoreResults() {
             // Given
