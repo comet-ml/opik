@@ -1,6 +1,10 @@
 package com.comet.opik.utils;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -8,11 +12,13 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JsonUtilsTest {
 
@@ -154,9 +160,65 @@ class JsonUtilsTest {
     @Test
     @DisplayName("exceedsSerializedLengthInBytes: rejects an oversized payload without serializing it in full")
     void exceedsSerializedLengthShortCircuits() {
-        // ~40 MB of JSON; a non-streaming check would materialize the whole string plus a byte[] copy
-        var huge = java.util.Map.<String, Object>of("payload", "x".repeat(40 * 1024 * 1024));
+        var value = new ChunkedValue();
 
-        assertThat(JsonUtils.exceedsSerializedLengthInBytes(huge, 1_024L)).isTrue();
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(value, 1_024L)).isTrue();
+        // The behaviour under test is the early abort, so assert it directly on how much the serializer
+        // actually wrote rather than inferring it from a large fixture. Keeps the test cheap on
+        // constrained CI heaps while making the short circuit an explicit assertion instead of a side
+        // effect of allocation size.
+        assertThat(value.chunksWritten()).isLessThan(ChunkedValue.CHUNKS);
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: propagates serialization failures unrelated to the budget")
+    void exceedsSerializedLengthPropagatesUnrelatedFailures() {
+        // The budget check catches RuntimeException broadly to unwrap Jackson's wrapping of the abort
+        // signal. This guards against that catch swallowing an unrelated failure and reporting it as an
+        // oversized value: only BudgetExceededException may return true, everything else must propagate.
+        assertThatThrownBy(() -> JsonUtils.exceedsSerializedLengthInBytes(new ExplodingValue(), 1_024L))
+                .hasMessageContaining("serializer failed for an unrelated reason");
+    }
+
+    /**
+     * Serializes to far more than any test budget, one small chunk at a time, and records how many chunks
+     * it managed to write before being cut off.
+     */
+    @JsonSerialize(using = ChunkedValue.Serializer.class)
+    static final class ChunkedValue {
+
+        static final int CHUNKS = 10_000;
+        private static final String CHUNK = "x".repeat(64);
+
+        private int chunksWritten;
+
+        int chunksWritten() {
+            return chunksWritten;
+        }
+
+        static final class Serializer extends JsonSerializer<ChunkedValue> {
+            @Override
+            public void serialize(ChunkedValue value, JsonGenerator gen, SerializerProvider serializers)
+                    throws IOException {
+                gen.writeStartArray();
+                for (int i = 0; i < CHUNKS; i++) {
+                    gen.writeString(CHUNK);
+                    value.chunksWritten++;
+                }
+                gen.writeEndArray();
+            }
+        }
+    }
+
+    /** Fails during serialization for a reason that has nothing to do with the size budget. */
+    @JsonSerialize(using = ExplodingValue.Serializer.class)
+    static final class ExplodingValue {
+
+        static final class Serializer extends JsonSerializer<ExplodingValue> {
+            @Override
+            public void serialize(ExplodingValue value, JsonGenerator gen, SerializerProvider serializers) {
+                throw new IllegalStateException("serializer failed for an unrelated reason");
+            }
+        }
     }
 }
