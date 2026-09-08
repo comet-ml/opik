@@ -79,6 +79,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_5_6_LUNA = "gpt-5.6-luna",
   GPT_5_6_SOL = "gpt-5.6-sol",
   GPT_5_6_TERRA = "gpt-5.6-terra",
+  GPT_6_ASTRA = "gpt-6-astra",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
@@ -96,7 +97,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
-  GPT_6_ASTRA = "gpt-6-astra",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -848,9 +848,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMMA_4_31B_IT = "gemma-4-31b-it",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
+  LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  LYRIA_3_5 = "lyria-3.5",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -871,6 +871,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_5_FLASH_LITE = "vertex_ai/gemini-3.5-flash-lite",
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
   VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
+  VERTEX_AI_GEMINI_3_8_FLASH = "vertex_ai/gemini-3.8-flash",
 }
 
 export interface ProviderModelsMap {
