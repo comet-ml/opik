@@ -3031,6 +3031,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.VERTEX_AI]: [
     {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
+      label: "Gemini 3.8 Flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
       label: "Gemini 3.7 Flash",
     },
