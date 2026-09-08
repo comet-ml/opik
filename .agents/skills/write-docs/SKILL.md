@@ -263,6 +263,24 @@ Use the repository template at `.github/pull_request_template.md` — read the F
 
 Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
 
+A section that does not apply gets `N/A` — never delete a heading.
+
+### `## Details` — style
+
+Write what changes for a user. A reviewer reads the diff for the code; this section tells them what is different when they use the product.
+
+- **Short.** Most PRs need 3–10 bullets. If it runs longer, the section is doing the diff's job — cut it.
+- **Bullets, not prose paragraphs.** One behavior per bullet. Nest one level for sub-cases.
+- **Authoritative.** State what happens: "The run is scored once." Not "This should now mean that the run will be scored once."
+- **No fluff.** No motivation paragraph, no "this PR …", no approach summary, no benefits list, no restating the diff.
+- **Observable behavior first.** What the UI shows, what the API returns, what gets scored, stored or logged. Name a class, method or file only when the behavior makes no sense without it.
+
+Pick the shape that fits the change — do not force one:
+
+- **Before / After bullet lists** when a behavior changed and the contrast is the point.
+- **A flat bullet list** for a new capability, where there is no "before".
+- **One or two lines** when users cannot see the change (refactor, dependency bump) — say what is unchanged and what improved, then stop.
+
 ## Internationalized READMEs
 
 `readme_CN.md`, `readme_ES.md`, `readme_FR.md`, `readme_DE.md` are AI machine-translated from the English `README.md`.

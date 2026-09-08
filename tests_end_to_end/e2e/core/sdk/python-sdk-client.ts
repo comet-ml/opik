@@ -88,6 +88,52 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number[] }>;
+  /**
+   * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
+   * order it returned them** — the property a concurrent paged read has to
+   * preserve, and the one a set comparison would not notice losing.
+   *
+   * Omit a knob to exercise the SDK's own default for it; the bridge only
+   * forwards the ones set here. `num_threads`, `chunk_size` and `nb_samples`
+   * are deliberately unconstrained so a caller can assert the SDK's own
+   * validation: an argument it refuses comes back as `value_error` carrying the
+   * ValueError's message, with no items, rather than as a bridge failure.
+   */
+  readDatasetItems(args: {
+    dataset_name: string;
+    project_name: string;
+    nb_samples?: number;
+    num_threads?: number;
+    chunk_size?: number;
+    filter_string?: string;
+    workspace?: string;
+  }): Promise<{ item_ids: string[]; value_error: string | null }>;
+  /**
+   * A chunked `stream_items()` read with an insert committed part-way through
+   * it — the scenario the read's version pin exists for.
+   *
+   * The interleaving is deterministic, not raced: the bridge consumes
+   * `pause_after_chunks` chunks, runs the insert to completion, then consumes
+   * the remaining pages, which are therefore all fetched against a backend that
+   * already holds the new items. `chunk_size * (pause_after_chunks + 2 *
+   * num_threads)` must stay well under the dataset size, or the reader's
+   * look-ahead will have fetched everything before the insert lands and the
+   * scenario silently degrades into an ordinary read.
+   */
+  readDatasetItemsWithMidReadInsert(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    chunk_size: number;
+    num_threads?: number;
+    pause_after_chunks: number;
+    workspace?: string;
+  }): Promise<{
+    item_ids: string[];
+    chunk_sizes: number[];
+    chunks_before_insert: number;
+    inserted: number;
+  }>;
   evaluateExperiment(args: {
     project_name: string;
     dataset_name: string;
@@ -360,6 +406,25 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         args,
         { timeoutMs: 180_000 },
       );
+    },
+    async readDatasetItems(args) {
+      // A multi-page read of a few thousand items is well inside the default
+      // budget, but a `num_threads=1` pass over small chunks is not.
+      return request<{ item_ids: string[]; value_error: string | null }>(
+        'POST',
+        '/datasets/read-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async readDatasetItemsWithMidReadInsert(args) {
+      // Holds a whole chunked read AND an insert open on one request.
+      return request<{
+        item_ids: string[];
+        chunk_sizes: number[];
+        chunks_before_insert: number;
+        inserted: number;
+      }>('POST', '/datasets/read-with-mid-read-insert', args, { timeoutMs: 180_000 });
     },
     async compareSeed(args) {
       return request<{

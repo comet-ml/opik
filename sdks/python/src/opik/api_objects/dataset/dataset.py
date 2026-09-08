@@ -73,6 +73,28 @@ class DatasetExportOperations(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Stream dataset items as chunks of raw dictionaries.
+
+        Args:
+            chunk_size: Number of items per chunk.
+            num_threads: Number of chunks fetched concurrently.
+            nb_samples: Maximum number of items to retrieve.
+            filter_string: Optional OQL filter string to filter dataset items.
+
+        Yields:
+            Lists of dictionaries representing the dataset items.
+        """
+        raise NotImplementedError
+
     def to_pandas(self) -> "pd.DataFrame":
         """
         Convert the dataset items to a pandas DataFrame.
@@ -99,12 +121,27 @@ class DatasetExportOperations(abc.ABC):
         self,
         nb_samples: Optional[int] = None,
         filter_string: Optional[str] = None,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
+        chunk_size: int = constants.DATASET_STREAM_BATCH_SIZE,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve dataset items as a list of dictionaries.
 
         Args:
-            nb_samples: Maximum number of items to retrieve. If not set, all items are returned.
+            nb_samples: Maximum number of items to retrieve. Must be a positive
+                integer; omit it or pass ``None`` to return all items. Zero and
+                negative values raise rather than being treated as a limit.
+            num_threads: Number of item pages fetched concurrently. Must be a
+                positive integer, defaults to 4; pass ``1`` to fetch
+                sequentially. Raising it speeds up large reads at the cost of
+                more load on the backend. Capped at
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Use
+                :meth:`stream_items` instead when the dataset is too large to
+                hold in memory all at once.
+            chunk_size: Number of items fetched per request. See
+                :meth:`stream_items` for how to pick it; the whole result is
+                materialized either way, so this only trades request count
+                against per-request size.
             filter_string: Optional OQL filter string to filter dataset items.
                 Supports filtering by tags, data fields, metadata, etc.
 
@@ -122,14 +159,116 @@ class DatasetExportOperations(abc.ABC):
 
         Returns:
             A list of dictionaries representing the dataset items.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``chunk_size`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
+                ``nb_samples`` is not a positive integer.
         """
-        dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
-            for item in self.__internal_api__stream_items_as_dataclasses__(
-                nb_samples=nb_samples, filter_string=filter_string
+        return [
+            item
+            for chunk in self.stream_items(
+                chunk_size=chunk_size,
+                filter_string=filter_string,
+                nb_samples=nb_samples,
+                num_threads=num_threads,
             )
+            for item in chunk
         ]
-        return dataset_items_as_dicts
+
+    def stream_items(
+        self,
+        chunk_size: int = constants.DATASET_STREAM_BATCH_SIZE,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
+        filter_string: Optional[str] = None,
+        nb_samples: Optional[int] = None,
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Read dataset items in chunks, fetching the chunks concurrently.
+
+        The chunked counterpart to :meth:`get_items`, which is itself built on
+        this method: chunks are fetched in parallel and are handed back as
+        plain dictionaries without going through the typed REST layer. Prefer
+        it over :meth:`get_items` when you want to start processing before the
+        whole dataset has been downloaded, or when the dataset is too large to
+        hold in memory all at once.
+
+        Items have exactly the shape :meth:`get_items` returns: the item's
+        data plus its ``id``.
+
+        The read is pinned to a single dataset version, so items inserted or
+        deleted while it is in progress do not affect it. On backends where
+        dataset versioning is unavailable there is no version to pin to and the
+        live state is read instead; a concurrent insert can then shift the
+        remaining pages, returning one item twice and skipping another. Read a
+        :class:`DatasetVersion` explicitly if you need that guarantee there.
+
+        Args:
+            chunk_size: Number of items per chunk, defaulting to and capped at
+                the same batch size the typed item stream reads with
+                (``constants.DATASET_STREAM_BATCH_SIZE``). Fetching a chunk
+                costs a fixed overhead whatever its size, so lowering this
+                makes the whole read slower; lower it when the items are
+                individually large, bearing in mind that up to
+                ``2 * num_threads`` chunks are held in memory at once.
+            num_threads: Number of chunks fetched concurrently. Must be a
+                positive integer, defaults to 4; pass ``1`` to fetch
+                sequentially. Capped at
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Accepts the same expressions as :meth:`get_items`.
+            nb_samples: Maximum number of items to read. Must be a positive
+                integer; omit it or pass ``None`` to read the whole dataset.
+                Zero and negative values raise rather than being treated as a
+                limit.
+
+        Yields:
+            Lists of dictionaries representing the dataset items, in dataset
+            order. The last chunk may be shorter than ``chunk_size``; empty
+            chunks are never yielded.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``chunk_size`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
+                ``nb_samples`` is not a positive integer.
+
+        Example:
+            >>> for chunk in dataset.stream_items(chunk_size=2000, num_threads=8):
+            ...     process(chunk)
+
+        Note:
+            ``nb_samples`` items are read starting from the beginning of the
+            dataset, so the same call reads the same items whatever the thread
+            count.
+        """
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int):
+            raise ValueError("chunk_size must be a positive integer")
+        if chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer")
+        if chunk_size > constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE:
+            raise ValueError(
+                "chunk_size must not exceed "
+                f"{constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE}, got {chunk_size}"
+            )
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+        if nb_samples is not None and (
+            isinstance(nb_samples, bool)
+            or not isinstance(nb_samples, int)
+            or nb_samples < 1
+        ):
+            raise ValueError("nb_samples must be a positive integer")
+
+        return self.__internal_api__stream_item_chunks__(
+            chunk_size=chunk_size,
+            num_threads=min(num_threads, constants.DATASET_ITEMS_READ_MAX_THREADS),
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+        )
 
     @abc.abstractmethod
     def get_version_info(
@@ -284,6 +423,24 @@ class DatasetVersion(DatasetExportOperations):
         )
 
     @override
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        return rest_operations.stream_dataset_item_chunks(
+            rest_client=self._rest_client,
+            dataset_id=self._dataset_id,
+            chunk_size=chunk_size,
+            num_threads=num_threads,
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+            dataset_version=self._version_info.version_hash,
+        )
+
+    @override
     def get_version_info(
         self,
     ) -> Optional[dataset_version_public.DatasetVersionPublic]:
@@ -353,6 +510,11 @@ class Dataset(DatasetExportOperations):
         # one-shot sync on the first `insert()` instead of paying an N+1
         # sync at list time.
         self._hashes_synced: bool = True
+        # None until the backend version has actually been determined. Only a
+        # conclusive answer is stored, so a probe that failed to reach the
+        # backend is retried instead of pinning this dataset to sequential
+        # uploads for the rest of the session.
+        self._parallel_insert_supported_cache: Optional[bool] = None
 
     @classmethod
     def from_public(
@@ -386,6 +548,11 @@ class Dataset(DatasetExportOperations):
         # Backend may already hold items we haven't seen; lazy-sync on first
         # insert so content-hash dedup still works without paying a sync now.
         dataset_.__internal_api__hashes_synced__ = False
+        # The response already carries the id, so seed the cached_property
+        # rather than paying a get-dataset-by-name round trip the first time
+        # something (a read, an item delete) needs it.
+        if dataset_fern.id is not None:
+            dataset_.__dict__["id"] = dataset_fern.id
         return dataset_
 
     @functools.cached_property
@@ -611,44 +778,60 @@ class Dataset(DatasetExportOperations):
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
 
-    @functools.cached_property
+    @property
     def _parallel_insert_supported(self) -> bool:
         """Whether the backend tolerates concurrent batches sharing a batch_group_id.
 
         Older backends race on them, so parallelism is only safe from
         ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the
-        version cannot be determined at all — unreachable endpoint, non-semver
-        build string — we report unsupported rather than risk the race.
+        version cannot be determined we report unsupported rather than risk the
+        race.
 
-        Cached because the backend cannot change version mid-session, and
-        parallel upload is the default: probing per ``insert`` would add a
-        round trip to every call in a loop.
+        The answer is cached because the backend cannot change version
+        mid-session and parallel upload is the default: probing per ``insert``
+        would add a round trip to every call in a loop. Only a conclusive
+        answer is cached — an unreachable backend is re-probed on the next
+        insert so parallel upload resumes once it recovers.
         """
+        if self._parallel_insert_supported_cache is not None:
+            return self._parallel_insert_supported_cache
+
         try:
             backend_version = self._rest_client.version()["version"]
+        except Exception:
+            LOGGER.warning(
+                "Could not reach the Opik backend to determine its version, "
+                "falling back to a sequential dataset upload for this insert.",
+                exc_info=True,
+            )
+            return False
+
+        try:
             supported = (
                 semantic_version.SemanticVersion.parse(backend_version)
                 >= constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
             )
         except Exception:
             LOGGER.warning(
-                "Could not determine the Opik backend version, falling back to a "
+                "Could not parse the Opik backend version %s, falling back to a "
                 "sequential dataset upload. Parallel upload requires backend %s "
                 "or newer.",
+                backend_version,
                 constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
                 exc_info=True,
             )
-            return False
+            supported = False
+        else:
+            if not supported:
+                LOGGER.warning(
+                    "Opik backend %s does not support parallel dataset upload, "
+                    "falling back to a sequential upload. Upgrade to backend %s or "
+                    "newer to use num_threads.",
+                    backend_version,
+                    constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                )
 
-        if not supported:
-            LOGGER.warning(
-                "Opik backend %s does not support parallel dataset upload, falling "
-                "back to a sequential upload. Upgrade to backend %s or newer to use "
-                "num_threads.",
-                backend_version,
-                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
-            )
-
+        self._parallel_insert_supported_cache = supported
         return supported
 
     def _send_batches(
@@ -718,6 +901,25 @@ class Dataset(DatasetExportOperations):
         num_threads: int = 1,
         deduplication: bool = True,
     ) -> None:
+        # Validated here rather than in each public entry point: every insert
+        # path funnels through this method. A truthy string or None would
+        # otherwise silently pick the wrong duplicate-checking behaviour, and
+        # a non-integer worker count would fail on the comparison below with a
+        # TypeError instead of naming the offending argument.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+
+        # Gated here rather than in `insert` so every caller of this funnel is
+        # covered: older backends race on concurrent batches that share a
+        # batch_group_id, and a direct caller asking for workers must not be
+        # able to skip that check.
+        if num_threads > 1 and not self._parallel_insert_supported:
+            num_threads = 1
+
         if deduplication:
             items_to_send = self._deduplicate(items)
         else:
@@ -756,7 +958,8 @@ class Dataset(DatasetExportOperations):
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
-                on large datasets.
+                on large datasets. The next insert that does deduplicate has to
+                re-read the dataset's items to account for what was skipped.
             num_threads: Number of worker threads used to upload the item
                 batches. Must be a positive integer, defaults to ``4``; pass
                 ``1`` to upload sequentially. All batches land in a single
@@ -764,14 +967,18 @@ class Dataset(DatasetExportOperations):
                 batches that already succeeded stay persisted. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, or
+                ``deduplication`` is not a bool.
         """
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
-
-        if num_threads > 1 and not self._parallel_insert_supported:
-            num_threads = 1
+        # Checked here too so bad input raises before any item is converted.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
 
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
@@ -927,6 +1134,55 @@ class Dataset(DatasetExportOperations):
             filter_string=filter_string,
             dataset_version=None,
         )
+
+    @override
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        # A generator, so `self.id` -- which resolves the dataset by name over
+        # REST when it hasn't been seeded -- is not touched until the caller
+        # actually starts iterating. Keeps `stream_items()` free of I/O.
+        yield from rest_operations.stream_dataset_item_chunks(
+            rest_client=self._rest_client,
+            dataset_id=self.id,
+            chunk_size=chunk_size,
+            num_threads=num_threads,
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+            dataset_version=self._resolve_read_version(),
+        )
+
+    def _resolve_read_version(self) -> Optional[str]:
+        """The version hash every page of one read is pinned to, if there is one.
+
+        Pages are addressed by offset, and the backend sorts newest id first, so
+        an item inserted mid-read lands at offset 0 and shifts every page that
+        has not been fetched yet -- returning one item twice and skipping
+        another. Reading a single version instead makes the whole read a
+        snapshot, which is what the cursor-based stream got for free from its
+        ``id < last_retrieved_id`` seek.
+
+        Returns None when the backend has no version to pin to (versioning
+        disabled, or a dataset with no versions yet); the read then falls back
+        to the live state and stays vulnerable to that shift, which is called
+        out on :meth:`stream_items`.
+        """
+        version_info = self.get_version_info()
+        version_hash = version_info.version_hash if version_info else None
+
+        if version_hash is None:
+            LOGGER.debug(
+                "No dataset version to pin the read of dataset %s to; reading "
+                "the live state, which may return an item twice or skip one if "
+                "items are inserted or deleted while the read is in progress.",
+                self._name,
+            )
+
+        return version_hash
 
     def insert_from_json(
         self,

@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Check,
   CircleFadingArrowUp,
+  Loader2,
   Settings2,
   X,
 } from "lucide-react";
@@ -30,8 +31,9 @@ type DeployToEnvironmentMenuProps = {
   versionId: string;
   versionLabel: string;
   versions: PromptVersion[] | undefined;
-  totalVersions: number;
   activeEnvironments: string[];
+  onOpenChange?: (open: boolean) => void;
+  isLoadingMore?: boolean;
 };
 
 const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
@@ -39,8 +41,9 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   versionId,
   versionLabel,
   versions,
-  totalVersions,
   activeEnvironments,
+  onOpenChange,
+  isLoadingMore = false,
 }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -64,13 +67,13 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   );
 
   const environmentOwners = useMemo(() => {
-    const map = new Map<string, { version: PromptVersion; index: number }>();
+    const map = new Map<string, PromptVersion>();
     // `versions` is newest-first; only keep the first writer per environment so
     // the "Currently vN" label reflects the newest version assigned to that env,
     // not whichever historical version was iterated last.
-    versions?.forEach((v, index) => {
+    versions?.forEach((v) => {
       v.environments?.forEach((env) => {
-        if (!map.has(env)) map.set(env, { version: v, index });
+        if (!map.has(env)) map.set(env, v);
       });
     });
     return map;
@@ -120,7 +123,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   if (!canEditPrompts) return null;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -143,8 +146,8 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
             const owner = environmentOwners.get(env.name);
             const isActiveHere = activeEnvSet.has(env.name);
             const ownerLabel =
-              !isActiveHere && owner && totalVersions > 0
-                ? `Currently v${totalVersions - owner.index}`
+              !isActiveHere && owner
+                ? `Currently ${owner.version_number ?? owner.commit}`
                 : "";
             return (
               <DropdownMenuItem
@@ -169,6 +172,11 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
               </DropdownMenuItem>
             );
           })
+        )}
+        {isLoadingMore && (
+          <div className="flex justify-center py-2">
+            <Loader2 className="size-4 animate-spin text-light-slate" />
+          </div>
         )}
         {activeEnvironments.length > 0 && (
           <>

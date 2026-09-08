@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from opik.api_objects import constants
+from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
 
 
@@ -549,6 +550,147 @@ def test_insert__version_endpoint_unreachable__uploads_sequentially(monkeypatch)
         num_threads=_GATE_BATCH_COUNT,
         expect_overlap=False,
     ), "A failing version probe must not break insert; it falls back to sequential"
+
+
+def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
+    """A transient probe failure must not pin the dataset to sequential uploads."""
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = Mock()
+    mock_rest_client.version.side_effect = [
+        ConnectionError("backend unreachable"),
+        {"version": constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT},
+    ]
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    # Spying on the upload layer keeps the assertion on the worker count that
+    # actually reached it, so a gate that stops honouring the probe still fails
+    # this test.
+    workers_per_insert = []
+    original_send = Dataset._send_batches
+
+    def spy_send_batches(self, batches, batch_group_id, num_threads):
+        workers_per_insert.append(num_threads)
+        return original_send(self, batches, batch_group_id, num_threads)
+
+    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+
+    dataset.insert(_make_items(4), deduplication=False)
+    dataset.insert(_make_items(4), deduplication=False)
+
+    assert mock_rest_client.version.call_count == 2, (
+        "The failed probe must be retried rather than cached as unsupported"
+    )
+    assert workers_per_insert[0] == 1, (
+        "While the backend is unreachable the upload must stay sequential"
+    )
+    assert workers_per_insert[1] > 1, (
+        "Once the backend answers, the upload must go back to using workers"
+    )
+
+
+def test_insert__unparseable_version__probed_once(monkeypatch):
+    """An unparseable version is a conclusive answer, so it must still cache."""
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = _mock_rest_client("dev-local")
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    for _ in range(3):
+        dataset.insert(_make_items(4), deduplication=False)
+
+    assert mock_rest_client.version.call_count == 1, (
+        "A version the SDK cannot parse will not change, so it must not be re-probed"
+    )
+
+
+def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
+    """The gate lives in the funnel, so a direct caller cannot skip it."""
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+    mock_rest_client = _mock_rest_client("2.2.7")
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    # The spy calls through, so the upload still happens and the assertions
+    # below cover the items actually reaching the backend, not just the
+    # argument the gate computed.
+    used_workers = []
+    original_send = Dataset._send_batches
+
+    def spy_send_batches(self, batches, batch_group_id, num_threads):
+        used_workers.append(num_threads)
+        return original_send(self, batches, batch_group_id, num_threads)
+
+    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+
+    dataset.__internal_api__insert_items_as_dataclasses__(
+        [dataset_item.DatasetItem(**item) for item in _make_items(4)],
+        num_threads=4,
+    )
+
+    assert used_workers == [1], (
+        "A backend that predates parallel insert must force a sequential upload "
+        "even when the internal API is called directly"
+    )
+
+    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
+    submitted = sorted(
+        item.data["input"]["i"]
+        for call in create_or_update.call_args_list
+        for item in call.kwargs["items"]
+    )
+    assert submitted == [0, 1, 2, 3], (
+        "Forcing a sequential upload must still deliver every item exactly once"
+    )
+
+
+@pytest.mark.parametrize("bad_value", [0, -1, 1.5, "2", True, None])
+def test_internal_insert__invalid_num_threads__raises_value_error(bad_value):
+    """Direct callers get the named ValueError, not a TypeError from the gate."""
+    mock_rest_client = Mock()
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(ValueError, match="num_threads must be a positive integer"):
+        dataset.__internal_api__insert_items_as_dataclasses__(
+            [dataset_item.DatasetItem(**item) for item in _make_items(2)],
+            num_threads=bad_value,
+        )
+
+    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+
+
+@pytest.mark.parametrize("bad_value", ["false", 0, 1, None, "", []])
+def test_insert__non_bool_deduplication__raises_before_any_request(bad_value):
+    mock_rest_client = Mock()
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(ValueError, match="deduplication must be a bool"):
+        dataset.insert(_make_items(3), deduplication=bad_value)
+
+    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+    mock_rest_client.version.assert_not_called()
 
 
 def test_insert__sequential__uploads_sequentially_without_probing_version(monkeypatch):

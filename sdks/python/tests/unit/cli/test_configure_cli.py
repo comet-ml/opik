@@ -384,6 +384,45 @@ class TestCometCloudHostMatch:
         assert configure_cli._is_comet_cloud_host("not a url at all") is False
 
 
+class TestIdentityIsReportedWithBothEvents:
+    """`opik configure` reports before and after it writes the configuration.
+
+    The account is resolved separately for each, because a first-ever run has no
+    credential to resolve until the flow has written one — and that run is exactly
+    the one the funnel starts from.
+    """
+
+    def test_entry_and_result__each_resolve_the_account(self):
+        runner = CliRunner()
+        answers = [
+            {"identity_lookup": "no_credential"},
+            {"user_id": "someone", "identity_lookup": "resolved"},
+        ]
+
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(configure_cli, "run_interactive_configure"),
+            mock.patch.object(
+                configure_cli.account_identity,
+                "event_properties",
+                side_effect=answers,
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event") as track,
+        ):
+            result = runner.invoke(cli, ["configure", "--use-local"])
+
+        assert result.exit_code == 0
+        entry, outcome = track.call_args_list
+        assert entry.kwargs["identity_lookup"] == "no_credential"
+        assert "user_id" not in entry.kwargs
+        assert outcome.kwargs["user_id"] == "someone"
+        # Asserted alongside the login: without it the pair still passes when the
+        # metadata that says how to read the login goes missing or changes value.
+        assert outcome.kwargs["identity_lookup"] == "resolved"
+
+
 class TestAssistantOutcomeReachesTheCaller:
     """The assistant step's result has to travel back up to the click command.
 

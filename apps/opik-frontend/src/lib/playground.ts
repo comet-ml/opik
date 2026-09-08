@@ -10,6 +10,7 @@ import {
 } from "@/constants/llm";
 import {
   getDefaultTemperatureForModel,
+  getDefaultThinkingLevel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
@@ -105,9 +106,8 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add thinkingLevel default for Gemini 3 models
     if (supportsGeminiThinkingLevel(model)) {
-      config.thinkingLevel = "high";
+      config.thinkingLevel = getDefaultThinkingLevel(model);
     }
 
     return config;
@@ -122,9 +122,8 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add thinkingLevel default for Vertex AI Gemini 3 Pro model
     if (supportsVertexAIThinkingLevel(model)) {
-      config.thinkingLevel = "low";
+      config.thinkingLevel = getDefaultThinkingLevel(model);
     }
 
     return config;
