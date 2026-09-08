@@ -24,9 +24,16 @@ const DataTab = ({
   datasetItemId,
 }: DataTabProps) => {
   const renderExperimentsSection = () => {
+    // One panel per slot: the index is stable across dataset items, unlike the
+    // experiment item id, and unique, unlike the experiment id when an
+    // experiment run contributes several items per dataset item.
     return experimentItems.map((experimentItem, idx) => (
-      <React.Fragment key={experimentItem.id}>
-        <ResizablePanel className="min-w-72" style={{ overflow: "unset" }}>
+      <React.Fragment key={idx}>
+        <ResizablePanel
+          order={idx + 1}
+          className="min-w-72"
+          style={{ overflow: "unset" }}
+        >
           <CompareExperimentsViewer
             experimentItem={experimentItem}
             openTrace={openTrace}
@@ -46,7 +53,7 @@ const DataTab = ({
       style={{ height: "unset", overflow: "unset" }}
       className="min-h-full"
     >
-      <ResizablePanel defaultSize={30} className="min-w-72">
+      <ResizablePanel order={0} defaultSize={30} className="min-w-72">
         <ExperimentDataset data={data} datasetItemId={datasetItemId} />
       </ResizablePanel>
       <ResizableHandle />
