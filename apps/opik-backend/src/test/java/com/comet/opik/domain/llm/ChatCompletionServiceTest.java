@@ -744,6 +744,49 @@ class ChatCompletionServiceTest {
         }
 
         /**
+         * Review finding from baz on this PR: {@code scoreTrace} reads only the wire status, while
+         * {@code create()} and the streaming handler prefer {@code getLlmProviderError}, so one failure can
+         * be reported with two different statuses. The divergence is real and deliberate, and it is pinned
+         * here rather than left to be rediscovered.
+         *
+         * <p>Unifying on the mapper is precisely what the classification PR removed. The mappers synthesize
+         * a status when they cannot parse a body ({@code CustomLlmErrorMessage} defaults to 400,
+         * {@code OpenAiErrorMessage} to 500) and nothing downstream can tell that from a genuinely parsed
+         * 400, so every unparseable CustomLlm failure would be retired on its first delivery and the
+         * evaluation lost. Unifying the other way — making {@code create()} ignore a body it did parse —
+         * would change the status HTTP callers already depend on, and buy this path nothing.
+         *
+         * <p>They diverge because they answer different questions. {@code create()} reports to a caller who
+         * reads the response, so the most specific reading of the body should win. {@code scoreTrace}
+         * decides whether a queued evaluation is redelivered or discarded, and only what the provider
+         * literally put on the wire is trustworthy enough to discard work.
+         */
+        @Test
+        @DisplayName("A mapper status disagreeing with the wire binds create(), never scoreTrace")
+        void whenMapperStatusDisagreesWithWire__thenCreateFollowsMapperAndScoreTraceFollowsWire() {
+            // The body parses to a permanent 401; the exception chain says transient 429.
+            var mapperReports401 = Optional.of(new ErrorMessage(401, "mapper parsed an auth failure"));
+
+            // create(): the parsed body wins, so the HTTP caller is told 401.
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(new RateLimitException("slow down"));
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(mapperReports401);
+
+            var fromCreate = catchThrowable(() -> chatCompletionService.create(request, "test-workspace-id"));
+
+            assertThat(fromCreate).isInstanceOf(WebApplicationException.class);
+            assertThat(((WebApplicationException) fromCreate).getResponse().getStatus())
+                    .as("create() answers a caller who reads the body, so the parsed status wins")
+                    .isEqualTo(401);
+
+            // scoreTrace: same failure, same mapper verdict, and the wire status still decides.
+            var fromScoreTrace = whenScoreTraceFails(new RateLimitException("slow down"), mapperReports401);
+
+            assertRetryable(fromScoreTrace, 429);
+        }
+
+        /**
          * The out-of-credits path, which is the one 429 that reaches here carrying no wire status at all.
          * {@code QuotaAwareHttpClient} rethrows {@link NonRetriableException} with the response body as its
          * <b>message and deliberately no cause</b>, so langchain4j's {@code ExceptionMapper.findRoot()}

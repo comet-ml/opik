@@ -1,11 +1,19 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.redis.testcontainers.RedisContainer;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.AfterEach;
@@ -50,6 +58,10 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Integration tests for {@link BaseRedisSubscriber}  using real Redis test container.
@@ -359,6 +371,11 @@ class BaseRedisSubscriberTest {
         @ParameterizedTest(name = "{0}")
         @MethodSource("nonRetryableExceptions")
         void shouldAckAndRemoveNonRetryableFailures(String description, RuntimeException exception) {
+            assertAckedAndRemoved(exception);
+        }
+
+        /** The entry must be acknowledged and gone: the failure can never succeed, so redelivery is waste. */
+        private void assertAckedAndRemoved(RuntimeException exception) {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(
                     config, redissonClient, exception));
@@ -385,6 +402,11 @@ class BaseRedisSubscriberTest {
         @ParameterizedTest(name = "{0} is retried, not dropped")
         @MethodSource("transientClientErrors")
         void shouldRetainTransientClientErrorsForRetry(String description, RuntimeException exception) {
+            assertRetainedForRedelivery(exception);
+        }
+
+        /** The entry must stay in the stream and stay unacknowledged, so the group redelivers it. */
+        private void assertRetainedForRedelivery(RuntimeException exception) {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(
                     config, redissonClient, exception));
@@ -417,6 +439,77 @@ class BaseRedisSubscriberTest {
                     Arguments.of("408 Request Timeout", new ClientErrorException("Request Timeout", 408)),
                     Arguments.of("425 Too Early", new ClientErrorException("Too Early", 425)),
                     Arguments.of("429 Too Many Requests", new ClientErrorException("Too Many Requests", 429)));
+        }
+
+        /**
+         * Review finding from baz on this PR: the rows above are hand-built {@code ClientErrorException}s
+         * and {@code OnlineScorePublisherIntegrationTest} mocks {@code ChatCompletionService}, so both
+         * halves of the contract were covered while the join between them was not. The join is the half
+         * that actually broke — the subscriber classified by exception class, {@code scoreTrace} chose the
+         * class, and the two disagreed about 429.
+         *
+         * <p>These rows are produced by driving a real {@link ChatCompletionService#scoreTrace} to failure,
+         * and the exception it genuinely throws is what is injected into the real subscriber against real
+         * Redis. The test restates no status of its own, so if either side stops agreeing about what a
+         * status means, this fails rather than the two drifting apart unnoticed.
+         */
+        @ParameterizedTest(name = "a real scoreTrace {0} is retried, not dropped")
+        @MethodSource("transientFailuresFromRealScoreTrace")
+        void shouldRetainRealScoreTraceTransientFailures(String description, RuntimeException exception) {
+            assertRetainedForRedelivery(exception);
+        }
+
+        @ParameterizedTest(name = "a real scoreTrace {0} is acked and removed")
+        @MethodSource("permanentFailuresFromRealScoreTrace")
+        void shouldAckAndRemoveRealScoreTracePermanentFailures(String description, RuntimeException exception) {
+            assertAckedAndRemoved(exception);
+        }
+
+        static Stream<Arguments> transientFailuresFromRealScoreTrace() {
+            return Stream.of(
+                    Arguments.of("408", thrownByRealScoreTrace(408, "Request Timeout")),
+                    Arguments.of("425", thrownByRealScoreTrace(425, "Too Early")),
+                    Arguments.of("429", thrownByRealScoreTrace(429, "Too Many Requests")));
+        }
+
+        static Stream<Arguments> permanentFailuresFromRealScoreTrace() {
+            return Stream.of(
+                    Arguments.of("400", thrownByRealScoreTrace(400, "Bad Request")),
+                    Arguments.of("401", thrownByRealScoreTrace(401, "Unauthorized")),
+                    Arguments.of("403", thrownByRealScoreTrace(403, "Forbidden")),
+                    Arguments.of("404", thrownByRealScoreTrace(404, "Not Found")));
+        }
+
+        /**
+         * Drives a real {@code ChatCompletionService.scoreTrace} against a provider that answers
+         * {@code status} and returns the exception it threw. Only the provider client is a mock — the
+         * classification under test is the production one.
+         */
+        private static RuntimeException thrownByRealScoreTrace(int status, String reason) {
+            var clientConfig = mock(LlmProviderClientConfig.class);
+            when(clientConfig.getMaxAttempts()).thenReturn(1);
+
+            var chatModel = mock(ChatModel.class);
+            when(chatModel.chat(any(ChatRequest.class)))
+                    .thenThrow(new RuntimeException(new HttpException(status, reason)));
+
+            var providerFactory = mock(LlmProviderFactory.class);
+            when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+
+            var service = new ChatCompletionService(clientConfig, providerFactory);
+            var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
+            var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
+
+            RuntimeException thrown = null;
+            try {
+                service.scoreTrace(request, parameters, "seam-workspace");
+            } catch (RuntimeException exception) {
+                thrown = exception;
+            }
+            if (thrown == null) {
+                throw new IllegalStateException("scoreTrace was expected to fail for status " + status);
+            }
+            return thrown;
         }
 
         /**
