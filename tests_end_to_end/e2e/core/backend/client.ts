@@ -3,6 +3,7 @@ import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
 import {
   pollSpanForFeedbackScore,
+  pollThreadForFeedbackScore,
   pollTraceForFeedbackScore,
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
@@ -760,7 +761,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -912,6 +913,28 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  };
+
+  // Hoisted for the same reason as `localGetTrace`: the thread poller is a free
+  // function and cannot reach the not-yet-constructed return object.
+  //
+  // Unlike the trace and span readers this does NOT map a 404 to null. A thread
+  // exists as soon as its first turn is written, so a caller polling one it
+  // seeded is never racing its creation — and swallowing the 404 would turn a
+  // mistyped thread id into a poll that times out saying "no score" instead of
+  // failing immediately with "no such thread".
+  const localGetThread = async (projectId: string, threadId: string): Promise<ThreadDetail> => {
+    const thread = await opik.api.traces.getTraceThread({ projectId, threadId });
+    return {
+      id: String(thread.id ?? ''),
+      projectId: String(thread.projectId ?? ''),
+      feedbackScores: (thread.feedbackScores ?? []).map((fs) => ({
+        name: fs.name,
+        value: Number(fs.value),
+        reason: fs.reason ?? null,
+        source: String(fs.source),
+      })),
+    };
   };
 
   return {
@@ -2767,20 +2790,49 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * of its traces — so this is the only API read that can confirm one landed.
      */
     async getThread(args: { projectId: string; threadId: string }): Promise<ThreadDetail> {
-      const thread = await opik.api.traces.getTraceThread({
-        projectId: args.projectId,
-        threadId: args.threadId,
+      return localGetThread(args.projectId, args.threadId);
+    },
+
+    /**
+     * Close one thread, so a thread-scope rule evaluates it now.
+     *
+     * A thread is otherwise closed by the inactivity timeout, which is a
+     * deployment-wide setting measured in minutes — waiting it out would make
+     * every thread-scoring spec both slow and dependent on the target
+     * environment's configuration. The explicit close is the same transition,
+     * taken deliberately.
+     *
+     * `rawFetch` because the endpoint is a `PUT` answering 204, which the pinned
+     * SDK's thread surface does not expose.
+     */
+    async closeThread(args: { projectName: string; threadId: string }): Promise<void> {
+      const { status, message } = await rawFetch('PUT', '/v1/private/traces/threads/close', {
+        body: { project_name: args.projectName, thread_id: args.threadId },
       });
-      return {
-        id: String(thread.id ?? ''),
-        projectId: String(thread.projectId ?? ''),
-        feedbackScores: (thread.feedbackScores ?? []).map((fs) => ({
-          name: fs.name,
-          value: Number(fs.value),
-          reason: fs.reason ?? null,
-          source: String(fs.source),
-        })),
-      };
+      if (status !== 204) {
+        throw new Error(
+          `closeThread: expected 204 for thread '${args.threadId}', got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * The thread-scope counterpart of `pollTraceForFeedbackScore`.
+     *
+     * A thread-scope rule writes to the thread and to none of its traces, so
+     * polling a turn's trace for a thread rule's score waits forever.
+     */
+    async pollThreadForFeedbackScore(
+      args: { projectId: string; threadId: string },
+      scoreName: string,
+      opts: PollFeedbackScoreOpts = {},
+    ): Promise<FeedbackScoreRef> {
+      return pollThreadForFeedbackScore(
+        (threadId) => localGetThread(args.projectId, threadId),
+        args.threadId,
+        scoreName,
+        opts,
+      );
     },
 
     /**
@@ -2896,6 +2948,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * scored — and a scoring spec built on it would assert nothing.
        */
       endTime?: Date;
+      /**
+       * Groups this trace into a conversation thread. Traces sharing one are the
+       * turns a thread-scope rule is handed when the thread closes; turn order
+       * comes from `start_time`, so a multi-turn seed must space them.
+       */
+      threadId?: string;
     }): Promise<string> {
       await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
         id: args.id,
@@ -2905,6 +2963,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+        ...(args.threadId ? { thread_id: args.threadId } : {}),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
         ...(args.metadata ? { metadata: args.metadata } : {}),
