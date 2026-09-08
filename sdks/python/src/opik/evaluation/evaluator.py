@@ -269,17 +269,19 @@ def evaluate(
             failed score.
 
             A tolerated failure of a metric is also recorded on a span named after
-            it, carrying the same ``error_info``, so it is visible in the trace even
-            though a failed score is never persisted as a feedback score. Failures
-            building an item-level evaluator happen before any metric span exists,
-            so those carry the payload on the score result only.
+            it, carrying the same ``error_info``, so it is visible in the trace.
+            It is also persisted as a feedback score at its recorded ``0.0``
+            with the error in ``reason``. Failures building an item-level
+            evaluator happen before any metric span exists, so those carry the
+            payload on the score result only.
 
             Tolerated failures are accumulated in the returned ``EvaluationResult``:
             every one is a ``ScoreResult`` with ``scoring_failed=True``, ``reason``
             set to the error message and ``metadata["error_info"]`` holding the
             structured payload (``exception_type``, ``message``, ``traceback``).
-            They are excluded from the aggregated statistics and are never sent to
-            the backend, so the score cell stays empty rather than showing a zero.
+            They count at their recorded ``0.0`` in the aggregated statistics
+            and are sent to the backend, so a crashing metric cannot improve
+            its average by dropping hard items.
     """
     analytics.track_event("evaluation", "evaluate")
     error_tolerance = ErrorTolerance(error_tolerance)
