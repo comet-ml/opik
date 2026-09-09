@@ -101,6 +101,18 @@
 #                                 the connected shard alone, and will repeat it on every shard before finalize.sh.
 #                             It does NOT unlock the REVERSE direction on more than one shard: the replay there is
 #                             shard-local while its postcondition reads every shard, so no single run can satisfy it.
+#   --confirm-retention-paused
+#                             REQUIRED unless --report-only, in BOTH directions, the same assertion
+#                             exchange_and_wrap.sh and rollback.sh already take. Retention deletes bypass the deletion
+#                             bridge, so the sweep cannot know about them: a retention delete that fires AFTER the
+#                             parked table froze leaves its row masked on the live table, still LIVE in the frozen
+#                             backup and absent from the bridge — so the sweep re-inserts it and the deletion replay,
+#                             which only re-applies BRIDGED keys, does not mask it again. The trace comes back.
+#                             It is not confined to old data, which is the tempting reason to dismiss it: retention
+#                             selects by `id` range (UUIDv7), while the gap window matches created_at OR
+#                             last_updated_at — and the merge path stamps a fresh last_updated_at while preserving
+#                             created_at, so an OLD trace updated during the gap window sits inside the sweep's window
+#                             and inside retention's id range at once.
 #   --settle-timeout N        seconds the replication-settle gate polls before giving a verdict. Default 120, capped at
 #                             3600; 0 takes a single sample. Unlike the pre-swap gate this one sits AFTER the swap, so
 #                             its wait costs no cutover tail — but every second is a second the gap-window traces are
@@ -139,6 +151,7 @@ MAX_PARTITIONS_PER_INSERT_BLOCK=2000
 REPORT_ONLY=0
 CONFIRM_REIMPORT=0
 CONFIRM_SINGLE_SHARD=0
+CONFIRM_RETENTION_PAUSED=0
 FORCE=0
 SETTLE_TIMEOUT=120        # seconds the settle gate polls before deciding. See --settle-timeout.
 SETTLE_TIMEOUT_MAX=3600   # its accepted ceiling; the validation below explains why the check is lexical.
@@ -173,6 +186,7 @@ while [[ $# -gt 0 ]]; do
         --report-only) REPORT_ONLY=1; shift ;;
         --confirm-reimport-successor-writes) CONFIRM_REIMPORT=1; shift ;;
         --confirm-single-shard) CONFIRM_SINGLE_SHARD=1; shift ;;
+        --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         --force) FORCE=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -384,6 +398,14 @@ detect_direction() {
 #     healthy-cluster property. It passes the moment the queue drains; failing that, an entry aged past
 #     SETTLE_STUCK_AGE_SECONDS, more retries than SETTLE_STUCK_NUM_TRIES, or any last_exception is a genuinely lagging
 #     replica and fails the gate naming the offending entries.
+ # KEEP IN STEP WITH exchange_and_wrap.sh's assert_replication_settled. The two drivers run the SAME GATE on opposite
+# sides of the swap, and the half that decides a verdict — the three settle-* blocks — is already shared, from
+# 000003_exchange_and_wrap.sql, each driver rendering its own table scope. What is duplicated is the control flow around
+# it, and these parts MUST NOT DRIFT: the stuck thresholds and the poll interval, the requirement that the sample be
+# SEVEN NUMERIC FIELDS ON ONE ROW before any arithmetic reads it, the polling bound (iteration cap AND deadline), and
+# the two verdicts (mutations unconditional, queue on stuck-ness). Only the table scope and the operator messages may
+# legitimately differ, being specific to what each side is about to do. The driver rehearsal exercises BOTH copies, so a
+# behavioural drift fails there rather than waiting for a reviewer.
 assert_replication_settled() {
     local cluster deadline polls poll row
     local sample_sql queue_detail_sql mutation_detail_sql
@@ -410,6 +432,15 @@ assert_replication_settled() {
     for (( poll = 1; poll <= polls; poll++ )); do
         row="$(ch "$sample_sql")" || row=""
         [[ -n "$row" ]] || { echo "ERROR: the settle gate could not read system.replication_queue / system.mutations across cluster '$cluster'. Grant SELECT ON system.* plus REMOTE and CLUSTER, or confirm settlement out of band and pass --force." >&2; exit 1; }
+        # ONE row: `read` consumes only the first line, so a second row would be discarded in silence and the gate
+        # would reach a verdict on a fragment. The settle-sample is a 1x1 CROSS JOIN of two single-row aggregates, so
+        # more than one row means the markers moved onto a different statement, not that the cluster said more.
+        [[ "$row" != *$'\n'* ]] || {
+            echo "ERROR: the settle gate read MORE THAN ONE ROW from cluster '$cluster'. settle-sample returns exactly" >&2
+            echo "       one row; extra rows mean the markers are around a different statement. Refusing to reach a" >&2
+            echo "       verdict on the first line of it." >&2
+            exit 1
+        }
         read -r queue age tries failures mutations mut_age mut_failed <<<"$row"
         # A short or non-numeric row must not be read as a settled cluster. `read` leaves the unfilled variables EMPTY,
         # and bash arithmetic evaluates an empty string as 0 — so a header line, a truncated row or a changed block
@@ -775,6 +806,20 @@ else
         echo "       so this state is not one a promote produces. Resolve by hand." >&2
         exit 1
     }
+fi
+
+# Retention is disabled in every deployment and the runbook requires it stay paused for the window — but the window it
+# names ends at the EXCHANGE, and this driver runs after it, which is exactly where a retention delete would be undone.
+# Asserted here for the same reason exchange_and_wrap.sh and rollback.sh assert it, and skipped for --report-only, which
+# issues no statement.
+if [[ "$REPORT_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
+    echo "ERROR: reconciliation requires --confirm-retention-paused. Retention deletes bypass the deletion bridge, so" >&2
+    echo "       this driver cannot see them: one that fired after '$PARKED_TABLE' froze leaves its trace masked on" >&2
+    echo "       '$LIVE_TABLE', still live in the frozen backup and absent from the bridge — the sweep re-inserts it and" >&2
+    echo "       the replay, which only re-applies bridged keys, leaves it live. The delete is undone." >&2
+    echo "       Confirm RETENTION_ENABLED=false on every backend for the whole window INCLUDING this step, then re-run." >&2
+    echo "       Use --report-only to read the counts without issuing any statement; it does not need this flag." >&2
+    exit 2
 fi
 
 assert_shard_scope

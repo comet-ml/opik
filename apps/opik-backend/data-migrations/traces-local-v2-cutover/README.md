@@ -58,8 +58,16 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > delete path (`TraceDAO.deleteForRetention*`) does not fire. The only deletes during the cutover window are
 > **user-initiated**, and those are captured by the bridge (`TraceService`, reason `USER_REQUEST`). The retention path is
 > intentionally **not** wired to the bridge. If Data Retention is ever enabled, either pause the retention job for the
-> whole backfill→EXCHANGE window, or first wire retention deletes into the bridge (a `RETENTION` reason recorded before
-> each `deleteForRetention*` delete). The test still exercises a synthetic large (retention-shape) delete batch, so the
+> whole backfill→**reconciliation** window, or first wire retention deletes into the bridge (a `RETENTION` reason
+> recorded before each `deleteForRetention*` delete).
+>
+> **The window outlasts the `EXCHANGE`, and step 5 is the reason.** A retention delete that fires after the parked
+> backup froze leaves its trace masked on the live table, still **live** in the frozen backup, and absent from the
+> bridge — so the sweep re-inserts it and the post-swap replay, which re-applies only *bridged* keys, leaves it live.
+> The delete is undone. Do not dismiss this as old-data-only: retention selects by `id` range (UUIDv7) while the gap
+> window matches `created_at` **or** `last_updated_at`, and the merge path stamps a fresh `last_updated_at` while
+> preserving `created_at` — so an old trace updated during the gap window is inside both at once. `reconcile.sh`
+> asserts `--confirm-retention-paused` for this, exactly as `exchange_and_wrap.sh` and `rollback.sh` do. The test still exercises a synthetic large (retention-shape) delete batch, so the
 > replay is proven to handle both batch sizes if retention is enabled later.
 
 ## Deletion scenarios and how each is handled
@@ -343,7 +351,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    absent from live `traces`.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/reconcile.sh --database opik \
-       --gap-start '<delta_start from step 2> UTC' --swap-done '<exchange_done from step 4> UTC'
+       --gap-start '<delta_start from step 2> UTC' --swap-done '<exchange_done from step 4> UTC' \
+       --confirm-retention-paused
    ```
    It derives the direction from the live topology (no `--direction` flag to get wrong), gates on the cluster-wide
    settle (the same gate as step 4, with a post-swap scope — see
@@ -1337,7 +1346,7 @@ The reverse direction of `reconcile.sh`. It re-imports into the restored origina
 ```bash
 ./scripts/reconcile.sh --database opik --report-only \
     --cutover-start '<ts> UTC' --swap-done '<promote_done from rollback.sh> UTC'   # size it first
-./scripts/reconcile.sh --database opik \
+./scripts/reconcile.sh --database opik --confirm-retention-paused \
     --cutover-start '<ts> UTC' --swap-done '<promote_done> UTC' --confirm-reimport-successor-writes
 ```
 
@@ -2118,10 +2127,12 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       restart for `tracesDistributedWrapEnabled` if the wrap is applied. Confirm you know
       how a backend restart is triggered on the target deployment and that it fits the schedule — see
       ["The one rolling restart"](#the-one-rolling-restart-tracecolumnsnonnullable).
-- [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`). Retention deletes bypass
-      the deletion bridge, so a sweep in the window would leak/resurrect across the swap; `exchange_and_wrap.sh` and
-      `rollback.sh` (stages B/C) enforce `--confirm-retention-paused`, but that is an assertion — this item is the real
-      "it is actually paused on every backend" verification.
+- [ ] **Data Retention confirmed disabled** for the cutover window **through reconciliation** (`RETENTION_ENABLED=false`).
+      Retention deletes bypass the deletion bridge, so a sweep in the window would leak/resurrect across the swap — and
+      one firing *after* the backup freezes is undone by step 5's sweep, which is why the window does not end at the
+      `EXCHANGE` (see the retention note). `exchange_and_wrap.sh`, `rollback.sh` (stages B/C) and `reconcile.sh` all
+      enforce `--confirm-retention-paused`, but that is an assertion — this item is the real "it is actually paused on
+      every backend" verification.
 - [ ] **Reconciliation clean** — per-window source/dest counts within 0.01% across the whole backfill.
 - [ ] **Replication settled before the EXCHANGE** — no unfinished mutation on the shadow on **any** replica, and the
       replication queue either drained or demonstrably just busy rather than stuck (`exchange_and_wrap.sh` gates on

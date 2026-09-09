@@ -171,7 +171,7 @@ $RUNBOOK/scripts/reconcile.sh --database opik --report-only \
 #    Its settle gate is step 8's gate with a post-swap scope, and the half worth watching is the one that only shows
 #    under traffic: delete_traffic.py is still mutating live traces throughout, and the gate must NOT abort on that —
 #    it gates unfinished mutations on the PARKED table only (runbook "The replication-settle gate").
-$RUNBOOK/scripts/reconcile.sh --database opik \
+$RUNBOOK/scripts/reconcile.sh --database opik --confirm-retention-paused \
     --gap-start '<delta_start from step 8> UTC' --swap-done '<exchange_done> UTC'
 
 # 10. QA after the sweep. Two different compares, because the swept gap and a fidelity defect live in different weeks:
@@ -277,7 +277,7 @@ $RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-sta
 $RUNBOOK/scripts/reconcile.sh --database opik --report-only \
     --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
 $RUNBOOK/scripts/reconcile.sh --database opik --confirm-reimport-successor-writes \
-    --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
+    --confirm-retention-paused --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
 # Worth checking afterwards, since it is the property the sweep must not break: a trace deleted AFTER cutover_start must
 # still be gone. The sweep re-imports the post-cutover writes and the reverse replay it re-runs masks those deletes, so
 # the run's own postcondition covers it — but with --resurrect-ratio traffic above, spot-check one id by hand too.

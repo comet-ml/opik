@@ -406,6 +406,14 @@ assert_pre_wrap_topology() {
 #     SETTLE_STUCK_NUM_TRIES, or any last_exception means a replica is genuinely lagging, and the gate fails naming the
 #     offending entries per replica. The sample counts only the entry types that mean a replica lacks data, so ordinary
 #     merge activity neither holds the gate open nor trips it (see the settle-sample block for why).
+ # KEEP IN STEP WITH reconcile.sh's assert_replication_settled. The two drivers run the SAME GATE on opposite
+# sides of the swap, and the half that decides a verdict — the three settle-* blocks — is already shared, from
+# 000003_exchange_and_wrap.sql, each driver rendering its own table scope. What is duplicated is the control flow around
+# it, and these parts MUST NOT DRIFT: the stuck thresholds and the poll interval, the requirement that the sample be
+# SEVEN NUMERIC FIELDS ON ONE ROW before any arithmetic reads it, the polling bound (iteration cap AND deadline), and
+# the two verdicts (mutations unconditional, queue on stuck-ness). Only the table scope and the operator messages may
+# legitimately differ, being specific to what each side is about to do. The driver rehearsal exercises BOTH copies, so a
+# behavioural drift fails there rather than waiting for a reviewer.
 assert_replication_settled() {
     local cluster deadline polls poll row
     local sample_sql queue_detail_sql mutation_detail_sql
@@ -434,6 +442,15 @@ assert_replication_settled() {
     for (( poll = 1; poll <= polls; poll++ )); do
         row="$(ch "$sample_sql")" || row=""
         [[ -n "$row" ]] || { echo "ERROR: the settle gate could not read system.replication_queue / system.mutations across cluster '$cluster'. Grant SELECT ON system.* plus REMOTE and CLUSTER, or confirm settlement out of band and pass --force." >&2; exit 1; }
+        # ONE row: `read` consumes only the first line, so a second row would be discarded in silence and the gate
+        # would reach a verdict on a fragment. The settle-sample is a 1x1 CROSS JOIN of two single-row aggregates, so
+        # more than one row means the markers moved onto a different statement, not that the cluster said more.
+        [[ "$row" != *$'\n'* ]] || {
+            echo "ERROR: the settle gate read MORE THAN ONE ROW from cluster '$cluster'. settle-sample returns exactly" >&2
+            echo "       one row; extra rows mean the markers are around a different statement. Refusing to reach a" >&2
+            echo "       verdict on the first line of it." >&2
+            exit 1
+        }
         read -r queue age tries failures mutations mut_age mut_failed <<<"$row"
         # A short or non-numeric row must not be read as a settled cluster. `read` leaves the unfilled variables EMPTY,
         # and bash arithmetic evaluates an empty string as 0 — so a header line, a truncated row or a changed block

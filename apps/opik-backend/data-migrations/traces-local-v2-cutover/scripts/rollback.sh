@@ -926,11 +926,11 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     if [[ -n "$PROMOTE_DONE" ]]; then
         echo "      ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
         echo "          --cutover-start '$CUTOVER_START UTC' --swap-done '$PROMOTE_DONE UTC' \\"
-        echo "          --confirm-reimport-successor-writes"
+        echo "          --confirm-reimport-successor-writes --confirm-retention-paused"
     else
         echo "      ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
         echo "          --cutover-start '$CUTOVER_START UTC' --swap-done '<promote_done, UTC>' \\"
-        echo "          --confirm-reimport-successor-writes"
+        echo "          --confirm-reimport-successor-writes --confirm-retention-paused"
     fi
     echo "    It re-imports them with the successor's epoch/NaN sentinels denormalized back to NULL (so their recomputed"
     echo "    duration is NULL, not a large negative), then re-runs the reverse replay so post-cutover deletes still win."
