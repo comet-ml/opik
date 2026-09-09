@@ -737,6 +737,30 @@ public class OnlineScoringEngine {
         return result;
     }
 
+    /**
+     * Bind every argument the rule declared, including ones the entity carried no value for.
+     *
+     * <p>{@link #toReplacements} drops a mapping it cannot resolve, which is what template
+     * rendering wants — an unresolved mustache variable renders empty. The Python path spreads
+     * the same map as {@code metric.score(**data)}, where a dropped key is instead an argument
+     * the metric never receives, failing any signature that requires it. Applied here rather
+     * than inside {@code toReplacements} because that method's other caller is LLM-as-judge:
+     * binding a previously dropped variable there would change rendered prompts, and so scores.
+     *
+     * <p>Unresolvable binds to {@code null} (Python {@code None}) rather than an empty value,
+     * which could not be told apart from one the entity really logged. {@code spans} is skipped:
+     * it is injected as a typed list by {@link #toReplacements(Map, Trace, List)}, never
+     * resolved from a path.
+     */
+    public static Map<String, Object> bindDeclaredArguments(
+            @NonNull Map<String, String> arguments, @NonNull Map<String, ?> replacements) {
+        var bound = new LinkedHashMap<String, Object>(replacements);
+        arguments.keySet().stream()
+                .filter(name -> !SPANS_VARIABLE_NAME.equals(name))
+                .forEach(name -> bound.putIfAbsent(name, null));
+        return bound;
+    }
+
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> span.input();
