@@ -620,8 +620,10 @@ def test_missing_optional_argument_keeps_its_default(process_client):
     assert response.status_code == 200
     scores = response.json["scores"]
     assert len(scores) == 1
+    assert scores[0]["name"] == "optional_threshold_metric"
     assert scores[0]["value"] == 0.5, "the metric's own default must survive"
     assert scores[0]["reason"] == "threshold=0.5"
+    assert scores[0]["scoring_failed"] is False
 
 
 # A resolvable mapping must reach the metric untouched -- the contrast that shows the
@@ -634,7 +636,11 @@ def test_present_argument_is_passed_through(process_client):
 
     assert response.status_code == 200
     scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "requires_metadata_metric"
+    assert scores[0]["value"] == 1.0
     assert scores[0]["reason"] == "metadata='{\"env\":\"test\"}'"
+    assert scores[0]["scoring_failed"] is False
 
 
 # Binding absent arguments must not paper over a genuinely wrong call: an argument the

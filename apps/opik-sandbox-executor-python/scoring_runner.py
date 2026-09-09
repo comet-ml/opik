@@ -140,6 +140,10 @@ def bind_missing_required(metric: BaseMetric, data: dict) -> dict:
     neither is touched. Deciding this here rather than server-side is what makes
     it possible at all -- only the metric object carries the signature.
     """
+    if not isinstance(data, dict):
+        # score(**data) rejects a non-mapping itself; converting it here would
+        # silently accept e.g. a list of pairs that the endpoint never validated.
+        return data
     try:
         parameters = inspect.signature(metric.score).parameters
     except (TypeError, ValueError):
@@ -170,8 +174,7 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
         if tb is None:
             break
         tb = tb.tb_next
-    formatted = "".join(traceback.format_exception(exc_type, exc, tb))
-    return "\\n".join(formatted.splitlines())
+    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
 
 
 code = argv[1]

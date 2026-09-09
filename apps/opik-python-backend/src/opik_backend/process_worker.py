@@ -296,6 +296,10 @@ def bind_missing_required(metric: BaseMetric, data: dict) -> dict:
     need nothing, and a positional-only param cannot be passed by name at all, so
     neither is touched.
     """
+    if not isinstance(data, dict):
+        # score(**data) rejects a non-mapping itself; converting it here would
+        # silently accept e.g. a list of pairs that the endpoint never validated.
+        return data
     try:
         parameters = inspect.signature(metric.score).parameters
     except (TypeError, ValueError):
