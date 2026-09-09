@@ -354,18 +354,18 @@ When configured, Opik requests an access token from your auth service using the 
 1. In the provider configuration dialog, switch the **Authentication** mode from **Static API key** to **OAuth2 client credentials**
 2. Fill in:
    - **Token URL**: The token endpoint of your authorization server (e.g., `https://auth.example.com/oauth/token`)
-   - **Credentials**: Enter your `client_id` and `client_secret` in the pre-filled rows. Add more rows if your auth service requires them (e.g., `scope`, `audience`). `grant_type=client_credentials` is sent automatically, so you don't need to add it.
+   - **Credentials**: Enter your `client_id` and `client_secret` in the pre-filled rows. Add more rows if your auth service requires them (e.g., `scope`, `audience`). `grant_type=client_credentials` is added automatically by the dialog, so you don't need to add it (REST API callers must include it themselves).
 3. Click **Test connection** to verify the setup. Opik performs the token fetch on the backend and reports the token lifetime.
 4. Click **Save** to store the configuration
 
 <Note>
-  Locked credential values are encrypted at rest and write-only: after saving, they can be replaced but not read back, either in the UI or through the API. Use the lock button on each row to control which values are treated this way. Values with secret-like names (`client_secret`, and any key containing "secret", "password", or "token") are locked automatically, and a value that was saved as locked cannot be unlocked, only replaced. Re-saving the configuration without changing a locked value keeps the stored secret.
+  Locked credential values are encrypted at rest and write-only: after saving, they can be replaced but not read back, either in the UI or through the API. Use the lock button on each row to control which values are treated this way. The dialog locks values with secret-like names automatically (`client_secret`, and any key containing "secret", "password", or "token"); through the REST API, set the credential's `secret` flag explicitly. A value that was saved as locked cannot be unlocked, only replaced. Re-saving the configuration without changing a locked value keeps the stored secret.
 </Note>
 
 A provider uses either a static API key or OAuth2 authentication, never both. Saving an OAuth2 configuration clears any stored static key, and switching back to a static key clears the stored OAuth2 configuration. Changing the **Token URL** requires re-entering the credentials, since stored secrets are only ever sent to the endpoint they were saved for.
 
 <Tip>
-  **Self-hosted deployments:** Token URLs on private networks are allowed by default (`LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed`), so internal auth services work out of the box. Set the variable to `strict` on the Opik backend to allow only public token URLs. On Opik Cloud, the token URL must be publicly reachable.
+  **Self-hosted deployments:** The Docker Compose and Helm deployments allow token URLs on private networks (`LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed`), so internal auth services work out of the box. Other launch paths default to `strict`, which allows only public token URLs; set the variable to `relaxed` if you need a private token URL, or to `strict` on Compose/Helm to harden them. On Opik Cloud, the token URL must be publicly reachable.
 </Tip>
 
 The UI covers the standard OAuth2 client credentials flow. If your token endpoint deviates from the standard, additional options are available through the [REST API](/reference/rest-api/llm-provider-key/store-llm-provider-api-key) in the `auth_config` field.
