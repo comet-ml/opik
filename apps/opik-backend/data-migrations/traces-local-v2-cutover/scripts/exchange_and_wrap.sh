@@ -62,11 +62,11 @@
 #                             slow-but-progressing cluster — it delays the EXCHANGE and so lengthens the tail write-gap
 #                             by the wait, which the driver reports. See assert_replication_settled for the two
 #                             judgements it makes.
-#   --force           skip the replication-settle gate entirely. By default the swap aborts when the deletion-replay
-#                     mutation has not finished on every replica, or when the replication queue is not merely busy but
+#   --force           skip the replication-settle gate entirely. By default the swap aborts when a mutation on the
+#                     shadow has not finished on every replica, or when the replication queue is not merely busy but
 #                     stuck (an aged entry, retries, or a last_exception) — either way a behind replica would swap in an
 #                     incomplete table. Use only if settlement is confirmed out of band; the runbook's Go/No-Go forbids
-#                     it in production.
+#                     it in production. Irrelevant to --wrap-only, which does not run the gate at all.
 #   --confirm-maintenance  REQUIRED whenever the wrap is applied (--with-wrap or --wrap-only). The wrap is gapless per
 #                     node (atomic rotate), but a brief cross-node ON CLUSTER propagation skew remains, during which a
 #                     Distributed query can hit a not-yet-created `traces_local` on a lagging node and fail. The failing
@@ -379,20 +379,23 @@ assert_pre_wrap_topology() {
 }
 
 # Pre-EXCHANGE gate: the swap is metadata-only and near-instant, but each replica reads its own local parts afterwards,
-# so a replica still fetching backfilled parts (replication_queue) or still applying the deletion-replay mutation
-# (system.mutations) would serve an incomplete table. Both are read across every replica via clusterAllReplicas, so one
-# connection sees the whole cluster. Aborts unless --force.
+# so a replica that does not yet hold every part would serve an incomplete table. Both signals are read across every
+# replica via clusterAllReplicas, so one connection sees the whole cluster. Aborts unless --force, and does not run for
+# --wrap-only, which performs no swap.
 #
 # The two signals are judged differently, because only one of them is quiet on a healthy cluster:
 #
-#   * The deletion-replay MUTATION is one bounded statement. It must reach is_done on every replica within
-#     --settle-timeout or the gate fails: an unapplied mask means bridged deletes leak live across the swap.
+#   * Unfinished MUTATIONS on the shadow must be none, within --settle-timeout. What this catches is a mutation left
+#     behind by an earlier step or by manual intervention -- NOT the final deletion replay below, which has not been
+#     issued yet when this samples. That one is covered by lightweight_deletes_sync = 2 in its own block, which returns
+#     only once every replica has applied the mask; run_final_deletion_replay asserts the setting is still there.
 #   * The replication QUEUE is expected to be busy under live ingestion — a GET_PART entry exists for every part a
 #     replica has not yet fetched — so requiring an instantaneous 0 would abort on ordinary churn and push the operator
 #     toward --force, which the Go/No-Go forbids. It passes as soon as the queue drains; failing that, the verdict is
 #     stuck-ness rather than depth: an entry aged past SETTLE_STUCK_AGE_SECONDS, more retries than
 #     SETTLE_STUCK_NUM_TRIES, or any last_exception means a replica is genuinely lagging, and the gate fails naming the
-#     offending entries per replica.
+#     offending entries per replica. The sample counts only the entry types that mean a replica lacks data, so ordinary
+#     merge activity neither holds the gate open nor trips it (see the settle-sample block for why).
 assert_replication_settled() {
     local cluster deadline polls poll row
     local sample_sql queue_detail_sql mutation_detail_sql
@@ -475,7 +478,14 @@ fi
 # part of it that varies: on a busy cluster it polls up to --settle-timeout, so the delta replay's wall time on its own
 # understates the gap by that much.
 SETTLE_SECONDS=0
-if [[ "$FORCE" == "1" ]]; then
+if [[ "$WRAP_ONLY" == "1" ]]; then
+    # Not skipped as a shortcut: neither signal describes this path. --wrap-only runs no EXCHANGE, and
+    # assert_pre_wrap_topology has already required traces_local_v2 to be gone, so the mutation half queries a table
+    # that no longer exists while the queue half judges the ingest churn of the live successor. Both would only ever
+    # block the wrap for a reason that has nothing to do with it. The wrap's own exposure is the cross-node DDL window,
+    # which --confirm-maintenance covers.
+    echo "Replication-settle gate not applicable to --wrap-only (no EXCHANGE); proceeding to the wrap."
+elif [[ "$FORCE" == "1" ]]; then
     echo "WARNING: --force set; skipping the replication-settle gate."
 else
     SETTLE_STARTED_AT=$SECONDS
@@ -522,6 +532,16 @@ run_final_deletion_replay() {
         exit 2
     }
     sql="${sql//"$from"/"$to"}"
+    # lightweight_deletes_sync = 2 is what actually protects the swap: it makes this statement return only once every
+    # replica has applied the mask, so the EXCHANGE below cannot run ahead of it. The settle gate cannot stand in for
+    # that -- it samples system.mutations before this statement is issued, so this mutation does not exist yet when it
+    # looks. Asserted for the same reason as the tag above: if the setting were dropped from 000002 the replay would go
+    # async and the swap could then serve a replica whose mask is not applied, with nothing downstream to notice.
+    grep -qF 'lightweight_deletes_sync = 2' <<<"$sql" || {
+        echo "ERROR: the deletion-replay block no longer sets lightweight_deletes_sync = 2, so this replay would not" >&2
+        echo "       wait for every replica to apply the delete mask before the EXCHANGE. Restore it in $DELTA_SQL_FILE." >&2
+        exit 2
+    }
     # --time prints the statement's elapsed seconds to stderr (a bare --query prints nothing). This replay sits inside
     # the final-delta -> EXCHANGE gap where tail writes are left behind, so its wall time is the number to record.
     clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"

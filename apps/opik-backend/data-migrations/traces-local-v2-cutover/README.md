@@ -355,12 +355,12 @@ it while there is slack — not between the final delta and the `EXCHANGE`.
 ### The replication-settle gate
 
 `exchange_and_wrap.sh` gates the swap on replication having settled, because the `EXCHANGE` is metadata-only and
-near-instant but each replica reads its own local parts afterwards: a replica still fetching backfilled parts, or one
-that has not finished the deletion-replay mutation, would serve an incomplete table. Both signals are read across every
-replica via `clusterAllReplicas`, so one connection sees the whole cluster. The queries are the `settle-sample`,
-`settle-queue-detail` and `settle-mutation-detail` blocks of
+near-instant but each replica reads its own local parts afterwards: a replica that does not yet hold every part would
+serve an incomplete table. Both signals are read across every replica via `clusterAllReplicas`, so one connection sees
+the whole cluster. The queries are the `settle-sample`, `settle-queue-detail` and `settle-mutation-detail` blocks of
 [`000003_exchange_and_wrap.sql`](scripts/db-app-analytics/000003_exchange_and_wrap.sql); the driver renders all three
-before it starts polling, so a mis-marked block fails the run up front rather than while reporting a failure.
+before it starts polling, so a mis-marked block fails the run up front rather than while reporting a failure. The gate
+does not run for `--wrap-only`, which performs no swap.
 
 **It polls, and it judges the two signals differently.** On a multi-replica cluster under live ingestion the
 `replication_queue` count is intermittently non-zero by construction — a `GET_PART` entry exists for every part a
@@ -369,12 +369,19 @@ toward `--force`, which the Go/No-Go forbids. Hence:
 
 | Signal | Judgement |
 |---|---|
-| the deletion-replay **mutation** on `traces_local_v2` | **Unconditional.** It is one bounded statement, not churn, so it must reach `is_done` on every replica within `--settle-timeout` (default 120s) or the gate fails — an unapplied mask means bridged deletes leak live across the swap. |
-| the **replication queue** on `traces` / `traces_local_v2` | **Stuck-ness, not depth.** It passes the moment the queue drains to 0. If it has not drained by the deadline, the gate reports the oldest entry's age, the highest `num_tries` and whether any entry carries a `last_exception` — an entry older than 60s, more than 3 retries, or any recorded exception means a replica is genuinely lagging and the gate **fails loudly, printing the offending entries per replica**. A queue that is busy but not stuck is accepted, with the numbers printed so the operator sees what was accepted. |
+| unfinished **mutations** on `traces_local_v2` | **Unconditional** — none, within `--settle-timeout` (default 120s). What this catches is a mutation left behind by an earlier step or by manual intervention. It does **not** cover the final deletion replay, which the driver issues *after* this sample: that one is covered by `lightweight_deletes_sync = 2` in its own block, which returns only once every replica has applied the mask, and the driver asserts the setting is still present before running it. |
+| the **replication queue** on `traces` / `traces_local_v2` | **Stuck-ness, not depth.** Counts only `GET_PART`/`ATTACH_PART` — the entries that mean a replica lacks data. Merges and mutations also sit in this queue and say nothing about completeness; counting them would fail the gate on the large merges that follow a backfill. It passes the moment the queue drains to 0. If it has not drained by the deadline, the gate reports the oldest entry's age, the highest `num_tries` and whether any entry carries a `last_exception` — an entry older than 60s, more than 3 retries, or any recorded exception means a replica is genuinely lagging and the gate **fails loudly, printing the offending entries per replica**. A queue that is busy but not stuck is accepted, with the numbers printed so the operator sees what was accepted. |
 
 The queue verdict is a **snapshot** over the last sample read, in both the polled and the single-sample case — nothing
 compares consecutive samples. Polling buys the queue time to drain, and a genuinely stuck entry time to age past the
 thresholds; that is all, so a shorter `--settle-timeout` is a weaker gate by exactly that much.
+
+**Budget for the wait.** The gate returns early only on a drained queue; the busy-but-not-stuck verdict is reached once
+the poll budget is spent. So a run whose queue never reaches 0 waits the full `--settle-timeout` before passing, and
+that wait lands in the tail write-gap. It is not wasted — the wait is what lets a stuck entry age past the thresholds,
+which is the only detection this gate has, and accepting the first not-stuck sample would make the default no stronger
+than `--settle-timeout 0`. Restricting the count to `GET_PART`/`ATTACH_PART` is what makes the early exit reachable in
+practice: those entries clear continuously, whereas the merge backlog that follows a backfill does not.
 
 `--settle-timeout` accepts 0–3600s; raise it for a slow-but-progressing cluster, at a price — the gate sits between the
 final delta and the `EXCHANGE`, so whatever it waits is added to the tail write-gap. The driver prints the wait

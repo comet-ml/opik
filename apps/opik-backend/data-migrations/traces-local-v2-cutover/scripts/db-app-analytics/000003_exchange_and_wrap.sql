@@ -22,6 +22,12 @@
 -- column is numeric on purpose — the free-text exception columns would need quoting to survive TSV, and the two detail
 -- blocks below print them instead. max()/countIf() over an empty set yield 0, so a drained queue and an idle mutation
 -- list need no special casing. Each side is a single-row aggregate, so the CROSS JOIN is 1x1.
+--
+-- The queue side counts only GET_PART / ATTACH_PART, the entry types that mean a replica does not yet hold a part —
+-- which is the one queue condition that would make it serve an incomplete table after the swap. The queue also carries
+-- MERGE_PARTS and MUTATE_PART entries, and those say nothing about completeness: a pending merge is an optimisation,
+-- and an unfinished mutation is the other half of this sample. Counting them would fail the gate on ordinary post-
+-- backfill merge activity, where one legitimate large merge easily outlives the driver's stuck threshold.
 -- >>> BEGIN settle-sample
 SELECT q.cnt, q.age, q.tries, q.exc, m.cnt, m.age, m.fails
 FROM (
@@ -32,6 +38,7 @@ FROM (
     FROM clusterAllReplicas('{cluster}', system.replication_queue)
     WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
       AND table IN ('traces', 'traces_local_v2')
+      AND type IN ('GET_PART', 'ATTACH_PART')
 ) AS q
 CROSS JOIN (
     SELECT count()                                     AS cnt,
@@ -45,7 +52,8 @@ CROSS JOIN (
 -- >>> END settle-sample
 
 -- Printed when the gate judges a replica to be lagging rather than merely busy: the oldest and most-retried queue
--- entries, per replica, with the free text the sample above deliberately omits.
+-- entries, per replica, with the free text the sample above deliberately omits. Same type filter as the sample, so the
+-- rows shown are the population the verdict was reached on.
 -- >>> BEGIN settle-queue-detail
 SELECT hostName()                             AS replica,
        table,
@@ -59,6 +67,7 @@ SELECT hostName()                             AS replica,
 FROM clusterAllReplicas('{cluster}', system.replication_queue)
 WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
   AND table IN ('traces', 'traces_local_v2')
+  AND type IN ('GET_PART', 'ATTACH_PART')
 ORDER BY num_tries DESC, create_time ASC
 LIMIT 10;
 -- >>> END settle-queue-detail
