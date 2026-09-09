@@ -26,7 +26,7 @@ Once configured, providers appear in two places:
 </Frame>
 
 2. In the Provider Configuration dialog that appears:
-   - Select a provider from the dropdown menu
+   - Select a provider
    - Enter your API key for that provider
    - Click **Save** to store the configuration
 
@@ -241,7 +241,7 @@ Before configuring Bedrock in Opik, ensure you have:
 4. Fill in the configuration:
    - **Provider name**: A unique identifier for this provider instance (e.g., "Bedrock us-east-1")
    - **URL**: Your Bedrock endpoint URL (see format below)
-   - **API Key**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions)
+   - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
    - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-3-5-sonnet-20241022-v2:0,us.meta.llama3-2-3b-instruct-v1:0`)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
@@ -301,7 +301,7 @@ Use this option to add any other OpenAI API-compliant provider such as vLLM, etc
 
 1. **Provider Name**: Enter a unique name to identify this custom provider (e.g., "vLLM Production", "Ollama Local", "Azure OpenAI Dev")
 2. **URL**: Enter your server URL, for example: `http://host.docker.internal:8000/v1`
-3. **API Key** (optional): If your model access requires authentication, enter the API key. Otherwise, leave this field blank.
+3. **Authentication** (optional): If your model access requires authentication, either enter a static API key or use OAuth2 client credentials (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below). Otherwise, leave it blank.
 4. **Models**: List all models available on your server. You'll be able to select one of them for use later.
 5. **Custom Headers** (optional): Add any additional HTTP headers required by your custom endpoint as key-value pairs.
 
@@ -339,12 +339,44 @@ Once you've configured multiple custom providers, you can:
 
 Each custom provider appears as a separate option in the provider dropdown, making it easy to work with multiple self-hosted or custom LLM deployments.
 
-## API Key Security
+### OAuth2 Client Credentials Authentication
 
-API keys are encrypted and stored securely. Only the name and provider type are visible after configuration.
+Some LLM gateways require a short-lived access token from an OAuth2 authorization server instead of a static API key. For these setups, custom providers (as well as Bedrock) can authenticate using the **OAuth2 client credentials** flow.
+
+When configured, Opik requests an access token from your auth service using the [client credentials grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4), attaches it as a `Bearer` token to every model call, and caches and refreshes it automatically before it expires. If the provider rejects a token before it expires (for example, after a revocation), Opik fetches a fresh token and retries the call.
+
+<Frame>
+  <img src="/img/configuration/custom_provider_oauth2.png" alt="Custom Provider OAuth2 Client Credentials Configuration" />
+</Frame>
+
+#### Configuring OAuth2 Authentication
+
+1. In the provider configuration dialog, switch the **Authentication** mode from **Static API key** to **OAuth2 client credentials**
+2. Fill in:
+   - **Token URL**: The token endpoint of your authorization server (e.g., `https://auth.example.com/oauth/token`)
+   - **Credentials**: Enter your `client_id` and `client_secret` in the pre-filled rows. Add more rows if your auth service requires them (e.g., `scope`, `audience`). `grant_type=client_credentials` is sent automatically, so you don't need to add it.
+3. Click **Test connection** to verify the setup. Opik performs the token fetch on the backend and reports the token lifetime.
+4. Click **Save** to store the configuration
+
+<Note>
+  Locked credential values are encrypted at rest and write-only: after saving, they can be replaced but not read back, either in the UI or through the API. Use the lock button on each row to control which values are treated this way. Values with secret-like names (`client_secret`, and any key containing "secret", "password", or "token") are locked automatically, and a value that was saved as locked cannot be unlocked, only replaced. Re-saving the configuration without changing a locked value keeps the stored secret.
+</Note>
+
+A provider uses either a static API key or OAuth2 authentication, never both. Saving an OAuth2 configuration clears any stored static key, and switching back to a static key clears the stored OAuth2 configuration. Changing the **Token URL** requires re-entering the credentials, since stored secrets are only ever sent to the endpoint they were saved for.
+
+<Tip>
+  **Self-hosted deployments:** Token URLs on private networks are allowed by default (`LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed`), so internal auth services work out of the box. Set the variable to `strict` on the Opik backend to allow only public token URLs. On Opik Cloud, the token URL must be publicly reachable.
+</Tip>
+
+The UI covers the standard OAuth2 client credentials flow. If your token endpoint deviates from the standard, additional options are available through the [REST API](/reference/rest-api/llm-provider-key/store-llm-provider-api-key) in the `auth_config` field.
+
+## Credential Security
+
+All provider credentials are encrypted at rest, whether a static API key or OAuth2 client credentials. Static API keys are shown masked after saving, and locked OAuth2 credential values are write-only.
 
 ## Troubleshooting
 
 - **Authentication Errors**: Ensure your API key is valid and hasn't expired
 - **Access Denied**: Check that your API key has the required permissions for the models you're trying to use
 - **Rate Limiting**: Adjust your request frequency or contact your provider to increase limits
+- **Token fetch failures**: Use **Test connection** in the provider dialog; the error message includes the auth server's response
