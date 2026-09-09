@@ -640,15 +640,19 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             </form>
           </Form>
         </div>
-        {/* 11.5px, not 12: the frame renders a 56px footer where 12/32/12 plus the rule is 57. */}
-        <div className="flex items-center justify-end gap-2 border-t border-border py-[11.5px] pl-[19px] pr-5">
-          {/* 11px, not the size default 12: the frame's Cancel measures 70px wide where 12px
-              padding renders 72.5, while its primary button matches at 12. Padding rather than a
-              fixed width, so a longer label still grows the button. */}
+        {/* 11 top and 12 bottom, not 12/12: the frame's footer is 56px, which the rule plus a 32px
+            button leaves 23 to split. Both must stay whole numbers — the symmetric 11.5 that fits
+            put the buttons on y=916.5, and a 1px border straddling two rows renders as two lighter
+            ones instead of one crisp line. */}
+        <div className="flex items-center justify-end gap-2 border-t border-border pb-3 pl-[19px] pr-5 pt-[11px]">
+          {/* Both buttons are anchored to the right edge, so the frame's widths (71 and 115) are what
+              put every edge on a whole pixel. Chrome measures Inter a fraction narrower than Figma
+              does, which otherwise leaves each button ~0.5px short and every edge left of the sheet's
+              padding on a fraction. min-w rather than w, so a longer label still grows the button. */}
           <Button
             variant="outline"
             size="sm"
-            className="px-[11px]"
+            className="min-w-[71px] px-[11px]"
             onClick={() => setOpen(false)}
           >
             Cancel
@@ -657,6 +661,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             type="submit"
             size="sm"
             disabled={isSubmitting}
+            className="min-w-[115px]"
             onClick={form.handleSubmit(onSubmit)}
           >
             {submitText}
