@@ -167,7 +167,7 @@ public class JsonEachRowBulkInsert {
                 // the row COUNT are logged alongside it — never the rows themselves. Note a ClickHouse
                 // parse error quotes the offending value in its own message, so this log can carry a
                 // fragment of customer content by way of the exception.
-                .doOnError(err -> log.error("Failed JSONEachRow insert into '{}': rows='{}'",
+                .doOnError(err -> log.error("Failed JSONEachRow insert: table='{}' rows='{}'",
                         table, items.size(), err));
     }
 }
