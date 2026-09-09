@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { getDefaultConfigByProvider } from "@/lib/playground";
+import {
+  getDefaultConfigByProvider,
+  restoreMissingConfigKeys,
+} from "@/lib/playground";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
+  LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import { PlaygroundPromptType } from "@/types/playground";
 
 describe("getDefaultConfigByProvider — Anthropic", () => {
   it("seeds temperature default for models that accept sampling params", () => {
@@ -26,5 +31,89 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
     expect(config.temperature).toBeUndefined();
     expect(config.topP).toBeUndefined();
     expect(config.maxCompletionTokens).toBe(4000);
+  });
+});
+
+describe("restoreMissingConfigKeys", () => {
+  const prompt = (
+    provider: PROVIDER_TYPE,
+    model: PROVIDER_MODEL_TYPE,
+    configs: Record<string, unknown>,
+  ) =>
+    ({
+      name: "p",
+      id: "p1",
+      messages: [],
+      model,
+      provider: provider as COMPOSED_PROVIDER_TYPE,
+      configs,
+    }) as unknown as PlaygroundPromptType;
+
+  it("puts back a topP the old model-change reconciler dropped", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        temperature: 0.4,
+        maxCompletionTokens: 4000,
+        frequencyPenalty: 0,
+        presencePenalty: 0,
+      }),
+    );
+
+    expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
+    expect((restored.configs as LLMOpenAIConfigsType).temperature).toBe(0.4);
+  });
+
+  it("puts back parameters added after the prompt was persisted", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        temperature: 1,
+        topP: 1,
+        maxTokens: 0,
+      }),
+    );
+
+    expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+  });
+
+  it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
+    // Restoring temperature here would silently override the user's Top P: with both set the
+    // request drops Top P. Which half is live stays resolveSamplingParams' call.
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.ANTHROPIC, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        topP: 0.9,
+        maxCompletionTokens: 4000,
+      }),
+    );
+
+    expect(
+      (restored.configs as LLMAnthropicConfigsType).temperature,
+    ).toBeUndefined();
+    expect((restored.configs as LLMAnthropicConfigsType).topP).toBe(0.9);
+  });
+
+  it("returns the same prompt when nothing is missing", () => {
+    const complete = prompt(
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      getDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      ) as unknown as Record<string, unknown>,
+    );
+
+    expect(restoreMissingConfigKeys(complete)).toBe(complete);
+  });
+
+  it("leaves a prompt with no provider alone", () => {
+    const noProvider = {
+      name: "p",
+      id: "p1",
+      messages: [],
+      model: "",
+      provider: "",
+      configs: {},
+    } as unknown as PlaygroundPromptType;
+
+    expect(restoreMissingConfigKeys(noProvider)).toBe(noProvider);
   });
 });
