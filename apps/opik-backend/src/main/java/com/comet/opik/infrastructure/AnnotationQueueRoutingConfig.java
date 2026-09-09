@@ -35,6 +35,33 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @NotBlank @JsonProperty
     private String streamName = "annotation-queue-routing";
 
+    /**
+     * How long an entity waits after its first score before it is evaluated. Later scores on the same
+     * entity land inside the window and collapse into the same evaluation instead of repeating it.
+     */
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration debounceDelay = Duration.seconds(5);
+
+    /** How often the flush job looks for entities whose window has elapsed. */
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration jobInterval = Duration.seconds(2);
+
+    /** Entities taken per flush; also the cap on how many entity ids one published message can carry. */
+    @Valid @JsonProperty
+    @Min(1) @Max(10000) private int jobBatchSize = 500;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration jobLockTime = Duration.seconds(4);
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    private Duration jobLockWaitTime = Duration.milliseconds(300);
+
     @Valid @NotBlank @JsonProperty
     private String consumerGroupName = "annotation-queue-routing-consumers";
 

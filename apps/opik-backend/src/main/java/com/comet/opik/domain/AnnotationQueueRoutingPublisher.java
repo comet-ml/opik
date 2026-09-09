@@ -17,8 +17,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Puts routing work on the stream. Called from the event listener, so it must stay cheap: one XADD and
- * nothing else.
+ * Puts routing work on the stream: one XADD and nothing else.
+ *
+ * <p>Called by {@link AnnotationQueueRoutingBufferService#flush()} rather than from the score path, so a
+ * message here already represents a group of debounced entities rather than a single score event.
  */
 @Slf4j
 @Singleton

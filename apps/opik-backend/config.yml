@@ -1119,6 +1119,24 @@ annotationQueueRouting:
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
+  # Default: 5s
+  # Description: How long an entity waits after its first score before being evaluated. Later scores on the
+  #   same entity land inside the window and collapse into one evaluation rather than repeating it. The
+  #   deadline is set by the first score and is NOT reset by later ones, so a continuously scored entity
+  #   cannot starve.
+  debounceDelay: ${ANNOTATION_QUEUE_ROUTING_DEBOUNCE_DELAY:-5s}
+  # Default: 2s
+  # Description: How often the flush job drains entities whose debounce window has elapsed
+  jobInterval: ${ANNOTATION_QUEUE_ROUTING_JOB_INTERVAL:-2s}
+  # Default: 500
+  # Description: Entities taken per flush, and the cap on how many entity ids one published message carries
+  jobBatchSize: ${ANNOTATION_QUEUE_ROUTING_JOB_BATCH_SIZE:-500}
+  # Default: 4s
+  # Description: How long the flush job holds its lock before it is released
+  jobLockTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: How long the flush job waits to acquire the lock before giving up until the next tick
+  jobLockWaitTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_WAIT_TIME:-300ms}
   # Default: annotation-queue-routing-consumers
   # Description: Consumer group name for annotation queue routing
   consumerGroupName: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_GROUP_NAME:-'annotation-queue-routing-consumers'}
