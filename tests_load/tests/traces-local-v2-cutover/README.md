@@ -177,6 +177,8 @@ $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup
 #     mutations at traces_local). --confirm-maintenance is a SEPARATE, unrelated concern: it asserts traffic is
 #     quiesced or a maintenance window is in effect for the wrap's cross-node ON CLUSTER skew, which hits reads and
 #     which no ingestion-side setting covers. Both wrap paths (--with-wrap and --wrap-only) require it.
+#     Unlike step 8, this run prints no settle-gate output: --wrap-only performs topology validation and the wrap only,
+#     with no EXCHANGE and no replication-settle gate (neither of its signals describes this path).
 #     A mismatch on the toggle IS fail-loud: with the flag true before the wrap exists, deletes 500 with
 #     "Code: 60 ... Table opik.traces_local does not exist" — worth triggering once, to see it. After the wrap,
 #     `DELETE FROM opik.traces` returns "Code: 36 DELETE query is not supported", and system.parts relabels from

@@ -286,8 +286,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 >
 > **Applying the deferred wrap later:** once the retarget flag (`tracesDistributedWrapEnabled=true`) is live across the
 > backend fleet, run
-> `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it runs the settle
-> gate and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`).
+> `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it validates the
+> post-EXCHANGE topology and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new
+> `cutover_start`, and no replication-settle gate — neither of its signals describes this path, see
+> ["The replication-settle gate"](#the-replication-settle-gate)).
 > `--confirm-daos-retargeted` is required for **any** wrap (same-run or deferred), since the wrap makes `traces`
 > `Distributed` and breaks the delete/mutation DAOs until `tracesDistributedWrapEnabled=true` routes them at `traces_local`. To roll the wrap back, use
 > `rollback.sh --stage C`, then set `tracesDistributedWrapEnabled` back to `false` with the same rolling restart so

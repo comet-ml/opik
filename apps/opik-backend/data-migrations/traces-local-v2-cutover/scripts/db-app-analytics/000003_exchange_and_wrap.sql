@@ -54,6 +54,10 @@ CROSS JOIN (
 -- Printed when the gate judges a replica to be lagging rather than merely busy: the oldest and most-retried queue
 -- entries, per replica, with the free text the sample above deliberately omits. Same type filter as the sample, so the
 -- rows shown are the population the verdict was reached on.
+--
+-- LIMIT n BY replica, not a global LIMIT: the cluster is ordered as one result set, so a single replica holding many
+-- retried entries would fill a global cap and hide every other replica that contributed to the verdict — which is the
+-- opposite of what this block is for. The row count is bounded by the replica count instead.
 -- >>> BEGIN settle-queue-detail
 SELECT hostName()                             AS replica,
        table,
@@ -69,10 +73,12 @@ WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
   AND table IN ('traces', 'traces_local_v2')
   AND type IN ('GET_PART', 'ATTACH_PART')
 ORDER BY num_tries DESC, create_time ASC
-LIMIT 10;
+LIMIT 3 BY replica;
 -- >>> END settle-queue-detail
 
--- Printed when the deletion-replay mutation has not finished on every replica by the gate's deadline.
+-- Printed when a mutation on the shadow has not finished on every replica by the gate's deadline. Bounded per replica
+-- for the same reason as the queue detail above: the point is to name which replicas are behind, and a global cap
+-- would hide them behind whichever replica sorted first.
 -- >>> BEGIN settle-mutation-detail
 SELECT hostName() AS replica,
        mutation_id,
@@ -86,7 +92,7 @@ WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
   AND table = 'traces_local_v2'
   AND is_done = 0
 ORDER BY create_time
-LIMIT 10;
+LIMIT 2 BY replica;
 -- >>> END settle-mutation-detail
 
 -- >>> BEGIN exchange
