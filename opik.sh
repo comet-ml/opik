@@ -105,7 +105,9 @@ generate_uuid() {
 }
 
 debugLog() {
+  # The trailing `true` keeps a no-op debug line from becoming the caller's non-zero return value.
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
+  true
 }
 
 # Log worktree configuration (called after DEBUG_MODE is set)
@@ -230,7 +232,7 @@ create_opik_config_if_missing() {
   
   if [[ -f "$config_file" ]]; then
     debugLog "[DEBUG] .opik.config file already exists, skipping creation"
-    return
+    return 0
   fi
   
   debugLog "[DEBUG] Creating .opik.config file at $config_file"
@@ -348,7 +350,6 @@ start_missing_containers() {
   debugLog "OPIK_ANONYMOUS_ID=$uuid"
 
   debugLog "🔍 Checking required containers..."
-  all_running=true
 
   local containers=("${CONTAINERS[@]}")
   for container in "${containers[@]}"; do
@@ -356,7 +357,6 @@ start_missing_containers() {
 
     if [[ "$status" != "running" ]]; then
       debugLog "🔴 $container is not running (status: ${status:-not found})"
-      all_running=false
     else
       debugLog "✅ $container is already running"
     fi
@@ -368,50 +368,26 @@ start_missing_containers() {
 
   local cmd
   cmd=$(get_docker_compose_cmd)
-  $cmd up -d ${BUILD_MODE:+--build}
 
-  echo "⏳ Waiting for all containers to be running and healthy..."
-  max_retries=60
-  interval=1
-  all_running=true
+  local startup_timeout="${OPIK_STARTUP_TIMEOUT:-300}"
+  echo "⏳ Waiting for all containers to be running and healthy (timeout: ${startup_timeout}s)..."
 
-  for container in "${containers[@]}"; do
-    retries=0
-    debugLog "⏳ Waiting for $container..."
-
-    while true; do
-      status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
-      health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
-
-      if [[ "$status" != "running" ]]; then
-        echo "❌ $container failed to start (status: $status)"
-        break
-      fi
-
-      if [[ "$health" == "healthy" ]]; then
-        debugLog "✅ $container is now running and healthy!"
-        break
-      elif [[ "$health" == "starting" ]]; then
-        debugLog "⏳ $container is starting... retrying (${retries}s)"
-        sleep "$interval"
-        retries=$((retries + 1))
-        if [[ $retries -ge $max_retries ]]; then
-          echo "⚠️  $container is still not healthy after ${max_retries}s"
-          all_running=false
-          break
-        fi
-      else
-        echo "❌ $container health state is '$health'"
-        all_running=false
-        break
-      fi
-    done
-  done
-
-  if $all_running; then
-    send_install_report "$uuid" "true" "$start_time"
-    create_opik_config_if_missing
+  # --wait waits on every service concurrently and honours each service's own healthcheck plus the
+  # depends_on graph, so a slow service can't be starved by the time spent on the ones before it.
+  if ! $cmd up -d ${BUILD_MODE:+--build} --wait --wait-timeout "$startup_timeout"; then
+    echo "❌ Containers did not become healthy within ${startup_timeout}s"
+    echo "   Set OPIK_STARTUP_TIMEOUT to allow more time, e.g. OPIK_STARTUP_TIMEOUT=600 $(get_start_cmd)"
+    echo ""
+    echo "📋 Container status:"
+    $cmd ps
+    echo ""
+    echo "📜 Recent container logs:"
+    $cmd logs --tail=200
+    return 1
   fi
+
+  send_install_report "$uuid" "true" "$start_time"
+  create_opik_config_if_missing
 }
 
 stop_containers() {
@@ -778,15 +754,11 @@ case "$1" in
     ;;
   "")
     echo "🔍 Checking container status and starting missing ones..."
-    start_missing_containers
-    sleep 2
-    echo "🔄 Re-checking container status..."
-    if check_containers_status; then
-      print_banner
-    else
+    if ! start_missing_containers; then
       echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
       exit 1
     fi
+    print_banner
     ;;
   *)
     echo "❌ Unknown option: $1"
