@@ -599,6 +599,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           <FormControl>
                             <Switch
                               size="xs"
+                              // The frame's switch is a 24x14 track with a 12px thumb, 1px of
+                              // padding and a #cbd5e1 off state; the nearest stock variant is
+                              // 28x16 on --light-slate, so track, padding, thumb travel
+                              // (24 - 12 - 2) and the off colour are all set here.
+                              className="h-[14px] w-6 border data-[state=unchecked]:bg-slate-300 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-[10px]"
                               checked={field.value}
                               onCheckedChange={field.onChange}
                               aria-label="Enable automation"
