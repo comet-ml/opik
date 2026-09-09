@@ -32,9 +32,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -170,12 +172,124 @@ class AnnotationQueueRoutingSubscriberTest {
         }
     }
 
+    /**
+     * A score written to an entity that already has others is the normal case - a judge scoring what a human
+     * scored, or the reverse - and it is the case a bare "no scores at all" check cannot see. If the read
+     * misses the new score, the conditions do not match, the message is acknowledged, and with no backfill
+     * the entity is never routed.
+     */
+    @Nested
+    @DisplayName("Stale read handling")
+    class StaleReadTests {
+
+        @Test
+        void reReadsWhenTheScoreTheEventNamedIsNotVisibleYet() {
+            UUID traceId = UUID.randomUUID();
+            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
+            givenConditionsMatch();
+            givenLoggingSource(traceId);
+            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
+
+            // First read has the old score only; the second sees the one the event named.
+            when(feedbackScoreDAO.getEffectiveScores(eq(EntityType.TRACE), any()))
+                    .thenReturn(Mono.just(scoresOf(traceId, Map.of("safety", BigDecimal.valueOf(0.8)))))
+                    .thenReturn(Mono.just(scoresOf(traceId,
+                            Map.of("safety", BigDecimal.valueOf(0.8), SCORE_NAME, BigDecimal.valueOf(0.2)))));
+
+            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Map.of(traceId, Set.of(SCORE_NAME)));
+
+            verify(feedbackScoreDAO, times(2)).getEffectiveScores(eq(EntityType.TRACE), any());
+            verify(annotationQueueService).addItems(queueId, Set.of(traceId), AnnotationQueueItemSource.AUTOMATED);
+        }
+
+        @Test
+        void doesNotReReadWhenEveryNamedScoreIsAlreadyVisible() {
+            UUID traceId = UUID.randomUUID();
+            givenScored(EntityType.TRACE, traceId);
+            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
+            givenConditionsMatch();
+            givenLoggingSource(traceId);
+            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
+
+            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Map.of(traceId, Set.of(SCORE_NAME)));
+
+            verify(feedbackScoreDAO, times(1)).getEffectiveScores(eq(EntityType.TRACE), any());
+        }
+
+        /** Names are best-effort: an entity the message says nothing about is judged on emptiness alone. */
+        @Test
+        void treatsAnAbsentNameSetAsNoInformationRatherThanAsNoScores() {
+            UUID traceId = UUID.randomUUID();
+            givenScored(EntityType.TRACE, traceId);
+            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
+            givenConditionsMatch();
+            givenLoggingSource(traceId);
+            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
+
+            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Map.of());
+
+            verify(feedbackScoreDAO, times(1)).getEffectiveScores(eq(EntityType.TRACE), any());
+        }
+    }
+
+    /**
+     * A failed queue write must leave the message pending rather than acknowledge it. Retrying is cheap and
+     * cannot duplicate anything, because addItems excludes what a queue has already held - so swallowing the
+     * failure would trade a free retry for a permanently unrouted trace.
+     */
+    @Nested
+    @DisplayName("Queue write failures")
+    class QueueWriteFailureTests {
+
+        @Test
+        void propagatesTheFailureSoTheMessageIsRetried() {
+            UUID traceId = UUID.randomUUID();
+            givenScored(EntityType.TRACE, traceId);
+            givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE);
+            givenConditionsMatch();
+            givenLoggingSource(traceId);
+            var failure = new IllegalStateException("clickhouse down");
+            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.error(failure));
+
+            assertThatThrownBy(() -> process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId)))
+                    .isSameAs(failure);
+        }
+
+        @Test
+        void attemptsEveryQueueBeforeFailing() {
+            UUID traceId = UUID.randomUUID();
+            UUID secondQueueId = UUID.randomUUID();
+            givenScored(EntityType.TRACE, traceId);
+            when(automationService.findEnabledByProjects(WORKSPACE_ID, Set.of(projectId),
+                    AnnotationQueue.AnnotationScope.TRACE))
+                    .thenReturn(List.of(new QueueAutomation(queueId, projectId, null),
+                            new QueueAutomation(secondQueueId, projectId, null)));
+            givenConditionsMatch();
+            givenLoggingSource(traceId);
+            when(annotationQueueService.addItems(eq(queueId), any(), any()))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse down")));
+            when(annotationQueueService.addItems(eq(secondQueueId), any(), any())).thenReturn(Mono.just(1L));
+
+            assertThatThrownBy(() -> process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId)))
+                    .isInstanceOf(IllegalStateException.class);
+
+            // The healthy queue still received its items - one bad queue cannot starve the rest.
+            verify(annotationQueueService).addItems(eq(secondQueueId), any(), any());
+        }
+    }
+
     private void process(AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds) {
+        process(scope, entityIds, Map.of());
+    }
+
+    private void process(AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds,
+            Map<UUID, Set<String>> scoreNamesByEntity) {
         subscriber.processEvent(AnnotationQueueRoutingMessage.builder()
                 .workspaceId(WORKSPACE_ID)
                 .userName(USER_NAME)
                 .scope(scope)
                 .entityIds(entityIds)
+                .scoreNamesByEntity(scoreNamesByEntity)
                 .build())
                 .block();
     }
@@ -198,5 +312,17 @@ class AnnotationQueueRoutingSubscriberTest {
 
     private void givenConditionsMatch() {
         when(evaluator.matches(any(), any())).thenReturn(true);
+    }
+
+    private void givenLoggingSource(UUID... entityIds) {
+        when(traceDAO.getLoggingSourceIds(any(), any())).thenReturn(Mono.just(Set.of(entityIds)));
+    }
+
+    private Map<UUID, EntityFeedbackScores> scoresOf(UUID entityId, Map<String, BigDecimal> scores) {
+        return Map.of(entityId, EntityFeedbackScores.builder()
+                .entityId(entityId)
+                .projectId(projectId)
+                .scores(scores)
+                .build());
     }
 }

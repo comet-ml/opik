@@ -13,6 +13,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +38,8 @@ public class AnnotationQueueRoutingPublisher {
     }
 
     public Mono<Void> enqueue(@NonNull String workspaceId, @NonNull String userName,
-            @NonNull AnnotationQueue.AnnotationScope scope, @NonNull Set<UUID> entityIds) {
+            @NonNull AnnotationQueue.AnnotationScope scope, @NonNull Set<UUID> entityIds,
+            @NonNull Map<UUID, Set<String>> scoreNamesByEntity) {
 
         if (!config.isEnabled() || entityIds.isEmpty()) {
             return Mono.empty();
@@ -48,6 +50,7 @@ public class AnnotationQueueRoutingPublisher {
                 .userName(userName)
                 .scope(scope)
                 .entityIds(entityIds)
+                .scoreNamesByEntity(scoreNamesByEntity)
                 .build();
 
         // DEBUG: one of these per score event on an automated workspace, so INFO would be noise.

@@ -59,7 +59,8 @@ public class AnnotationQueueRoutingListener {
                 () -> automationService.hasEnabledAutomation(event.workspaceId(), event.projectId(), scope))
                 .subscribeOn(Schedulers.boundedElastic())
                 .filter(Boolean::booleanValue)
-                .flatMap(__ -> bufferService.record(event.workspaceId(), event.userName(), scope, event.entityIds()))
+                .flatMap(__ -> bufferService.record(event.workspaceId(), event.userName(), scope, event.entityIds(),
+                        event.getScoreNames()))
                 .subscribe(
                         __ -> {
                         },

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Builder;
 import lombok.NonNull;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -28,5 +29,18 @@ public record AnnotationQueueRoutingMessage(
         @NonNull String workspaceId,
         String userName,
         @NonNull AnnotationQueue.AnnotationScope scope,
-        @NonNull Set<UUID> entityIds) implements RedisSubscriberMessage {
+        @NonNull Set<UUID> entityIds,
+        /**
+         * Which scores the triggering events wrote, per entity, where the emitter said. Names only — no
+         * values, so this cannot go stale: a name that existed still exists, and the value is always read
+         * fresh. It exists so the consumer can tell a score that has not replicated yet from a score that
+         * genuinely does not satisfy a condition. Absent for an entity means no information.
+         */
+        Map<UUID, Set<String>> scoreNamesByEntity) implements RedisSubscriberMessage {
+
+    public Set<String> expectedScoreNames(UUID entityId) {
+        return scoreNamesByEntity == null
+                ? Set.of()
+                : scoreNamesByEntity.getOrDefault(entityId, Set.of());
+    }
 }

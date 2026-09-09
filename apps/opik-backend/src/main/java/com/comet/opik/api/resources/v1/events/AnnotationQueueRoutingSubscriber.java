@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 
 /**
@@ -193,27 +194,31 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * Reads the entities' effective scores, with one cheap guard against reading before the write is
      * visible.
      *
-     * <p>The event names the entities whose scores just changed, so finding <em>no</em> scores at all for
-     * one of them means the read saw less than the write produced. Two causes: ClickHouse replication lag
-     * on a multi-node cluster (the write landed on another replica), or a score whose
+     * <p>Two things can make a read stale, and the message carries what is needed to spot both. Finding
+     * <em>no</em> scores for an entity the event named means the read saw less than the write produced.
+     * Finding scores but not the <em>named</em> ones means the same thing for an entity that already had
+     * other scores — the far more common shape, since a judge scoring a trace that a human already scored
+     * is the normal case, and it is the one a bare emptiness check misses entirely.
+     *
+     * <p>Either way the cause is ClickHouse replication lag on a multi-node cluster, or a score whose
      * {@code scoreDestination} sent it to the assertion-results table, which never reaches
      * {@code feedback_scores} at all.
      *
-     * <p>The guard is a single delayed re-read of only the entities that came back empty. It costs nothing
-     * in the normal case, and it matters because of what the alternative loses: a stale read makes the
+     * <p>The guard is a single delayed re-read of only the entities that looked stale. It costs nothing in
+     * the normal case, and it matters because of what the alternative loses: a stale read makes the
      * conditions not match, and if that was the last score the trace will ever receive, nothing
      * re-triggers. With no backfill the trace would then never be routed — silently and permanently.
      */
     private Mono<Map<UUID, EntityFeedbackScores>> loadScores(AnnotationQueueRoutingMessage message) {
         return readScores(message, message.entityIds())
                 .flatMap(scores -> {
-                    Set<UUID> missing = missingEntities(message.entityIds(), scores);
+                    Set<UUID> missing = staleEntities(message, scores);
                     if (missing.isEmpty()) {
                         return Mono.just(scores);
                     }
 
                     AnnotationQueueRoutingMetrics.STALE_READS.add(1);
-                    log.debug("No scores found for '{}' of '{}' entities named by the event, re-reading after '{}'",
+                    log.debug("Scores for '{}' of '{}' entities named by the event look stale, re-reading after '{}'",
                             missing.size(), message.entityIds().size(), config.getStaleReadRetryDelay());
 
                     return Mono.delay(config.getStaleReadRetryDelay().toJavaDuration())
@@ -227,7 +232,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                                 return Map.copyOf(merged);
                             })
                             .doOnNext(merged -> {
-                                int unresolved = missingEntities(message.entityIds(), merged).size();
+                                int unresolved = staleEntities(message, merged).size();
                                 if (unresolved > 0) {
                                     AnnotationQueueRoutingMetrics.UNRESOLVED_ENTITIES.add(unresolved);
                                 }
@@ -249,9 +254,24 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                         .put(RequestContext.USER_NAME, message.userName()));
     }
 
-    private Set<UUID> missingEntities(Set<UUID> named, Map<UUID, EntityFeedbackScores> found) {
-        return named.stream()
-                .filter(entityId -> !found.containsKey(entityId))
+    /**
+     * Entities whose read cannot be trusted yet: no scores at all, or none of the names the event said it
+     * wrote. An entity the message says nothing about is judged on emptiness alone, which is all the
+     * information there is — score names are best-effort, and a missing name set must not be read as "no
+     * scores were written".
+     */
+    private Set<UUID> staleEntities(AnnotationQueueRoutingMessage message,
+            Map<UUID, EntityFeedbackScores> found) {
+
+        return message.entityIds().stream()
+                .filter(entityId -> {
+                    EntityFeedbackScores scores = found.get(entityId);
+                    if (scores == null) {
+                        return true;
+                    }
+                    Set<String> expected = message.expectedScoreNames(entityId);
+                    return !expected.isEmpty() && !scores.scores().keySet().containsAll(expected);
+                })
                 .collect(Collectors.toSet());
     }
 
@@ -273,10 +293,14 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
             return Mono.just(0L);
         }
 
+        // Every queue is attempted even if an earlier one failed, so one bad queue cannot starve the rest.
+        // But a failure is not swallowed: it is collected and rethrown once the others are done, which
+        // leaves the message pending for autoClaim to retry. Retrying costs almost nothing and cannot
+        // duplicate anything, because addItems excludes what a queue has already held - so acknowledging a
+        // failed write would trade a cheap retry for a permanently unrouted trace, there being no backfill.
+        var failures = new ConcurrentLinkedQueue<Throwable>();
+
         return Flux.fromIterable(matchesByQueue.entrySet())
-                // Per-queue isolation: one queue failing must not stop the others. The failure is swallowed
-                // rather than rethrown so a single bad queue does not force the whole message to be retried,
-                // re-doing the work for queues that already succeeded.
                 .concatMap(entry -> annotationQueueService
                         .addItems(entry.getKey(), entry.getValue(), AnnotationQueueItemSource.AUTOMATED)
                         .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
@@ -286,8 +310,23 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                         .doOnNext(added -> AnnotationQueueRoutingMetrics.ITEMS_ROUTED.add(added))
                         .onErrorResume(error -> {
                             log.error("Failed to route items into annotation queue '{}'", entry.getKey(), error);
+                            AnnotationQueueRoutingMetrics.QUEUE_WRITE_FAILURES.add(1);
+                            failures.add(error);
                             return Mono.just(0L);
                         }))
-                .reduce(0L, Long::sum);
+                .reduce(0L, Long::sum)
+                .flatMap(routed -> failures.isEmpty()
+                        ? Mono.just(routed)
+                        : Mono.error(routingFailure(failures)));
+    }
+
+    /**
+     * The first failure, with any others attached. Reported as-is rather than wrapped, so
+     * {@code BaseRedisSubscriber} can still tell a retryable failure from one that will never succeed.
+     */
+    private Throwable routingFailure(ConcurrentLinkedQueue<Throwable> failures) {
+        Throwable first = failures.poll();
+        failures.forEach(first::addSuppressed);
+        return first;
     }
 }

@@ -110,7 +110,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                                     author.orElse(null)))
                             .doOnSuccess(__ -> eventBus.post(
                                     new FeedbackScoresCreated(Set.of(traceId), EntityType.TRACE, workspaceId, userName,
-                                            projectId))))
+                                            projectId, Set.of(score.name())))))
                     .then();
         });
     }
@@ -158,11 +158,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String userName = ctx.get(RequestContext.USER_NAME);
             Set<UUID> entityIds = scores.stream().map(FeedbackScoreBatchItem::id).collect(Collectors.toSet());
 
+            Set<String> scoreNames = scores.stream().map(FeedbackScoreItem::name).collect(Collectors.toSet());
+
             return processScoreBatch(EntityType.TRACE, scores)
                     .doOnSuccess(__ -> {
                         if (!entityIds.isEmpty()) {
-                            eventBus.post(
-                                    new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId, userName));
+                            eventBus.post(new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId,
+                                    userName, null, scoreNames));
                         }
                     });
         });
@@ -506,9 +508,14 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                     .map(FeedbackScoreItem::id)
                     .collect(Collectors.toSet());
 
+            Set<String> scoreNames = projectDto.scores()
+                    .stream()
+                    .map(FeedbackScoreItem::name)
+                    .collect(Collectors.toSet());
+
             eventBus.post(new FeedbackScoresCreated(threadModelIds, EntityType.THREAD,
                     ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.USER_NAME),
-                    projectDto.project().id()));
+                    projectDto.project().id(), scoreNames));
 
             return Mono.empty();
         });

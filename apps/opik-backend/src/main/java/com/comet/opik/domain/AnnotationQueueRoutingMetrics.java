@@ -37,6 +37,12 @@ public class AnnotationQueueRoutingMetrics {
             .setDescription("Items added to annotation queues by automation")
             .build();
 
+    public static final LongCounter QUEUE_WRITE_FAILURES = METER
+            .counterBuilder("queue_write_failures_total")
+            .setDescription("Queues whose addItems call failed; the message is left pending so autoClaim "
+                    + "retries it, and this counts how often that happens")
+            .build();
+
     public static final LongCounter NON_PRODUCTION_SKIPPED = METER
             .counterBuilder("non_production_skipped_total")
             .setDescription("Scored entities dropped before evaluation because they were not logged by an "
