@@ -9,6 +9,7 @@ import lombok.NonNull;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * A batch of entities whose feedback scores just changed, handed to the routing consumer.
@@ -38,9 +39,20 @@ public record AnnotationQueueRoutingMessage(
          */
         Map<UUID, Set<String>> scoreNamesByEntity) implements RedisSubscriberMessage {
 
+    /**
+     * Normalises a null map to empty and copies both levels, so a message cannot be observed differently
+     * on two deliveries. Redelivery deserializes afresh and would not share state, but the publisher hands
+     * in a map built by {@code Collectors.toMap} - mutable, and reachable from the caller.
+     */
+    public AnnotationQueueRoutingMessage {
+        scoreNamesByEntity = scoreNamesByEntity == null
+                ? Map.of()
+                : scoreNamesByEntity.entrySet().stream()
+                        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
+                                entry -> Set.copyOf(entry.getValue())));
+    }
+
     public Set<String> expectedScoreNames(UUID entityId) {
-        return scoreNamesByEntity == null
-                ? Set.of()
-                : scoreNamesByEntity.getOrDefault(entityId, Set.of());
+        return scoreNamesByEntity.getOrDefault(entityId, Set.of());
     }
 }

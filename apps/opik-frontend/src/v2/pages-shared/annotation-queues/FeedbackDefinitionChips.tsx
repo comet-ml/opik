@@ -19,7 +19,9 @@ type FeedbackDefinitionChipsProps = {
  * the tag columns use, so a queue with a dozen scores does not stretch the field.
  *
  * The remove control is a span rather than a button on purpose: this renders inside the select's
- * trigger button, and a nested button is invalid. Pointer events are stopped so removing a chip does
+ * trigger button, and a nested button is invalid. That constraint is on the element, not on
+ * accessibility - it carries tabIndex and its own Enter/Space handling so keyboard users can remove a
+ * chip, which role="button" alone does not provide. Pointer events are stopped so removing a chip does
  * not also open the dropdown.
  */
 const FeedbackDefinitionChips: React.FC<FeedbackDefinitionChipsProps> = ({
@@ -51,12 +53,23 @@ const FeedbackDefinitionChips: React.FC<FeedbackDefinitionChipsProps> = ({
             <span className="truncate">{name}</span>
             <span
               role="button"
+              tabIndex={0}
               aria-label={`Remove ${name}`}
-              className="shrink-0 cursor-pointer text-light-slate hover:text-foreground"
+              className="shrink-0 cursor-pointer rounded text-light-slate hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 onRemove(name);
+              }}
+              // A span with role="button" is not focusable or activatable on its own, so both are
+              // supplied here. Enter and Space are stopped as well as handled, or Space would scroll
+              // the dropdown and Enter would submit the surrounding form.
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRemove(name);
+                }
               }}
             >
               <X className="size-3" />

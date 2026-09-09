@@ -16,7 +16,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -52,10 +52,22 @@ public class AnnotationQueueRoutingBufferService {
 
     static final String PENDING_SET_KEY = "annotation-queue:routing:pending";
     static final String PENDING_AUTHORS_KEY = "annotation-queue:routing:pending-authors";
-    static final String PENDING_SCORE_NAMES_KEY = "annotation-queue:routing:pending-score-names";
+
+    /**
+     * Prefix for the per-entity set of score names, one Redis set per pending member.
+     *
+     * <p>A set rather than a delimited value in one hash, for two reasons. It unions: consecutive scores on
+     * the same entity inside one debounce window each contribute their names, where overwriting would leave
+     * the freshness check blind to all but the last event's. And it needs no encoding, so a score name is
+     * stored as itself - a delimiter-joined value would corrupt any name containing the delimiter, and
+     * score names are free text.
+     *
+     * <p>One key per pending entity is a few hundred keys at the configured batch size, all deleted with
+     * their member once published.
+     */
+    static final String PENDING_SCORE_NAMES_PREFIX = "annotation-queue:routing:pending-score-names:";
 
     private static final String MEMBER_SEPARATOR = ":";
-    private static final String NAME_SEPARATOR = "\u001f";
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull AnnotationQueueRoutingConfig config;
@@ -97,8 +109,6 @@ public class AnnotationQueueRoutingBufferService {
         long dueAt = Instant.now().plusMillis(config.getDebounceDelay().toMilliseconds()).toEpochMilli();
         var pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
         var authors = redisClient.<String, String>getMap(PENDING_AUTHORS_KEY);
-        var pendingScoreNames = redisClient.<String, String>getMap(PENDING_SCORE_NAMES_KEY);
-        String encodedNames = String.join(NAME_SEPARATOR, scoreNames);
 
         return Mono.defer(() -> Flux.fromIterable(entityIds)
                 .flatMap(entityId -> {
@@ -107,7 +117,7 @@ public class AnnotationQueueRoutingBufferService {
                             .then(userName == null ? Mono.empty() : authors.fastPut(member, userName))
                             .then(scoreNames.isEmpty()
                                     ? Mono.empty()
-                                    : pendingScoreNames.fastPut(member, encodedNames));
+                                    : redisClient.<String>getSet(scoreNamesKey(member)).addAll(scoreNames));
                 })
                 .then()
                 .doOnSuccess(__ -> log.debug(
@@ -180,8 +190,9 @@ public class AnnotationQueueRoutingBufferService {
 
         return pending.removeAll(members)
                 .then(authors.fastRemove(members.toArray(String[]::new)))
-                .then(redisClient.<String, String>getMap(PENDING_SCORE_NAMES_KEY)
-                        .fastRemove(members.toArray(String[]::new)))
+                .then(Flux.fromIterable(members)
+                        .flatMap(member -> redisClient.getSet(scoreNamesKey(member)).delete())
+                        .then())
                 .then();
     }
 
@@ -197,7 +208,6 @@ public class AnnotationQueueRoutingBufferService {
     private Mono<List<DueEntity>> readDue(int limit) {
         var pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
         var authors = redisClient.<String, String>getMap(PENDING_AUTHORS_KEY);
-        var pendingScoreNames = redisClient.<String, String>getMap(PENDING_SCORE_NAMES_KEY);
         long now = Instant.now().toEpochMilli();
 
         return pending.valueRange(0, true, now, true, 0, limit)
@@ -206,24 +216,28 @@ public class AnnotationQueueRoutingBufferService {
                     if (members.isEmpty()) {
                         return Mono.just(List.<DueEntity>of());
                     }
-                    Set<String> memberKeys = Set.copyOf(members);
-                    return Mono.zip(
-                            authors.getAll(memberKeys).defaultIfEmpty(Map.of()),
-                            pendingScoreNames.getAll(memberKeys).defaultIfEmpty(Map.of()))
-                            .map(both -> members.stream()
-                                    .map(member -> parse(member, both.getT1().get(member),
-                                            decodeNames(both.getT2().get(member))))
-                                    .filter(Objects::nonNull)
-                                    .toList());
+                    return authors.getAll(Set.copyOf(members))
+                            .defaultIfEmpty(Map.of())
+                            .flatMap(authorByMember -> Flux.fromIterable(members)
+                                    .flatMap(member -> readScoreNames(member)
+                                            .map(names -> Optional
+                                                    .ofNullable(parse(member, authorByMember.get(member), names)))
+                                            .filter(Optional::isPresent)
+                                            .map(Optional::get))
+                                    .collectList());
                 })
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Set<String> decodeNames(String encoded) {
-        if (encoded == null || encoded.isEmpty()) {
-            return Set.of();
-        }
-        return Set.of(encoded.split(NAME_SEPARATOR));
+    private Mono<Set<String>> readScoreNames(String member) {
+        return redisClient.<String>getSet(scoreNamesKey(member))
+                .readAll()
+                .map(Set::copyOf)
+                .defaultIfEmpty(Set.of());
+    }
+
+    private String scoreNamesKey(String member) {
+        return PENDING_SCORE_NAMES_PREFIX + member;
     }
 
     /**

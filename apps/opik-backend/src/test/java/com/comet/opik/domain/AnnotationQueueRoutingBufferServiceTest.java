@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RScoredSortedSetReactive;
+import org.redisson.api.RSetReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
@@ -26,6 +27,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -54,7 +56,7 @@ class AnnotationQueueRoutingBufferServiceTest {
     @Mock
     private RMapReactive<String, String> authors;
     @Mock
-    private RMapReactive<String, String> scoreNames;
+    private RSetReactive<String> scoreNames;
     @Mock
     private AnnotationQueueRoutingPublisher publisher;
 
@@ -69,15 +71,15 @@ class AnnotationQueueRoutingBufferServiceTest {
                 .thenReturn(pending);
         when(redisClient.<String, String>getMap(AnnotationQueueRoutingBufferService.PENDING_AUTHORS_KEY))
                 .thenReturn(authors);
-        when(redisClient.<String, String>getMap(AnnotationQueueRoutingBufferService.PENDING_SCORE_NAMES_KEY))
-                .thenReturn(scoreNames);
+        when(redisClient.<String>getSet(anyString())).thenReturn(scoreNames);
 
         when(pending.addIfAbsent(anyDouble(), any())).thenReturn(Mono.just(true));
         when(pending.removeAll(any())).thenReturn(Mono.just(true));
         when(authors.fastPut(anyString(), anyString())).thenReturn(Mono.just(true));
         when(authors.fastRemove(any(String[].class))).thenReturn(Mono.just(1L));
-        when(scoreNames.fastPut(anyString(), anyString())).thenReturn(Mono.just(true));
-        when(scoreNames.fastRemove(any(String[].class))).thenReturn(Mono.just(1L));
+        when(scoreNames.addAll(anyCollection())).thenReturn(Mono.just(true));
+        when(scoreNames.readAll()).thenReturn(Mono.just(Set.of()));
+        when(scoreNames.delete()).thenReturn(Mono.just(true));
 
         service = new AnnotationQueueRoutingBufferService(redisClient, config, publisher);
     }
@@ -95,7 +97,7 @@ class AnnotationQueueRoutingBufferServiceTest {
             String expectedMember = "%s:trace:%s".formatted(WORKSPACE_ID, traceId);
             verify(pending).addIfAbsent(anyDouble(), eq(expectedMember));
             verify(authors).fastPut(expectedMember, USER_NAME);
-            verify(scoreNames).fastPut(expectedMember, "relevance");
+            verify(scoreNames).addAll((Collection<String>) Set.of("relevance"));
         }
 
         /**
@@ -117,7 +119,23 @@ class AnnotationQueueRoutingBufferServiceTest {
         void writesNoScoreNamesWhenTheEmitterDidNotSay() {
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(UUID.randomUUID()), Set.of()).block();
 
-            verify(scoreNames, never()).fastPut(anyString(), anyString());
+            verify(scoreNames, never()).addAll(anyCollection());
+        }
+
+        /**
+         * A set, so two scores on the same entity inside one window both contribute. Overwriting would
+         * leave the freshness check blind to every event but the last, which is the whole point of
+         * carrying the names.
+         */
+        @Test
+        void unionsScoreNamesAcrossEventsInTheSameWindow() {
+            UUID traceId = UUID.randomUUID();
+
+            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("relevance")).block();
+            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("hallucination")).block();
+
+            verify(scoreNames).addAll((Collection<String>) Set.of("relevance"));
+            verify(scoreNames).addAll((Collection<String>) Set.of("hallucination"));
         }
 
         @Test
@@ -175,7 +193,7 @@ class AnnotationQueueRoutingBufferServiceTest {
 
             verify(pending, never()).removeAll(any());
             verify(authors, never()).fastRemove(any(String[].class));
-            verify(scoreNames, never()).fastRemove(any(String[].class));
+            verify(scoreNames, never()).delete();
         }
 
         @Test
@@ -217,7 +235,7 @@ class AnnotationQueueRoutingBufferServiceTest {
             UUID traceId = UUID.randomUUID();
             givenDue(List.of(member(traceId)));
             givenAuthors(Map.of(member(traceId), USER_NAME));
-            when(scoreNames.getAll(any())).thenReturn(Mono.just(Map.of(member(traceId), "relevancesafety")));
+            when(scoreNames.readAll()).thenReturn(Mono.just(Set.of("relevance", "safety")));
             when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
 
             service.flush().block();
@@ -249,7 +267,6 @@ class AnnotationQueueRoutingBufferServiceTest {
     private void givenDue(List<String> members) {
         when(pending.valueRange(anyDouble(), any(Boolean.class), anyDouble(), any(Boolean.class), anyInt(),
                 anyInt())).thenReturn(Mono.just((Collection<Object>) List.<Object>copyOf(members)));
-        when(scoreNames.getAll(any())).thenReturn(Mono.just(Map.of()));
         when(authors.getAll(any())).thenReturn(Mono.just(Map.of()));
     }
 

@@ -100,6 +100,13 @@ type SharedProps<T extends FieldValues> = {
   groupIconClassName?: string;
   /** Shown when the last remaining group or condition cannot be deleted. */
   minimumMessage?: string;
+  /**
+   * Caps on how much can be added, where the caller's API enforces one. Left undefined by default
+   * because alerts have no such limit - only annotation queue automation does, at 5 and 5 - and a cap
+   * invented here would silently constrain a caller whose backend accepts more.
+   */
+  maxGroups?: number;
+  maxConditionsPerGroup?: number;
 };
 
 const DEFAULT_MINIMUM_MESSAGE =
@@ -137,6 +144,8 @@ const FeedbackScoreConditions = <T extends FieldValues>({
   operators = DEFAULT_OPERATORS,
   groupIconClassName = "bg-violet-600",
   minimumMessage = DEFAULT_MINIMUM_MESSAGE,
+  maxGroups,
+  maxConditionsPerGroup,
 }: SharedProps<T>) => {
   const groupsFieldArray = useFieldArray({
     control: form.control,
@@ -150,6 +159,8 @@ const FeedbackScoreConditions = <T extends FieldValues>({
     } as any);
 
   const canDeleteGroup = groupsFieldArray.fields.length > 1;
+  const atGroupLimit =
+    maxGroups !== undefined && groupsFieldArray.fields.length >= maxGroups;
 
   return (
     <div className="flex flex-col gap-2">
@@ -166,6 +177,7 @@ const FeedbackScoreConditions = <T extends FieldValues>({
             operators={operators}
             groupIconClassName={groupIconClassName}
             minimumMessage={minimumMessage}
+            maxConditionsPerGroup={maxConditionsPerGroup}
             label={`Group ${groupIndex + 1}`}
             onRemove={() => groupsFieldArray.remove(groupIndex)}
             canRemove={canDeleteGroup}
@@ -173,16 +185,22 @@ const FeedbackScoreConditions = <T extends FieldValues>({
         </React.Fragment>
       ))}
       <div className="flex h-8 items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="text-foreground hover:text-primary-hover"
-          onClick={addGroup}
+        <DisabledTooltip
+          disabled={atGroupLimit}
+          message={`At most ${maxGroups} groups.`}
         >
-          <Plus className="mr-0.5 size-3" />
-          Add OR group
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="text-foreground hover:text-primary-hover"
+            onClick={addGroup}
+            disabled={atGroupLimit}
+          >
+            <Plus className="mr-0.5 size-3" />
+            Add OR group
+          </Button>
+        </DisabledTooltip>
       </div>
     </div>
   );
@@ -205,6 +223,7 @@ const ConditionGroup = <T extends FieldValues>({
   operators = DEFAULT_OPERATORS,
   groupIconClassName,
   minimumMessage = DEFAULT_MINIMUM_MESSAGE,
+  maxConditionsPerGroup,
   label,
   onRemove,
   canRemove,
@@ -233,6 +252,9 @@ const ConditionGroup = <T extends FieldValues>({
 
   const canDeleteCondition =
     conditionsFieldArray.fields.length > 1 || canRemove;
+  const atConditionLimit =
+    maxConditionsPerGroup !== undefined &&
+    conditionsFieldArray.fields.length >= maxConditionsPerGroup;
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-soft-background">
@@ -283,16 +305,22 @@ const ConditionGroup = <T extends FieldValues>({
             />
           </React.Fragment>
         ))}
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="self-start pl-1 text-foreground hover:text-primary-hover"
-          onClick={addCondition}
+        <DisabledTooltip
+          disabled={atConditionLimit}
+          message={`At most ${maxConditionsPerGroup} conditions per group.`}
         >
-          <Plus className="mr-0.5 size-3" />
-          Add AND condition
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="self-start pl-1 text-foreground hover:text-primary-hover"
+            onClick={addCondition}
+            disabled={atConditionLimit}
+          >
+            <Plus className="mr-0.5 size-3" />
+            Add AND condition
+          </Button>
+        </DisabledTooltip>
       </div>
     </div>
   );

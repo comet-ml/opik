@@ -26,7 +26,11 @@ import StepperField from "@/v2/pages-shared/annotation-queues/StepperField";
 import FeedbackScoreConditions, {
   DEFAULT_UNWINDOWED_CONDITION,
 } from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
-import { ALL_OPERATOR_VALUES } from "@/v2/pages-shared/feedback-score-conditions/constants";
+import {
+  ALL_OPERATOR_VALUES,
+  AUTOMATION_MAX_CONDITIONS_PER_GROUP,
+  AUTOMATION_MAX_GROUPS,
+} from "@/v2/pages-shared/feedback-score-conditions/constants";
 import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { Switch } from "@/ui/switch";
 import { ArrowUpRight } from "lucide-react";
@@ -87,14 +91,25 @@ const formSchema = z
     automation_groups: z
       .array(
         z.object({
-          conditions: z.array(
-            z.object({
-              name: z.string(),
-              operator: z.enum(ALL_OPERATOR_VALUES),
-              threshold: z.string(),
-            }),
-          ),
+          // Both limits mirror the API's @Size(max = 5); without them the form would happily build a
+          // payload the backend rejects with a 422 after everything has been filled in.
+          conditions: z
+            .array(
+              z.object({
+                name: z.string(),
+                operator: z.enum(ALL_OPERATOR_VALUES),
+                threshold: z.string(),
+              }),
+            )
+            .max(
+              AUTOMATION_MAX_CONDITIONS_PER_GROUP,
+              `Cannot exceed ${AUTOMATION_MAX_CONDITIONS_PER_GROUP} conditions per group`,
+            ),
         }),
+      )
+      .max(
+        AUTOMATION_MAX_GROUPS,
+        `Cannot exceed ${AUTOMATION_MAX_GROUPS} groups`,
       )
       .default([]),
   })
@@ -558,6 +573,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                       // Automation compares one entity's score, so equality is meaningful here in a
                       // way it is not for an alert's windowed aggregate.
                       operators={[...ALL_OPERATOR_VALUES]}
+                      maxGroups={AUTOMATION_MAX_GROUPS}
+                      maxConditionsPerGroup={
+                        AUTOMATION_MAX_CONDITIONS_PER_GROUP
+                      }
                       groupIconClassName="bg-lime-400"
                       minimumMessage="Can't remove — automation needs at least one group with at least one condition."
                     />

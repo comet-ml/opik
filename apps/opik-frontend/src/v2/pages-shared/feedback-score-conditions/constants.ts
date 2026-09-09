@@ -34,3 +34,11 @@ export const OPERATOR_LABELS: Record<OperatorValue, string> = {
   "<": "less than",
   "=": "equals",
 };
+
+/**
+ * What the annotation queue automation API accepts, mirroring AnnotationQueueAutomation.MAX_GROUPS and
+ * MAX_CONDITIONS_PER_GROUP. Enforced in the form as well as by the backend so the sixth group is
+ * unreachable rather than a 422 after the user has filled it in. Alerts have no equivalent limit.
+ */
+export const AUTOMATION_MAX_GROUPS = 5;
+export const AUTOMATION_MAX_CONDITIONS_PER_GROUP = 5;
