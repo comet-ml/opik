@@ -282,6 +282,13 @@ repos:
         files: ^apps/opik-backend/(rebaseline_db_changelog|test_rebaseline_db_changelog)\.sh$
         pass_filenames: false
 
+      - id: agent-configs-drift
+        name: 🤖🔄 agent configs in sync
+        entry: scripts/agent-configs-manifest.sh check
+        language: system
+        files: ^\.agents/
+        pass_filenames: false
+
   # ---------------------------------------------------------------------------
   # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
   # typecheck (tsc can't be per-file: path aliases + cross-file inference).

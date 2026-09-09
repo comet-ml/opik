@@ -1,0 +1,43 @@
+name: "🤖🔄🧪 Agent Config Sync Tests"
+run-name: "🤖🔄🧪 Agent Config Sync Tests on ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: &paths
+      - '.agents/**'
+      - 'scripts/convert-mcp.sh'
+      - 'scripts/sync-agent-configs.sh'
+      - 'scripts/agent-configs-manifest.sh'
+      - 'scripts/test-agent-configs.sh'
+      - 'Makefile'
+      - '.hooks/post-checkout'
+      - '.hooks/post-merge'
+      - '.github/workflows/agent_configs_tests.yml'
+  push:
+    branches:
+      - 'main'
+    paths: *paths
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  agent-config-sync-tests:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Check agent-config drift (committed manifest matches .agents/)
+        run: make check-agent-configs
+
+      - name: Run agent-config sync tests
+        run: ./scripts/test-agent-configs.sh
