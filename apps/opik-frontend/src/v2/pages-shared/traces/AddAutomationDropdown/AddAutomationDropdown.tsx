@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Bell, ChevronDown, LucideIcon, UserPen, Zap } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -17,17 +18,35 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 
-/**
- * The three ways to automate something about what a project logs, gathered behind one button.
- *
- * <p>Each option opens the create form of its own feature, prefilled from the tab the user is on: an
- * annotation queue collecting threads when opened from Threads, traces when opened from Traces. The
- * annotation queue form also opens with its automation section switched on — arriving here is a
- * statement of intent, and having to hunt for the toggle afterwards would waste it.
- *
- * <p>Spans are deliberately absent from the annotation queue option: a span is never a queue item.
- */
 type AutomationTarget = "alert" | "online_evaluation" | "annotation_queue";
+
+/** What each logs tab calls the thing it lists, for the option descriptions. */
+const SUBJECT_BY_LOGS_TYPE: Record<LOGS_TYPE, string> = {
+  [LOGS_TYPE.traces]: "traces",
+  [LOGS_TYPE.spans]: "spans",
+  [LOGS_TYPE.threads]: "threads",
+};
+
+const EVALUATOR_SCOPE_BY_LOGS_TYPE: Record<LOGS_TYPE, EVALUATORS_RULE_SCOPE> = {
+  [LOGS_TYPE.traces]: EVALUATORS_RULE_SCOPE.trace,
+  [LOGS_TYPE.spans]: EVALUATORS_RULE_SCOPE.span,
+  [LOGS_TYPE.threads]: EVALUATORS_RULE_SCOPE.thread,
+};
+
+/** A span is never a queue item, so the Spans tab has no scope to map and no option to offer. */
+const QUEUE_SCOPE_BY_LOGS_TYPE: Record<
+  LOGS_TYPE,
+  ANNOTATION_QUEUE_SCOPE | null
+> = {
+  [LOGS_TYPE.traces]: ANNOTATION_QUEUE_SCOPE.TRACE,
+  [LOGS_TYPE.spans]: null,
+  [LOGS_TYPE.threads]: ANNOTATION_QUEUE_SCOPE.THREAD,
+};
+
+type OptionContext = {
+  logsType: LOGS_TYPE;
+  permissions: ReturnType<typeof usePermissions>["permissions"];
+};
 
 type AutomationOption = {
   target: AutomationTarget;
@@ -36,6 +55,8 @@ type AutomationOption = {
   /** Icon plate colour, from the design tokens for these three features. */
   iconClassName: string;
   description: (subject: string) => string;
+  /** Whether to offer this option at all. Lives on the option so adding one is a single edit. */
+  isAvailable: (context: OptionContext) => boolean;
 };
 
 const AUTOMATION_OPTIONS: AutomationOption[] = [
@@ -46,6 +67,7 @@ const AUTOMATION_OPTIONS: AutomationOption[] = [
     iconClassName: "bg-pink-500",
     description: (subject) =>
       `Get notified about ${subject} that need attention`,
+    isAvailable: () => true,
   },
   {
     target: "online_evaluation",
@@ -54,6 +76,8 @@ const AUTOMATION_OPTIONS: AutomationOption[] = [
     iconClassName: "bg-teal-500",
     description: (subject) =>
       `Automatically score incoming ${subject} with evaluators`,
+    isAvailable: ({ permissions }) =>
+      permissions.canUpdateOnlineEvaluationRules,
   },
   {
     target: "annotation_queue",
@@ -62,6 +86,9 @@ const AUTOMATION_OPTIONS: AutomationOption[] = [
     iconClassName: "bg-lime-400",
     description: (subject) =>
       `Automatically collect matching ${subject} for human review`,
+    isAvailable: ({ logsType, permissions }) =>
+      permissions.canCreateAnnotationQueues &&
+      QUEUE_SCOPE_BY_LOGS_TYPE[logsType] !== null,
   },
 ];
 
@@ -70,29 +97,27 @@ type AddAutomationDropdownProps = {
   logsType: LOGS_TYPE;
 };
 
+/**
+ * The three ways to automate something about what a project logs, gathered behind one button.
+ *
+ * Each option opens the create form of its own feature, prefilled from the tab the user is on: an
+ * annotation queue collecting threads when opened from Threads, traces when opened from Traces. The
+ * annotation queue form also opens with its automation section switched on - arriving here is a
+ * statement of intent, and having to hunt for the toggle afterwards would waste it.
+ */
 const AddAutomationDropdown: React.FunctionComponent<
   AddAutomationDropdownProps
 > = ({ projectId, logsType }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const {
-    permissions: { canCreateAnnotationQueues, canUpdateOnlineEvaluationRules },
-  } = usePermissions();
+  const { permissions } = usePermissions();
 
   const [openTarget, setOpenTarget] = useState<AutomationTarget | null>(null);
 
-  const isThreads = logsType === LOGS_TYPE.threads;
-  const isSpans = logsType === LOGS_TYPE.spans;
-  const subject = isThreads ? "threads" : isSpans ? "spans" : "traces";
-
-  const options = AUTOMATION_OPTIONS.filter(({ target }) => {
-    if (target === "annotation_queue") {
-      return !isSpans && canCreateAnnotationQueues;
-    }
-    if (target === "online_evaluation") {
-      return canUpdateOnlineEvaluationRules;
-    }
-    return true;
-  });
+  const subject = SUBJECT_BY_LOGS_TYPE[logsType];
+  const queueScope = QUEUE_SCOPE_BY_LOGS_TYPE[logsType];
+  const options = AUTOMATION_OPTIONS.filter((option) =>
+    option.isAvailable({ logsType, permissions }),
+  );
 
   if (!options.length) {
     return null;
@@ -113,7 +138,10 @@ const AddAutomationDropdown: React.FunctionComponent<
             const item = (
               <div className="flex items-start gap-2">
                 <span
-                  className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] p-0.5 ${option.iconClassName}`}
+                  className={cn(
+                    "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] p-0.5",
+                    option.iconClassName,
+                  )}
                 >
                   <option.icon className="size-3 text-background" />
                 </span>
@@ -152,16 +180,12 @@ const AddAutomationDropdown: React.FunctionComponent<
           })}
         </DropdownMenuContent>
       </DropdownMenu>
-      {openTarget === "annotation_queue" && (
+      {openTarget === "annotation_queue" && queueScope && (
         <AddEditAnnotationQueueDialog
           open
           setOpen={(open) => !open && setOpenTarget(null)}
           projectId={projectId}
-          scope={
-            isThreads
-              ? ANNOTATION_QUEUE_SCOPE.THREAD
-              : ANNOTATION_QUEUE_SCOPE.TRACE
-          }
+          scope={queueScope}
           expandAutomation
         />
       )}
@@ -170,13 +194,7 @@ const AddAutomationDropdown: React.FunctionComponent<
           open
           setOpen={(open) => !open && setOpenTarget(null)}
           projectId={projectId}
-          defaultScope={
-            isThreads
-              ? EVALUATORS_RULE_SCOPE.thread
-              : isSpans
-                ? EVALUATORS_RULE_SCOPE.span
-                : EVALUATORS_RULE_SCOPE.trace
-          }
+          defaultScope={EVALUATOR_SCOPE_BY_LOGS_TYPE[logsType]}
           mode="create"
         />
       )}

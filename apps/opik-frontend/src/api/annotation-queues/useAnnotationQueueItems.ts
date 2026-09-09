@@ -18,11 +18,10 @@ type UseAnnotationQueueItemsResponse = {
 /**
  * Queue membership metadata for the items currently on screen.
  *
- * <p>A lookup rather than a listing: the items table is driven by the traces API with its own sorting and
+ * A lookup rather than a listing: the items table is driven by the traces API with its own sorting and
  * filtering, so asking for a page of membership would return rows that cannot be aligned with the rows
- * being displayed. The caller passes the ids it is showing and joins by id.
- *
- * <p>Ids with no membership are simply absent from the response.
+ * being displayed. The caller passes the ids it is showing and joins by id. Ids with no membership are
+ * simply absent from the response.
  */
 const getAnnotationQueueItems = async (
   { signal }: QueryFunctionContext,

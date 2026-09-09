@@ -15,10 +15,10 @@ type FeedbackDefinitionChipsProps = {
 /**
  * The selected feedback scores, shown as removable chips inside the closed select.
  *
- * <p>Only the chips that actually fit are rendered, with a "+N" for the rest — the same measured
- * approach the tag columns use, so a queue with a dozen scores does not stretch the field.
+ * Only the chips that actually fit are rendered, with a "+N" for the rest - the same measured approach
+ * the tag columns use, so a queue with a dozen scores does not stretch the field.
  *
- * <p>The remove control is a span rather than a button on purpose: this renders inside the select's
+ * The remove control is a span rather than a button on purpose: this renders inside the select's
  * trigger button, and a nested button is invalid. Pointer events are stopped so removing a chip does
  * not also open the dropdown.
  */

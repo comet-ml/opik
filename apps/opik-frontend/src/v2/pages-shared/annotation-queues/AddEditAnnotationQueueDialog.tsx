@@ -22,12 +22,14 @@ import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import FeedbackDefinitionsSelectBox from "@/v2/pages-shared/annotation-queues/FeedbackDefinitionsSelectBox";
 import FeedbackDefinitionChips from "@/v2/pages-shared/annotation-queues/FeedbackDefinitionChips";
 import AutomationZapIcon from "@/v2/pages-shared/annotation-queues/AutomationZapIcon";
+import StepperField from "@/v2/pages-shared/annotation-queues/StepperField";
 import FeedbackScoreConditions, {
   DEFAULT_UNWINDOWED_CONDITION,
 } from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
+import { ALL_OPERATOR_VALUES } from "@/v2/pages-shared/feedback-score-conditions/constants";
 import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { Switch } from "@/ui/switch";
-import { ArrowUpRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import {
   ANNOTATION_QUEUE_SCOPE,
@@ -46,76 +48,6 @@ const QUEUE_DOCS_LINK = buildDocsUrl("/evaluation/advanced/annotation_queues");
 
 // The design's labels sit 2px in from the field edge with 2px beneath, making a 22px label box.
 const LABEL_CLASS = "px-0.5 pb-0.5";
-
-/**
- * A number field drawn the way the design draws it: the unit reads as part of the value, and the
- * stepper is an explicit glyph rather than the browser's hover-only spinner.
- *
- * <p>The glyph is wired to stepUp/stepDown so it does what it looks like it does — a decorative
- * stepper that ignores clicks would be worse than no stepper at all.
- */
-const StepperField = React.forwardRef<
-  HTMLInputElement,
-  React.ComponentProps<typeof Input> & { suffix?: string }
->(({ suffix, className, ...props }, forwardedRef) => {
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-
-  // FormControl hands its ref down through a Slot for the field's aria wiring and focus-on-error,
-  // and the stepper needs the same node — so both get it.
-  const setRef = (node: HTMLInputElement | null) => {
-    inputRef.current = node;
-    if (typeof forwardedRef === "function") {
-      forwardedRef(node);
-    } else if (forwardedRef) {
-      forwardedRef.current = node;
-    }
-  };
-
-  const step = (direction: "up" | "down") => {
-    const input = inputRef.current;
-    if (!input) return;
-    direction === "up" ? input.stepUp() : input.stepDown();
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex h-8 items-center gap-1 rounded-md border border-border bg-background px-3 hover:shadow-sm focus-within:border-primary",
-        className,
-      )}
-    >
-      <Input
-        ref={setRef}
-        variant="unstyled"
-        dimension="none"
-        type="number"
-        className="w-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        {...props}
-      />
-      {suffix && <span className="comet-body-s text-foreground">{suffix}</span>}
-      <span className="ml-auto flex shrink-0 flex-col text-light-slate">
-        <button
-          type="button"
-          aria-label="Increase"
-          className="flex h-2 items-center hover:text-foreground"
-          onClick={() => step("up")}
-        >
-          <ChevronUp className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          aria-label="Decrease"
-          className="flex h-2 items-center hover:text-foreground"
-          onClick={() => step("down")}
-        >
-          <ChevronDown className="size-3.5" />
-        </button>
-      </span>
-    </div>
-  );
-});
-StepperField.displayName = "StepperField";
 
 const SCOPE_OPTIONS = [
   {
@@ -158,7 +90,7 @@ const formSchema = z
           conditions: z.array(
             z.object({
               name: z.string(),
-              operator: z.enum([">", "<", "="]),
+              operator: z.enum(ALL_OPERATOR_VALUES),
               threshold: z.string(),
             }),
           ),
@@ -248,7 +180,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       project_id: defaultQueue?.project_id || projectId || "",
       scope: defaultQueue?.scope || scope || ANNOTATION_QUEUE_SCOPE.TRACE,
       feedback_definition_names: defaultQueue?.feedback_definition_names || [],
-      comments_enabled: defaultQueue?.comments_enabled || true,
+      comments_enabled: defaultQueue?.comments_enabled ?? true,
       annotators_per_item: defaultQueue?.annotators_per_item || 1,
       lock_timeout_minutes:
         (defaultQueue?.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) /
@@ -625,12 +557,12 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                       projectId={projectId}
                       // Automation compares one entity's score, so equality is meaningful here in a
                       // way it is not for an alert's windowed aggregate.
-                      operators={[">", "<", "="]}
+                      operators={[...ALL_OPERATOR_VALUES]}
                       groupIconClassName="bg-lime-400"
                       minimumMessage="Can't remove — automation needs at least one group with at least one condition."
                     />
                     {automationGroupsError && (
-                      <p className="mt-1.5 text-[0.8rem] font-medium text-destructive">
+                      <p className="comet-body-s mt-1.5 px-0.5 text-destructive">
                         {automationGroupsError}
                       </p>
                     )}

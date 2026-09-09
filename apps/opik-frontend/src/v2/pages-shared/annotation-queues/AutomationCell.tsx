@@ -9,7 +9,7 @@ import { AnnotationQueue } from "@/types/annotation-queues";
 /**
  * Whether a queue populates itself.
  *
- * <p>"On" means matching items are added automatically; it does not mean the queue is closed to people —
+ * "On" means matching items are added automatically; it does not mean the queue is closed to people -
  * manual additions keep working either way, which is why the label is On/Off rather than
  * Automatic/Manual.
  */

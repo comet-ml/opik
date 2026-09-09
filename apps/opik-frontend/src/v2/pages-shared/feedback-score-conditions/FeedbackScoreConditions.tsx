@@ -31,12 +31,12 @@ import {
 /**
  * Score threshold condition builder: OR-ed groups of AND-ed conditions.
  *
- * <p>Shared by alerts and annotation queue automation, which the design asks to look and behave
+ * Shared by alerts and annotation queue automation, which the design asks to look and behave
  * identically. The two differ in only three ways, all props here: alerts aggregate a score over a time
  * window and so show the window select, automation compares a single entity's score and does not; the
  * field path root differs; and the group icon is tinted per feature.
  *
- * <p>The form is addressed by a runtime path string rather than a typed path. React Hook Form cannot
+ * The form is addressed by a runtime path string rather than a typed path. React Hook Form cannot
  * express "an array of groups somewhere in an arbitrary form shape" without the caller supplying a
  * literal, so the caller passes the root and this component builds children from it. That is the same
  * trade the alert-only version made with its literal casts.
@@ -465,7 +465,7 @@ const ConditionRow = <T extends FieldValues>({
         </DisabledTooltip>
       </div>
       {hasErrors && (
-        <div className="flex flex-wrap gap-x-2 px-2 text-[0.8rem] font-medium text-destructive">
+        <div className="comet-body-s flex flex-wrap gap-x-2 px-2 text-destructive">
           {conditionFields.map(
             (f) => errors[f] && <span key={f}>{errors[f]}</span>,
           )}

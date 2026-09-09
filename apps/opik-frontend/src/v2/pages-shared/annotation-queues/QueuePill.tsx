@@ -12,10 +12,10 @@ type QueuePillProps = {
 /**
  * The neutral pill the annotation queue tables use for Scope, Automation and Source.
  *
- * <p>Surface taken from the Latency pill in Optimization runs, which the design names as the
- * reference: a 20px muted plate with a hairline border, a 12px icon in {@code --muted-gray} and an
- * accented label. It is deliberately not the {@code Tag} component — that one has no border, a 2px
- * radius and a different ground, so the two read as different objects side by side.
+ * Surface taken from the Latency pill in Optimization runs, which the design names as the reference:
+ * a 20px muted plate with a hairline border, a 12px icon in --muted-gray and an accented label.
+ * Deliberately not the Tag component - that one has no border, a 2px radius and a different ground,
+ * so the two would read as different objects side by side.
  */
 const QueuePill: React.FC<QueuePillProps> = ({
   icon: Icon,
