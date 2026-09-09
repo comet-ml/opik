@@ -53,6 +53,33 @@ set_containers_for_profile() {
 
 }
 
+# `compose up --wait --wait-timeout` is only available from this version on.
+COMPOSE_MIN_VERSION="2.17.0"
+
+compose_version() {
+  docker compose version --short 2>/dev/null
+}
+
+compose_supports_wait() {
+  local version
+  version=$(compose_version)
+  [[ -z "$version" ]] && return 1
+  # Sort the detected and minimum versions together; support is present unless the detected one
+  # sorts first, which keeps this correct across multi-digit components (e.g. 2.9 vs 2.17).
+  [[ "$(printf '%s\n%s\n' "$COMPOSE_MIN_VERSION" "${version#v}" | sort -V | head -1)" == "$COMPOSE_MIN_VERSION" ]]
+}
+
+# The compose service names to wait on, derived from the profile's container list so the two can't
+# drift. Run-once jobs are absent from that list by design and so are never waited on.
+wait_services() {
+  local container
+  for container in "${CONTAINERS[@]}"; do
+    # "<project>-<service>-1" -> "<service>"
+    container="${container#"${COMPOSE_PROJECT_NAME}"-}"
+    echo "${container%-1}"
+  done
+}
+
 get_verify_cmd() {
   local cmd="./opik.sh"
   if [[ "$INFRA" == "true" ]]; then
@@ -239,11 +266,15 @@ create_opik_config_if_missing() {
   
   local ui_url=$(get_ui_url)
   
-  cat > "$config_file" << EOF
+  if ! cat > "$config_file" << EOF
 [opik]
 url_override = ${ui_url}/api/
 workspace = default
 EOF
+  then
+    echo "❌ Failed to write $config_file"
+    return 1
+  fi
   debugLog "[DEBUG] .opik.config file created successfully with URL: ${ui_url}/api/"
 }
 
@@ -370,11 +401,34 @@ start_missing_containers() {
   cmd=$(get_docker_compose_cmd)
 
   local startup_timeout="${OPIK_STARTUP_TIMEOUT:-300}"
+  if ! [[ "$startup_timeout" =~ ^[0-9]+$ ]]; then
+    echo "❌ OPIK_STARTUP_TIMEOUT must be a non-negative integer number of seconds, got '$startup_timeout'"
+    return 1
+  fi
+
+  if ! compose_supports_wait; then
+    echo "❌ Docker Compose $(compose_version) is too old: starting Opik requires v${COMPOSE_MIN_VERSION}+"
+    echo "   (the startup readiness check relies on 'compose up --wait --wait-timeout')."
+    echo "   Please upgrade Docker Compose and retry."
+    return 1
+  fi
+
+  # Start everything in the profile, including the run-once jobs (mc, demo-data-generator) that
+  # nothing declares a dependency on — passing a service list to the waiting command below would
+  # otherwise silently skip them.
+  if ! $cmd up -d ${BUILD_MODE:+--build}; then
+    echo "❌ Failed to start containers"
+    $cmd ps
+    return 1
+  fi
+
   echo "⏳ Waiting for all containers to be running and healthy (timeout: ${startup_timeout}s)..."
 
-  # --wait waits on every service concurrently and honours each service's own healthcheck plus the
-  # depends_on graph, so a slow service can't be starved by the time spent on the ones before it.
-  if ! $cmd up -d ${BUILD_MODE:+--build} --wait --wait-timeout "$startup_timeout"; then
+  # Wait only on the long-running services for this profile. --wait waits on them concurrently and
+  # honours each healthcheck plus the depends_on graph, so a slow service can't be starved by the
+  # time spent on the ones before it. The run-once jobs are deliberately excluded here: --wait
+  # treats any service exit as a failure, even a successful exit 0.
+  if ! $cmd up -d --wait --wait-timeout "$startup_timeout" $(wait_services); then
     echo "❌ Containers did not become healthy within ${startup_timeout}s"
     echo "   Set OPIK_STARTUP_TIMEOUT to allow more time, e.g. OPIK_STARTUP_TIMEOUT=600 $(get_start_cmd)"
     echo ""

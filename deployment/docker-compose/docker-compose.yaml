@@ -255,10 +255,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # mc provisions the `public` bucket the backend writes attachments to, and is a run-once job.
-      # Declaring the completion dependency also tells `compose up --wait` that its exit is expected.
-      mc:
-        condition: service_completed_successfully
     tmpfs:
       - /tmp
 
