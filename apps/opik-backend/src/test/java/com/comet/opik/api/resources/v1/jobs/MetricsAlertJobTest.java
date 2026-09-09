@@ -37,6 +37,7 @@ import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.WINDOW_IN_SECONDS_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -230,6 +231,29 @@ class MetricsAlertJobTest {
     }
 
     @Test
+    void firesTraceErrorsAlertWhenWindowIsProvidedAsWindowInSeconds() {
+        Alert alert = alertWithErrorThresholdConfig(Map.of(
+                THRESHOLD_CONFIG_KEY, "2",
+                WINDOW_IN_SECONDS_CONFIG_KEY, "60"));
+
+        when(projectMetricsDAO.getTotalTraceErrors(anyList(), any(Instant.class), any(Instant.class)))
+                .thenAnswer(invocation -> {
+                    Instant startTime = invocation.getArgument(1);
+                    Instant endTime = invocation.getArgument(2);
+                    assertThat(java.time.Duration.between(startTime, endTime).getSeconds()).isEqualTo(60);
+                    return Mono.just(new BigDecimal("3"));
+                });
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_ERRORS), anyList(), anyList(),
+                anyList());
+    }
+
+    @Test
     void doesNotEvaluateWhenInterrupted() throws org.quartz.UnableToInterruptJobException {
         job.interrupt();
         job.doJob(null);
@@ -284,6 +308,28 @@ class MetricsAlertJobTest {
                         THRESHOLD_CONFIG_KEY, threshold,
                         WINDOW_CONFIG_KEY, "300"))
                 .groupIndex(groupIndex)
+                .build();
+    }
+
+    private static Alert alertWithErrorThresholdConfig(Map<String, String> configValue) {
+        AlertTrigger trigger = AlertTrigger.builder()
+                .id(UUID.randomUUID())
+                .eventType(AlertEventType.TRACE_ERRORS)
+                .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                        .id(UUID.randomUUID())
+                        .type(AlertTriggerConfigType.THRESHOLD_ERRORS)
+                        .configValue(configValue)
+                        .build()))
+                .build();
+
+        return Alert.builder()
+                .id(UUID.randomUUID())
+                .name("test-alert")
+                .enabled(true)
+                .webhook(Webhook.builder().url("http://example/hook").build())
+                .triggers(List.of(trigger))
+                .projectId(PROJECT_ID)
+                .workspaceId(WORKSPACE_ID)
                 .build();
     }
 
