@@ -24,6 +24,8 @@ favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
+  - path: ./page_actions_install_tools.js
+    strategy: afterInteractive
   - path: ./mcp_prompt_copy.js
     strategy: afterInteractive
 css: ./styles.css
@@ -36,6 +38,15 @@ analytics:
   posthog:
     api-key: ${POSTHOG_API_KEY}
     endpoint: ${POSTHOG_API_HOST}
+theme:
+  page-actions: toolbar
+
+page-actions:
+  default: copy-page
+  options:
+    claude: true
+    chatgpt: true
+
 layout:
   searchbar-placement: header
   tabs-placement: header
