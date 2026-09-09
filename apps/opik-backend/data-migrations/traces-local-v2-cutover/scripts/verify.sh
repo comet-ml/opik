@@ -125,12 +125,23 @@ log() {
 # Extract one `-- >>> BEGIN <name>` .. `-- >>> END <name>` block from the reference SQL (exact-line markers), and
 # substitute this window's placeholders.
 render_block() {
-    local block="$1" lo="$2" hi="$3" sql begins ends masked
+    local block="$1" lo="$2" hi="$3" sql begins ends masked begin_line end_line
     # Exactly one pair: the awk otherwise runs to EOF on a missing END and sweeps the later blocks in with this one.
     begins="$(grep -cxF -e "-- >>> BEGIN $block" "$VERIFY_SQL" || true)"
     ends="$(grep -cxF -e "-- >>> END $block" "$VERIFY_SQL" || true)"
     if (( begins != 1 || ends != 1 )); then
         log "ERROR: $VERIFY_SQL holds $begins '-- >>> BEGIN $block' and $ends '-- >>> END $block'; expected one of each." >&2
+        return 1
+    fi
+    # Counting alone misses an END moved ABOVE its BEGIN, which still counts 1 and 1 and gives the same run-on capture.
+    # Here that costs queries rather than correctness: every block is a read, and each caller parses the first row,
+    # which still comes from the intended statement. Refused anyway -- drill-down and the two re-checks are not cheap
+    # to run per window by accident, and "the caller happens to parse the right row" is not a property to depend on.
+    read -r begin_line end_line <<<"$(awk -v b="-- >>> BEGIN $block" -v e="-- >>> END $block" \
+        '$0 == b {bl = NR} $0 == e {el = NR} END {print bl, el}' "$VERIFY_SQL")"
+    if (( end_line <= begin_line )); then
+        log "ERROR: $VERIFY_SQL has the '$block' markers out of order (BEGIN at line $begin_line, END at line" >&2
+        log "       $end_line), so the block would capture to end of file. Refusing to run it." >&2
         return 1
     fi
     sql="$(awk -v begin="-- >>> BEGIN $block" -v end="-- >>> END $block" \

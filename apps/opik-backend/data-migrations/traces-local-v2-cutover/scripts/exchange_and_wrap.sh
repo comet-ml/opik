@@ -252,14 +252,27 @@ extract() {
 # RETURN, not exit: `render` calls this inside a command substitution, where an exit would end only that subshell and
 # hand the caller partial SQL. Every caller assigns first and adds `|| exit 2`, so a refusal still stops the run.
 require_rendered() {
-    local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends
-    # Exactly one pair, checked on the file rather than the extraction: the awk stops at the first END and otherwise
-    # runs to EOF, so a missing or renamed END sweeps every later block into this one and --multiquery executes them
-    # all. The content checks below cannot see that -- a run-on capture still contains this block's own statement.
+    local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends begin_line end_line
+    # Both structural checks read the FILE, not the extraction, because the content checks below cannot see a run-on
+    # capture: extract()'s awk clears its flag only on a line equal to the END marker, so with no such line after the
+    # BEGIN it captures to end of file and --multiquery executes every later block too. Such a capture is neither empty
+    # nor missing this block's own statement, and its must_contain token can be satisfied by the swept-in neighbour --
+    # so identity does not localize to the intended block either.
+    #
+    # First: exactly one of each marker. Catches a missing or renamed END.
     begins="$(grep -cxF -e "-- >>> BEGIN $what" "$file" || true)"
     ends="$(grep -cxF -e "-- >>> END $what" "$file" || true)"
     if (( begins != 1 || ends != 1 )); then
         echo "ERROR: $file holds $begins '-- >>> BEGIN $what' and $ends '-- >>> END $what'; expected one of each." >&2
+        return 2
+    fi
+    # Second: the END must sit after its BEGIN. Counting alone misses a reordered END, which still counts 1 and 1 while
+    # producing that same run-on capture. One pass, since the counts above establish there is exactly one of each.
+    read -r begin_line end_line <<<"$(awk -v b="-- >>> BEGIN $what" -v e="-- >>> END $what" \
+        '$0 == b {bl = NR} $0 == e {el = NR} END {print bl, el}' "$file")"
+    if (( end_line <= begin_line )); then
+        echo "ERROR: $file has the '$what' markers out of order (BEGIN at line $begin_line, END at line $end_line)," >&2
+        echo "       so the block would capture to end of file and sweep every later block into it. Refusing to run it." >&2
         return 2
     fi
     masked="$(sed 's/--.*$//' <<<"$sql")"

@@ -189,7 +189,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    prints `cutover_start`, runs `EXCHANGE TABLES ... ON CLUSTER` and renames the displaced old data to
    `traces_pre_cutover_backup` (see "Naming and the parked backup"). It **stops there by default** (EXCHANGE only,
    leaving `traces` a `MergeTree` where deletes still work); the `RENAME` + `Distributed` wrap runs only with
-   `--with-wrap`. Then reconcile (step 5) and verify.
+   `--with-wrap`. Afterwards, size the tail write-gap (["The final cutover window"](#the-final-cutover-window)) and
+   verify (["Verifying the migration"](#verifying-the-migration-qa)).
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
        --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused
