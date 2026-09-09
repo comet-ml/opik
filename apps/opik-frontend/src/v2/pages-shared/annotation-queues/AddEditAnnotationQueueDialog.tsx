@@ -26,7 +26,7 @@ import FeedbackScoreConditions, {
 } from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
 import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { Switch } from "@/ui/switch";
-import { ArrowUpRight, Zap } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronUp, Zap } from "lucide-react";
 
 import {
   ANNOTATION_QUEUE_SCOPE,
@@ -42,6 +42,79 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const QUEUE_DOCS_LINK = buildDocsUrl("/evaluation/advanced/annotation_queues");
+
+// The design's labels sit 2px in from the field edge with 2px beneath, making a 22px label box.
+const LABEL_CLASS = "px-0.5 pb-0.5";
+
+/**
+ * A number field drawn the way the design draws it: the unit reads as part of the value, and the
+ * stepper is an explicit glyph rather than the browser's hover-only spinner.
+ *
+ * <p>The glyph is wired to stepUp/stepDown so it does what it looks like it does — a decorative
+ * stepper that ignores clicks would be worse than no stepper at all.
+ */
+const StepperField = React.forwardRef<
+  HTMLInputElement,
+  React.ComponentProps<typeof Input> & { suffix?: string }
+>(({ suffix, className, ...props }, forwardedRef) => {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // FormControl hands its ref down through a Slot for the field's aria wiring and focus-on-error,
+  // and the stepper needs the same node — so both get it.
+  const setRef = (node: HTMLInputElement | null) => {
+    inputRef.current = node;
+    if (typeof forwardedRef === "function") {
+      forwardedRef(node);
+    } else if (forwardedRef) {
+      forwardedRef.current = node;
+    }
+  };
+
+  const step = (direction: "up" | "down") => {
+    const input = inputRef.current;
+    if (!input) return;
+    direction === "up" ? input.stepUp() : input.stepDown();
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex h-8 items-center gap-1 rounded-md border border-border bg-background px-3 hover:shadow-sm focus-within:border-primary",
+        className,
+      )}
+    >
+      <Input
+        ref={setRef}
+        variant="unstyled"
+        dimension="none"
+        type="number"
+        className="w-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        {...props}
+      />
+      {suffix && <span className="comet-body-s text-foreground">{suffix}</span>}
+      <span className="ml-auto flex shrink-0 flex-col text-light-slate">
+        <button
+          type="button"
+          aria-label="Increase"
+          className="flex h-2 items-center hover:text-foreground"
+          onClick={() => step("up")}
+        >
+          <ChevronUp className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Decrease"
+          className="flex h-2 items-center hover:text-foreground"
+          onClick={() => step("down")}
+        >
+          <ChevronDown className="size-3.5" />
+        </button>
+      </span>
+    </div>
+  );
+});
+StepperField.displayName = "StepperField";
 
 const SCOPE_OPTIONS = [
   {
@@ -212,10 +285,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   ) as string | undefined;
 
   const isEdit = Boolean(defaultQueue);
-  const title = isEdit ? "Edit annotation queue" : "Create annotation queue";
-  const submitText = isEdit
-    ? "Update annotation queue"
-    : "Create annotation queue";
+  const title = isEdit ? "Edit annotation queue" : "New annotation queue";
+  const submitText = isEdit ? "Update queue" : "Create queue";
 
   const getQueue = useCallback(() => {
     const formData = form.getValues();
@@ -300,13 +371,18 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     >
       <SheetContent
         side="right"
-        className="flex w-full max-w-none flex-col p-0 sm:max-w-[800px]"
+        className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[800px]"
         // A select or nested dialog opened from inside the form must not be treated as an outside
         // click, or configuring a field would close the whole form.
         blockOverlayClose={isNestedDialogOpen}
         header={
           <SheetTopBar variant="form" title={title}>
-            <Button variant="outline" size="2xs" asChild>
+            <Button
+              variant="outline"
+              size="2xs"
+              className="rounded-[4px]"
+              asChild
+            >
               <a href={QUEUE_DOCS_LINK} target="_blank" rel="noreferrer">
                 Docs
                 <ArrowUpRight className="ml-1 size-3" />
@@ -327,8 +403,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                 render={({ field, formState }) => {
                   const validationErrors = get(formState.errors, ["name"]);
                   return (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
+                    <FormItem className="gap-1">
+                      <FormLabel className={LABEL_CLASS}>Name</FormLabel>
                       <FormControl>
                         <Input
                           dimension="sm"
@@ -350,8 +426,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                 control={form.control}
                 name="scope"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Scope</FormLabel>
+                  <FormItem className="gap-1">
+                    <FormLabel className={LABEL_CLASS}>Scope</FormLabel>
                     <FormControl>
                       <ToggleGroup
                         type="single"
@@ -370,7 +446,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                             size="sm"
                             // bg-muted is this theme's #F1F5F9 — the design's active fill — and it
                             // follows dark mode, which a literal hex would not.
-                            className="comet-body-xs flex-1 hover:bg-upload-icon-bg data-[state=on]:bg-muted data-[state=on]:text-foreground"
+                            className="comet-body-xs h-[22px] flex-1 hover:bg-upload-icon-bg data-[state=on]:bg-muted data-[state=on]:text-foreground"
                           >
                             {option.label}
                           </ToggleGroupItem>
@@ -385,12 +461,14 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                 control={form.control}
                 name="instructions"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Instructions (optional)</FormLabel>
+                  <FormItem className="gap-1">
+                    <FormLabel className={LABEL_CLASS}>
+                      Instructions (optional)
+                    </FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder="Add instructions for annotators"
-                        className="min-h-14"
+                        className="h-14 min-h-14"
                         {...field}
                       />
                     </FormControl>
@@ -408,8 +486,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   const selected = field.value ?? [];
 
                   return (
-                    <FormItem>
-                      <FormLabel>Feedback scores (optional)</FormLabel>
+                    <FormItem className="gap-1">
+                      <FormLabel className={LABEL_CLASS}>
+                        Feedback scores (optional)
+                      </FormLabel>
                       <FormControl>
                         <FeedbackDefinitionsSelectBox
                           value={selected}
@@ -449,8 +529,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   control={form.control}
                   name="annotators_per_item"
                   render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>
+                    <FormItem className="flex-1 gap-1">
+                      <FormLabel className={LABEL_CLASS}>
                         Annotators per item{" "}
                         <ExplainerIcon
                           className="inline"
@@ -458,12 +538,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         />
                       </FormLabel>
                       <FormControl>
-                        <Input
-                          dimension="sm"
-                          type="number"
-                          min={1}
-                          {...field}
-                        />
+                        <StepperField {...field} min={1} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -473,8 +548,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   control={form.control}
                   name="lock_timeout_minutes"
                   render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>
+                    <FormItem className="flex-1 gap-1">
+                      <FormLabel className={LABEL_CLASS}>
                         Lock timeout{" "}
                         <ExplainerIcon
                           className="inline"
@@ -482,28 +557,19 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         />
                       </FormLabel>
                       <FormControl>
-                        {/* The unit lives in the field rather than the label, per the design. It is
-                            decoration over a plain number input, so it must not swallow clicks. */}
-                        <div className="relative">
-                          <Input
-                            dimension="sm"
-                            type="number"
-                            min={1}
-                            max={60}
-                            className="pr-12"
-                            {...field}
-                          />
-                          <span className="comet-body-s pointer-events-none absolute inset-y-0 right-8 flex items-center text-light-slate">
-                            min
-                          </span>
-                        </div>
+                        <StepperField
+                          {...field}
+                          min={1}
+                          max={60}
+                          suffix="min"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              <Separator orientation="horizontal" className="my-0" />
+              <Separator orientation="horizontal" className="my-1" />
               <div className="overflow-hidden rounded-md border border-border bg-soft-background">
                 <div
                   className={cn(
@@ -529,6 +595,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         <FormItem className="shrink-0">
                           <FormControl>
                             <Switch
+                              size="xs"
                               checked={field.value}
                               onCheckedChange={field.onChange}
                               aria-label="Enable automation"
@@ -565,7 +632,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             </form>
           </Form>
         </div>
-        <div className="flex items-center gap-2 border-t border-border px-5 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
           <Button
             type="submit"
             size="sm"
@@ -573,9 +643,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             onClick={form.handleSubmit(onSubmit)}
           >
             {submitText}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
-            Cancel
           </Button>
         </div>
       </SheetContent>
