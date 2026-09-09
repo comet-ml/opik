@@ -7,6 +7,12 @@ failed carries a placeholder ``0.0`` that would otherwise be stored as if it wer
 
 The endpoint rejects a response only when *no* score is usable: a mixed list is passed through, so the
 usable scores still reach the backend, which drops the rest and reports them on the rule's log stream.
+
+``scoring_failed`` is matched strictly against ``True`` rather than by truthiness, because this side only
+decides whether to reject the whole response while the backend decides what is stored. A truthy
+non-boolean (``"false"`` is a truthy string in Python) would otherwise reject a score the backend would
+have stored quite happily. Erring the other way costs nothing: the backend deserializes the flag itself
+and drops what it considers failed.
 """
 
 import re
@@ -30,7 +36,7 @@ def unusable_scores(scores: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
             unusable.append(("", NO_VALUE))
         elif score.get("value") is None:
             unusable.append((score.get("name"), NO_VALUE))
-        elif score.get("scoring_failed"):
+        elif score.get("scoring_failed") is True:
             unusable.append((score.get("name"), SCORING_FAILED))
     return unusable
 

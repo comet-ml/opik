@@ -1547,8 +1547,8 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Splits Python evaluator results into the ones that can be stored and the names of the ones that
-     * cannot, by reason. Shared by the trace, span and thread Python scorers.
+     * Splits Python evaluator results three ways: the ones that can be stored, and the names of the ones
+     * that cannot, by reason. Shared by the trace, span and thread Python scorers.
      *
      * <p>A user metric is free to return a score with no value — {@code ScoreResult(value=None)} for a
      * check that did not apply, or a scoring attempt the metric itself gave up on. Such a score cannot
@@ -1563,9 +1563,9 @@ public class OnlineScoringEngine {
      * storing it would record a failed evaluation as a genuine zero, indistinguishable in the UI from a
      * metric that deliberately scored zero.
      */
-    public StorablePythonScores toStorablePythonScores(List<PythonScoreResult> scoreResults) {
+    public PythonScoreSplit splitPythonScores(List<PythonScoreResult> scoreResults) {
         if (CollectionUtils.isEmpty(scoreResults)) {
-            return StorablePythonScores.builder().build();
+            return PythonScoreSplit.builder().build();
         }
 
         var storable = new ArrayList<PythonScoreResult>(scoreResults.size());
@@ -1587,7 +1587,7 @@ public class OnlineScoringEngine {
             }
         });
 
-        return StorablePythonScores.builder()
+        return PythonScoreSplit.builder()
                 .storable(storable)
                 .valuelessNames(valuelessNames)
                 .failedNames(failedNames)
@@ -1595,14 +1595,14 @@ public class OnlineScoringEngine {
     }
 
     @Builder(toBuilder = true)
-    public record StorablePythonScores(List<PythonScoreResult> storable, List<String> valuelessNames,
+    public record PythonScoreSplit(List<PythonScoreResult> storable, List<String> valuelessNames,
             List<String> failedNames) {
 
         // Snapshotted, defaulted and normalized here rather than at the call sites: this record hands its
         // lists to its callers, so it is the one place that has to guarantee they are immutable, never null,
         // and free of null elements — a metric may leave a score unnamed, and List.copyOf rejects a null
         // element, which would throw from inside the type meant to make an unusable score harmless.
-        public StorablePythonScores {
+        public PythonScoreSplit {
             storable = storable == null ? List.of() : List.copyOf(storable);
             valuelessNames = copyOfNames(valuelessNames);
             failedNames = copyOfNames(failedNames);
@@ -1631,7 +1631,7 @@ public class OnlineScoringEngine {
     public void logDroppedPythonScores(
             @NonNull Logger userFacingLogger,
             @NonNull Map<String, String> mdc,
-            @NonNull StorablePythonScores scores,
+            @NonNull PythonScoreSplit scores,
             @NonNull String entityLabel,
             @NonNull Object entityId) {
         if (CollectionUtils.isEmpty(scores.valuelessNames()) && CollectionUtils.isEmpty(scores.failedNames())) {

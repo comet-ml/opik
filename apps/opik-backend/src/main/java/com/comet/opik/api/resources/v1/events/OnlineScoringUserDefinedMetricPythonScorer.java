@@ -100,7 +100,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
                 .flatMap(scoreResults -> {
-                    var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
                     OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores,
                             "traceId", trace.id());
                     return storeScores(toFeedbackScores(pythonScores.storable(), trace), trace,

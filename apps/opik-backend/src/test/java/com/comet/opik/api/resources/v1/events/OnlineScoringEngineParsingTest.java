@@ -699,7 +699,7 @@ class OnlineScoringEngineParsingTest {
         @DisplayName("split Python results by whether they can be stored")
         void splitsPythonResultsByWhetherTheyCanBeStored(String scenario, List<PythonScoreResult> results,
                 List<String> expectedStorableNames, List<String> expectedValuelessNames) {
-            var split = OnlineScoringEngine.toStorablePythonScores(results);
+            var split = OnlineScoringEngine.splitPythonScores(results);
 
             assertThat(split.storable()).extracting(PythonScoreResult::name)
                     .containsExactlyElementsOf(expectedStorableNames);
@@ -763,7 +763,7 @@ class OnlineScoringEngineParsingTest {
             var results = new ArrayList<>(List.of(pythonScore(BigDecimal.ONE)));
             var names = new ArrayList<>(List.of(randomScoreName()));
 
-            var split = OnlineScoringEngine.StorablePythonScores.builder()
+            var split = OnlineScoringEngine.PythonScoreSplit.builder()
                     .storable(results)
                     .valuelessNames(names)
                     .build();
@@ -818,7 +818,7 @@ class OnlineScoringEngineParsingTest {
                     .scoringFailed(true)
                     .build();
 
-            var split = OnlineScoringEngine.toStorablePythonScores(List.of(valued, failed));
+            var split = OnlineScoringEngine.splitPythonScores(List.of(valued, failed));
 
             assertThat(split.storable()).containsExactly(valued);
             assertThat(split.failedNames()).containsExactly(failed.name());
@@ -835,7 +835,7 @@ class OnlineScoringEngineParsingTest {
                     .build();
             var absent = pythonScore(BigDecimal.ONE);
 
-            var split = OnlineScoringEngine.toStorablePythonScores(List.of(explicitlyNotFailed, absent));
+            var split = OnlineScoringEngine.splitPythonScores(List.of(explicitlyNotFailed, absent));
 
             assertThat(split.storable()).containsExactly(explicitlyNotFailed, absent);
             assertThat(split.failedNames()).isEmpty();
@@ -848,7 +848,7 @@ class OnlineScoringEngineParsingTest {
             var failedName = randomScoreName();
 
             OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc(),
-                    OnlineScoringEngine.StorablePythonScores.builder()
+                    OnlineScoringEngine.PythonScoreSplit.builder()
                             .valuelessNames(List.of(valuelessName))
                             .failedNames(List.of(failedName))
                             .build(),
@@ -862,8 +862,8 @@ class OnlineScoringEngineParsingTest {
                     .anySatisfy(message -> assertThat(message).contains("reported the scoring as failed"));
         }
 
-        private static OnlineScoringEngine.StorablePythonScores valueless(List<String> names) {
-            return OnlineScoringEngine.StorablePythonScores.builder().valuelessNames(names).build();
+        private static OnlineScoringEngine.PythonScoreSplit valueless(List<String> names) {
+            return OnlineScoringEngine.PythonScoreSplit.builder().valuelessNames(names).build();
         }
 
         /** The nth interpolated argument of the single warning the helper wrote. */

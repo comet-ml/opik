@@ -33,6 +33,16 @@ def test_zero_is_a_value_not_a_missing_one():
     assert unusable_scores([score(name="is_toxic", value=0.0)]) == []
 
 
+@pytest.mark.parametrize("flag", ["false", "true", 1, 0, "", None])
+def test_only_a_real_true_counts_as_a_failed_scoring(flag):
+    """Rejection here is all-or-nothing, so a truthy non-boolean must not reject what the backend stores."""
+    assert unusable_scores([score(name="a", value=1.0, scoring_failed=flag)]) == []
+
+
+def test_a_real_true_counts_as_a_failed_scoring():
+    assert unusable_scores([score(name="a", value=1.0, scoring_failed=True)]) == [("a", SCORING_FAILED)]
+
+
 def test_describe_names_each_score_and_its_reason():
     described = describe_unusable([("a", NO_VALUE), ("b", SCORING_FAILED)])
 

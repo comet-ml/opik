@@ -301,7 +301,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for threadId '{}':\n\n{}", threadId, scoreResults)))
                 .flatMap(scoreResults -> {
-                    var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
                     OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores, "threadId",
                             threadId);
                     List<FeedbackScoreBatchItemThread> scores = pythonScores.storable().stream()
