@@ -729,8 +729,8 @@ class OnlineScoringEngineParsingTest {
         @MethodSource
         @DisplayName("sanitize the score name written to the rule log")
         void sanitizesTheScoreNameWrittenToTheRuleLog(String scenario, String scoreName, String expectedFragment) {
-            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(),
-                    Collections.singletonList(scoreName), "traceId", ID_GENERATOR.generateId());
+            OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc(),
+                    valueless(Collections.singletonList(scoreName)), "traceId", ID_GENERATOR.generateId());
 
             assertThat(loggedArgument(0)).doesNotContain("\n", "\r").contains(expectedFragment);
         }
@@ -751,8 +751,8 @@ class OnlineScoringEngineParsingTest {
             var forged = "%s\nERROR [2026-01-01 00:00:00,000] forged entry"
                     .formatted(RandomStringUtils.secure().nextAlphanumeric(10));
 
-            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(),
-                    List.of(randomScoreName()), "threadId", forged);
+            OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc(),
+                    valueless(List.of(randomScoreName())), "threadId", forged);
 
             assertThat(loggedArgument(2)).doesNotContain("\n", "\r").contains("ERROR");
         }
@@ -780,7 +780,7 @@ class OnlineScoringEngineParsingTest {
         void capsTheReportedNamesAndCountsTheRemainder() {
             var names = IntStream.range(0, 25).mapToObj("score_%d"::formatted).toList();
 
-            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(), names, "traceId",
+            OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc(), valueless(names), "traceId",
                     ID_GENERATOR.generateId());
 
             assertThat(loggedArgument(0))
@@ -794,8 +794,8 @@ class OnlineScoringEngineParsingTest {
         @MethodSource
         @DisplayName("write nothing when no score was dropped")
         void writesNothingWhenNoScoreWasDropped(String scenario, List<String> valuelessNames) {
-            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(), valuelessNames, "traceId",
-                    ID_GENERATOR.generateId());
+            OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc(), valueless(valuelessNames),
+                    "traceId", ID_GENERATOR.generateId());
 
             Mockito.verifyNoInteractions(userFacingLogger);
         }
@@ -804,6 +804,66 @@ class OnlineScoringEngineParsingTest {
             return Stream.of(
                     arguments("nothing was dropped", List.of()),
                     arguments("the caller passed no list at all", null));
+        }
+
+        @Test
+        @DisplayName("drop a score the metric flagged as failed, rather than storing its placeholder zero")
+        void dropsAScoreTheMetricFlaggedAsFailed() {
+            // The SDK pairs scoring_failed with value=0.0, so the score is storable — but storing it would
+            // record a failed evaluation as a genuine zero.
+            var valued = pythonScore(BigDecimal.valueOf(0.75));
+            var failed = PythonScoreResult.builder()
+                    .name(randomScoreName())
+                    .value(BigDecimal.ZERO)
+                    .scoringFailed(true)
+                    .build();
+
+            var split = OnlineScoringEngine.toStorablePythonScores(List.of(valued, failed));
+
+            assertThat(split.storable()).containsExactly(valued);
+            assertThat(split.failedNames()).containsExactly(failed.name());
+            assertThat(split.valuelessNames()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("keep a score whose scoring_failed flag is false or absent")
+        void keepsAScoreThatDidNotFail() {
+            var explicitlyNotFailed = PythonScoreResult.builder()
+                    .name(randomScoreName())
+                    .value(BigDecimal.ONE)
+                    .scoringFailed(false)
+                    .build();
+            var absent = pythonScore(BigDecimal.ONE);
+
+            var split = OnlineScoringEngine.toStorablePythonScores(List.of(explicitlyNotFailed, absent));
+
+            assertThat(split.storable()).containsExactly(explicitlyNotFailed, absent);
+            assertThat(split.failedNames()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("report each reason on its own line")
+        void reportsEachReasonOnItsOwnLine() {
+            var valuelessName = randomScoreName();
+            var failedName = randomScoreName();
+
+            OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc(),
+                    OnlineScoringEngine.StorablePythonScores.builder()
+                            .valuelessNames(List.of(valuelessName))
+                            .failedNames(List.of(failedName))
+                            .build(),
+                    "traceId", ID_GENERATOR.generateId());
+
+            var messages = ArgumentCaptor.forClass(String.class);
+            Mockito.verify(userFacingLogger, Mockito.times(2)).warn(messages.capture(), Mockito.any(),
+                    Mockito.any(), Mockito.any());
+            assertThat(messages.getAllValues())
+                    .anySatisfy(message -> assertThat(message).contains("returned no value"))
+                    .anySatisfy(message -> assertThat(message).contains("reported the scoring as failed"));
+        }
+
+        private static OnlineScoringEngine.StorablePythonScores valueless(List<String> names) {
+            return OnlineScoringEngine.StorablePythonScores.builder().valuelessNames(names).build();
         }
 
         /** The nth interpolated argument of the single warning the helper wrote. */

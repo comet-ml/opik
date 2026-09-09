@@ -381,6 +381,85 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
     assert stacktrace in error_message
 
 
+VALUELESS_SCORE_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ValuelessMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "valueless_metric"):
+        self.name = name
+
+    def score(self, output: str, reference: str, **ignored_kwargs: Any):
+        return score_result.ScoreResult(value=None, name=self.name, reason="did not apply")
+"""
+
+MIXED_SCORES_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class MixedMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "mixed_metric"):
+        self.name = name
+
+    def score(self, output: str, reference: str, **ignored_kwargs: Any):
+        return [
+            score_result.ScoreResult(value=1.0, name="usable_score", reason="applied"),
+            score_result.ScoreResult(value=None, name="valueless_score", reason="did not apply"),
+        ]
+"""
+
+SCORING_FAILED_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ScoringFailedMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "scoring_failed_metric"):
+        self.name = name
+
+    def score(self, output: str, reference: str, **ignored_kwargs: Any):
+        return score_result.ScoreResult(
+            value=0.0, name=self.name, reason="upstream call failed", scoring_failed=True
+        )
+"""
+
+
+@pytest.mark.parametrize("code, expected_detail", [
+    (VALUELESS_SCORE_METRIC, "'valueless_metric' returned no value"),
+    (SCORING_FAILED_METRIC, "'scoring_failed_metric' reported the scoring as failed"),
+])
+def test_wholly_unusable_scores_return_bad_request(client, code, expected_detail):
+    """Nothing usable came back, so the evaluation is a user error — reported like an empty result."""
+    response = client.post(EVALUATORS_URL, json={
+        "data": DATA,
+        "code": code
+    })
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "didn't return any usable 'opik.evaluation.metrics.ScoreResult'" in error
+    assert expected_detail in error
+
+
+def test_mixed_scores_are_passed_through(client):
+    """A mixed list must not fail the evaluation: the backend stores the usable score and reports the rest."""
+    response = client.post(EVALUATORS_URL, json={
+        "data": DATA,
+        "code": MIXED_SCORES_METRIC
+    })
+    assert response.status_code == 200
+
+    scores = response.json["scores"]
+    assert len(scores) == 2
+    by_name = {score["name"]: score for score in scores}
+    assert by_name["usable_score"]["value"] == 1.0
+    assert by_name["valueless_score"]["value"] is None
+
+
 def test_no_scores_returns_bad_request(client):
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
