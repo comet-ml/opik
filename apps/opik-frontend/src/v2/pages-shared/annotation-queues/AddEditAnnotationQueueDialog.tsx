@@ -21,12 +21,13 @@ import { Textarea } from "@/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import FeedbackDefinitionsSelectBox from "@/v2/pages-shared/annotation-queues/FeedbackDefinitionsSelectBox";
 import FeedbackDefinitionChips from "@/v2/pages-shared/annotation-queues/FeedbackDefinitionChips";
+import AutomationZapIcon from "@/v2/pages-shared/annotation-queues/AutomationZapIcon";
 import FeedbackScoreConditions, {
   DEFAULT_UNWINDOWED_CONDITION,
 } from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
 import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { Switch } from "@/ui/switch";
-import { ArrowUpRight, ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronUp } from "lucide-react";
 
 import {
   ANNOTATION_QUEUE_SCOPE,
@@ -391,7 +392,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           </SheetTopBar>
         }
       >
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5">
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(onSubmit)}
@@ -573,13 +574,15 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
               <div className="overflow-hidden rounded-md border border-border bg-soft-background">
                 <div
                   className={cn(
-                    "flex flex-col gap-1.5 p-3",
+                    // pb is 1px under the p-3 the note states, because that is what the frame
+                    // renders: its card is 71px, where 12px all round sums to 72.
+                    "flex flex-col gap-1.5 p-3 pb-[11px] pl-[13px]",
                     automationEnabled && "border-b border-border",
                   )}
                 >
                   <div className="flex items-center gap-2">
                     <span className="flex h-5 items-center justify-center rounded-[4px] bg-lime-400 px-1">
-                      <Zap className="size-3 text-background" />
+                      <AutomationZapIcon className="text-foreground" />
                     </span>
                     <span className="comet-body-s-accented">Automation</span>
                   </div>
@@ -607,7 +610,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   </div>
                 </div>
                 {automationEnabled && (
-                  <div className="p-3">
+                  <div className="p-3 pl-[13px]">
                     <FeedbackScoreConditions
                       form={form}
                       groupsPath="automation_groups"
@@ -632,8 +635,17 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             </form>
           </Form>
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+        {/* 11.5px, not 12: the frame renders a 56px footer where 12/32/12 plus the rule is 57. */}
+        <div className="flex items-center justify-end gap-2 border-t border-border py-[11.5px] pl-[19px] pr-5">
+          {/* 11px, not the size default 12: the frame's Cancel measures 70px wide where 12px
+              padding renders 72.5, while its primary button matches at 12. Padding rather than a
+              fixed width, so a longer label still grows the button. */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="px-[11px]"
+            onClick={() => setOpen(false)}
+          >
             Cancel
           </Button>
           <Button
