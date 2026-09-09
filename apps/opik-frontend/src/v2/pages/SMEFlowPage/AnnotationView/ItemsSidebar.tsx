@@ -13,15 +13,21 @@ import { Trace, Thread } from "@/types/traces";
 import { isObjectThread } from "@/lib/traces";
 import { prettifyMessage } from "@/lib/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
+import { hasOpenInferenceHint } from "@/lib/openinference";
 
 const getPreviewText = (
   obj: object | undefined,
   type: "input" | "output",
+  openInferenceInput?: object,
+  openInferenceHint?: boolean,
 ): string => {
-  if (!obj) return "";
-  const result = prettifyMessage(obj, { type });
+  const result = prettifyMessage(obj, {
+    type,
+    openInferenceInput,
+    openInferenceHint,
+  });
   if (typeof result.message === "string") return result.message;
-  return JSON.stringify(obj).slice(0, 80);
+  return obj ? JSON.stringify(obj).slice(0, 80) : "";
 };
 
 const getItemPreviews = (
@@ -41,10 +47,20 @@ const getItemPreviews = (
     };
   }
   const trace = item as Trace;
+  const openInferenceHint = hasOpenInferenceHint(
+    trace.metadata,
+    trace.input,
+    trace.output,
+  );
   return {
     name: trace.name || trace.id.slice(-12),
-    input: getPreviewText(trace.input, "input"),
-    output: getPreviewText(trace.output, "output"),
+    input: getPreviewText(trace.input, "input", undefined, openInferenceHint),
+    output: getPreviewText(
+      trace.output,
+      "output",
+      trace.input,
+      openInferenceHint,
+    ),
   };
 };
 

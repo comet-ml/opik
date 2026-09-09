@@ -10,7 +10,18 @@ import {
 } from "@/shared/PrettyLLMMessage/types";
 
 // Format types
-export type LLMMessageFormat = "openai" | "langchain" | "anthropic" | "google";
+export type LLMMessageFormat =
+  | "openai"
+  | "langchain"
+  | "anthropic"
+  | "google"
+  | "openinference";
+
+export type LLMMessagePrettifyConfig = {
+  fieldType?: "input" | "output";
+  formatHint?: LLMMessageFormat;
+  formatHintIsAuthoritative?: boolean;
+};
 
 // Detection result
 export interface LLMMessageFormatDetectionResult {
@@ -67,13 +78,13 @@ export interface LLMMapperResult {
 // Format detector contract
 export type FormatDetector = (
   data: unknown,
-  prettifyConfig?: { fieldType?: "input" | "output" },
+  prettifyConfig?: LLMMessagePrettifyConfig,
 ) => boolean;
 
 // Format mapper contract
 export type FormatMapper = (
   data: unknown,
-  prettifyConfig?: { fieldType?: "input" | "output" },
+  prettifyConfig?: LLMMessagePrettifyConfig,
 ) => LLMMapperResult;
 
 // Format combiner contract

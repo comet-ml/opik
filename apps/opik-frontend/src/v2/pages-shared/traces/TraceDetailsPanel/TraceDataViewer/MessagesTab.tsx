@@ -13,6 +13,7 @@ import {
   mapAndCombineMessages,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
+  LLMMessageFormat,
 } from "@/shared/PrettyLLMMessage/llmMessages";
 import { Button } from "@/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
@@ -21,6 +22,7 @@ import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import { useLLMMessagesExpandAll } from "@/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import Loader from "@/shared/Loader/Loader";
 import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
+import { PrettyLLMMessageUsageProps } from "@/shared/PrettyLLMMessage/types";
 
 const ESTIMATED_COLLAPSED_HEIGHT = 36; // single header row height in px
 const ESTIMATED_EXPANDED_HEIGHT = 200; // fallback for expanded items before measurement
@@ -29,11 +31,14 @@ const VIRTUAL_OVERSCAN = 10; // extra items rendered outside viewport
 const TOGGLE_SUPPRESS_MS = 300; // ignore scroll adjustments after expand/collapse
 
 type MessagesTabProps = {
-  transformedInput: object;
-  transformedOutput: object;
+  transformedInput: unknown;
+  transformedOutput: unknown;
   media: UnifiedMediaItem[];
   isLoading: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  formatHint?: LLMMessageFormat;
+  formatHintIsAuthoritative?: boolean;
+  spanUsage?: PrettyLLMMessageUsageProps["usage"];
 };
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
@@ -55,10 +60,24 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   media,
   isLoading,
   scrollContainerRef,
+  formatHint,
+  formatHintIsAuthoritative,
+  spanUsage,
 }) => {
   const { messages: combinedMessages, usage } = useMemo(
-    () => mapAndCombineMessages(transformedInput, transformedOutput),
-    [transformedInput, transformedOutput],
+    () =>
+      mapAndCombineMessages(transformedInput, transformedOutput, {
+        formatHint,
+        formatHintIsAuthoritative,
+        spanUsage,
+      }),
+    [
+      formatHint,
+      formatHintIsAuthoritative,
+      spanUsage,
+      transformedInput,
+      transformedOutput,
+    ],
   );
 
   const allMessageIds = useMemo(

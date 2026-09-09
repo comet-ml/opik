@@ -12,12 +12,14 @@ type DetailsTabProps = {
   data: Trace | Span;
   isLoading: boolean;
   search?: string;
+  openInferenceHint: boolean;
 };
 
 const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
   data,
   isLoading,
   search,
+  openInferenceHint,
 }) => {
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
@@ -36,7 +38,7 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
           <CodeBlock
             title="Input"
             data={transformedInput}
-            prettifyConfig={{ fieldType: "input" }}
+            prettifyConfig={{ fieldType: "input", openInferenceHint }}
             preserveKey="syntax-highlighter-trace-sidebar-input"
             search={search}
             withSearch
@@ -51,7 +53,11 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
           <CodeBlock
             title="Output"
             data={transformedOutput}
-            prettifyConfig={{ fieldType: "output" }}
+            prettifyConfig={{
+              fieldType: "output",
+              openInferenceHint,
+              openInferenceInput: transformedInput,
+            }}
             preserveKey="syntax-highlighter-trace-sidebar-output"
             search={search}
             withSearch
