@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -33,9 +35,9 @@ class OnlineScoringEngineValuelessPythonScoresTest {
     private Object logAndCaptureNames(List<String> valuelessNames, String entityLabel, Object entityId) {
         OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, MDC, valuelessNames, entityLabel, entityId);
 
-        var names = org.mockito.ArgumentCaptor.forClass(Object.class);
-        var label = org.mockito.ArgumentCaptor.forClass(Object.class);
-        var id = org.mockito.ArgumentCaptor.forClass(Object.class);
+        var names = ArgumentCaptor.forClass(Object.class);
+        var label = ArgumentCaptor.forClass(Object.class);
+        var id = ArgumentCaptor.forClass(Object.class);
         verify(userFacingLogger).warn(anyString(), names.capture(), label.capture(), id.capture());
         return names.getValue();
     }
@@ -98,7 +100,7 @@ class OnlineScoringEngineValuelessPythonScoresTest {
             OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, MDC, List.of(), "traceId",
                     UUID.randomUUID());
 
-            verify(userFacingLogger, never()).warn(anyString(), org.mockito.ArgumentMatchers.<Object[]>any());
+            verify(userFacingLogger, never()).warn(anyString(), any(Object[].class));
         }
 
         @Test
@@ -150,9 +152,9 @@ class OnlineScoringEngineValuelessPythonScoresTest {
             OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, MDC, List.of("hallucination"),
                     "threadId", forged);
 
-            var names = org.mockito.ArgumentCaptor.forClass(Object.class);
-            var label = org.mockito.ArgumentCaptor.forClass(Object.class);
-            var id = org.mockito.ArgumentCaptor.forClass(Object.class);
+            var names = ArgumentCaptor.forClass(Object.class);
+            var label = ArgumentCaptor.forClass(Object.class);
+            var id = ArgumentCaptor.forClass(Object.class);
             verify(userFacingLogger).warn(anyString(), names.capture(), label.capture(), id.capture());
 
             assertThat(id.getValue()).asString().doesNotContain("\n").doesNotContain("\r")
