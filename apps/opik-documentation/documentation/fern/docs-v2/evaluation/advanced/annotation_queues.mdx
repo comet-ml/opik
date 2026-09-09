@@ -78,6 +78,11 @@ someone scores it by hand. The source of the score does not matter.
   an automated queue, and the queue's items table shows how each item arrived under **Source**.
 </Note>
 
+Only traces and threads your application logged are collected — the ones that come from the SDK or the
+REST API. Playground runs, experiment traces, optimization runs and traces produced by evaluators are
+scored like any other, but automation skips them, so trying a prompt in the Playground never sends work
+to your reviewers. Those can still be added by hand.
+
 Automation works the same way for thread queues, matching on thread scores instead of trace scores.
 
 ### Sharing with Subject Matter Experts

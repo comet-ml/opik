@@ -143,6 +143,12 @@ public interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
+    /**
+     * Of the given ids, the ones an SDK logged — {@link Source#isLoggingSource} expressed as a query,
+     * so legacy {@code unknown} rows count as SDK the same way it treats {@code null}.
+     */
+    Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds);
+
     Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
@@ -468,6 +474,25 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    // Reads the latest row per id rather than matching on any row. An out-of-order create leaves an
+    // earlier row holding 'unknown' until the real source arrives (see the merge in the batch insert),
+    // and matching on any row would read that 'unknown' as SDK and route a playground trace.
+    private static final String SELECT_LOGGING_SOURCE_IDS = """
+            SELECT id
+            FROM (
+                SELECT id, source
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                AND id IN :ids
+                ORDER BY id, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE source IN (:source, :source_legacy)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4979,6 +5004,30 @@ class TraceDAOImpl implements TraceDAO {
                                     row.get("id", UUID.class), row.get("start_time", Instant.class))))
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getLoggingSourceIds(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds) {
+        if (projectIds.isEmpty() || traceIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_LOGGING_SOURCE_IDS, "get_logging_source_ids",
+                    workspaceId, userName, "trace_ids_size=%s".formatted(traceIds.size()));
+
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_ids", projectIds.toArray(UUID[]::new))
+                    .bind("ids", traceIds.toArray(UUID[]::new))
+                    .bind("source", Source.SDK.getValue())
+                    .bind("source_legacy", Source.UNKNOWN_VALUE);
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("id", UUID.class)))
+                    .collect(toSet());
+        }));
     }
 
     @Override

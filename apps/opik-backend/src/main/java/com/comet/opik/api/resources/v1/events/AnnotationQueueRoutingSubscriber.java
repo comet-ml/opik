@@ -10,6 +10,8 @@ import com.comet.opik.domain.AnnotationQueueService;
 import com.comet.opik.domain.EntityFeedbackScores;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
@@ -55,6 +57,8 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     private final AnnotationQueueConditionEvaluator evaluator;
     private final AnnotationQueueService annotationQueueService;
     private final FeedbackScoreDAO feedbackScoreDAO;
+    private final TraceDAO traceDAO;
+    private final TraceThreadDAO traceThreadDAO;
 
     @Inject
     public AnnotationQueueRoutingSubscriber(
@@ -63,13 +67,17 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
             @NonNull AnnotationQueueAutomationService automationService,
             @NonNull AnnotationQueueConditionEvaluator evaluator,
             @NonNull AnnotationQueueService annotationQueueService,
-            @NonNull FeedbackScoreDAO feedbackScoreDAO) {
+            @NonNull FeedbackScoreDAO feedbackScoreDAO,
+            @NonNull TraceDAO traceDAO,
+            @NonNull TraceThreadDAO traceThreadDAO) {
         super(config, redisson, AnnotationQueueRoutingConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.config = config;
         this.automationService = automationService;
         this.evaluator = evaluator;
         this.annotationQueueService = annotationQueueService;
         this.feedbackScoreDAO = feedbackScoreDAO;
+        this.traceDAO = traceDAO;
+        this.traceThreadDAO = traceThreadDAO;
     }
 
     @Override
@@ -130,7 +138,54 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                             // processing — an automation disabled in the meantime must not route.
                             .flatMap(automations -> automations.isEmpty()
                                     ? Mono.just(0L)
-                                    : addMatches(automations, scoresByEntity, message));
+                                    : retainProductionEntities(scoresByEntity, projectIds, message)
+                                            .flatMap(production -> production.isEmpty()
+                                                    ? Mono.just(0L)
+                                                    : addMatches(automations, production, message)));
+                });
+    }
+
+    /**
+     * Drops everything that was not logged by an SDK, the same gate online scoring applies via
+     * {@link com.comet.opik.api.Source#isLoggingSource}: an automation routes production traffic to a human
+     * reviewer, and playground, optimization and evaluator activity is a developer trying things or a run
+     * scoring itself. Routing it would fill a review queue with work nobody asked to review.
+     *
+     * <p>Stricter than online scoring in one respect: that path also admits {@code EXPERIMENT}, because an
+     * experiment's traces are what produce its metrics. Experiment traces are reviewed through the
+     * experiment comparison view, not a queue, so they are excluded here.
+     *
+     * <p>Deliberately a separate read rather than a predicate folded into the score query. Filtered-out
+     * entities would otherwise be indistinguishable from entities whose scores had not landed yet, and
+     * {@code loadScores} would spend a delayed re-read on each one and then count it as unresolved.
+     *
+     * <p>It runs after the automation lookup so the read only happens for a project that actually has an
+     * enabled automation, which is the minority of scored traffic.
+     */
+    private Mono<Map<UUID, EntityFeedbackScores>> retainProductionEntities(
+            Map<UUID, EntityFeedbackScores> scoresByEntity, Set<UUID> projectIds,
+            AnnotationQueueRoutingMessage message) {
+
+        Set<UUID> entityIds = scoresByEntity.keySet();
+
+        Mono<Set<UUID>> loggedBySdk = message.scope() == AnnotationQueue.AnnotationScope.THREAD
+                ? traceThreadDAO.getLoggingSourceIds(projectIds, entityIds)
+                : traceDAO.getLoggingSourceIds(projectIds, entityIds);
+
+        return loggedBySdk
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.USER_NAME, message.userName()))
+                .map(kept -> {
+                    int skipped = entityIds.size() - kept.size();
+                    if (skipped > 0) {
+                        AnnotationQueueRoutingMetrics.NON_PRODUCTION_SKIPPED.add(skipped);
+                        log.debug("Skipped '{}' of '{}' scored entities not logged by an SDK, workspace '{}'",
+                                skipped, entityIds.size(), message.workspaceId());
+                    }
+
+                    return scoresByEntity.entrySet().stream()
+                            .filter(entry -> kept.contains(entry.getKey()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
     }
 

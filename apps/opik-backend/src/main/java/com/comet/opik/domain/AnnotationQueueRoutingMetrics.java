@@ -36,4 +36,10 @@ public class AnnotationQueueRoutingMetrics {
             .counterBuilder("items_routed_total")
             .setDescription("Items added to annotation queues by automation")
             .build();
+
+    public static final LongCounter NON_PRODUCTION_SKIPPED = METER
+            .counterBuilder("non_production_skipped_total")
+            .setDescription("Scored entities dropped before evaluation because they were not logged by an "
+                    + "SDK — playground, experiment, optimization or evaluator activity")
+            .build();
 }
