@@ -40,6 +40,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -1557,7 +1558,11 @@ public class OnlineScoringEngine {
      * a generic "Unexpected error" naming neither the metric nor the reason. Dropped per score instead,
      * mirroring how the judge path treats a null judge score.
      */
-    public static StorablePythonScores toStorablePythonScores(@NonNull List<PythonScoreResult> scoreResults) {
+    public StorablePythonScores toStorablePythonScores(List<PythonScoreResult> scoreResults) {
+        if (CollectionUtils.isEmpty(scoreResults)) {
+            return StorablePythonScores.builder().build();
+        }
+
         var storable = new ArrayList<PythonScoreResult>(scoreResults.size());
         var valuelessNames = new ArrayList<String>();
 
@@ -1577,10 +1582,21 @@ public class OnlineScoringEngine {
             valuelessNames.add(StringUtils.defaultString(name));
         });
 
-        return new StorablePythonScores(List.copyOf(storable), List.copyOf(valuelessNames));
+        return StorablePythonScores.builder()
+                .storable(List.copyOf(storable))
+                .valuelessNames(List.copyOf(valuelessNames))
+                .build();
     }
 
+    @Builder(toBuilder = true)
     public record StorablePythonScores(List<PythonScoreResult> storable, List<String> valuelessNames) {
+
+        // Defaulted so an empty result can be built without spelling both components out, and so no caller
+        // of the getters has to null-check them.
+        public StorablePythonScores {
+            storable = storable == null ? List.of() : storable;
+            valuelessNames = valuelessNames == null ? List.of() : valuelessNames;
+        }
     }
 
     /**
@@ -1596,13 +1612,13 @@ public class OnlineScoringEngine {
      * paths but the caller-supplied thread id on the thread one — a CR/LF in it would forge entries in the
      * log, and an oversized one would flood a single entry.
      */
-    public static void logValuelessPythonScores(
+    public void logValuelessPythonScores(
             @NonNull Logger userFacingLogger,
             @NonNull Map<String, String> mdc,
-            @NonNull List<String> valuelessNames,
+            List<String> valuelessNames,
             @NonNull String entityLabel,
             @NonNull Object entityId) {
-        if (valuelessNames.isEmpty()) {
+        if (CollectionUtils.isEmpty(valuelessNames)) {
             return;
         }
 
