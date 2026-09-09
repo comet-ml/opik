@@ -54,7 +54,13 @@ export const restoreMissingConfigKeys = (
   prompt: PlaygroundPromptType,
 ): PlaygroundPromptType => {
   // Runs over every stored prompt during hydration, so anything this touches has to tolerate a
-  // corrupted entry: throwing costs every sibling prompt's state, not just this one's.
+  // corrupted entry: throwing costs every sibling prompt's state, not just this one's. The
+  // parameter type is a claim about persisted JSON, not a guarantee, so the shape is checked
+  // rather than trusted — an entry it cannot read is returned untouched.
+  if (!prompt || typeof prompt !== "object") {
+    return prompt;
+  }
+
   // parseComposedProviderType calls provider.startsWith.
   if (!prompt.provider || typeof prompt.provider !== "string") {
     return prompt;

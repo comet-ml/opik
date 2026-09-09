@@ -129,6 +129,15 @@ describe("restoreMissingConfigKeys", () => {
     expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
   });
 
+  it("does not throw on a malformed prompt entry", () => {
+    expect(
+      restoreMissingConfigKeys(null as unknown as PlaygroundPromptType),
+    ).toBeNull();
+    expect(
+      restoreMissingConfigKeys("nonsense" as unknown as PlaygroundPromptType),
+    ).toBe("nonsense");
+  });
+
   it("does not throw on a prompt whose stored provider is not a string", () => {
     // parseComposedProviderType calls provider.startsWith, so a corrupted entry would throw inside
     // the hydration map and take every sibling prompt's state with it.
