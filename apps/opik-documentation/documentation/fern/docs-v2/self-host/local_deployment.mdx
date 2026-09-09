@@ -107,6 +107,22 @@ The `opik.sh` and `opik.ps1` scripts support the following options:
 
 Run `./opik.sh --help` (or `powershell -ExecutionPolicy ByPass -c ".\opik.ps1 --help"` on Windows) to see the full list of options.
 
+### Startup timeout
+
+`opik.sh` waits up to 300 seconds for every container to start and report healthy, then fails with the container
+status and recent logs. A first-time start that has to pull or build images, or a host under heavy load, can
+legitimately take longer than that. Raise the deadline with `OPIK_STARTUP_TIMEOUT` (in seconds, between 1 and 86400)
+rather than retrying:
+
+```bash
+OPIK_STARTUP_TIMEOUT=600 ./opik.sh
+```
+
+<Note>
+  `OPIK_STARTUP_TIMEOUT` is read by `opik.sh`. On Windows, `opik.ps1` applies its own fixed per-container wait and does
+  not honour this variable.
+</Note>
+
 ## Stopping the Opik platform
 
 You can stop the Opik server by running the following commands:

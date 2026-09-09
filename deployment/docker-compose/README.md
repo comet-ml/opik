@@ -68,6 +68,21 @@ Instead of running `docker compose` directly, you can use the `opik.sh` script (
 
 Run `./opik.sh --help` to see the full list of options.
 
+### Environment variables
+
+| Variable                | Default | Description                                                                                              |
+| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `OPIK_STARTUP_TIMEOUT`  | `300`   | Seconds `opik.sh` waits for the containers to start and become healthy. Accepts `1`-`86400`.              |
+
+The default suits a warm machine. A first-time start that has to pull or build images, or a host under heavy load, can
+legitimately take longer — raise the deadline rather than retrying:
+
+```bash
+OPIK_STARTUP_TIMEOUT=600 ./opik.sh
+```
+
+This variable is read by `opik.sh` only; `opik.ps1` on Windows still applies its own fixed per-container wait.
+
 ## Run `docker compose` using the images
 
 If you want to use a specific version, set Opik version like:
