@@ -356,16 +356,6 @@ export const updateProviderConfig = <
     const next: T = { ...currentConfig };
     let changed = false;
 
-    // Reasoning models reject temperature < 1; coerce.
-    if (
-      isReasoningModel(params.model) &&
-      typeof next.temperature === "number" &&
-      next.temperature < 1
-    ) {
-      next.temperature = 1.0;
-      changed = true;
-    }
-
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
     // thinkingEffort handling below.
@@ -480,10 +470,11 @@ export const resolveSamplingParams = (
     return { temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE };
   }
 
-  // Reasoning models reject top_p outright: OpenAI returns 400 "Unsupported parameter: 'top_p' is
-  // not supported with this model."
+  // Reasoning models take neither: top_p is rejected outright ("Unsupported parameter: 'top_p' is
+  // not supported with this model.") and temperature accepts only the provider's own default, so
+  // there is nothing to tune and omitting both is the one payload that always works.
   if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
-    return { temperature };
+    return {};
   }
 
   return { temperature, topP };

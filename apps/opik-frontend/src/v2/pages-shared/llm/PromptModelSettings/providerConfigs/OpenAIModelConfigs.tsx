@@ -10,7 +10,6 @@ import {
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
   getOpenAIReasoningEffortOptions,
-  isReasoningModel,
   resolveSamplingParams,
   supportsOpenAIReasoningEffort,
 } from "@/lib/modelUtils";
@@ -36,32 +35,24 @@ const OpenAIModelConfigs = ({
   model,
   onChange,
 }: OpenAIModelSettingsProps) => {
-  // Reasoning models (GPT-5.2, GPT-5.1, GPT-5, O1, O3, O4-mini) require temperature = 1.0
-  const isReasoning = isReasoningModel(model);
   // The resolver owns which sampling params this model accepts and what the request will carry, so
-  // Top P follows it rather than the config's own key — a config that lost the key still offers it.
-  const { topP } = resolveSamplingParams(model ?? "", configs);
+  // both sliders follow it rather than the config's own keys. Reasoning models tune neither.
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
+      {!isUndefined(temperature) && (
         <SliderInputControl
-          value={configs.temperature}
+          value={temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={isReasoning ? 1 : 0}
+          min={0}
           max={1}
           step={0.01}
-          defaultValue={isReasoning ? 1 : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
+          defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
           tooltip={
-            <PromptModelSettingsTooltipContent
-              text={
-                isReasoning
-                  ? "Reasoning models require temperature = 1.0. This setting controls randomness in completions."
-                  : "Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive."
-              }
-            />
+            <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
           }
         />
       )}

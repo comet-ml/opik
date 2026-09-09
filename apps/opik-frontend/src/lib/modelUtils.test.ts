@@ -252,7 +252,10 @@ describe("getOpenAIReasoningEffortOptions", () => {
 });
 
 describe("updateProviderConfig — OpenAI", () => {
-  it("bumps temperature to 1 when switching into a reasoning model with temp < 1", () => {
+  it("keeps temperature when switching into a reasoning model, which does not take one", () => {
+    // o3 accepts only its own default temperature, so there is nothing to legalise here: the panel
+    // offers no slider and the request omits the field. Rewriting the value would lose the user's
+    // choice for whenever they pick a model that does take one.
     const config: LLMOpenAIConfigsType = {
       temperature: 0,
       maxCompletionTokens: 4000,
@@ -264,7 +267,13 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    expect(result?.temperature).toBe(1);
+    expect(result?.temperature).toBe(0);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_O3,
+        result as unknown as Record<string, unknown>,
+      ).temperature,
+    ).toBeUndefined();
   });
 
   it("leaves the config untouched on a reasoning model that already has temperature 1", () => {
@@ -386,10 +395,9 @@ describe("updateProviderConfig — OpenAI", () => {
     expect(result).toBe(config);
   });
 
-  it("retains topP when switching into a reasoning OpenAI model, and pins temperature", () => {
-    // topP is kept so gpt-4o -> gpt-5.5 -> gpt-4o gives the slider back with the user's own value;
-    // the request builder is what keeps top_p off a gpt-5.5 call. Temperature is still coerced
-    // here, because nothing downstream makes a sub-1 value legal for a reasoning model.
+  it("retains both sampling params when switching into a reasoning OpenAI model", () => {
+    // Both are kept so gpt-4o -> gpt-5.5 -> gpt-4o gives the sliders back with the user's own
+    // values; the request builder is what keeps them off a gpt-5.5 call.
     const config: LLMOpenAIConfigsType = {
       temperature: 0.7,
       maxCompletionTokens: 4000,
@@ -401,14 +409,14 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_5_5,
       provider: OPEN_AI,
     });
-    expect(result?.topP).toBe(0.9);
-    expect(result?.temperature).toBe(1.0);
-    expect(
-      sanitizeConfigForRequest(
-        PROVIDER_MODEL_TYPE.GPT_5_5,
-        result as unknown as Record<string, unknown>,
-      ).topP,
-    ).toBeUndefined();
+    expect(result).toBe(config);
+
+    const request = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      result as unknown as Record<string, unknown>,
+    );
+    expect(request.topP).toBeUndefined();
+    expect(request.temperature).toBeUndefined();
   });
 
   it("keeps topP when switching to a non-reasoning OpenAI model", () => {
@@ -545,14 +553,14 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBe("high");
   });
 
-  it("strips topP for OpenAI reasoning models", () => {
-    // gpt-5.5 is a reasoning model; OpenAI returns 400 if top_p is in the request.
+  it("strips both sampling params for OpenAI reasoning models", () => {
+    // gpt-5.5 returns 400 if top_p is in the request, and accepts only its own default temperature.
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
-      temperature: 1,
+      temperature: 0.3,
       topP: 0.9,
     });
     expect(result.topP).toBeUndefined();
-    expect(result.temperature).toBe(1);
+    expect(result.temperature).toBeUndefined();
   });
 
   it("keeps topP for non-reasoning OpenAI models", () => {
@@ -1109,6 +1117,27 @@ describe("sampling params survive a model round trip", () => {
     expect(back?.temperature).toBe(0.7);
   });
 
+  it("keeps temperature across gpt-4o-mini -> gpt-5.5 -> gpt-4o-mini", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0.3,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+    const back = updateProviderConfig(onReasoning, {
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: OPEN_AI,
+    });
+
+    expect(back?.temperature).toBe(0.3);
+  });
+
   it("still omits the retained value from the wire while the model rejects it", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
@@ -1117,12 +1146,12 @@ describe("sampling params survive a model round trip", () => {
       }).temperature,
     ).toBeUndefined();
 
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
-        temperature: 1,
-        topP: 0.9,
-      }).topP,
-    ).toBeUndefined();
+    const onReasoningModel = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      { temperature: 0.3, topP: 0.9 },
+    );
+    expect(onReasoningModel.topP).toBeUndefined();
+    expect(onReasoningModel.temperature).toBeUndefined();
   });
 });
 
@@ -1169,13 +1198,15 @@ describe("resolveSamplingParams", () => {
     ).toBeUndefined();
   });
 
-  it("omits topP for OpenAI reasoning models", () => {
+  it("omits both for OpenAI reasoning models, which take neither", () => {
+    // top_p is rejected outright and temperature accepts only the provider's own default, so
+    // neither is tunable and the panel offers no slider for either.
     expect(
       resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_5, {
-        temperature: 1,
+        temperature: 0.3,
         topP: 0.9,
-      }).topP,
-    ).toBeUndefined();
+      }),
+    ).toEqual({});
   });
 
   it("passes other providers' values through untouched", () => {

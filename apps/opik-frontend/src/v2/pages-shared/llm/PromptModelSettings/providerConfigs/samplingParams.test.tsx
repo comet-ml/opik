@@ -38,7 +38,9 @@ describe("OpenAI sampling params", () => {
     expect(screen.getByTestId("topP-input")).toHaveValue("0.75");
   });
 
-  it("hides Top P for a reasoning model, which rejects the parameter", () => {
+  it("hides both sliders for a reasoning model, which takes neither", () => {
+    // top_p is rejected outright and temperature accepts only the provider's own default, so a
+    // temperature slider here could only ever be a control clamped to a single value.
     renderPanel(
       <OpenAIModelConfigs
         configs={OPEN_AI_CONFIG}
@@ -48,6 +50,7 @@ describe("OpenAI sampling params", () => {
     );
 
     expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
   });
 });
 

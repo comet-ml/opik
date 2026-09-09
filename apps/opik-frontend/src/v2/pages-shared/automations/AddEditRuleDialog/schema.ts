@@ -15,7 +15,7 @@ import {
 } from "@/types/providers";
 import {
   getThinkingLevelOptions,
-  supportsSamplingParams,
+  resolveSamplingParams,
   updateProviderConfig,
 } from "@/lib/modelUtils";
 import { getProviderFromModel } from "@/lib/provider";
@@ -576,13 +576,16 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     name: data.model as PROVIDER_MODEL_TYPE,
   };
 
-  // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the
-  // form keeps a temperature the user set on another model, and Anthropic 400s on the models that
-  // take no sampling params.
-  if (
-    temperature != null &&
-    supportsSamplingParams(data.model as PROVIDER_MODEL_TYPE)
-  ) {
+  // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the form
+  // keeps a temperature the user set on another model, and the providers that take none reject it at
+  // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
+  // a rule that never had a temperature does not gain the resolver's default.
+  const { temperature: modelTakesTemperature } = resolveSamplingParams(
+    data.model as PROVIDER_MODEL_TYPE,
+    data.config,
+  );
+
+  if (temperature != null && modelTakesTemperature != null) {
     model.temperature = temperature;
   }
 
