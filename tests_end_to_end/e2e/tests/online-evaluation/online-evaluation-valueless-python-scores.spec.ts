@@ -463,31 +463,60 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
       return id;
     });
 
-    await test.step('Seed a two-turn thread and close it', async () => {
+    const turnTraceIds = await test.step('Seed a two-turn thread and close it', async () => {
       // A thread is otherwise evaluated when the inactivity timeout expires,
       // which is a deployment-wide setting in minutes. Closing it explicitly is
       // the same transition, taken now.
       const start = new Date();
+      const ids: string[] = [];
       for (const [index, turn] of [
         { input: 'q1', output: 'a1' },
         { input: 'q2', output: 'a2' },
       ].entries()) {
-        await backendClient.createTraceWithSource({
-          id: uuid7(),
-          projectName: project.name,
-          name: `${testNamespace}-thread-turn-${index}`,
-          source: 'sdk',
-          input: { q: turn.input },
-          output: { output: turn.output },
-          // Turn order is derived from start_time; distinct stamps rather than a
-          // sleep, so two writes landing in the same millisecond cannot reorder
-          // the conversation.
-          startTime: new Date(start.getTime() + index * 1_000),
-          endTime: new Date(start.getTime() + index * 1_000 + 500),
-          threadId,
-        });
+        ids.push(
+          await backendClient.createTraceWithSource({
+            id: uuid7(),
+            projectName: project.name,
+            name: `${testNamespace}-thread-turn-${index}`,
+            source: 'sdk',
+            input: { q: turn.input },
+            output: { output: turn.output },
+            // Turn order is derived from start_time; distinct stamps rather than a
+            // sleep, so two writes landing in the same millisecond cannot reorder
+            // the conversation.
+            startTime: new Date(start.getTime() + index * 1_000),
+            endTime: new Date(start.getTime() + index * 1_000 + 500),
+            threadId,
+          }),
+        );
       }
+
+      // The write endpoint answers 201 once the trace is accepted, not once it
+      // is queryable, and closing the thread is what hands the conversation to
+      // the scorer. Closing while a turn is still in flight risks the thread
+      // being evaluated without it — which does not change WHICH scores this
+      // metric returns (its list is fixed and it never reads `context`), but a
+      // thread that closes before any turn is visible may not be evaluated at
+      // all, and the poll below would then burn its full timeout reporting
+      // "no score" for what was really a seeding race.
+      await expect
+        .poll(
+          async () => {
+            const traces = await Promise.all(ids.map((id) => backendClient.getTrace(id)));
+            return traces.filter((t) => t !== null).length;
+          },
+          {
+            timeout: 60_000,
+            intervals: [500, 1_000, 2_000],
+            message:
+              `only some of the ${ids.length} seeded turns of thread '${threadId}' became ` +
+              `readable, so closing it would hand the scorer a partial conversation`,
+          },
+        )
+        .toBe(ids.length);
+
       await backendClient.closeThread({ projectName: project.name, threadId });
+      return ids;
     });
 
     await test.step('The span carries the valued score and not the valueless one', async () => {
@@ -517,6 +546,22 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
         thread.feedbackScores.map((s) => s.name).sort(),
         `'${threadGone}' carries no value, so the thread must carry only '${threadKept}'`,
       ).toEqual([threadKept]);
+
+      // The other half of "thread scope": the score landed on the thread and on
+      // nothing else. Without this the test would pass on a build that also
+      // wrote the thread rule's scores onto each turn — which is the trace-scope
+      // behaviour, and the fallback this test's `type` assertion exists to rule
+      // out. Asserting the whole set, not just the absence of `threadKept`, so a
+      // dropped `threadGone` leaking onto a turn fails here too.
+      for (const [index, turnTraceId] of turnTraceIds.entries()) {
+        const turn = await backendClient.getTrace(turnTraceId);
+        expect(turn, `seeded turn ${index} must still exist to be asserted about`).not.toBeNull();
+        expect(
+          turn!.feedbackScores.map((s) => s.name).sort(),
+          `a thread-scope rule scores the thread, not its turns — turn ${index} ` +
+            `(${turnTraceId}) must carry no feedback score at all`,
+        ).toEqual([]);
+      }
     });
 
     await test.step('Both rules reported their dropped score and neither failed', async () => {
