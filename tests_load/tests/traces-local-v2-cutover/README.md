@@ -131,8 +131,8 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 
 # 7. MANDATORY CONFIG STEP, and the one most easily skipped in a rehearsal: roll out traceColumnsNonNullable=true
 #    BEFORE the EXCHANGE (runbook "The final cutover window"). This is the only restart the cutover itself needs, and
-#    it carries no latency cost; step 10's optional wrap has its own. Use recreate_backend() from "Changing backend
-#    config mid-rehearsal" above.
+#    it carries no steady-state latency cost, though the roll itself consumes ingestion capacity; step 10's optional
+#    wrap has its own. Use recreate_backend() from "Changing backend config mid-rehearsal" above.
 #    Skipping this leaves the whole read-side half of the flag unexercised — and its failure mode is SILENT (writes still
 #    succeed either way; absent end_time just reads back as 1970-01-01 instead of null).
 export ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED=true \

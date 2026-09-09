@@ -3,8 +3,8 @@
 -- (see its Javadoc). The settle-gate blocks are read-only and are exercised in the cutover rehearsal instead.
 --
 -- ../exchange_and_wrap.sh drives this: it runs the settle gate, records cutover_start, runs the `exchange` block, and
--- (unless --skip-wrap) the `wrap` block. Run it right after step 2's delta + replay, so the final-delta -> EXCHANGE gap
--- stays small. Do NOT run this whole file wholesale — the driver runs one marked block at a time. Nothing here needs an
+-- runs the `wrap` block only with --with-wrap (or --wrap-only, which runs that block alone). Run it right after step 2's
+-- delta + replay, so the final-delta -> EXCHANGE gap stays small. Do NOT run this whole file wholesale — the driver runs one marked block at a time. Nothing here needs an
 -- ingestion-side config change: the EXCHANGE is atomic per node, so a concurrent insert always commits to a valid
 -- table. Writes that land in the old one — in that gap or during the cross-node skew — stay in the parked backup: the
 -- open tail write-gap tracked as OPIK-8238, stated in the runbook's "The final cutover window".

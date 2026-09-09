@@ -187,11 +187,9 @@ esac
 if (( SKIP_WRAP + WITH_WRAP + WRAP_ONLY > 1 )); then
     echo "ERROR: --skip-wrap, --with-wrap and --wrap-only are mutually exclusive" >&2; exit 2
 fi
-# The wrap is gapless per node but has a brief cross-node ON CLUSTER propagation skew, in which a Distributed query can
-# reach a node where `traces_local` does not exist yet. The failing query is a SELECT, so nothing done on the ingestion
-# side reduces it, and running in the same session as the EXCHANGE does not either: --with-wrap and --wrap-only carry
-# the same exposure and the same requirement. Refuse (fail fast, before touching ClickHouse) unless the operator asserts
-# ingestion is quiesced / a maintenance window is in effect.
+# Both wrap paths, not just the deferred one: being in the same run as the EXCHANGE buys --with-wrap nothing here,
+# because the exposure is a READ reaching a not-yet-created `traces_local` (mechanism in the --confirm-maintenance help
+# above, and restated in the refusal below). Fail fast, before touching ClickHouse.
 if [[ ( "$WITH_WRAP" == "1" || "$WRAP_ONLY" == "1" ) && "$CONFIRM_MAINTENANCE" != "1" ]]; then
     echo "ERROR: applying the wrap requires --confirm-maintenance (both --with-wrap and --wrap-only). The wrap has a brief" >&2
     echo "       cross-node ON CLUSTER window in which a Distributed query can reach a node where 'traces_local' does not" >&2
@@ -438,9 +436,10 @@ assert_replication_settled() {
 
     # Out of time and still not clean. The mutation is unconditional; the queue is judged on stuck-ness, not depth.
     if (( mutations != 0 )); then
-        echo "ERROR: the deletion-replay mutation on 'traces_local_v2' has not finished on every replica after ${SETTLE_TIMEOUT}s" >&2
+        echo "ERROR: a mutation on 'traces_local_v2' has not finished on every replica after ${SETTLE_TIMEOUT}s" >&2
         echo "       ($mutations unfinished, oldest ${mut_age}s, $mut_failed carrying a latest_fail_reason). Swapping now would" >&2
-        echo "       serve a replica where the delete mask is not applied, so bridged deletes would leak live across the swap." >&2
+        echo "       serve a replica mid-mutation; if it is a deletion replay left by an earlier step, its delete mask is" >&2
+        echo "       not applied there and bridged deletes would leak live across the swap." >&2
         echo "       Unfinished mutations:" >&2
         ch_vertical "$mutation_detail_sql" >&2 || true
         echo "       Let it finish (or fix the cause), then re-run. Raise --settle-timeout for a slow-but-progressing" >&2
@@ -474,9 +473,9 @@ else
     assert_pre_exchange_topology
 fi
 
-# Timed, because this driver's run is the second half of the final-delta -> EXCHANGE gap and the settle gate is the
-# part of it that varies: on a busy cluster it polls up to --settle-timeout, so the delta replay's wall time on its own
-# understates the gap by that much.
+# Timed, because everything from here to the EXCHANGE is part of the final-delta -> EXCHANGE gap, and the settle gate
+# is the part of it that varies: on a busy cluster it polls up to --settle-timeout, so the delta replay's wall time on
+# its own understates the gap by that much.
 SETTLE_SECONDS=0
 if [[ "$WRAP_ONLY" == "1" ]]; then
     # Not skipped as a shortcut: neither signal describes this path. --wrap-only runs no EXCHANGE, and
