@@ -1583,19 +1583,19 @@ public class OnlineScoringEngine {
         });
 
         return StorablePythonScores.builder()
-                .storable(List.copyOf(storable))
-                .valuelessNames(List.copyOf(valuelessNames))
+                .storable(storable)
+                .valuelessNames(valuelessNames)
                 .build();
     }
 
     @Builder(toBuilder = true)
     public record StorablePythonScores(List<PythonScoreResult> storable, List<String> valuelessNames) {
 
-        // Defaulted so an empty result can be built without spelling both components out, and so no caller
-        // of the getters has to null-check them.
+        // Snapshotted and defaulted here rather than at the call site: this record hands both lists to its
+        // callers, so it is the one place that has to guarantee they are immutable and never null.
         public StorablePythonScores {
-            storable = storable == null ? List.of() : storable;
-            valuelessNames = valuelessNames == null ? List.of() : valuelessNames;
+            storable = storable == null ? List.of() : List.copyOf(storable);
+            valuelessNames = valuelessNames == null ? List.of() : List.copyOf(valuelessNames);
         }
     }
 

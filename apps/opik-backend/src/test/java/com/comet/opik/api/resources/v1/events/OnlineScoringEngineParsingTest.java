@@ -23,7 +23,7 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -720,7 +720,7 @@ class OnlineScoringEngineParsingTest {
                     arguments("an unnamed valueless score is reported, not silently dropped",
                             List.of(valued, unnamed), List.of(valued.name()), Collections.singletonList("")),
                     arguments("a null entry is reported without being dereferenced",
-                            Arrays.asList(valued, null), List.of(valued.name()), Collections.singletonList("")),
+                            Stream.of(valued, null).toList(), List.of(valued.name()), Collections.singletonList("")),
                     arguments("an empty result stores nothing", List.of(), List.of(), List.of()),
                     arguments("a null result stores nothing", null, List.of(), List.of()));
         }
@@ -755,6 +755,24 @@ class OnlineScoringEngineParsingTest {
                     List.of(randomScoreName()), "threadId", forged);
 
             assertThat(loggedArgument(2)).doesNotContain("\n", "\r").contains("ERROR");
+        }
+
+        @Test
+        @DisplayName("snapshot the lists it was built from, so a later mutation cannot change the result")
+        void snapshotsTheListsItWasBuiltFrom() {
+            var results = new ArrayList<>(List.of(pythonScore(BigDecimal.ONE)));
+            var names = new ArrayList<>(List.of(randomScoreName()));
+
+            var split = OnlineScoringEngine.StorablePythonScores.builder()
+                    .storable(results)
+                    .valuelessNames(names)
+                    .build();
+
+            results.clear();
+            names.clear();
+
+            assertThat(split.storable()).hasSize(1);
+            assertThat(split.valuelessNames()).hasSize(1);
         }
 
         @Test
