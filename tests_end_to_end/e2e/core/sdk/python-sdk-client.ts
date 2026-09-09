@@ -1,3 +1,22 @@
+/**
+ * A seeded span's `usage` map: the three counts every LLM span reports, plus
+ * whatever else the scenario needs.
+ *
+ * Open-ended because the backend's cost calculators read far more than the
+ * trio — audio, cache and reasoning token counts all arrive as extra keys on
+ * this same flat map (`original_usage.completion_tokens_details.reasoning_tokens`
+ * and friends), and the bridge types the field as a plain `dict[str, int]`.
+ *
+ * Note the Python SDK normalises what it is given: a bare OTel key is re-emitted
+ * under the `original_usage.` prefix. A seed that must arrive with the bare key
+ * cannot go through the bridge at all — see `backendClient.createSpan`.
+ */
+export type SpanSeedUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+} & Record<string, number>;
+
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
   createTrace(args: {
@@ -34,7 +53,7 @@ export interface PythonSdkClient {
       metadata?: Record<string, unknown>;
       model?: string;
       provider?: string;
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage?: SpanSeedUsage;
       total_cost?: number;
       parent_index?: number;
     }>;
