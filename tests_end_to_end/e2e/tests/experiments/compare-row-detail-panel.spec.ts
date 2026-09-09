@@ -28,11 +28,12 @@ import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
  *
  * ## Why the resize assertion clicks rather than navigates
  *
- * The panel's layout is persisted by react-resizable-panels under an
- * `autoSaveId` whose storage key is derived from the panel set. Stepping to the
- * next dataset item must be an in-place arrow click: a URL reload would restore
- * the saved layout from localStorage and pass whether or not the panels held
- * their widths. The test asserts it never reloaded, so that premise cannot rot
+ * `DataTab` hands react-resizable-panels a fixed
+ * `autoSaveId="compare-vetical-sidebar"`, so the group writes every layout it
+ * settles on to localStorage. Stepping to the next dataset item must therefore
+ * be an in-place arrow click: a URL reload would restore the saved layout from
+ * storage and pass whether or not the panels held their widths in the live
+ * document. The test asserts it never reloaded, so that premise cannot rot
  * silently.
  */
 
@@ -76,25 +77,33 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
         return compare;
       };
 
-      await test.step('With experiments=[A,B] the panel reads A then B', async () => {
-        const compare = await openPanelFor([expA, expB]);
-        await compare.expectPanelExperimentOrder([expA.experimentName, expB.experimentName]);
-      });
-
-      await test.step('The same row with experiments=[B,A] reads B then A', async () => {
-        const compare = await openPanelFor([expB, expA]);
-        await compare.expectPanelExperimentOrder([expB.experimentName, expA.experimentName]);
-
-        // Order alone would still pass if the sections were re-ordered but
-        // mis-paired with their contents, so tie each heading back to the
-        // output and score that belong under it.
-        for (const exp of [expB, expA]) {
+      // Order alone would still pass if the sections were re-ordered but
+      // mis-paired with their contents, so tie each heading back to the output
+      // and score that belong under it — in both URL orders, since a pairing
+      // regression can be specific to one of them.
+      const expectSectionsPaired = async (
+        compare: CompareExperimentsPage,
+        ordered: typeof comparison.experiments,
+      ) => {
+        for (const exp of ordered) {
           await compare.expectPanelExperimentResult(exp.experimentName, {
             output: exp.outputsByItemId[itemId!],
             score: exp.scoresByItemId[itemId!],
             metricName: comparison.evaluator.name,
           });
         }
+      };
+
+      await test.step('With experiments=[A,B] the panel reads A then B', async () => {
+        const compare = await openPanelFor([expA, expB]);
+        await compare.expectPanelExperimentOrder([expA.experimentName, expB.experimentName]);
+        await expectSectionsPaired(compare, [expA, expB]);
+      });
+
+      await test.step('The same row with experiments=[B,A] reads B then A', async () => {
+        const compare = await openPanelFor([expB, expA]);
+        await compare.expectPanelExperimentOrder([expB.experimentName, expA.experimentName]);
+        await expectSectionsPaired(compare, [expB, expA]);
       });
     },
   );
@@ -124,14 +133,42 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
           .toEqual(expect.arrayContaining(comparison.itemIds));
         expect(rowOrder, 'and nothing else').toHaveLength(comparison.itemIds.length);
 
-        // The first row leaves Next enabled; after one step, Previous is too.
-        [firstItemId, secondItemId] = rowOrder;
+        // Step between two ADJACENT rows that BOTH experiments answer
+        // differently, so a section left showing the previous item fails rather
+        // than coincidentally matching: experiment B answers "WRONG" to two of
+        // the three seeded items, so not every adjacent pair discriminates.
+        // Adjacent because the arrows move one row at a time, and taking a pair
+        // with a row after it also leaves Next enabled to start with.
+        const pairStart = rowOrder.findIndex((id, i) => {
+          const next = rowOrder[i + 1];
+          return (
+            next !== undefined &&
+            comparison.experiments.every((exp) => exp.outputsByItemId[id] !== exp.outputsByItemId[next])
+          );
+        });
+        expect(pairStart, 'seed sanity: adjacent rows both experiments answered differently')
+          .toBeGreaterThanOrEqual(0);
+
+        [firstItemId, secondItemId] = [rowOrder[pairStart], rowOrder[pairStart + 1]];
       });
 
       await test.step('Open the detail panel on the first row', async () => {
         await compare.openRowPanel(firstItemId);
         await compare.expectPanelExperimentOrder([expA.experimentName, expB.experimentName]);
       });
+
+      // Every experiment section has to move on, not just the first: DataTab
+      // renders one panel per experiment, so a refresh that reaches only some of
+      // them leaves the rest showing the previous item.
+      const expectPanelShows = async (datasetItemId: string) => {
+        for (const exp of comparison.experiments) {
+          await compare.expectPanelExperimentResult(exp.experimentName, {
+            output: exp.outputsByItemId[datasetItemId],
+            score: exp.scoresByItemId[datasetItemId],
+            metricName: comparison.evaluator.name,
+          });
+        }
+      };
 
       let draggedLayout: string[] = [];
 
@@ -160,12 +197,8 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
         await compare.goToNextRow(secondItemId);
 
         // Confirm the panel really moved on rather than just the URL: the two
-        // items carry different outputs for the same experiment.
-        await compare.expectPanelExperimentResult(expA.experimentName, {
-          output: expA.outputsByItemId[secondItemId],
-          score: expA.scoresByItemId[secondItemId],
-          metricName: comparison.evaluator.name,
-        });
+        // items carry different outputs for both experiments.
+        await expectPanelShows(secondItemId);
 
         await compare.expectPanelLayout(draggedLayout);
       });
@@ -173,11 +206,7 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
       await test.step('Stepping back keeps them too', async () => {
         await compare.goToPreviousRow(firstItemId);
 
-        await compare.expectPanelExperimentResult(expA.experimentName, {
-          output: expA.outputsByItemId[firstItemId],
-          score: expA.scoresByItemId[firstItemId],
-          metricName: comparison.evaluator.name,
-        });
+        await expectPanelShows(firstItemId);
 
         await compare.expectPanelLayout(draggedLayout);
       });

@@ -182,7 +182,9 @@ export class CompareExperimentsPage {
    * two-experiment comparison has two.
    */
   async countPanelDividers(): Promise<number> {
-    return this.panelDividers.count();
+    return test.step('count the row-detail panel dividers', async () => {
+      return this.panelDividers.count();
+    });
   }
 
   /**
@@ -403,12 +405,23 @@ export class CompareExperimentsPage {
     return this.page.getByTestId('compare-experiments');
   }
 
-  /** The resizable panels inside the row-detail panel (dataset + one per experiment). */
+  /**
+   * The resizable panels inside the row-detail panel (dataset + one per
+   * experiment).
+   *
+   * `data-panel` and `data-panel-size` below are react-resizable-panels' own
+   * published attributes, not a structural CSS path — the library stamps them on
+   * every `<Panel>`, and `data-panel-size` is the only place the group's
+   * assigned percentage is readable at all. A `data-testid` on `DataTab`'s
+   * panels could identify them but could not carry their size, so it would not
+   * replace this; the conventions' test-id rule is about addressing an element,
+   * and these locators read a value.
+   */
   private get panelsInRowPanel(): Locator {
     return this.rowPanel.locator('[data-panel]');
   }
 
-  /** The draggable dividers between those panels. */
+  /** The draggable dividers between those panels — likewise the library's own attribute. */
   private get panelDividers(): Locator {
     return this.rowPanel.locator('[data-panel-resize-handle-id]');
   }
