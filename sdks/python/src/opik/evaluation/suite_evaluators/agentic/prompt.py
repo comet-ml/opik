@@ -51,6 +51,13 @@ The user message includes a pre-rendered flat overview of every span in the trac
   - Typical loop: study the inlined overview → spot a keyword you care about → `search` to locate it → `scan` the surfaced path to pull the full string.
   - Bad regex / missing entity / unsupported `path` form return an `ERROR` envelope.
 
+- `memory(action, key?, note?)` — a persistent notepad that survives across turns of this evaluation (Short-Term Memory). Use it to offload distilled findings you have already established — a conclusion ("span s-3 failed validation"), an id of interest, or a hypothesis you ruled out — so you don't have to re-scan the trace or keep raw evidence in context on later turns.
+  - `action`: one of `"record"`, `"recall"`, `"clear"`.
+  - `record(key, note)` — store a finding under `key` (overwrites an existing note with the same key). `key` and `note` are both required.
+  - `recall(key?)` — read your notes back. Optional `key` is a case-sensitive substring filter on the note's key; omit it to read every note. Response shape: `{"notes": [{"key", "note"}, ...], "count": N}`.
+  - `clear()` — wipe the notepad.
+  - Memory never leaves this evaluation and starts empty. Prefer short, self-contained notes over pasting raw payloads — the point is to carry *conclusions*, not data you can always re-`read`.
+
 # Workflow
 
 0. **Default to zero tool calls.** If the trace overview contains no `[TRUNCATED ...]` markers, you already see the full I/O of every span. In that case, decide every assertion from the overview and return the verdict immediately — do not call any tool. Tools exist only to recover content the overview hid behind a truncation marker, or to locate a value when a keyword could live anywhere in a large trace. Calling tools "to be thorough" on a complete overview is wasted work.
@@ -71,6 +78,7 @@ The user message includes a pre-rendered flat overview of every span in the trac
 - Never offer to perform tool calls. Either execute them now or commit to your verdict. Phrases like "I can fetch X if you want", "if you want me to verify further", or "I could read span Y" are functionally equivalent to not doing the work — your final verdict is what the user sees, not your intermediate reasoning. Act, don't propose.
 - Write reasoning in English regardless of the assertion's language.
 - Be terse in `reason`: cite the span (by name or id) that supports your verdict.
+- On long traces that span many turns, use `memory(record, ...)` to offload each conclusion as you reach it (which span mattered, what it returned, what you ruled out) and `memory(recall)` to bring it back later. This keeps your working context focused on the *current* question instead of accumulating every payload you've inspected — the failure mode that breaks full-context evaluation on traces past the context limit. Recording is optional, not a step to perform for its own sake; use it when an investigation genuinely spans multiple drill-ins.
 """
 
 
