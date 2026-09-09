@@ -31,6 +31,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
+import AutomationCell from "@/v2/pages-shared/annotation-queues/AutomationCell";
 import AnnotateQueueCell from "@/v2/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
@@ -151,6 +152,12 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     type: COLUMN_TYPE.string,
     cell: AnnotationQueueProgressCell as never,
   },
+  {
+    id: "automation",
+    label: "Automation",
+    type: COLUMN_TYPE.category,
+    cell: AutomationCell as never,
+  },
 ];
 
 const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
@@ -174,6 +181,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "progress",
   COLUMN_FEEDBACK_SCORES_ID,
   "scope",
+  "automation",
   "last_updated_at",
 ];
 
@@ -185,6 +193,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "progress",
   COLUMN_FEEDBACK_SCORES_ID,
   "scope",
+  "automation",
   "last_updated_at",
   "created_at",
   "created_by",
@@ -193,6 +202,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+// Bumped to surface the new Automation column to users whose v2 selection is already stored —
+// otherwise the persisted value wins and they never see it.
+const SELECTED_COLUMNS_KEY_V3 = `${SELECTED_COLUMNS_KEY}-v3`;
 const COLUMNS_WIDTH_KEY = "workspace-annotation-queues-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-annotation-queues-columns-order";
 const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
@@ -249,12 +261,15 @@ export const AnnotationQueuesPage: React.FC = () => {
     defaultValue: ROW_HEIGHT.small,
   });
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY_V3,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_NAME_ID],
+        SELECTED_COLUMNS_KEY_V2,
+        migrateSelectedColumns(SELECTED_COLUMNS_KEY, DEFAULT_SELECTED_COLUMNS, [
+          COLUMN_NAME_ID,
+          "automation",
+        ]),
+        ["automation"],
       ),
     },
   );
