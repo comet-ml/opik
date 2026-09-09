@@ -29,6 +29,7 @@ import {
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -219,13 +220,29 @@ const getSpanFromRun = (
       created_from: spanProvider,
       usage: run.usage,
       model: spanModel,
-      parameters: run.configs,
+      parameters: getLoggedParameters(run),
       ...(run.provider === PROVIDER_TYPE.OPIK_FREE && {
         opik_free_model: true,
       }),
     },
   };
 };
+
+/**
+ * What the request actually carried, for the trace to record.
+ *
+ * The stored config deliberately keeps a parameter the selected model rejects so that switching
+ * back to one that accepts it restores the value, and sanitizeConfigForRequest is what decides
+ * which of those reach the provider. Logging the raw config instead would report a temperature the
+ * call never ran at.
+ */
+export const getLoggedParameters = (
+  run: Pick<LogQueueParams, "model" | "configs">,
+): Record<string, unknown> =>
+  sanitizeConfigForRequest(
+    run.model,
+    run.configs as unknown as Record<string, unknown>,
+  );
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
   // Use the actual model from the response headers if available
@@ -234,7 +251,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
   const experimentMetadata: Record<string, unknown> = {
     model: experimentModel,
     messages: JSON.stringify(run.providerMessages),
-    model_config: run.configs,
+    model_config: getLoggedParameters(run),
   };
 
   // Add selected_rule_ids to experiment metadata if provided

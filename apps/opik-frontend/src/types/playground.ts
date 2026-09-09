@@ -111,7 +111,9 @@ export interface LogSpan {
     created_from: string;
     usage: UsageType | null;
     model: string;
-    parameters: LLMPromptConfigsType;
+    // The parameters the request carried, not the stored config: the two differ wherever the
+    // selected model rejects something the config keeps.
+    parameters: Record<string, unknown>;
   };
 }
 
