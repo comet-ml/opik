@@ -3,8 +3,7 @@ import { CellContext } from "@tanstack/react-table";
 import { Bot, User } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import { Tag } from "@/ui/tag";
-import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
+import QueuePill from "@/v2/pages-shared/annotation-queues/QueuePill";
 import { ANNOTATION_QUEUE_ITEM_SOURCE } from "@/types/annotation-queues";
 import { Trace, Thread } from "@/types/traces";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
@@ -31,7 +30,7 @@ const QueueItemSourceCell = <TData extends Trace | Thread>(
   const { custom } = context.column.columnDef.meta ?? {};
   const { sourceById } = (custom ?? {}) as CustomMeta;
   const source = sourceById?.[getAnnotationQueueItemId(context.row.original)];
-  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
+  const automated = source === ANNOTATION_QUEUE_ITEM_SOURCE.AUTOMATED;
 
   return (
     <CellWrapper
@@ -39,16 +38,9 @@ const QueueItemSourceCell = <TData extends Trace | Thread>(
       tableMetadata={context.table.options.meta}
     >
       {source && (
-        <Tag size={tagSize} variant="gray" className="flex items-center gap-1">
-          {source === ANNOTATION_QUEUE_ITEM_SOURCE.AUTOMATED ? (
-            <Bot className="size-3 shrink-0 text-muted-gray" />
-          ) : (
-            <User className="size-3 shrink-0 text-muted-gray" />
-          )}
-          {source === ANNOTATION_QUEUE_ITEM_SOURCE.AUTOMATED
-            ? "Automated"
-            : "Manual"}
-        </Tag>
+        <QueuePill icon={automated ? Bot : User}>
+          {automated ? "Automated" : "Manual"}
+        </QueuePill>
       )}
     </CellWrapper>
   );

@@ -3,8 +3,7 @@ import { CellContext } from "@tanstack/react-table";
 import { Zap, ZapOff } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import { Tag } from "@/ui/tag";
-import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
+import QueuePill from "@/v2/pages-shared/annotation-queues/QueuePill";
 import { AnnotationQueue } from "@/types/annotation-queues";
 
 /**
@@ -19,21 +18,15 @@ const AutomationCell: React.FC<CellContext<AnnotationQueue, unknown>> = (
 ) => {
   const queue = context.row.original;
   const enabled = Boolean(queue.automation?.enabled);
-  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <Tag size={tagSize} variant="gray" className="flex items-center gap-1">
-        {enabled ? (
-          <Zap className="size-3 shrink-0 text-muted-gray" />
-        ) : (
-          <ZapOff className="size-3 shrink-0 text-muted-gray" />
-        )}
+      <QueuePill icon={enabled ? Zap : ZapOff}>
         {enabled ? "On" : "Off"}
-      </Tag>
+      </QueuePill>
     </CellWrapper>
   );
 };
