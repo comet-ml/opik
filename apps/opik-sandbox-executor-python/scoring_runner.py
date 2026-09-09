@@ -125,40 +125,6 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
 
 
 
-def bind_missing_required(metric: BaseMetric, data: dict) -> dict:
-    """Pass None for required score() parameters the data has no key for.
-
-    A rule maps each score() parameter to a trace/span field, but a field the
-    entity never logged resolves to nothing and is left out of `data` entirely.
-    Spreading that as score(**data) then misses an argument the signature requires
-    and raises TypeError, scoring nothing -- which is what the shipped default
-    template did on any trace logged without metadata.
-
-    Only parameters with no default are filled: one that has a default must keep
-    it, since None is a value and would override it. Params covered by **kwargs
-    need nothing, and a positional-only param cannot be passed by name at all, so
-    neither is touched. Deciding this here rather than server-side is what makes
-    it possible at all -- only the metric object carries the signature.
-    """
-    if not isinstance(data, dict):
-        # score(**data) rejects a non-mapping itself; converting it here would
-        # silently accept e.g. a list of pairs that the endpoint never validated.
-        return data
-    try:
-        parameters = inspect.signature(metric.score).parameters
-    except (TypeError, ValueError):
-        # Not introspectable (a C-implemented or exotic callable): leave the call
-        # exactly as it would have been rather than guessing at its arguments.
-        return data
-    bound = dict(data)
-    for name, parameter in parameters.items():
-        if (
-            parameter.default is inspect.Parameter.empty
-            and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
-            and name not in bound
-        ):
-            bound[name] = None
-    return bound
 
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
     """Format the current exception with the runner's own frames dropped.
@@ -175,7 +141,6 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
             break
         tb = tb.tb_next
     return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
-
 
 code = argv[1]
 data = json.loads(argv[2])
@@ -204,7 +169,7 @@ try:
         score_result = metric.score(data)
     else:
         # Regular scoring - unpack data as keyword arguments
-        score_result = metric.score(**bind_missing_required(metric, data))
+        score_result = metric.score(**data)
 except Exception:
     stacktrace = user_facing_stacktrace()
     print(json.dumps({"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))

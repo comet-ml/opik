@@ -1,5 +1,7 @@
 import os
 from typing import Any, Dict
+from opik_backend.payload_types import PayloadType
+from opik_backend.process_worker import required_score_params
 
 from flask import request, abort, jsonify, Blueprint, current_app
 from werkzeug.exceptions import HTTPException
@@ -56,6 +58,19 @@ def execute_evaluator_python():
 
     # Extract type information for conversation thread metrics
     payload_type = payload.get("type")
+
+    # An online-scoring rule maps each score() parameter to a trace/span field, and
+    # a field the entity never logged resolves to nothing and arrives with its key
+    # absent -- which misses an argument the signature requires and scores nothing.
+    # Passing None says the entity had no value there, which is the outcome the rule
+    # wants. Deliberately applied here and not in the shared scoring code: the
+    # optimization studio runs the same code with a mapped *dataset column* absent
+    # and requires the opposite -- score(**data) must raise, so the item is reported
+    # as an explained 0.0 rather than a silent score (OPIK_7172). Same shape, two
+    # contracts, and only the caller separates them.
+    if isinstance(data, dict) and payload_type != PayloadType.TRACE_THREAD.value:
+        for name in required_score_params(code):
+            data.setdefault(name, None)
 
     # Get the executor from app context and run the code
     response = get_executor().run_scoring(code, data, payload_type)

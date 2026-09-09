@@ -283,39 +283,6 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
     return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
 
 
-def bind_missing_required(metric: BaseMetric, data: dict) -> dict:
-    """Pass None for required score() parameters the data has no key for.
-
-    A rule maps each score() parameter to a trace/span field, but a field the
-    entity never logged resolves to nothing and is left out of ``data`` entirely.
-    Spreading that as score(**data) then misses an argument the signature requires
-    and raises TypeError, scoring nothing.
-
-    Only parameters with no default are filled: one that has a default must keep
-    it, since None is a value and would override it. Params covered by **kwargs
-    need nothing, and a positional-only param cannot be passed by name at all, so
-    neither is touched.
-    """
-    if not isinstance(data, dict):
-        # score(**data) rejects a non-mapping itself; converting it here would
-        # silently accept e.g. a list of pairs that the endpoint never validated.
-        return data
-    try:
-        parameters = inspect.signature(metric.score).parameters
-    except (TypeError, ValueError):
-        # Not introspectable: leave the call exactly as it would have been.
-        return data
-    bound = dict(data)
-    for name, parameter in parameters.items():
-        if (
-            parameter.default is inspect.Parameter.empty
-            and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
-            and name not in bound
-        ):
-            bound[name] = None
-    return bound
-
-
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
@@ -348,7 +315,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
             score_result = metric.score(data)
         else:
             # Regular scoring - unpack data as keyword arguments
-            score_result = metric.score(**bind_missing_required(metric, data))
+            score_result = metric.score(**data)
     except Exception as e:
         stacktrace = user_facing_stacktrace()
         return {
@@ -433,6 +400,40 @@ def validate_user_code(code: str) -> dict:
         "score_params": _score_params_ast(metric_class),
     }
 
+
+def required_score_params(code: str) -> List[str]:
+    """``score()`` parameters with no default, read statically from the code.
+
+    Static because this runs before any user code does, and outside the sandbox:
+    the metric object is never constructed here. Empty when the signature isn't
+    statically resolvable (``score()`` inherited from an imported base), which
+    the callers treat as "fill nothing" rather than guessing.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    metric_class = _find_basemetric_classdef(tree)
+    if metric_class is None:
+        scored = sorted(
+            (c for c in _top_level_classdefs(tree) if _score_funcdef(c) is not None),
+            key=lambda node: node.name,
+        )
+        if not scored:
+            return []
+        metric_class = scored[0]
+    score = _score_funcdef(metric_class)
+    if score is None:
+        return []
+    args = [a.arg for a in score.args.args if a.arg != "self"]
+    # Defaults bind to the tail of args; only the untailed ones are required.
+    required = args[: len(args) - len(score.args.defaults)] if score.args.defaults else args
+    kwonly = [
+        a.arg
+        for a, default in zip(score.args.kwonlyargs, score.args.kw_defaults)
+        if default is None
+    ]
+    return required + kwonly
 
 def worker_process_main(connection):
     # Workers should ignore SIGINT; parent ProcessExecutor will manage shutdown.
