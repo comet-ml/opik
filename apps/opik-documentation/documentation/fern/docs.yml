@@ -42,7 +42,7 @@ theme:
   page-actions: toolbar
 
 page-actions:
-  default: copy-page
+  default: ask-ai
   options:
     claude: true
     chatgpt: true

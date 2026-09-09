@@ -78,7 +78,10 @@
     ".opik-it-tab[aria-selected=true]{color:var(--accent-a11,inherit);border-bottom-color:var(--accent-a11,currentColor)}" +
     ".opik-it-text{margin:16px 0 10px;color:var(--grayscale-a11,inherit)}" +
     ".opik-it-cmd{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--grayscale-a6,rgba(128,128,128,.35));border-radius:8px;padding:12px 14px;background:var(--grayscale-a2,rgba(128,128,128,.08))}" +
-    ".opik-it-cmd code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;white-space:pre-wrap;word-break:break-word;background:transparent;padding:0}" +
+    ".opik-it-dialog code{border:0!important;box-shadow:none!important;background:transparent!important;padding:0!important;border-radius:0!important;color:inherit}" +
+    ".opik-it-cmd code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;white-space:pre-wrap;word-break:break-word}" +
+    ".opik-it-alt{margin:18px 0 8px;font-size:13.5px;color:var(--grayscale-a11,inherit)}" +
+    ".opik-it-cmd.opik-it-cmd-alt code{font-size:13px}" +
     ".opik-it-copy{flex:none;border:0;background:transparent;color:inherit;cursor:pointer;padding:6px;border-radius:6px;opacity:.75;display:inline-flex}" +
     ".opik-it-copy:hover{opacity:1;background:var(--accent-a3,rgba(128,128,128,.15))}" +
     ".opik-it-foot{margin:16px 0 0;font-size:13.5px;color:var(--grayscale-a11,inherit)}" +
@@ -125,13 +128,15 @@
         '<div class="opik-it-tabs" role="tablist"></div>' +
         '<p class="opik-it-text"></p>' +
         '<div class="opik-it-cmd"><code></code><button class="opik-it-copy" type="button" aria-label="Copy command">' + ICON_COPY + "</button></div>" +
-        '<p class="opik-it-foot">Another MCP client? <code>npx add-mcp ' + MCP_URL + " --name opik-mcp</code>. Self-hosted Opik: the command above detects your deployment.</p>" +
+        '<p class="opik-it-alt">Another MCP client? Any client that speaks MCP can take the Opik Cloud server directly:</p>' +
+        '<div class="opik-it-cmd opik-it-cmd-alt"><code>npx add-mcp ' + MCP_URL + ' --name opik-mcp</code><button class="opik-it-copy" type="button" aria-label="Copy command">' + ICON_COPY + "</button></div>" +
+        '<p class="opik-it-foot">Self-hosted Opik: the commands in the tabs detect your deployment.</p>' +
       "</div>";
 
     var tablist = overlay.querySelector(".opik-it-tabs");
     var text = overlay.querySelector(".opik-it-text");
     var code = overlay.querySelector(".opik-it-cmd code");
-    var copyBtn = overlay.querySelector(".opik-it-copy");
+    var copyButtons = overlay.querySelectorAll(".opik-it-copy");
 
     function select(id) {
       TABS.forEach(function (tab) {
@@ -164,7 +169,11 @@
 
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
     overlay.querySelector(".opik-it-close").addEventListener("click", close);
-    copyBtn.addEventListener("click", function () { copyText(code.textContent, copyBtn); });
+    copyButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        copyText(btn.previousElementSibling.textContent, btn);
+      });
+    });
     document.addEventListener("keydown", onKey);
 
     document.body.appendChild(overlay);
