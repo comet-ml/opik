@@ -134,8 +134,10 @@ jobs:
       - name: Keep BE log in case of failure
         if: failure()
         run: |
-          docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_guardrails_p${{matrix.python_version}}.log || true
-          docker logs opik-guardrails-backend-1 > ${{ github.workspace }}/opik-guardrails-backend_p${{matrix.python_version}}.log || true
+          cd ${{ github.workspace }}
+          source scripts/worktree-utils.sh && init_worktree_ports
+          docker logs "${COMPOSE_PROJECT_NAME}-backend-1" > ${{ github.workspace }}/opik-backend_guardrails_p${{matrix.python_version}}.log 2>&1 || true
+          docker logs "${COMPOSE_PROJECT_NAME}-guardrails-backend-1" > ${{ github.workspace }}/opik-guardrails-backend_p${{matrix.python_version}}.log 2>&1 || true
 
       - name: Attach BE log
         if: failure()
