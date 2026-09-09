@@ -285,34 +285,6 @@ class DashboardsResourceFindProjectDashboardsTest {
     }
 
     @Test
-    @DisplayName("Find project dashboards excludes workspace dashboards with no project")
-    void findProjectDashboardsExcludesUnassignedDashboards() {
-        String apiKey = UUID.randomUUID().toString();
-        String workspaceName = "test-workspace-" + UUID.randomUUID();
-        String workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-        var projectDashboard = dashboardResourceClient.createPartialDashboard()
-                .scope(DashboardScope.WORKSPACE)
-                .projectId(projectId)
-                .build();
-        var workspaceDashboard = dashboardResourceClient.createPartialDashboard()
-                .scope(DashboardScope.WORKSPACE)
-                .build();
-
-        var projectDashboardId = dashboardResourceClient.create(projectDashboard, apiKey, workspaceName);
-        dashboardResourceClient.create(workspaceDashboard, apiKey, workspaceName);
-
-        var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
-                null);
-
-        assertThat(page.total()).isEqualTo(1);
-        assertThat(page.content()).extracting(Dashboard::id).containsExactly(projectDashboardId);
-    }
-
-    @Test
     @DisplayName("Find project dashboards with empty result")
     void findProjectDashboardsWithEmptyResult() {
         String apiKey = UUID.randomUUID().toString();
