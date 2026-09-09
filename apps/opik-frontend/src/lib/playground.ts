@@ -37,6 +37,56 @@ import {
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import { parseComposedProviderType } from "@/lib/provider";
 
+/**
+ * Fills in config parameters a stored prompt has no value for, from the provider defaults.
+ *
+ * Two ways a prompt ends up short of one. It was persisted before the parameter existed, or an
+ * earlier model change cleared it: the reconciler used to overwrite a parameter the newly picked
+ * model rejected, and the panels render one control per parameter the config carries, so the
+ * control stayed gone for good (a playground reset was the only way back).
+ *
+ * Only absent parameters are filled; a value the user chose is never overwritten. The
+ * temperature/topP pair is skipped where the provider takes one or the other — restoring
+ * temperature next to a live Top P would make the request drop the Top P. resolveSamplingParams
+ * settles which half is live for those.
+ */
+export const restoreMissingConfigKeys = (
+  prompt: PlaygroundPromptType,
+): PlaygroundPromptType => {
+  if (!prompt.provider) {
+    return prompt;
+  }
+
+  const defaults = getDefaultConfigByProvider(prompt.provider, prompt.model) as
+    | Record<string, unknown>
+    | undefined;
+
+  if (!defaults) {
+    return prompt;
+  }
+
+  const exclusiveSamplingPair =
+    parseComposedProviderType(prompt.provider) === PROVIDER_TYPE.ANTHROPIC;
+  const configs = prompt.configs as unknown as Record<string, unknown>;
+  const restored: Record<string, unknown> = { ...configs };
+  let changed = false;
+
+  for (const [key, value] of Object.entries(defaults)) {
+    if (value === undefined || configs[key] !== undefined) {
+      continue;
+    }
+    if (exclusiveSamplingPair && (key === "temperature" || key === "topP")) {
+      continue;
+    }
+    restored[key] = value;
+    changed = true;
+  }
+
+  return changed
+    ? { ...prompt, configs: restored as unknown as LLMPromptConfigsType }
+    : prompt;
+};
+
 export const getDefaultConfigByProvider = (
   provider: COMPOSED_PROVIDER_TYPE,
   model?: PROVIDER_MODEL_TYPE | "",

@@ -11,6 +11,7 @@ import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
   getOpenAIReasoningEffortOptions,
   isReasoningModel,
+  resolveSamplingParams,
   supportsOpenAIReasoningEffort,
 } from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
@@ -37,6 +38,9 @@ const OpenAIModelConfigs = ({
 }: OpenAIModelSettingsProps) => {
   // Reasoning models (GPT-5.2, GPT-5.1, GPT-5, O1, O3, O4-mini) require temperature = 1.0
   const isReasoning = isReasoningModel(model);
+  // The resolver owns which sampling params this model accepts and what the request will carry, so
+  // Top P follows it rather than the config's own key — a config that lost the key still offers it.
+  const { topP } = resolveSamplingParams(model ?? "", configs);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -78,12 +82,9 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.topP) && !isReasoning && (
-        // OpenAI rejects top_p with "Unsupported parameter: 'top_p' is not supported with this
-        // model." on reasoning models (gpt-5.x, o-series). Hide the slider rather than send a
-        // value the backend will surface as a 400. Mirrors the temperature pinning above.
+      {!isUndefined(topP) && (
         <SliderInputControl
-          value={configs.topP}
+          value={topP}
           onChange={(v) => onChange({ topP: v })}
           id="topP"
           min={0}
