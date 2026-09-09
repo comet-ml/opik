@@ -29,6 +29,7 @@ export {
   type SpanDetail,
   type AutomationRuleRef,
   type AutomationRuleDetail,
+  type CreatePythonRuleArgs,
   type AutomationRuleLogRef,
   type AutomationRuleEvaluatorPageRef,
   type JudgeMessageRef,

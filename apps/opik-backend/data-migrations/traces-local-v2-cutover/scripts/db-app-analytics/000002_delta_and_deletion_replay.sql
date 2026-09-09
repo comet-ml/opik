@@ -132,7 +132,9 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- during the window (client-supplied ids; the delete is a mask, a newer insert wins under FINAL). Such an id is bridged
 -- as deleted but is LIVE again on the source, and the backfill/delta already copied its live version. Deleting it by key
 -- would drop a row that is live on the source — silent data loss. So the replay deletes only ids that are NOT currently
--- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
+-- live on the source (mask-honored). The guard covers a second case since OPIK-8141: capture runs before the delete, so
+-- the bridge can name an id whose delete then errored and is still live on the source. Same arm, same reason.
+-- The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
 -- (retention is off, so these are user-scale deletes); `traces` has no id skip index (000088 indexes only
 -- created_at/last_updated_at — id minmax/bloom indexes exist only on traces_local_v2), so this source lookup is a
 -- bounded id-filtered read of that tiny set, not a value-indexed prune of the full `traces` table.

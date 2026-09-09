@@ -45,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -251,7 +252,7 @@ class TraceServiceImplTest {
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
             when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
-            when(deletionEventDAO.insert(any(), eq(DEFAULT_USER)))
+            when(deletionEventDAO.insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER))
                     .thenReturn(Mono.error(new RuntimeException("Error inserting deletion events")));
 
             var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
@@ -266,23 +267,26 @@ class TraceServiceImplTest {
 
             verify(traceDao).delete(pairs(projectId, ids), connection);
             verifyTracesDeletedPosted(ids, projectId, workspaceId);
-            verify(deletionEventDAO).insert(any(), eq(DEFAULT_USER));
+            verify(deletionEventDAO).insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER);
         }
 
         @Test
-        @DisplayName("when the delete fails, then no deletion events are recorded and the error propagates")
-        void delete__whenDeleteFails__thenRecordsNoDeletionEventsAndPropagates() {
+        @DisplayName("when the delete fails, then the deletion events are still recorded and the error propagates")
+        void delete__whenDeleteFails__thenStillRecordsDeletionEventsAndPropagates() {
             var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
             var projectId = idGenerator.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
             when(traceDao.delete(pairs(projectId, ids), connection))
                     .thenReturn(Mono.error(new RuntimeException("Error deleting traces")));
+            when(deletionEventDAO.insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER))
+                    .thenReturn(Mono.empty());
 
             var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
                     .traceDeletionEventsCaptureEnabled(true)
                     .build());
-            // Capture runs only after a successful delete, so a failed delete records nothing and surfaces the error.
+            // OPIK-8141: capture runs before the delete, so a failed delete is recorded anyway - including one whose
+            // statement errored on the client while its server-side mutation applied, the case that lost the event.
             assertThatThrownBy(() -> traceService
                     .delete(ids, projectId)
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
@@ -291,8 +295,12 @@ class TraceServiceImplTest {
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("Error deleting traces");
 
-            verify(traceDao).delete(pairs(projectId, ids), connection);
-            verifyNoInteractions(deletionEventDAO, eventBus);
+            // The ordering is the fix, so assert it rather than infer it from both having happened.
+            var inOrder = inOrder(deletionEventDAO, traceDao);
+            inOrder.verify(deletionEventDAO).insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER);
+            inOrder.verify(traceDao).delete(pairs(projectId, ids), connection);
+            // A failed delete still skips the cascade: its children belong to traces that may well be live.
+            verifyNoInteractions(eventBus);
         }
 
         @Test
@@ -341,6 +349,23 @@ class TraceServiceImplTest {
          */
         private Set<Pair<UUID, UUID>> pairs(UUID projectId, Set<UUID> ids) {
             return ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
+        }
+
+        /**
+         * The bridge rows the delete is expected to record: one {@code traces} / {@code user_request} event per pair,
+         * with {@code eventTime} left null for ClickHouse to stamp. Matching the insert on this rather than on
+         * {@code any()} is what pins the recorded contents, so a wrong source table, reason or id fails the test.
+         */
+        private Set<DeletionEvent> deletionEvents(UUID projectId, Set<UUID> ids, String workspaceId) {
+            return ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.TRACES)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
         }
 
         private Connection mockDeleteFlow() {
