@@ -3,10 +3,11 @@
 ## Installation pre-requirements for local installation
 
 - Docker: https://docs.docker.com/engine/install/
-- Docker Compose **v2.17.0 or newer**: https://docs.docker.com/compose/install/
+- Docker Compose **v2.24.4 or newer**: https://docs.docker.com/compose/install/
 
-`opik.sh` checks the Compose version before starting anything and exits with an upgrade message if it is older, since
-it relies on `docker compose up --wait --wait-timeout` for the startup readiness check. Confirm your version with:
+`opik.sh` checks the Compose version before starting anything and exits with an upgrade message if it is older. Two
+features set that floor: `docker compose up --wait --wait-timeout`, used for the startup readiness check, and the
+`!override` tag used by the port-mapping and local-development overlay files. Confirm your version with:
 
 ```bash
 docker compose version --short

@@ -15,7 +15,7 @@ To run Opik locally we recommend using [Docker Compose](https://docs.docker.com/
 Before running the installation, make sure you have Docker and Docker Compose installed:
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/) **v2.17.0 or newer**
+- [Docker Compose](https://docs.docker.com/compose/install/) **v2.24.4 or newer**
 
 You can confirm your Compose version with `docker compose version --short`.
 
@@ -26,7 +26,8 @@ You can confirm your Compose version with `docker compose version --short`.
 
 <Warning>
   `opik.sh` checks the Compose version before starting any container and exits with an upgrade message if it is older
-  than v2.17.0, which is where the `--wait-timeout` flag it uses was introduced. On Linux, a `docker-compose` v1 binary
+  than v2.24.4. Two features set that floor: the `--wait-timeout` flag used for the readiness check, and the
+  `!override` tag used by the port-mapping and local-development overlay files. On Linux, a `docker-compose` v1 binary
   installed from a distro package is usually too old — install the [Compose v2
   plugin](https://docs.docker.com/compose/install/linux/) instead.
 </Warning>

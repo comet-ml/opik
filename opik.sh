@@ -53,8 +53,10 @@ set_containers_for_profile() {
 
 }
 
-# `compose up --wait --wait-timeout` is only available from this version on.
-COMPOSE_MIN_VERSION="2.17.0"
+# Minimum Docker Compose version. `up --wait --wait-timeout` needs v2.17.0, but the `!override` tag
+# used by the port-mapping and local-development overlays arrived with compose-go/v2 in v2.24.x, so
+# the higher floor is the binding one for anything that loads those files.
+COMPOSE_MIN_VERSION="2.24.4"
 
 # Upper bound for OPIK_STARTUP_TIMEOUT (24h). Compose parses --wait-timeout as an int64 and rejects
 # anything larger, so the value is range-checked here rather than by a failed flag parse later.
@@ -64,13 +66,32 @@ compose_version() {
   docker compose version --short 2>/dev/null
 }
 
+# True when the first argument is a version greater than or equal to the second. Compares the
+# numeric major/minor/patch components in bash rather than with `sort -V`, which is a GNU/BSD
+# extension and absent on busybox hosts — where a missing comparison would reject a valid version.
+version_at_least() {
+  local have="${1#v}" want="$2" i have_part want_part
+  # Trailing qualifiers such as -desktop.1 or -rc.2 are not part of the precedence we care about.
+  have="${have%%-*}"
+  local -a have_parts want_parts
+  IFS=. read -r -a have_parts <<< "$have"
+  IFS=. read -r -a want_parts <<< "$want"
+  for i in 0 1 2; do
+    have_part="${have_parts[i]:-0}"
+    want_part="${want_parts[i]:-0}"
+    # Any non-numeric component makes the comparison meaningless; treat the version as unusable.
+    [[ "$have_part" =~ ^[0-9]+$ ]] || return 1
+    (( 10#$have_part > 10#$want_part )) && return 0
+    (( 10#$have_part < 10#$want_part )) && return 1
+  done
+  return 0
+}
+
 compose_supports_wait() {
   local version
   version=$(compose_version)
   [[ -z "$version" ]] && return 1
-  # Sort the detected and minimum versions together; support is present unless the detected one
-  # sorts first, which keeps this correct across multi-digit components (e.g. 2.9 vs 2.17).
-  [[ "$(printf '%s\n%s\n' "$COMPOSE_MIN_VERSION" "${version#v}" | sort -V | head -1)" == "$COMPOSE_MIN_VERSION" ]]
+  version_at_least "$version" "$COMPOSE_MIN_VERSION"
 }
 
 # The compose service names to wait on, derived from the profile's container list so the two can't
