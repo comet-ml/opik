@@ -44,6 +44,18 @@
 #                             ClickHouse's own 300. In this driver it also sets distributed_ddl_task_timeout, which is
 #                             the binding limit -- see the CH_ARGS comment below, and ../README.md for the trade-off.
 #   --confirm         actually run the drop/recycle; without it, prints what would happen and exits (dry run).
+#   --confirm-gap-reconciled  REQUIRED on BOTH branches. The parked backup is the ONLY copy of the writes that sit either
+#                     side of the swap, and this script is what destroys it:
+#                       * after a cutover  — traces_pre_cutover_backup holds every trace written to the old table between
+#                         the last delta pass and the EXCHANGE. Nothing holds those writes across the swap, so they are
+#                         NOT live until reconcile.sh has swept them back. Asserts `reconcile.sh` ran and its
+#                         postcondition returned 0 (missing_keys / stale_keys / payload_mismatch_keys all zero).
+#                       * after a rollback — traces_post_rollback_backup holds the post-cutover writes the promote made
+#                         non-live. Asserts the accept-or-recover decision rollback.sh printed has been MADE: either
+#                         `reconcile.sh --confirm-reimport-successor-writes` merged them back, or they are knowingly
+#                         being discarded. Not that a recovery ran — that neither outcome is an accident.
+#                     Neither is checkable from SQL (nothing records that a driver ran), so it is operator-asserted, the
+#                     same shape as --confirm-retention-paused.
 
 set -euo pipefail
 
@@ -52,11 +64,13 @@ CH_HOST=""                # host; empty = clickhouse-client default/env. See --h
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total query time. See --receive-timeout.
 CONFIRM=0
+CONFIRM_GAP_RECONCILED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm) CONFIRM=1; shift ;;
+        --confirm-gap-reconciled) CONFIRM_GAP_RECONCILED=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -143,6 +157,31 @@ else
     exit 0
 fi
 
+# The gap gate, on BOTH branches. Checked once the parked name is known so the diagnostic can name the right hazard, and
+# only on the acting path: a dry run exists to read the estate, and refusing it would tell the operator nothing. Both dry
+# runs name the flag, so its first appearance is never a surprise at the --confirm step.
+if [[ "$CONFIRM" == "1" && "$CONFIRM_GAP_RECONCILED" != "1" ]]; then
+    echo "ERROR: retiring '$BACKUP' requires --confirm-gap-reconciled." >&2
+    if [[ "$BACKUP" == "traces_pre_cutover_backup" ]]; then
+        echo "       This table holds every trace written to the old table between the last delta pass and the EXCHANGE." >&2
+        echo "       Nothing holds those writes across the swap, so they are not live on the successor until reconcile.sh" >&2
+        echo "       has swept them back. Dropping the backup now would destroy the only copy. Run, and confirm it" >&2
+        echo "       reports missing_keys=0 stale_keys=0 payload_mismatch_keys=0:" >&2
+        echo "         ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --report-only \\" >&2
+        echo "             --gap-start '<delta_start> UTC' --swap-done '<exchange_done> UTC'" >&2
+    else
+        echo "       This table holds the post-cutover writes the promote made non-live. Recycling it discards them for" >&2
+        echo "       good. The flag asserts the accept-or-recover decision rollback.sh printed has been MADE — either" >&2
+        echo "       'reconcile.sh --confirm-reimport-successor-writes' merged them back into the restored original, or" >&2
+        echo "       they are knowingly being discarded. To size what would be lost first:" >&2
+        echo "         ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --report-only \\" >&2
+        echo "             --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'" >&2
+    fi
+    echo "       Nothing in the data records that a driver ran, so this cannot be checked from SQL — it is asserted, the" >&2
+    echo "       same shape as --confirm-retention-paused. Re-run with the flag once it is true." >&2
+    exit 2
+fi
+
 LIVE_ROWS="$(max_rows traces)"
 BACKUP_ROWS="$(max_rows "$BACKUP")"
 
@@ -183,7 +222,8 @@ if [[ "$BACKUP" == "traces_post_rollback_backup" ]]; then
     fi
     if [[ "$CONFIRM" != "1" ]]; then
         echo "DRY RUN: would recycle $DATABASE.$BACKUP into an empty $DATABASE.traces_local_v2 (TRUNCATE + RENAME)."
-        echo "         Re-run with --confirm."
+        echo "         Re-run with --confirm --confirm-gap-reconciled — the second flag asserts the accept-or-recover"
+        echo "         decision on the post-cutover writes this table holds has been made (see rollback.sh's output)."
         exit 0
     fi
     ch "TRUNCATE TABLE $BACKUP ON CLUSTER '{cluster}' SETTINGS max_table_size_to_drop = 0"
@@ -191,7 +231,9 @@ if [[ "$BACKUP" == "traces_post_rollback_backup" ]]; then
     echo "Recycled $DATABASE.$BACKUP into an empty $DATABASE.traces_local_v2. The rollback is finalized."
 else
     if [[ "$CONFIRM" != "1" ]]; then
-        echo "DRY RUN: would DROP TABLE $DATABASE.$BACKUP. Re-run with --confirm to drop it."
+        echo "DRY RUN: would DROP TABLE $DATABASE.$BACKUP."
+        echo "         Re-run with --confirm --confirm-gap-reconciled — the second flag asserts reconcile.sh has swept"
+        echo "         the last delta -> EXCHANGE gap out of this table and its postcondition returned 0."
         exit 0
     fi
     ch "DROP TABLE IF EXISTS $BACKUP ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0"

@@ -112,6 +112,12 @@ SETTLE_POLL_SECONDS=5
 SETTLE_STUCK_AGE_SECONDS=60
 SETTLE_STUCK_NUM_TRIES=3
 
+# The scope 000003's shared settle-* blocks are rendered with. Pre-swap that is both tables for the queue (either could
+# leave a replica short of a part the swap then exposes) and the shadow alone for mutations (the only table this step
+# has mutated). reconcile.sh renders the same blocks with its own post-swap scope.
+SETTLE_QUEUE_TABLES="'traces', 'traces_local_v2'"
+SETTLE_MUTATION_TABLES="'traces_local_v2'"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -300,6 +306,8 @@ render() {
     local sql
     sql="$(extract "$1" "$2")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${SETTLE_QUEUE_TABLES}'/$SETTLE_QUEUE_TABLES}"
+    sql="${sql//'${SETTLE_MUTATION_TABLES}'/$SETTLE_MUTATION_TABLES}"
     [[ -z "$BACKFILL_START" ]] || sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
     require_rendered "$sql" "$1" "$3" "$2" || return 2
     printf '%s' "$sql"
@@ -510,8 +518,9 @@ run_block() {
 # is captured HERE, so a delete bridged in that final gap would be covered by neither the forward replay nor the rollback
 # reverse-replay (which starts at cutover_start) and would leak live across the swap. Re-running the deletion-replay block
 # (from the single-source 000002) right after capturing cutover_start extends forward coverage to it — the arm is
-# idempotent and user-scale (retention off), so it is cheap. Deletions only: the writes in that gap, and those that land
-# in the old table during the cross-node EXCHANGE skew, are the open tail write-gap (OPIK-8238), not this step's job.
+# idempotent and user-scale (retention off), so it is cheap. Deletions only: the writes in that gap, and those that
+# land in the old table during the cross-node EXCHANGE skew, are swept back AFTER the swap by reconcile.sh
+# (OPIK-8238) — not this step's job, and not something an ingestion-side setting can hold.
 run_final_deletion_replay() {
     local sql
     # A silent no-op here is the worst failure in this script: the deletes it masks are covered by neither the forward
@@ -572,6 +581,14 @@ run_block exchange
 EXCHANGE_SECONDS=$SECONDS
 echo "EXCHANGE done: 'traces' is now the partitioned data; the old data is parked as 'traces_pre_cutover_backup'."
 
+# exchange_done: captured AFTER the swap statement returned, which is what makes it usable as the sweep's "do not
+# resurrect" bound. It must NOT be cutover_start: that instant precedes the final deletion replay and the swap itself, so
+# using it would wrongly exclude a trace deleted and then re-created in between — a trace that is legitimately live in
+# the parked backup and has to be swept back. Captured in UTC, because 000006 parses it as UTC.
+EXCHANGE_DONE="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6, 'UTC'))")"
+echo "RECORD exchange_done=$EXCHANGE_DONE UTC  (the sweep's exclusion bound; pass it with the marker:"
+echo "       reconcile.sh --swap-done '$EXCHANGE_DONE UTC')"
+
 if [[ "$WITH_WRAP" == "1" ]]; then
     run_block wrap
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id)."
@@ -581,15 +598,25 @@ else
 fi
 
 echo
-echo "TAIL WRITE-GAP: traces written between the last delta and this swap — and any routed at a not-yet-swapped node"
-echo "during it — are in traces_pre_cutover_backup, NOT in live traces. Nothing in this procedure carries them across"
-echo "yet (OPIK-8238)."
-echo "  Length: ${EXCHANGE_SECONDS}s from this driver's start through the EXCHANGE, of which ${SETTLE_SECONDS}s was the"
-echo "  settle gate. Add the final delta_replay's replay time (its --time output) for the whole gap."
-echo "  Size it now with the post-EXCHANGE compare and --drill-down. TWO of its three key shapes are gap rows: keys"
-echo "  shown backup-only (created in the tail), and keys on BOTH sides whose hashes differ with the newer"
-echo "  last_updated_at in the backup (updated in the tail — sizing by key presence alone misses these). Differing"
-echo "  hashes whose newer version is live are ordinary post-swap writes. The drill-down prints hashes, not versions,"
-echo "  so compare last_updated_at per key. Then accept the gap, or recover from the backup BEFORE finalize.sh retires it."
-echo "Then verify, and keep traces_pre_cutover_backup for the soak. No ingestion-side config was changed, so there is"
-echo "nothing to restore."
+# The banner, not a footnote. Everything written to the old table between the last delta pass and the swap is sitting in
+# traces_pre_cutover_backup and is NOT live. The cutover is not done until reconcile.sh has swept it back and its
+# postcondition has returned 0; finalize.sh refuses to retire the backup without --confirm-gap-reconciled for exactly
+# that reason.
+echo "================================================================================"
+echo "  CUTOVER INCOMPLETE — the gap between the last delta and this swap is NOT live."
+echo "================================================================================"
+echo "Traces written to the old table since the last delta_replay.sh pass — and any routed at a not-yet-swapped node"
+echo "during the EXCHANGE — are in 'traces_pre_cutover_backup' and absent from live 'traces'. Reconcile it NOW, before"
+echo "the soak and before any verify verdict is trusted:"
+echo
+echo "  ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
+echo "      --gap-start '<delta_start printed by the last delta_replay.sh run> UTC' \\"
+echo "      --swap-done '$EXCHANGE_DONE UTC'"
+echo
+echo "  Gap length: ${EXCHANGE_SECONDS}s from this driver's start through the EXCHANGE, of which ${SETTLE_SECONDS}s was"
+echo "  the settle gate. Add the final delta_replay's replay time (its --time output) for the whole gap. Add"
+echo "  --report-only to size the gap in keys before sweeping it."
+echo "If delta_start was not recorded, pass backfill_start instead: widening the gap window is free (the sweep is"
+echo "mask-honored and idempotent), so a lost delta_start is never an escalation."
+echo "Then keep traces_pre_cutover_backup for the soak — finalize.sh refuses to retire it without"
+echo "--confirm-gap-reconciled. No ingestion-side config was changed, so there is nothing to restore."
