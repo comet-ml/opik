@@ -71,7 +71,12 @@ TIER_ORDER = ("t1-smoke", "t2-cuj", "t3-nightly")
 
 # `  key:   { covered: true,  tier: t1-smoke }` — captures indent, key, and the
 # inside of the braces so we can rewrite values without touching alignment.
-FLOW_ENTRY = re.compile(r"^(?P<indent>\s+)(?P<key>[\w.-]+):(?P<pad>\s*)\{(?P<body>[^}]*)\}\s*$")
+# Greedy body, anchored on the LAST closing brace: a `note:` legitimately
+# contains one, e.g. "PATCH /traces/{id} merges ...". With `[^}]*` the match
+# stopped at that inner brace and failed the `\}\s*$` anchor, so the whole
+# entry was skipped -- the capability never entered `seen`, was reported as
+# "tagged in a spec but absent from the taxonomy", and the nightly exited 1.
+FLOW_ENTRY = re.compile(r"^(?P<indent>\s+)(?P<key>[\w.-]+):(?P<pad>\s*)\{(?P<body>.*)\}\s*$")
 SECTION = re.compile(r"^(?P<indent>\s+)(?P<name>[\w.-]+):\s*$")
 
 
