@@ -99,8 +99,13 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
-                .flatMap(scoreResults -> storeScores(toFeedbackScores(scoreResults, trace), trace,
-                        message.userName(), message.workspaceId()))
+                .flatMap(scoreResults -> {
+                    var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
+                    OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc,
+                            pythonScores.valuelessNames(), "traceId", trace.id());
+                    return storeScores(toFeedbackScores(pythonScores.storable(), trace), trace,
+                            message.userName(), message.workspaceId());
+                })
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
