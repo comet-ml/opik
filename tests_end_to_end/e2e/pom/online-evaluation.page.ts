@@ -444,6 +444,80 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * The Scope select inside the add/edit dialog ("Trace" / "Thread" / "Span").
+   *
+   * Filtered by the values it can render rather than addressed by a testid,
+   * which the SelectTrigger does not carry. The variable-mapping rows are
+   * `input[cmdk-input]` elements with no text content of their own, so the
+   * anchored alternation cannot collide with them — and callers assert the
+   * filter resolved to exactly one element before using it.
+   */
+  get scopeSelect(): Locator {
+    return this.dialog
+      .getByRole('combobox')
+      .filter({ hasText: /^(Trace|Thread|Span)$/ });
+  }
+
+  /**
+   * Set the rule's Scope.
+   *
+   * Call this BEFORE touching the type toggle or the metric editor. Changing
+   * scope resets `pythonCodeDetails` / `llmJudgeDetails` to that scope's own
+   * defaults, and raises a "you're about to lose your changes" confirm dialog
+   * once either has been edited — so a caller that sets scope first never has to
+   * deal with the confirm, and a caller that sets it last would silently lose
+   * whatever it typed.
+   */
+  async selectScope(scope: 'Trace' | 'Thread' | 'Span'): Promise<void> {
+    return test.step(`set the rule scope to ${scope}`, async () => {
+      const select = this.scopeSelect;
+      await expect(select, 'the dialog must render exactly one scope select').toHaveCount(1);
+      await select.click();
+      await this.page.getByRole('option', { name: scope, exact: true }).click();
+      await expect(select).toHaveText(scope);
+    });
+  }
+
+  /**
+   * Create a Code-metric rule from the dialog's SHIPPED DEFAULT: set the name,
+   * switch the type to "Code metric", and submit without touching the template
+   * or its variable mapping.
+   *
+   * The untouched default is the point, not a shortcut. Every other python-rule
+   * helper here replaces the template with a snippet of its own and remaps its
+   * variables, so nothing in the estate ever sends the evaluator the input the
+   * dialog actually ships — which is the input a user gets by clicking through
+   * the dialog and changing nothing.
+   *
+   * `scope` is applied first, for the ordering reason in `selectScope`.
+   */
+  async fillAndSubmitCreateRuleDialogPythonDefaultTemplate(fields: {
+    name: string;
+    scope?: 'Trace' | 'Span';
+  }): Promise<void> {
+    return test.step(
+      `create rule "${fields.name}" from the dialog's default ${fields.scope ?? 'Trace'} code metric`,
+      async () => {
+        const d = this.dialog;
+        if (fields.scope && fields.scope !== 'Trace') {
+          await this.selectScope(fields.scope);
+        }
+        await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
+        await d.getByRole('radio', { name: 'Code metric' }).click();
+
+        // The editor has to be on screen before submitting: the type toggle
+        // populates `pythonCodeDetails` from the scope's default, and submitting
+        // while that section is still mounting would post a form the user never
+        // saw. Nothing is typed into it — its content is the subject.
+        await d.locator('.cm-content').first().waitFor({ state: 'visible' });
+
+        await d.getByTestId('add-edit-rule-dialog-submit').click();
+        await d.waitFor({ state: 'hidden' });
+      },
+    );
+  }
+
+  /**
    * Change a variable-mapping cmdk-input for the given parameter name (the
    * left-side label, e.g. `output`) to the given path (e.g. `output.output`).
    * The Variable mapping section renders one row per `score()` parameter; each

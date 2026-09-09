@@ -31,6 +31,7 @@ export {
   type AutomationRuleDetail,
   type CreatePythonRuleArgs,
   type AutomationRuleLogRef,
+  type PythonRuleCodeRef,
   type AutomationRuleEvaluatorPageRef,
   type JudgeMessageRef,
   type JudgeMessageContentPartRef,
