@@ -41,11 +41,6 @@ analytics:
 theme:
   page-actions: toolbar
 
-page-actions:
-  default: ask-ai
-  options:
-    claude: true
-    chatgpt: true
 
 layout:
   searchbar-placement: header
