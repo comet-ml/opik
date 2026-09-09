@@ -343,7 +343,7 @@ Each custom provider appears as a separate option in the provider dropdown, maki
 
 Some LLM gateways require a short-lived access token from an OAuth2 authorization server instead of a static API key. For these setups, custom providers (as well as Bedrock) can authenticate using the **OAuth2 client credentials** flow.
 
-When configured, Opik requests an access token from your auth service using the [client credentials grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4), attaches it as a `Bearer` token to every model call, and caches and refreshes it automatically before it expires. If the provider rejects a token before it expires (for example, after a revocation), Opik fetches a fresh token and retries the call.
+When configured, Opik requests an access token from your auth service using the [client credentials grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4), attaches it as a `Bearer` token to every model call, and caches and refreshes it automatically before it expires. If the provider rejects a token as invalid or expired (for example, after a revocation), Opik fetches a fresh token and retries the call.
 
 <Frame>
   <img src="/img/configuration/custom_provider_oauth2.png" alt="Custom Provider OAuth2 Client Credentials Configuration" />
@@ -365,7 +365,7 @@ When configured, Opik requests an access token from your auth service using the 
 A provider uses either a static API key or OAuth2 authentication, never both. Saving an OAuth2 configuration clears any stored static key, and switching back to a static key clears the stored OAuth2 configuration. Changing the **Token URL** requires re-entering the credentials, since stored secrets are only ever sent to the endpoint they were saved for.
 
 <Tip>
-  **Self-hosted deployments:** The Docker Compose and Helm deployments allow token URLs on private networks (`LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed`), so internal auth services work out of the box. Other launch paths default to `strict`, which allows only public token URLs; set the variable to `relaxed` if you need a private token URL, or to `strict` on Compose/Helm to harden them. On Opik Cloud, the token URL must be publicly reachable.
+  **Self-hosted deployments:** The Docker Compose and Helm deployments allow token URLs on private networks (`LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed`), so internal auth services work out of the box. Other launch paths default to `strict`, which allows only public `https` token URLs; set the variable to `relaxed` if you need a private token URL, or to `strict` on Compose/Helm to harden them. On Opik Cloud, the token URL must be publicly reachable.
 </Tip>
 
 The UI covers the standard OAuth2 client credentials flow. If your token endpoint deviates from the standard, additional options are available through the [REST API](/reference/rest-api/llm-provider-key/store-llm-provider-api-key) in the `auth_config` field.
@@ -380,3 +380,4 @@ All provider credentials are encrypted at rest, whether a static API key or OAut
 - **Access Denied**: Check that your API key has the required permissions for the models you're trying to use
 - **Rate Limiting**: Adjust your request frequency or contact your provider to increase limits
 - **Token fetch failures**: Use **Test connection** in the provider dialog; the error message includes the auth server's response
+- **Missing token lifetime**: The token reply must state its lifetime (`expires_in` by default); for endpoints that omit it, set `fallback_ttl_seconds` through the REST API
