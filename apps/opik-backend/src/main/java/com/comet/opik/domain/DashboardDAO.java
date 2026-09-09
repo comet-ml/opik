@@ -89,11 +89,15 @@ public interface DashboardDAO {
     int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
             @Define("scope") @Bind("scope") String scope);
 
+    /**
+     * Legacy project dashboards have no {@code project_id}, so they stay listed in every project.
+     * Workspace dashboards are project-less by design, which is why the scope column decides.
+     */
     @SqlQuery("SELECT COUNT(id) FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif>" +
             "<if(project_id)> AND (project_id = :projectId " +
-            "<if(include_unassigned_project)> OR project_id IS NULL <endif>) <endif>" +
+            "OR (scope = 'insights' AND project_id IS NULL)) <endif>" +
             "<if(scope)> AND scope = :scope <endif>" +
             "<if(filters)> AND <filters> <endif>")
     @UseStringTemplateEngine
@@ -101,7 +105,6 @@ public interface DashboardDAO {
     long findCount(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
             @Define("project_id") @Bind("projectId") UUID projectId,
-            @Define("include_unassigned_project") boolean includeUnassignedProject,
             @Define("scope") @Bind("scope") String scope,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
@@ -123,7 +126,7 @@ public interface DashboardDAO {
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
             "<if(project_id)> AND (project_id = :projectId " +
-            "<if(include_unassigned_project)> OR project_id IS NULL <endif>) <endif>" +
+            "OR (scope = 'insights' AND project_id IS NULL)) <endif>" +
             "<if(scope)> AND scope = :scope <endif>" +
             "<if(filters)> AND <filters> <endif> " +
             "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
@@ -133,7 +136,6 @@ public interface DashboardDAO {
     List<UUID> findPageIdsSorted(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
             @Define("project_id") @Bind("projectId") UUID projectId,
-            @Define("include_unassigned_project") boolean includeUnassignedProject,
             @Define("scope") @Bind("scope") String scope,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping,

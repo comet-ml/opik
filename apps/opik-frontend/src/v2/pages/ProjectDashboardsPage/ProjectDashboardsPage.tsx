@@ -82,10 +82,18 @@ const ProjectDashboardsContent: React.FunctionComponent<
   });
 
   useEffect(() => {
-    if (!isPending && dashboardId && !dashboard) {
+    if (isPending || !dashboardId) return;
+
+    // A shared link carries the id in the query string, and reading one by id is not project
+    // scoped, so another project's view would render here. Legacy views carry no project and stay.
+    const belongsToAnotherProject = Boolean(
+      dashboard?.project_id && dashboard.project_id !== projectId,
+    );
+
+    if (!dashboard || belongsToAnotherProject) {
       setDashboardId(DEFAULT_TEMPLATE_ID);
     }
-  }, [isPending, dashboardId, dashboard, setDashboardId]);
+  }, [isPending, dashboardId, dashboard, projectId, setDashboardId]);
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 

@@ -219,7 +219,7 @@ class InsightsViewsResourceTest {
                     insightsViewClient.createPartialInsightsView().projectId(otherProjectId).build(), apiKey,
                     workspaceName);
 
-            // Views created before OPIK-8322 have no project and stay visible in every project
+            // Legacy views have no project and stay visible in every project
             var unassignedViewId = insightsViewClient.create(apiKey, workspaceName);
 
             var page = insightsViewClient.find(apiKey, workspaceName, 1, 10, null, projectId, null, null,
