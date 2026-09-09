@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, GitCompareArrows } from "lucide-react";
+import { Clock, GitCompareArrows, Loader2 } from "lucide-react";
 
 import { getTimeFromNow } from "@/lib/date";
 import { Button } from "@/ui/button";
@@ -20,6 +20,8 @@ interface DiffVersionMenuProps {
   versions: VersionHistoryItem[];
   onSelectVersion: (item: VersionHistoryItem) => void;
   triggerLabel?: string;
+  onOpenChange?: (open: boolean) => void;
+  isLoadingMore?: boolean;
 }
 
 const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
@@ -27,11 +29,13 @@ const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
   versions,
   onSelectVersion,
   triggerLabel = "Show diff",
+  onOpenChange,
+  isLoadingMore = false,
 }) => {
   const selectableVersions = versions.filter((v) => v.id !== currentItemId);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           size="sm"
@@ -73,6 +77,11 @@ const DiffVersionMenu: React.FC<DiffVersionMenuProps> = ({
               </span>
             </DropdownMenuItem>
           ))}
+          {isLoadingMore && (
+            <div className="flex justify-center py-2">
+              <Loader2 className="size-4 animate-spin text-light-slate" />
+            </div>
+          )}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

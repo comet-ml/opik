@@ -241,7 +241,6 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
   );
 
   const versions = data?.content ?? [];
-  const total = data?.total ?? versions.length;
 
   if (isLoading) {
     return (
@@ -259,8 +258,8 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
 
   return (
     <div className="max-h-[40vh] overflow-y-auto">
-      {versions.map((version, idx) => {
-        const label = `v${total - idx}`;
+      {versions.map((version) => {
+        const label = version.version_number ?? version.commit;
         const isActive = version.id === activeVersionId;
         const stage = pickHighestStage(version.tags);
         return (

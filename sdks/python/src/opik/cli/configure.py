@@ -8,6 +8,7 @@ import click
 
 import opik.config as opik_config
 from opik import analytics
+from opik.cli import account_identity
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
@@ -333,6 +334,9 @@ def configure(
         # "never asked" — the flag is also how an agent drives this.
         install_mcp=str(install_mcp),
         install_skills=str(install_skills),
+        # Whoever is already configured, if anyone: a first-ever run has no
+        # credential yet at this point, and says so.
+        **account_identity.event_properties(),
     )
 
     # With no terminal there is nobody to ask, and every question here has a sane
@@ -356,6 +360,10 @@ def configure(
         "result",
         clients_written=outcome.clients,
         skills_installed=outcome.skills,
+        # Resolved again rather than reused from the entry event: this is the run
+        # that just wrote ~/.opik.config, so it is the first point at which a
+        # first-ever configure has an account to name at all.
+        **account_identity.event_properties(),
     )
 
 

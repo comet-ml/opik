@@ -21,6 +21,19 @@ DELETE_TRACE_BATCH_SIZE = 1000
 
 DATASET_STREAM_BATCH_SIZE = 2000
 
+DATASET_ITEMS_READ_NUM_THREADS = 4
+# Page-size ceiling for reads, deliberately the same as the batch size above: a
+# read should never ask the backend for a bigger page than the SDK's own read
+# batch, so peak memory stays bounded the way it was before pages were fetched
+# in parallel. Unlike the thread ceiling this one rejects rather than clamps --
+# silently handing back smaller pages than asked for would look like the
+# argument had no effect.
+DATASET_ITEMS_READ_MAX_CHUNK_SIZE = DATASET_STREAM_BATCH_SIZE
+# Ceiling on dataset read threads. The SDK's httpx client pools 100
+# connections, so a caller passing an arbitrarily large num_threads would
+# otherwise queue pages behind the pool instead of speeding anything up.
+DATASET_ITEMS_READ_MAX_THREADS = 32
+
 # Parallel dataset insert requires a backend that serializes concurrent dataset
 # version writes. On backends older than this version, concurrent batches
 # sharing one batch_group_id raced and could 500 or silently drop rows; 2.2.8 is

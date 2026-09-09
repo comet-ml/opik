@@ -69,11 +69,15 @@ In order to use the extension, you will need to configure your Opik API key. The
 
 Once the extension is installed, all your new Cursor conversations will be logged to Opik.
 
-## MCP Server Integration
+## MCP server
 
-The extension automatically registers an Opik MCP (Model Context Protocol) server with Cursor when you have an API key configured. This enables Cursor's AI to access your Opik project data during conversations, providing enhanced context about your traces and experiments.
+To let Cursor's agent read your traces, score outputs and run evaluations, connect
+the [Opik MCP server](/mcp-server). One command sets it up and installs the Opik
+skills:
 
-The MCP server integration is enabled by default and requires no additional configuration. For more details about the MCP server, see the [opik-mcp package](https://www.npmjs.com/package/opik-mcp).
+```bash
+uvx opik mcp configure
+```
 
 ## Token usage and cost
 

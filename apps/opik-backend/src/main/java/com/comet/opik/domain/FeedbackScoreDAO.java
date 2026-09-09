@@ -394,6 +394,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             var feedbackScoreBatchItem = scores.get(i);
 
+            // Callers reaching here through the API are bean-validated (value is @NotNull) and the online
+            // scoring paths drop valueless scores before batching. A null at this point means a new caller
+            // did neither: fail naming the score instead of raising the NPE that .toString() used to throw
+            // from inside the bind, where it took the whole batch — and every other score in it — down.
+            Preconditions.checkArgument(feedbackScoreBatchItem.value() != null,
+                    "Feedback score '%s' cannot be stored without a value", feedbackScoreBatchItem.name());
+
             statement.bind("entity_type" + i, entityType.getType())
                     .bind("entity_id" + i, feedbackScoreBatchItem.id())
                     .bind("project_id" + i, feedbackScoreBatchItem.projectId())
