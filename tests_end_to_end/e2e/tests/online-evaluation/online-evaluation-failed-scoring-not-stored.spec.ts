@@ -243,7 +243,10 @@ test.describe('Online Evaluation — a failed scoring is dropped, not stored as 
         panel.feedbackScoreRow(usableName),
         'the usable score renders — the anchor for the absence assertions below',
       ).toHaveCount(1);
-      expect(await panel.readFeedbackScoreValue(usableName)).toBe(1.0);
+      expect(
+        await panel.readFeedbackScoreValue(usableName),
+        'the panel renders the stored value, not just a row for it',
+      ).toBe(1.0);
 
       await expect(
         panel.feedbackScoreRow(zeroName),
