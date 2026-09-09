@@ -3,12 +3,14 @@
  *
  * Only the ones whose control is *not* already governed by the config carrying the key: a panel
  * renders one slider per parameter its config holds, which is enough for the surfaces whose config
- * simply omits what they cannot keep. These five are the exceptions — the effort dropdowns and the
- * Anthropic sampling pair are gated on the model's capabilities instead, and the two runner
- * controls fall back to a default rather than hiding, so absence from the config says nothing.
+ * simply omits what they cannot keep. These are the exceptions — the effort dropdowns and the
+ * Anthropic sampling pair are gated on the model's capabilities instead, and the runner controls
+ * (plus Anthropic's max output tokens) fall back to a default rather than hiding, so absence from
+ * the config says nothing.
  */
 export type ModelConfigParam =
   | "topP"
+  | "maxCompletionTokens"
   | "reasoningEffort"
   | "thinkingEffort"
   | "throttling"
@@ -20,6 +22,7 @@ export type ModelConfigParam =
  */
 export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
   "topP",
+  "maxCompletionTokens",
   "reasoningEffort",
   "thinkingEffort",
   "throttling",

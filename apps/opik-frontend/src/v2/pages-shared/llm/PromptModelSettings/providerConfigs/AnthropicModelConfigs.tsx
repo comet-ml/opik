@@ -135,22 +135,24 @@ const AnthropicModelConfigs = ({
         </div>
       )}
 
-      <SliderInputControl
-        value={
-          configs.maxCompletionTokens ??
-          DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS
-        }
-        onChange={(v) => onChange({ maxCompletionTokens: v })}
-        id="maxCompletionTokens"
-        min={0}
-        max={64000}
-        step={1}
-        defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
-        label="Max output tokens"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
-        }
-      />
+      {supports("maxCompletionTokens") && (
+        <SliderInputControl
+          value={
+            configs.maxCompletionTokens ??
+            DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS
+          }
+          onChange={(v) => onChange({ maxCompletionTokens: v })}
+          id="maxCompletionTokens"
+          min={0}
+          max={64000}
+          step={1}
+          defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
+          label="Max output tokens"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+          }
+        />
+      )}
 
       {supports("throttling") && (
         <SliderInputControl

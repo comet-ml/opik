@@ -15,7 +15,9 @@ import {
 } from "@/lib/optimizations";
 import { getProviderFromModel } from "@/lib/provider";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { OPTIMIZATION_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
+import omit from "lodash/omit";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -334,9 +336,12 @@ export const convertFormDataToStudioConfig = (
       // Drop params the resolved model doesn't accept (e.g. temperature) before
       // the gateway rejects them — same hardening the playground applies. The
       // cast is only because sanitizeConfigForRequest types its arg as the legacy enum.
+      // Also drop the ones this surface never offered a control for: a run saved before they
+      // were hidden still carries them in the form, and forwarding a value nobody can see is
+      // the same defect as showing one that never gets sent.
       parameters: sanitizeConfigForRequest(
         formData.modelName as PROVIDER_MODEL_TYPE,
-        formData.modelConfig,
+        omit(formData.modelConfig, [...OPTIMIZATION_UNSUPPORTED_PARAMS]),
       ),
     },
     evaluation: {

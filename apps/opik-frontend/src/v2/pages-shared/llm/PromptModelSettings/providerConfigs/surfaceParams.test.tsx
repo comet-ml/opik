@@ -55,6 +55,12 @@ describe("controls an evaluator rule cannot store", () => {
       screen.queryByTestId("maxConcurrentRequests-input"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Thinking effort")).not.toBeInTheDocument();
+    // LlmAsJudgeModelParameters has no max-tokens field, so the converter drops whatever this
+    // slider wrote. Anthropic is the one panel that renders it unconditionally rather than only
+    // when the config carries the key, so it reached the rule form.
+    expect(
+      screen.queryByTestId("maxCompletionTokens-input"),
+    ).not.toBeInTheDocument();
   });
 
   it("drops them from the OpenAI panel", () => {
@@ -90,6 +96,7 @@ describe("the playground and the optimizer", () => {
       screen.getByTestId("maxConcurrentRequests-input"),
     ).toBeInTheDocument();
     expect(screen.getByText("Thinking effort")).toBeInTheDocument();
+    expect(screen.getByTestId("maxCompletionTokens-input")).toBeInTheDocument();
   });
 
   it("keeps the effort control for the optimizer but drops the runner ones", () => {
