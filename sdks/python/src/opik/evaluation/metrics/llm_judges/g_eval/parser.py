@@ -50,8 +50,9 @@ def parse_litellm_model_output(
     between 0 and 10.
 
     In order to make the score computation more robust, we look at the top logprobs of the score token and compute
-    a weighted average of the scores. Since we try to enforce the format of the model's response, we can assume that
-    the score token is always the fourth token in the response (first token is `{"`, followed by `score` and `":`).
+    a weighted average of the scores. The score token is located by content (the digits after the `"score":` key,
+    last-wins on duplicates, mirroring json.loads); only when the key cannot be located do we fall back to the
+    legacy fixed token offset for backwards compatibility.
     """
     try:
         choice_dict = _normalise_first_choice(content)
