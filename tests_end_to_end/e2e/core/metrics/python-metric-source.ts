@@ -106,6 +106,71 @@ class ThreadConstantScore(base_metric.BaseMetric):
 }
 
 /**
+ * One `ScoreResult` for `buildScoreListMetric` to return.
+ *
+ * `value` is `number | null` rather than `number` on purpose. `ScoreResult.value`
+ * is declared `float` in the SDK and nothing enforces it at runtime, so `None` is
+ * a shape a real user metric can and does produce — and it is one of the two
+ * reasons a score is unusable. Typing it away here would make that case
+ * unreachable from a spec.
+ */
+export interface ScoreResultSpec {
+  /** Lands on the trace verbatim. `''` produces the unnamed case, reported as `<unnamed>`. */
+  name: string;
+  /** `null` emits `ScoreResult(value=None, …)` — a score that cannot be stored. */
+  value: number | null;
+  /**
+   * The metric's own admission that scoring did not complete. The SDK pairs it
+   * with a placeholder `0.0`, so the score is storable but must not be stored:
+   * that is what makes this distinct from `value: 0` and worth a spec.
+   */
+  scoringFailed?: boolean;
+  reason?: string;
+}
+
+/**
+ * A metric returning an arbitrary list of `ScoreResult`s, verbatim.
+ *
+ * Deliberately general where its siblings above are purpose-built: the
+ * unusable-score behaviour is one rule shape crossed with several score lists
+ * (mixed usable/failed, wholly failed, valueless, unnamed, a deliberate zero),
+ * and a builder per combination would be five near-identical copies of the same
+ * five lines. What varies between those cases is data, so it is passed as data.
+ *
+ * The list is embedded as a JSON string and parsed at run time rather than
+ * inlined as a Python literal: `null`, `true` and `false` are valid JSON and not
+ * valid Python, so a straight interpolation would produce a metric that fails to
+ * import — for exactly the `value: null` case a spec most wants to seed.
+ *
+ * The runner accepts a bare `ScoreResult` or a list of them (`to_scores`), so a
+ * one-element list is the same shape a single return would take. Always
+ * returning a list keeps every case built here on one code path.
+ */
+export function buildScoreListMetric(scores: readonly ScoreResultSpec[]): string {
+  const payload = scores.map((s) => ({
+    name: s.name,
+    value: s.value,
+    ...(s.scoringFailed === undefined ? {} : { scoring_failed: s.scoringFailed }),
+    ...(s.reason === undefined ? {} : { reason: s.reason }),
+  }));
+  // Stringified twice: once to JSON, once into a quoted literal that is valid in
+  // both languages, so the source below embeds it without any escaping of its own.
+  const encoded = JSON.stringify(JSON.stringify(payload));
+  return `import json
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORES = json.loads(${encoded})
+
+class ScoreListMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "score_list"):
+        self.name = name
+
+    def score(self, output: Any = None, **ignored_kwargs: Any) -> Any:
+        return [score_result.ScoreResult(**spec) for spec in SCORES]`;
+}
+
+/**
  * A metric that exits 0 without ever printing its result line.
  *
  * `os._exit` is deliberate: it ends the interpreter immediately, so the runner's
