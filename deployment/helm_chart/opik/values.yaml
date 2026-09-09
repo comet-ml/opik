@@ -872,10 +872,28 @@ clickhouse:
     # the table definition is untouched; `ALTER TABLE ... MODIFY SETTING` is rejected on a
     # Distributed table (Code 48, NOT_IMPLEMENTED).
     #
+    # Note `prefer_localhost_replica` is NOT here. Its correct value depends on the topology,
+    # which a static list cannot express, so it is derived in clickhouseinstallation.yaml and
+    # overridden via `preferLocalhostReplica` below.
     - name: default
       settings:
         distributed_background_insert_batch: 1
         distributed_background_insert_split_batch_on_failure: 1
+  # -- Whether an insert with a local replica available bypasses the Distributed forwarding queue
+  # and writes straight into the local `_local` table (OPIK-8255). Empty derives it from the
+  # topology:
+  #   - multi-node (replicasCount > 1 or shardsCount > 1) -> 0, so inserts take the queue, which
+  #     is the path the batching settings above fix. The bypass is no substitute: at N shards only
+  #     ~1/N of inserts could take it.
+  #   - single node -> 1, since every replica is already local. 0 there buys nothing and only
+  #     turns an in-process write into an async queue file, which also stops anything written
+  #     through a Distributed wrapper from being immediately readable.
+  #
+  # Either way a value is always rendered explicitly, never inherited: the Altinity operator ships
+  # 0 and vanilla ClickHouse ships 1. Set 0 or 1 to pin it regardless of topology; setting
+  # `prefer_localhost_replica` on a `default` entry in additionalProfiles also wins and suppresses
+  # the derived value, so the manifest never carries the key twice.
+  preferLocalhostReplica: ""
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
   # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
