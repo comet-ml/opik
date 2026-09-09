@@ -15,12 +15,21 @@ To run Opik locally we recommend using [Docker Compose](https://docs.docker.com/
 Before running the installation, make sure you have Docker and Docker Compose installed:
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
+- [Docker Compose](https://docs.docker.com/compose/install/) **v2.17.0 or newer**
+
+You can confirm your Compose version with `docker compose version --short`.
 
 <Note>
   If you are using Mac or Windows, both `docker` and `docker compose` are included in the [Docker
   Desktop](https://docs.docker.com/desktop/) installation.
 </Note>
+
+<Warning>
+  `opik.sh` checks the Compose version before starting any container and exits with an upgrade message if it is older
+  than v2.17.0, which is where the `--wait-timeout` flag it uses was introduced. On Linux, a `docker-compose` v1 binary
+  installed from a distro package is usually too old — install the [Compose v2
+  plugin](https://docs.docker.com/compose/install/linux/) instead.
+</Warning>
 
 ## Installation
 
@@ -109,14 +118,20 @@ Run `./opik.sh --help` (or `powershell -ExecutionPolicy ByPass -c ".\opik.ps1 --
 
 ### Startup timeout
 
-`opik.sh` waits up to 300 seconds for every container to start and report healthy, then fails with the container
-status and recent logs. A first-time start that has to pull or build images, or a host under heavy load, can
+`opik.sh` waits up to 300 seconds for the long-running services to start and report healthy, then fails with the
+container status and recent logs. A first-time start that has to pull or build images, or a host under heavy load, can
 legitimately take longer than that. Raise the deadline with `OPIK_STARTUP_TIMEOUT` (in seconds, between 1 and 86400)
 rather than retrying:
 
 ```bash
 OPIK_STARTUP_TIMEOUT=600 ./opik.sh
 ```
+
+The deadline covers the long-running services — the ones with a health check, such as the databases, the backend and
+the frontend. Short-lived setup jobs that run once and exit, such as the MinIO bucket provisioning and the demo-data
+generator, are started but are not part of the readiness check, so they do not count towards startup success or
+failure. If one of those jobs fails, Opik still reports a successful start; check `docker compose ps -a` for their exit
+codes.
 
 <Note>
   `OPIK_STARTUP_TIMEOUT` is read by `opik.sh`. On Windows, `opik.ps1` applies its own fixed per-container wait and does

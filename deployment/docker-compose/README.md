@@ -3,7 +3,17 @@
 ## Installation pre-requirements for local installation
 
 - Docker: https://docs.docker.com/engine/install/
-- Docker Compose: https://docs.docker.com/compose/install/
+- Docker Compose **v2.17.0 or newer**: https://docs.docker.com/compose/install/
+
+`opik.sh` checks the Compose version before starting anything and exits with an upgrade message if it is older, since
+it relies on `docker compose up --wait --wait-timeout` for the startup readiness check. Confirm your version with:
+
+```bash
+docker compose version --short
+```
+
+Docker Desktop bundles a recent Compose; on Linux, a `docker-compose` v1 binary installed from a distro package is
+usually too old and should be replaced with the Compose v2 plugin.
 
 ## Service Profiles for Development
 
@@ -72,7 +82,7 @@ Run `./opik.sh --help` to see the full list of options.
 
 | Variable                | Default | Description                                                                                              |
 | ----------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `OPIK_STARTUP_TIMEOUT`  | `300`   | Seconds `opik.sh` waits for the containers to start and become healthy. Accepts `1`-`86400`.              |
+| `OPIK_STARTUP_TIMEOUT`  | `300`   | Seconds `opik.sh` waits for the long-running services to start and become healthy. Accepts `1`-`86400`.   |
 
 The default suits a warm machine. A first-time start that has to pull or build images, or a host under heavy load, can
 legitimately take longer — raise the deadline rather than retrying:
@@ -80,6 +90,11 @@ legitimately take longer — raise the deadline rather than retrying:
 ```bash
 OPIK_STARTUP_TIMEOUT=600 ./opik.sh
 ```
+
+The deadline covers the services that have a health check. Run-once setup jobs — the `mc` bucket provisioning and the
+`demo-data-generator` — are started but excluded from the wait, because `compose up --wait` treats any service exit as
+a failure even when it exits 0. They therefore do not affect startup success; check `docker compose ps -a` for their
+exit codes if something they provision is missing.
 
 This variable is read by `opik.sh` only; `opik.ps1` on Windows still applies its own fixed per-container wait.
 
