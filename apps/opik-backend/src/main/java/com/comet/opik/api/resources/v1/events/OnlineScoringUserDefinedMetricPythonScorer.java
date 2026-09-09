@@ -101,8 +101,8 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
                 .flatMap(scoreResults -> {
                     var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
-                    OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc,
-                            pythonScores.valuelessNames(), "traceId", trace.id());
+                    OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores,
+                            "traceId", trace.id());
                     return storeScores(toFeedbackScores(pythonScores.storable(), trace), trace,
                             message.userName(), message.workspaceId());
                 })
