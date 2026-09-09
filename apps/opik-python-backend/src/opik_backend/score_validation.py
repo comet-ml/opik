@@ -34,10 +34,12 @@ def unusable_scores(scores: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
     for score in scores:
         if not isinstance(score, dict):
             unusable.append(("", NO_VALUE))
+        elif score.get("scoring_failed") is True:
+            # Checked before the value, so a metric that both failed and returned nothing is reported by
+            # its cause rather than the symptom. One reason per score keeps the message readable.
+            unusable.append((score.get("name"), SCORING_FAILED))
         elif score.get("value") is None:
             unusable.append((score.get("name"), NO_VALUE))
-        elif score.get("scoring_failed") is True:
-            unusable.append((score.get("name"), SCORING_FAILED))
     return unusable
 
 

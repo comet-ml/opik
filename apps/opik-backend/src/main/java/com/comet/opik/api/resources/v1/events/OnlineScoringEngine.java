@@ -1578,10 +1578,14 @@ public class OnlineScoringEngine {
             // value either, so it joins the dropped scores rather than being dereferenced — one unusable
             // entry must not cost the batch, which is the whole point of this split. An unnamed score keeps
             // its missing name here; the record normalizes it, and it is reported as <unnamed>.
-            if (scoreResult == null || scoreResult.value() == null) {
-                valuelessNames.add(scoreResult == null ? null : scoreResult.name());
+            if (scoreResult == null) {
+                valuelessNames.add(null);
             } else if (BooleanUtils.isTrue(scoreResult.scoringFailed())) {
+                // Checked before the value, so a metric that both failed and returned nothing is reported by
+                // its cause rather than the symptom. Either way the score is dropped.
                 failedNames.add(scoreResult.name());
+            } else if (scoreResult.value() == null) {
+                valuelessNames.add(scoreResult.name());
             } else {
                 storable.add(scoreResult);
             }

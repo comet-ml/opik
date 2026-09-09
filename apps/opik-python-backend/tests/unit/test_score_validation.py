@@ -39,6 +39,11 @@ def test_only_a_real_true_counts_as_a_failed_scoring(flag):
     assert unusable_scores([score(name="a", value=1.0, scoring_failed=flag)]) == []
 
 
+def test_a_failed_scoring_with_no_value_is_reported_by_its_cause():
+    """Both conditions hold, so the reason a user can act on is the failure, not its symptom."""
+    assert unusable_scores([score(name="a", value=None, scoring_failed=True)]) == [("a", SCORING_FAILED)]
+
+
 def test_a_real_true_counts_as_a_failed_scoring():
     assert unusable_scores([score(name="a", value=1.0, scoring_failed=True)]) == [("a", SCORING_FAILED)]
 

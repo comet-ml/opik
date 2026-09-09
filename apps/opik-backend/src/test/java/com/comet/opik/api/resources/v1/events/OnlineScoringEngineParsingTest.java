@@ -826,6 +826,21 @@ class OnlineScoringEngineParsingTest {
         }
 
         @Test
+        @DisplayName("report a score that both failed and returned no value by its cause")
+        void reportsAScoreThatBothFailedAndReturnedNoValueByItsCause() {
+            var both = PythonScoreResult.builder()
+                    .name(randomScoreName())
+                    .scoringFailed(true)
+                    .build();
+
+            var split = OnlineScoringEngine.splitPythonScores(List.of(both));
+
+            assertThat(split.failedNames()).containsExactly(both.name());
+            assertThat(split.valuelessNames()).isEmpty();
+            assertThat(split.storable()).isEmpty();
+        }
+
+        @Test
         @DisplayName("keep a score whose scoring_failed flag is false or absent")
         void keepsAScoreThatDidNotFail() {
             var explicitlyNotFailed = PythonScoreResult.builder()
