@@ -2596,11 +2596,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * Close threads through ONE `PUT /v1/private/traces/threads/close`.
      *
      * `threadIds` (plural) deliberately, even for a single id: the endpoint
-     * accepts either, but the batch form is a different code path — the close
-     * groups the sampled threads per rule and enqueues one scoring message
-     * carrying every thread id, where the single form can only ever enqueue one.
-     * A spec that closed n threads in n calls would exercise the single path n
-     * times and prove nothing about the batch one.
+     * accepts either, but the batch form is a different code path — one close
+     * makes the publisher's grouped pass read every thread's persisted sampling
+     * decision in a single sweep and fan the sampled ones out to one scoring
+     * stream entry EACH (#8162; before it, one entry carried the whole list). A
+     * spec that closed n threads in n calls would drive n separate one-thread
+     * sweeps and prove nothing about the grouped one.
      *
      * Closing is not incidental for thread-scope online scoring, it is the
      * trigger: an open thread is never scored.

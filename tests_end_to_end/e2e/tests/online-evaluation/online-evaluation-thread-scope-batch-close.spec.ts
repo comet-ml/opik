@@ -7,14 +7,24 @@ import { buildThreadScoreMetric } from '@e2e/core/metrics';
  * Thread-scope online evaluation over a BATCH close (OPIK-8262 / #8162).
  *
  * Closing threads is what triggers thread-scope scoring, and a close can carry
- * many thread ids at once: the publisher groups the sampled threads per rule and
- * enqueues ONE message holding every id, which the scorer then walks. That makes
- * two failures possible, and both are silent:
+ * many thread ids at once. #8162 changed what happens next: the publisher still
+ * makes ONE grouped pass over the close, collecting the threads each rule
+ * sampled (`TraceThreadOnlineScorerPublisher`), but it now fans that set out to
+ * one stream entry PER THREAD ID rather than one entry carrying the whole list
+ * (`OnlineScorePublisher#enqueueThreadMessage`), so each thread is acked and
+ * redelivered on its own.
  *
- *   - a thread in the batch is never scored at all — indistinguishable, from the
- *     outside, from a rule that legitimately declined to score it;
- *   - one thread whose metric raises takes its siblings down with it, because a
- *     single error aborts the walk over the rest of the message.
+ * That fan-out is what this spec pins, because two failures are still possible
+ * and both are silent:
+ *
+ *   - a thread in the close is never enqueued at all. The grouped pass reads
+ *     each thread's persisted sampling decision and skips the threads missing
+ *     from it, which from the outside is indistinguishable from a rule that
+ *     legitimately declined to score that thread;
+ *   - one thread whose metric raises takes its siblings down with it. Per-entry
+ *     delivery makes that structurally unlikely now, which is exactly why it
+ *     needs a test: nothing else would catch a regression that collapsed the
+ *     fan-out back to one shared entry under one shared verdict.
  *
  * Neither surfaces as an error a user would see. A thread simply has no score.
  *
@@ -38,12 +48,29 @@ const SCORING_TIMEOUT_MS = 240_000;
  * How long the settled state must hold before "the poisoned thread was not
  * scored" counts as an answer rather than as "not yet".
  *
- * The failing thread's error is re-surfaced onto the message's error path, so
- * the message can be retried as a whole. This window is what makes the two
- * outcomes distinguishable: a retry that re-scored the siblings a second time,
- * or eventually scored the poisoned one, lands inside it.
+ * The failing thread's error is re-surfaced to `BaseRedisSubscriber` once its
+ * own entry finishes, so that entry can be redelivered. This window is what
+ * makes the two outcomes distinguishable: a redelivery that eventually scored
+ * the poisoned thread, or that re-scored a sibling, lands inside it.
  */
 const QUIET_PERIOD_MS = 30_000;
+
+/**
+ * How long to let the sampler's decision land after the threads become listable.
+ *
+ * Not a readiness wait dressed up as a sleep — there is nothing to wait ON. A
+ * thread's row and its `sampling_per_rule` map are written by two different
+ * paths: the row is what makes the thread listable, and a listener on an async
+ * event bus then writes the sampling decision, with nothing synchronising the
+ * two. The close only READS that map, so a close issued the instant the sixth
+ * thread appears can find it empty, enqueue nothing, and surface four minutes
+ * later as a missing score — a failure that reads exactly like the product bug
+ * this spec is meant to catch.
+ *
+ * The map is not on the public thread API, so a spec cannot poll for it. Until
+ * it is, this margin is the honest mitigation.
+ */
+const SAMPLING_COMMIT_MARGIN_MS = 10_000;
 
 /** Rule creation and read-back, twelve seed writes, the close, and two panel loads. */
 const SETUP_AND_UI_BUDGET_MS = 240_000;
@@ -55,7 +82,11 @@ const SETUP_AND_UI_BUDGET_MS = 240_000;
  * thread in the batch was never scored".
  */
 const TEST_TIMEOUT_MS =
-  THREADS_VISIBLE_TIMEOUT_MS * 2 + SCORING_TIMEOUT_MS + QUIET_PERIOD_MS + SETUP_AND_UI_BUDGET_MS;
+  THREADS_VISIBLE_TIMEOUT_MS * 2 +
+  SCORING_TIMEOUT_MS +
+  QUIET_PERIOD_MS +
+  SAMPLING_COMMIT_MARGIN_MS +
+  SETUP_AND_UI_BUDGET_MS;
 
 const THREAD_COUNT = 6;
 const TURNS_PER_THREAD = 2;
@@ -89,7 +120,7 @@ const SCORE_NAME = 'thread_batch_score';
 const SCORE_VALUE = 0.75;
 
 test.describe('Online Evaluation — thread scope', { tag: ['@t2-cuj', '@area:online-evaluation'] }, () => {
-  test('A single batch thread close scores every thread exactly once, and one failing thread does not take its siblings down', { tag: ['@cap:online-evaluation.rule-scope-thread-span'] }, async ({
+  test('A single batch thread close scores every thread exactly once, and one failing thread does not take its siblings down', { tag: ['@cap:online-evaluation.rule-scope-thread-span', '@cap:online-evaluation.python-rule-scores'] }, async ({
     project,
     backendClient,
     testNamespace,
@@ -201,9 +232,17 @@ test.describe('Online Evaluation — thread scope', { tag: ['@t2-cuj', '@area:on
         .toEqual([...threadIds].sort());
     });
 
+    await test.step('Let the sampling decision commit before closing', async () => {
+      // See SAMPLING_COMMIT_MARGIN_MS: the close reads a map the sampler writes
+      // on a path this spec has no way to observe.
+      await new Promise((r) => setTimeout(r, SAMPLING_COMMIT_MARGIN_MS));
+    });
+
     await test.step('Close all six thread ids in ONE call', async () => {
-      // The single multi-id close is the subject. Six separate calls would take
-      // the single-id path six times and say nothing about the batch one.
+      // The single multi-id close is the subject: it is the one call that makes
+      // the publisher's grouped pass see six sampled threads at once and fan
+      // them out to six independent stream entries. Six separate closes would
+      // drive six separate one-thread passes and say nothing about that.
       await backendClient.closeThreads({
         projectName: project.name,
         threadIds,
@@ -295,40 +334,67 @@ test.describe('Online Evaluation — thread scope', { tag: ['@t2-cuj', '@area:on
       // Positive evidence first. "No score" on its own is satisfied by a thread
       // that was never sent to the evaluator at all, which is the OTHER bug —
       // so the log stream is what separates "the metric raised, and the failure
-      // stayed here" from "this thread was quietly dropped from the batch".
-      const logs = await backendClient.getAutomationRuleLogs(ruleId);
-      const errorText = logs
-        .filter((l) => l.level === 'ERROR')
-        .map((l) => l.message)
-        .join('\n---\n');
+      // stayed here" from "this thread was quietly dropped from the close".
+      //
       // Quoted, because the engine writes thread ids as `threadId '<id>'` and a
       // bare substring match would let `...-thread-1` be satisfied by a line
       // about `...-thread-10`.
       const quoted = (id: string) => `'${id}'`;
-      expect(
-        errorText,
-        'the poisoned thread must have been evaluated and reported as failed',
-      ).toContain(quoted(poisonedThreadId));
+
+      const readLogSections = async () => {
+        const logs = await backendClient.getAutomationRuleLogs(ruleId);
+        return {
+          errorText: logs
+            .filter((l) => l.level === 'ERROR')
+            .map((l) => l.message)
+            .join('\n---\n'),
+          // `Evaluating threadId '<id>' sampled by rule '<name>'` — the marker
+          // the scorer writes per thread, before it calls the metric.
+          evaluatedText: logs
+            .filter((l) => l.message.includes('Evaluating threadId'))
+            .map((l) => l.message)
+            .join('\n---\n'),
+        };
+      };
+
+      // Polled, not read once. The evaluator log is flushed on its own path, so
+      // a snapshot taken the moment the last benign score lands can still be
+      // missing the poisoned thread's error — a one-shot read fails
+      // intermittently on a run that was entirely correct.
+      //
+      // Both positive facts are polled together: every id in the single close
+      // reached the scorer, and the poisoned one was reported as failed. This is
+      // the fan-out property stated directly rather than inferred from the
+      // scores — a publish that dropped ids would still leave the rest scored,
+      // and fails here naming the ones that never appeared.
+      await expect
+        .poll(
+          async () => {
+            const { errorText, evaluatedText } = await readLogSections();
+            return {
+              notEvaluated: threadIds.filter((id) => !evaluatedText.includes(quoted(id))),
+              poisonedFailureLogged: errorText.includes(quoted(poisonedThreadId)),
+            };
+          },
+          {
+            timeout: SCORING_TIMEOUT_MS,
+            intervals: [2_000, 5_000],
+            message:
+              'the evaluator log never showed every closed thread being evaluated, or never ' +
+              'reported the poisoned thread as failed',
+          },
+        )
+        .toEqual({ notEvaluated: [], poisonedFailureLogged: true });
+
+      // Only now the negative half, against a log known to have arrived. Made
+      // after the poll on purpose: against an empty snapshot every one of these
+      // would pass while proving nothing.
+      const { errorText } = await readLogSections();
       for (const benign of benignThreadIds) {
         expect(
           errorText,
           `no failure may be reported against sibling ${benign}`,
         ).not.toContain(quoted(benign));
-      }
-
-      // Every id in the single close reached the scorer. This is the batch
-      // property stated directly, rather than inferred from the scores: an
-      // enqueue that carried only the first id would still leave one thread
-      // scored and would fail here naming the ones it dropped.
-      const evaluatedText = logs
-        .filter((l) => l.message.includes('Evaluating threadId'))
-        .map((l) => l.message)
-        .join('\n---\n');
-      for (const id of threadIds) {
-        expect(
-          evaluatedText,
-          `thread ${id} was closed in the batch, so the rule must have evaluated it`,
-        ).toContain(quoted(id));
       }
 
       expect(
