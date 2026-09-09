@@ -411,7 +411,12 @@ def required_score_params(code: str) -> List[str]:
     """
     try:
         tree = ast.parse(code)
-    except SyntaxError:
+    except Exception:
+        # Anything unparseable yields no names, so the call is dispatched exactly as
+        # it would have been. Deliberately broad: this runs in the request thread,
+        # ahead of the executor, and `code` is untyped JSON -- a non-string raises
+        # TypeError, not SyntaxError. Narrowing it would turn the executor's 400 for
+        # invalid code into a 500 from here.
         return []
     metric_class = _find_basemetric_classdef(tree)
     if metric_class is None:

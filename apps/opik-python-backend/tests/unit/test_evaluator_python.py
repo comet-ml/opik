@@ -668,3 +668,17 @@ class NoKwargs(base_metric.BaseMetric):
     assert "unexpected keyword argument 'metadata'" in error, (
         "the cause must be named -- a fixed-length traceback slice used to drop it"
     )
+
+
+# `code` is untyped JSON and is parsed in the request thread, ahead of the executor,
+# to read the score() signature. A non-string raises TypeError rather than
+# SyntaxError there, which would surface as a 500 instead of the executor's 400 for
+# invalid code.
+@pytest.mark.parametrize("code", [42, ["x"], {"a": 1}])
+def test_non_string_code_is_rejected_as_bad_request(process_client, code):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": code
+    })
+
+    assert response.status_code == 400, "must not surface as a 500"
