@@ -999,8 +999,8 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "empty traces_local_v2. That is the irreversible step — it destroys the only copy of the post-cutover writes"
     echo "this rollback discarded, and with it the cheap retry. Do not run it until the flag reverts, the sentinel"
     echo "repair and the checks above are done (runbook: 'When the rollback is done'). It refuses without"
-    echo "--confirm-gap-reconciled, which is you asserting that the accept-or-recover decision above has been MADE —"
-    echo "not that a recovery ran."
+    echo "--confirm-post-cutover-decision, which is you asserting that the accept-or-recover decision above has been"
+    echo "MADE — not that a recovery ran."
 fi
 
 # Last, so the guidance above always prints: a caller reading only $? must not be told this rollback succeeded.

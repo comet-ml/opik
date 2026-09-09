@@ -293,9 +293,11 @@ $RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance
   again with `traces_local`/`traces_dist_old` gone and post-wrap writes still live, then re-apply with
   `exchange_and_wrap.sh --wrap-only …`. Note the writes surviving: this is the contrast with stage C, which would
   discard them.
-* *After `finalize.sh --confirm`* — the case with no alternative. Stages B/C now refuse (their parked original is gone),
-  so this is the only wrap recovery left. The closing message correctly reports the re-wrap as unavailable here, since
-  `--wrap-only` refuses without the parked original; do not hand-roll around that.
+* *After `finalize.sh --confirm --confirm-gap-reconciled`* — the case with no alternative. Stages B/C now refuse (their
+  parked original is gone), so this is the only wrap recovery left. The closing message correctly reports the re-wrap as
+  unavailable here, since `--wrap-only` refuses without the parked original; do not hand-roll around that. The second
+  flag is required on this branch and asserts the gap was reconciled — so run step 9 before reaching for this, or you
+  are rehearsing the drop with writes still parked.
 
 Then flip `tracesDistributedWrapEnabled` back to `false` and restart. Triggering that window on purpose is instructive:
 between the DDL and the restart, deletes fail with `Code: 60 … Table opik.traces_local does not exist` while reads and
@@ -322,9 +324,11 @@ untouched — a re-run of `backfill.sh` reuses the original anchor from the stat
 physical object, so this restores the shadow with its data intact), then resumes at `delta_replay.sh`. So all three
 stages chain on one seeded volume, with no irreversible step in between.
 
-`finalize.sh --confirm` is the *other* option and a different trade: its recycle branch TRUNCATEs the backup into an
-empty shadow, which discards the copy and forces a full re-backfill. Use it to rehearse that branch on purpose, not to
-get from one stage to the next.
+`finalize.sh --confirm --confirm-post-cutover-decision` is the *other* option and a different trade: its recycle branch
+TRUNCATEs the backup into an empty shadow, which discards the copy and forces a full re-backfill. The second flag is
+required on this branch — it asserts the accept-or-recover decision on the post-cutover writes has been made — and
+rehearsing it is also how you see that gate work. Use this to rehearse that branch on purpose, not to get from one stage
+to the next.
 
 **Then finish the config half of the rollback** — `rollback.sh` prints both steps, and stage B/C is not complete without
 them (runbook: "Rolling back the `traceColumnsNonNullable` flip"). Set `traceColumnsNonNullable=false` and

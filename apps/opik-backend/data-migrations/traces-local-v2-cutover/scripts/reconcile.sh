@@ -16,17 +16,21 @@
 #   reverse (after a rollback) sweep traces_post_rollback_backup -> the restored original, then re-run the reverse replay.
 #
 # The direction is derived from the live topology, the way finalize.sh detects which backup is parked; there is no
-# --direction flag to get wrong. It refuses on an ambiguous or absent estate.
+# --direction flag to get wrong. It refuses on an ambiguous or absent estate, and — because every statement it issues is
+# shard-local while finalize.sh drops the parked backup ON CLUSTER — on a multi-shard or unreadable topology unless the
+# scope is asserted with --confirm-single-shard. See assert_shard_scope.
 #
 # Idempotent and re-runnable: it reads the postcondition BEFORE mutating anything, so a second run on a reconciled estate
 # issues no statement and exits 0.
 #
 # The SQL is NOT duplicated here. The sweeps and the forward deletion replay come from
 # db-app-analytics/000006_post_swap_reconciliation.sql, the postcondition from
-# db-app-analytics/000006_verify_reconciliation.sql, and the reverse replay from 000004_rollback_reverse_replay.sql plus
-# its postcondition 000004_rollback_verify_replay.sql, both unchanged. The forward replay is a POST-swap statement of its
-# own rather than a re-run of 000002's pre-swap one: it reads its resurrection guard from the frozen backup, and carries
-# a third arm that pre-swap has no counterpart for. See that block's header.
+# db-app-analytics/000006_verify_reconciliation.sql (its gate blocks plus the advisory leak-check-forward), the settle
+# gate from 000003_exchange_and_wrap.sql's three settle-* blocks — shared with exchange_and_wrap.sh, each driver
+# rendering its own table scope — and the reverse replay from 000004_rollback_reverse_replay.sql plus its postcondition
+# 000004_rollback_verify_replay.sql, both unchanged. The forward replay is a POST-swap statement of its own rather than a
+# re-run of 000002's pre-swap one: it reads its resurrection guard from the frozen backup, and carries a third arm that
+# pre-swap has no counterpart for. See that block's header.
 #
 # Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
 # NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
@@ -89,6 +93,14 @@
 #                             this asserts the operator now WANTS them back. That is right when the rollback was
 #                             motivated by latency, merge load or the wrap; it is wrong when the successor's CONTENT is
 #                             what is suspect, since it re-imports the very data the rollback existed to discard.
+#   --confirm-single-shard    assert the run's SHARD SCOPE yourself, the same shape and the same name as in rollback.sh.
+#                             Needed in two states, because every statement here and the forward postcondition are
+#                             shard-local while finalize.sh drops the parked backup ON CLUSTER:
+#                               * the shard count is unreadable or 0 (unknown topology) — you assert it is one shard;
+#                               * FORWARD on a cluster reporting more than one shard — you accept that this run covers
+#                                 the connected shard alone, and will repeat it on every shard before finalize.sh.
+#                             It does NOT unlock the REVERSE direction on more than one shard: the replay there is
+#                             shard-local while its postcondition reads every shard, so no single run can satisfy it.
 #   --settle-timeout N        seconds the replication-settle gate polls before giving a verdict. Default 120, capped at
 #                             3600; 0 takes a single sample. Unlike the pre-swap gate this one sits AFTER the swap, so
 #                             its wait costs no cutover tail — but every second is a second the gap-window traces are
@@ -126,6 +138,7 @@ MAX_PASSES=3
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000
 REPORT_ONLY=0
 CONFIRM_REIMPORT=0
+CONFIRM_SINGLE_SHARD=0
 FORCE=0
 SETTLE_TIMEOUT=120        # seconds the settle gate polls before deciding. See --settle-timeout.
 SETTLE_TIMEOUT_MAX=3600   # its accepted ceiling; the validation below explains why the check is lexical.
@@ -140,6 +153,7 @@ DIRECTION=""              # forward | reverse, derived from the live topology
 LIVE_TABLE=""             # traces, or traces_local on a wrapped estate
 PARKED_TABLE=""           # traces_pre_cutover_backup | traces_post_rollback_backup
 EFFECTIVE_GAP_START=""    # --gap-start widened downward by --slack-seconds, computed server-side
+SHARD_SCOPE_NOTE=""       # set by assert_shard_scope when the run is knowingly shard-local; qualifies the verdict
 # The 000006 blocks this direction mutates with, IN THE ORDER THEY MUST RUN. Forward: sweep first, then the replay, so
 # bridged deletes win over anything the sweep just re-inserted. Reverse has no replay block here — it re-runs 000004's
 # unchanged. Set by detect_direction, and an array rather than a string so no IFS or globbing surprise can reorder or
@@ -158,6 +172,7 @@ while [[ $# -gt 0 ]]; do
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
         --report-only) REPORT_ONLY=1; shift ;;
         --confirm-reimport-successor-writes) CONFIRM_REIMPORT=1; shift ;;
+        --confirm-single-shard) CONFIRM_SINGLE_SHARD=1; shift ;;
         --force) FORCE=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -235,8 +250,12 @@ CH_ARGS=()
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
 CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
 
+# --format TabSeparated is explicit, not redundant: clickhouse-client takes a default format from the user's own client
+# config, and a pretty/bordered default would put headers and box-drawing into every scalar read below. Those are parsed
+# as numbers and timestamps, so the failure would not be an error — it would be a wrong verdict.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:reconcile' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:reconcile' \
+        --format TabSeparated --query "$1"
 }
 
 # Same connection, but rendered for a human — used only for the settle gate's detail blocks, whose interesting columns
@@ -392,6 +411,19 @@ assert_replication_settled() {
         row="$(ch "$sample_sql")" || row=""
         [[ -n "$row" ]] || { echo "ERROR: the settle gate could not read system.replication_queue / system.mutations across cluster '$cluster'. Grant SELECT ON system.* plus REMOTE and CLUSTER, or confirm settlement out of band and pass --force." >&2; exit 1; }
         read -r queue age tries failures mutations mut_age mut_failed <<<"$row"
+        # A short or non-numeric row must not be read as a settled cluster. `read` leaves the unfilled variables EMPTY,
+        # and bash arithmetic evaluates an empty string as 0 — so a header line, a truncated row or a changed block
+        # would sail through every comparison below as "queue drained, nothing mutating" and pass the gate silently.
+        # Seven numeric fields or nothing.
+        for _field in "$queue" "$age" "$tries" "$failures" "$mutations" "$mut_age" "$mut_failed"; do
+            [[ "$_field" =~ ^[0-9]+$ ]] || {
+                echo "ERROR: the settle gate read '$row' from cluster '$cluster', which is not the seven numeric fields the" >&2
+                echo "       settle-sample block returns. Refusing to reach a verdict on it — an unparsed field would be" >&2
+                echo "       treated as 0 and pass the gate. Check the block's markers in $SETTLE_SQL, and that no client" >&2
+                echo "       config overrides the output format." >&2
+                exit 1
+            }
+        done
 
         if (( queue == 0 && mutations == 0 )); then
             echo "Replication settled across cluster '$cluster': queue drained, nothing still mutating '$PARKED_TABLE'."
@@ -443,29 +475,66 @@ settle() {
     fi
 }
 
-# The reverse direction re-runs 000004_rollback_reverse_replay.sql, which is deliberately NOT ON CLUSTER (it travels by
-# replication, which spans a shard's replicas and not other shards) while its postcondition reads clusterAllReplicas,
-# which spans every shard. On more than one shard those scopes disagree: the replay fixes one shard and the check keeps
-# failing. rollback.sh refuses the same combination for the same reason. The forward direction has no such mismatch —
-# both its sweep and its own postcondition are shard-local — so this is asserted only where it bites.
-assert_single_shard_for_reverse() {
+# EVERY STATEMENT THIS DRIVER ISSUES IS SHARD-LOCAL, and so is the forward postcondition. The sweep reads a per-shard
+# parked backup and writes the per-shard live table; the replay is a mutation, which travels by replication (a shard's
+# replicas, not other shards); the forward postcondition joins two tables and so cannot use clusterAllReplicas. That
+# makes a per-shard forward run correct — but it also means a single run's RECONCILED certifies ONE SHARD, and
+# finalize.sh drops the parked backup ON CLUSTER, on every shard, on the strength of that assertion. So the scope has to
+# be established before anything mutates, in BOTH directions, and an unreadable count fails closed exactly as
+# rollback.sh's does:
+#
+#   * more than one shard, REVERSE — refused outright. The reverse replay this driver re-runs is shard-local while its
+#     postcondition (000004_rollback_verify_replay.sql) reads clusterAllReplicas, so no single run can satisfy it. Worse
+#     here than in rollback.sh, because that postcondition is advisory in this driver: the run would repair one shard,
+#     warn, and still print RECONCILED off the shard-local four counts. rollback.sh refuses the same combination.
+#   * more than one shard, FORWARD — allowed only with --confirm-single-shard, which is then an acknowledgment that this
+#     run covers the connected shard alone and must be repeated on every shard before finalize.sh. Refusing outright
+#     would leave a multi-shard estate with no driver path for a gap the drivers can actually close.
+#   * count unreadable or 0 — the topology is UNKNOWN, so fail closed in both directions unless the operator asserts it
+#     with --confirm-single-shard. Assuming the safe case is the run this check exists to stop. Zero is not one shard: an
+#     empty system.macros match yields a default, so a missing 'cluster' macro returns 0 — and that also guarantees the
+#     reverse postcondition's clusterAllReplicas('{cluster}', ...) cannot resolve.
+assert_shard_scope() {
     local shards
     shards="$(ch "SELECT uniqExact(shard_num) FROM system.clusters
                   WHERE cluster = (SELECT substitution FROM system.macros WHERE macro = 'cluster')" 2>/dev/null || true)"
+
     if [[ "$shards" =~ ^[0-9]+$ ]] && (( shards > 1 )); then
-        echo "ERROR: this cluster reports $shards shards. The reverse replay this driver re-runs after the sweep reaches" >&2
-        echo "       only the shard you are connected to, while its postcondition reads every shard, so no single run can" >&2
-        echo "       satisfy it. Apply the statements from $SQL_DIR by hand, one shard at a time, then check the" >&2
-        echo "       postcondition once — the same path rollback.sh documents for its own reverse replay." >&2
-        exit 1
+        if [[ "$DIRECTION" == "reverse" ]]; then
+            echo "ERROR: this cluster reports $shards shards. The reverse replay this driver re-runs after the sweep reaches" >&2
+            echo "       only the shard you are connected to, while its postcondition reads every shard, so no single run can" >&2
+            echo "       satisfy it. Apply the statements from $SQL_DIR by hand, one shard at a time, then check the" >&2
+            echo "       postcondition once — the same path rollback.sh documents for its own reverse replay." >&2
+            exit 1
+        fi
+        if [[ "$CONFIRM_SINGLE_SHARD" != "1" ]]; then
+            echo "ERROR: this cluster reports $shards shards, and every statement this driver issues — plus its" >&2
+            echo "       postcondition — covers only the shard you are connected to. A RECONCILED here would certify one" >&2
+            echo "       shard while finalize.sh drops the parked backup ON CLUSTER, destroying the only copy of whatever" >&2
+            echo "       is still unswept on the others." >&2
+            echo "       Run this driver once PER SHARD with --confirm-single-shard, and do not run finalize.sh until every" >&2
+            echo "       shard has reported RECONCILED." >&2
+            exit 1
+        fi
+        SHARD_SCOPE_NOTE="this run covered ONE of $shards shards"
+        echo "NOTE: $shards shards; proceeding on --confirm-single-shard. This run reconciles and certifies only the shard" >&2
+        echo "      reached through ${CH_HOST:-the default host}. Repeat it on every shard before finalize.sh." >&2
+        return 0
     fi
-    # Unreadable is a NOTE rather than a refusal here, unlike rollback.sh's --sentinel-repair-only: this driver issues no
-    # whole-table rewrite, and the reverse replay it runs is the same statement the rollback already ran once on this
-    # estate. {cluster} inside a table function is substituted from the server's config rather than read from
-    # system.macros, so the postcondition still evaluates on the usual cause (a missing SELECT on system.clusters).
+
     if ! [[ "$shards" =~ ^[0-9]+$ ]] || (( shards == 0 )); then
-        echo "NOTE: could not read the shard count ('${shards:-<empty>}'); it needs SELECT on system.clusters and" >&2
-        echo "      system.macros. Proceeding — on a multi-shard cluster this would reconcile only the connected shard." >&2
+        if [[ "$CONFIRM_SINGLE_SHARD" == "1" ]]; then
+            echo "NOTE: could not read the shard count; proceeding on --confirm-single-shard. If the cluster in fact has" >&2
+            echo "      more than one shard, this reconciles and certifies only the shard you are connected to." >&2
+            SHARD_SCOPE_NOTE="shard count unread; scope asserted by --confirm-single-shard"
+            return 0
+        fi
+        echo "ERROR: the shard count came back unusable ('${shards:-<empty>}'), so this cluster's topology is unknown. It" >&2
+        echo "       needs SELECT on system.clusters and system.macros, and a 0 means the 'cluster' macro did not resolve." >&2
+        echo "       Every statement here is shard-local, so on more than one shard this would reconcile one shard and" >&2
+        echo "       report RECONCILED for the estate — which finalize.sh then acts on by dropping the backup ON CLUSTER." >&2
+        echo "       Grant the reads, or pass --confirm-single-shard to assert the topology yourself." >&2
+        exit 1
     fi
 }
 
@@ -593,6 +662,7 @@ verify_reverse_replay() {
 validate_blocks() {
     local block
     validate_block "$VERIFY_SQL" "verify-$DIRECTION"
+    [[ "$DIRECTION" != "forward" ]] || validate_block "$VERIFY_SQL" leak-check-forward
     [[ "$REPORT_ONLY" == "1" ]] && return 0
     for block in "${MUTATING_BLOCKS[@]}"; do
         validate_block "$SWEEP_SQL" "$block"
@@ -625,6 +695,33 @@ print_counts() {
     echo "  missing_keys=$MISSING stale_keys=$STALE payload_mismatch_keys=$PAYLOAD (gate: all three at 0)"
     echo "  newer_keys=$NEWER  — informational, and EXPECTED to be non-zero: a gap-window trace written again after the"
     echo "                        swap is newer on the live side, which the sweep deliberately leaves alone."
+}
+
+# 000006_verify_reconciliation.sql's leak-check-forward: bridged deletes still LIVE on the successor at a version the
+# frozen backup itself held. Forward only, and NOT part of the gate — it reports the residual arm 3 of the deletion
+# replay cannot prevent (a pre-swap row carrying a client-supplied FUTURE last_updated_at falls outside its staleness
+# scope; see that block's header). Advisory, and non-fatal on a read failure: the four counts are what this driver exits
+# on, and a failed advisory read must not turn a clean reconciliation into a failure. Printed AFTER the gate so a
+# non-zero here is read as "reconciled, and these deletes need re-applying by hand", which is what it means.
+print_leak_check() {
+    local leaked
+    [[ "$DIRECTION" == "forward" ]] || return 0
+    leaked="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated \
+        --query "$(render "$(extract "$VERIFY_SQL" leak-check-forward)")" 2>/dev/null || true)"
+    if [[ "$leaked" == "0" ]]; then
+        echo "  leaked_delete_keys=0 — no captured delete is live on '$LIVE_TABLE' at a version the backup held."
+        return 0
+    fi
+    if ! [[ "$leaked" =~ ^[0-9]+$ ]]; then
+        echo "  WARNING: the deletion-leak advisory could not be read; the four counts above still stand." >&2
+        return 0
+    fi
+    echo "  WARNING: leaked_delete_keys=$leaked — that many CAPTURED DELETES are still live on '$LIVE_TABLE'." >&2
+    echo "           The reconciliation itself is complete; this is the residual the replay's staleness scope cannot" >&2
+    echo "           prevent, because last_updated_at is client-supplied (see 000006's ARM 3 header). Those keys are" >&2
+    echo "           still in deletion_events_local, so they can be re-applied by hand — list them with the" >&2
+    echo "           leak-check-forward block in $VERIFY_SQL, dropping its outer count()." >&2
+    return 0
 }
 
 gate_is_clean() {
@@ -678,8 +775,9 @@ else
         echo "       so this state is not one a promote produces. Resolve by hand." >&2
         exit 1
     }
-    assert_single_shard_for_reverse
 fi
+
+assert_shard_scope
 
 # Widen the gap anchor downward by --slack-seconds, server-side: no host date math and no timezone ambiguity, the same
 # reason every other window bound in this runbook is computed in ClickHouse.
@@ -702,6 +800,7 @@ read_postcondition || {
 }
 echo "Postcondition BEFORE any mutation:"
 print_counts
+print_leak_check
 
 if gate_is_clean; then
     echo "Nothing to reconcile: every key live in '$PARKED_TABLE' inside the gap window is present on '$LIVE_TABLE' at the"
@@ -735,6 +834,13 @@ while (( PASS < MAX_PASSES )); do
     if gate_is_clean; then
         echo
         echo "RECONCILED after $PASS pass(es): missing_keys=0 stale_keys=0 payload_mismatch_keys=0."
+        print_leak_check
+        # A shard-local verdict must never read as an estate-wide one: finalize.sh destroys the parked backup ON CLUSTER
+        # on the strength of this line, so when the scope was asserted rather than proven, the line says so.
+        [[ -z "$SHARD_SCOPE_NOTE" ]] || {
+            echo "SCOPE: $SHARD_SCOPE_NOTE. This verdict covers that shard ONLY — every other shard needs its own"
+            echo "       RECONCILED before finalize.sh, which drops the parked backup on all of them."
+        }
         if [[ "$DIRECTION" == "forward" ]]; then
             echo "Every trace written to the old table in the [$EFFECTIVE_GAP_START, swap) gap is live on '$LIVE_TABLE'."
             echo

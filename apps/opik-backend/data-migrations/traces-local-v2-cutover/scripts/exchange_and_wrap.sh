@@ -229,8 +229,12 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
     exit 2
 fi
 
+# --format TabSeparated is explicit, not redundant: clickhouse-client takes a default format from the user's own client
+# config, and a pretty/bordered default would put headers and box-drawing into every scalar read below. Those are parsed
+# as engines, counts and timestamps, so the failure would not be an error — it would be a wrong verdict.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' \
+        --format TabSeparated --query "$1"
 }
 
 # Same connection, but rendered for a human — used only for the settle gate's detail blocks, whose interesting columns
@@ -431,6 +435,19 @@ assert_replication_settled() {
         row="$(ch "$sample_sql")" || row=""
         [[ -n "$row" ]] || { echo "ERROR: the settle gate could not read system.replication_queue / system.mutations across cluster '$cluster'. Grant SELECT ON system.* plus REMOTE and CLUSTER, or confirm settlement out of band and pass --force." >&2; exit 1; }
         read -r queue age tries failures mutations mut_age mut_failed <<<"$row"
+        # A short or non-numeric row must not be read as a settled cluster. `read` leaves the unfilled variables EMPTY,
+        # and bash arithmetic evaluates an empty string as 0 — so a header line, a truncated row or a changed block
+        # would sail through every comparison below as "queue drained, no unfinished mutations" and pass the gate
+        # silently, immediately before the EXCHANGE. Seven numeric fields or nothing.
+        for _field in "$queue" "$age" "$tries" "$failures" "$mutations" "$mut_age" "$mut_failed"; do
+            [[ "$_field" =~ ^[0-9]+$ ]] || {
+                echo "ERROR: the settle gate read '$row' from cluster '$cluster', which is not the seven numeric fields the" >&2
+                echo "       settle-sample block returns. Refusing to reach a verdict on it — an unparsed field would be" >&2
+                echo "       treated as 0 and pass the gate. Check the block's markers in $SQL_FILE, and that no client" >&2
+                echo "       config overrides the output format." >&2
+                exit 1
+            }
+        done
 
         if (( queue == 0 && mutations == 0 )); then
             echo "Replication settled across cluster '$cluster': queue drained, no unfinished mutations on the shadow."

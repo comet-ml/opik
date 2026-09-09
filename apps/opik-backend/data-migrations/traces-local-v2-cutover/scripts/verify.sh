@@ -65,6 +65,15 @@
 #                       boundaries. --sample-mod, --drill-down, --receive-timeout and the confirm-keys / version-ties
 #                       resolution all work unchanged. In this mode the anchor scan is skipped (nothing needs a week
 #                       grid), so the run also does not depend on min/max(created_at) holding still.
+#                       IT COMPARES TRACES *CREATED* IN THE WINDOW, not every trace touched in it, and the PASSED line
+#                       says so. 000005's blocks bound on created_at and have to: the weekly mode's partitions and its
+#                       superseded-version artifact logic are created_at-based, and widening the predicate to
+#                       `created_at OR last_updated_at` would put one row in two week windows and break both. So a trace
+#                       created earlier and merely UPDATED inside the window is not in this compare. That is not a hole
+#                       in the reconciliation — those keys are precisely what reconcile.sh's postcondition reports as
+#                       stale_keys / payload_mismatch_keys, which is version-driven and sees them where a created_at
+#                       window cannot. Read a PASS here as "the traces created in this range are faithful", and the four
+#                       counts as what covers the ones merely updated in it.
 #   --drill-down        on any week the compare reported as differing, print up to 100 keys that differ or exist on one
 #                       side only. Not limited to a MISMATCH: the artifact and INCONCLUSIVE verdicts are reached from the
 #                       same differing-key set, and those are the ones an operator most often needs to see.
@@ -443,7 +452,11 @@ fi
 # weekly form prints its bounds and stride. In window mode that is the explicit window, which is the whole point of the
 # mode: a reconciliation compare has to be quotable as "this exact range was checked".
 if (( WINDOW_MODE == 1 )); then
-    COVERED="window [$WINDOW_FROM .. $WINDOW_TO) UTC, sample 1/$SAMPLE_MOD"
+    # "created in" rather than just the range: 000005 bounds on created_at, so a trace created earlier and merely
+    # updated inside the window is not in this compare (see --window-from's doc). Saying so on the PASSED line is what
+    # stops the pass being quoted as broader than it is — reconcile.sh's stale_keys / payload_mismatch_keys are what
+    # cover the updated ones.
+    COVERED="traces CREATED in window [$WINDOW_FROM .. $WINDOW_TO) UTC, sample 1/$SAMPLE_MOD"
 else
     COVERED="weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD"
 fi

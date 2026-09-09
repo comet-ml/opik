@@ -1,8 +1,9 @@
 -- runbook traces-local-v2-cutover — POST-SWAP reconciliation POSTCONDITION (driven by ../reconcile.sh)
 -- The gate test TracesLocalV2CutoverTest reimplements these statements inline; keep the two in step (see its Javadoc).
 --
--- Read-only, and read repeatedly by the driver: once before any mutation (so a reconciled estate skips the sweep
--- entirely and the mode is a true no-op), and once after each pass, as the gate. --report-only runs nothing else.
+-- Read-only. `verify-forward` / `verify-reverse` are the GATE, read once before any mutation (so a reconciled estate
+-- skips the sweep entirely and the mode is a true no-op) and once after each pass. `leak-check-forward` is an ADVISORY
+-- read on the forward path only, taken at whichever of those the run exits on. --report-only runs nothing else.
 --
 -- ONE ROW, FOUR COUNTS, read with `read -r` exactly as ../rollback.sh reads 000004_rollback_verify_sentinels.sql —
 -- including that file's idiom of carrying one deliberately-INFORMATIONAL count alongside the gates. For every key that is
@@ -37,8 +38,9 @@
 -- nanoseconds to microseconds, so comparing the raw columns would report every faithfully-copied row with a
 -- sub-microsecond last_updated_at as `stale_keys`.
 --
--- FINAL on both sides, so the comparison is of the live, logical row; the default apply_deleted_mask = 1 keeps it to
--- rows that are not lightweight-deleted. The `parked` CTE is referenced twice (once to pick the live side's candidate
+-- FINAL on both sides of the GATE blocks, so the comparison is of the live, logical row; the default
+-- apply_deleted_mask = 1 keeps it to rows that are not lightweight-deleted. (`leak-check-forward` deliberately departs
+-- from both — see its own header.) The `parked` CTE is referenced twice (once to pick the live side's candidate
 -- keys, once as the join's left side) and ClickHouse inlines rather than materializes a CTE, so it is evaluated twice —
 -- acceptable because it is bounded by the gap window and its skip indexes, not by the table.
 --
@@ -46,7 +48,8 @@
 --   ${ANALYTICS_DB_DATABASE_NAME}   the analytics database
 --   ${LIVE_TABLE}                   `traces`, or `traces_local` on a wrapped estate (see 000006_post_swap_reconciliation.sql)
 --   ${GAP_START}                    the gap window's lower bound, the same value the sweep used
---   ${SWAP_DONE}                    the instant the swap returned (forward block only)
+--   ${SWAP_DONE}                    the instant the swap returned (`verify-forward` only; `leak-check-forward` needs
+--                                   no timestamp, which is the point of it)
 
 -- >>> BEGIN verify-forward
 -- Forward: parked = traces_pre_cutover_backup (OLD schema — Nullable, nanosecond); live = the successor (sentinels,
@@ -247,3 +250,71 @@ SETTINGS join_use_nulls = 1,
          use_skip_indexes_if_final = 1,
          log_comment = 'traces_local_v2_cutover:reconcile:verify_reverse';
 -- >>> END verify-reverse
+
+-- >>> BEGIN leak-check-forward
+-- FORWARD ONLY, ADVISORY, AND NOT PART OF THE FOUR COUNTS. One number: captured deletes still LIVE on the successor at
+-- a version the frozen backup itself held. Non-zero means deletes leaked; those keys are still in the bridge, so they
+-- can be re-applied by hand.
+--
+-- It reports the residual `forward-deletion-replay`'s ARM 3 cannot prevent — a pre-swap row carrying a client-supplied
+-- future last_updated_at falls outside that arm's staleness scope. See ARM 3's header in
+-- 000006_post_swap_reconciliation.sql for why the predicate stays as it is and why this check cannot live there.
+--
+-- THE VERSION COMPARISON IS WHAT MAKES IT PRECISE, and it needs no timestamp. A leaked row is a COPY of a backup row
+-- (placed by the backfill/delta before the delete fired, or re-inserted by the sweep), so its (key, last_updated_at) is
+-- one the backup holds. A legitimate post-swap re-creation carries a version the backup never held, whatever the client
+-- claimed, because the client's value went into the successor and not into the frozen table.
+--
+-- WHY IT OVERRIDES THE DELETE MASK, given that ClickHouse filters lightweight-deleted rows automatically. That
+-- filtering is the obstacle, not a substitute: the versions to match against belong to rows DELETED in the backup, so
+-- under the default the read returns nothing for exactly the keys that matter and a real leak reports 0 (verified on
+-- 26.3). Hence `apply_deleted_mask = 0` for the statement, with `_row_exists = 0` in the `deleted` CTE keeping only
+-- what the mask had hidden — precisely "live in the old table when the backfill copied it, deleted before the freeze".
+--
+-- The setting is STATEMENT-WIDE and cannot be narrowed to one subquery (attaching it to the CTE alone has no effect,
+-- also verified), so the live side restores mask-honoring by hand with `_row_exists = 1`. Without that the rows the
+-- replay correctly masked read as live, and since their versions are backup versions by construction, the check would
+-- report its own fix as a leak.
+--
+-- The `deleted` CTE deliberately omits FINAL: any version the backup ever held is one a copy could carry, so all of
+-- them are wanted. Only the live side needs FINAL, to compare against the row the successor actually serves.
+WITH
+    bridged AS (
+        SELECT
+            workspace_id,
+            toFixedString(project_id, 36) AS project_id,
+            toFixedString(deleted_id, 36) AS id
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
+        WHERE source_table = 'traces'
+          AND event_time >= toDateTime64('${GAP_START}', 6, 'UTC')
+          AND project_id != ''
+          AND length(project_id) = 36
+          AND length(deleted_id) = 36
+    ),
+    deleted AS (
+        SELECT
+            (workspace_id, project_id, id) AS key,
+            toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)) AS version
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.traces_pre_cutover_backup
+        WHERE _row_exists = 0
+          AND (workspace_id, project_id, id) IN (SELECT workspace_id, project_id, id FROM bridged)
+    )
+SELECT count() AS leaked_delete_keys
+FROM (
+    SELECT
+        (workspace_id, project_id, id) AS key,
+        toUnixTimestamp64Micro(last_updated_at) AS version
+    FROM ${ANALYTICS_DB_DATABASE_NAME}.${LIVE_TABLE} FINAL
+    -- `_row_exists = 1` restores mask-honoring for THIS side by hand, because apply_deleted_mask = 0 is statement-wide
+    -- and the live table must still be read as the product reads it. Without it every key the replay correctly masked
+    -- would come back as live and be reported as a leak — the check would indict its own fix. FINAL picks the newest
+    -- version first and a lightweight delete rewrites that row's mask without bumping the version, so a properly masked
+    -- key is dropped here and a leaked one (still unmasked on the successor) is kept.
+    WHERE _row_exists = 1
+      AND (workspace_id, project_id, id) IN (SELECT workspace_id, project_id, id FROM bridged)
+) AS live
+WHERE (live.key, live.version) IN (SELECT key, version FROM deleted)
+SETTINGS apply_deleted_mask = 0,
+         use_skip_indexes_if_final = 1,
+         log_comment = 'traces_local_v2_cutover:reconcile:leak_check_forward';
+-- >>> END leak-check-forward

@@ -201,6 +201,25 @@ SETTINGS max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
 -- while a newer version of the same key survives — which is what ReplacingMergeTree would have served anyway. The union
 -- of the two columns is complete for the same reason the gap window's is (see the header): a post-swap write stamps a
 -- fresh server created_at on the batch-ingest path, and a fresh server last_updated_at on the merge paths.
+--
+-- ARM 3's RESIDUAL, AND WHY THE PREDICATE STAYS AS IT IS. `last_updated_at` is CLIENT-SUPPLIED on the batch-ingest path:
+-- TraceDAO binds Trace.lastUpdatedAt verbatim, and the API accepts any value before 2300. So a genuinely PRE-swap row
+-- can carry a future timestamp, fall outside this scope, and keep its captured delete unmasked — a leaked delete. The
+-- two ways out are both worse:
+--   * Dropping the last_updated_at conjunct (scoping on created_at alone) inverts the failure. The merge path PRESERVES
+--     created_at, so a post-swap PATCH of a pre-existing trace would then be masked. Over-sparing leaves a deleted
+--     trace visible while its key is still in the bridge, so it can be re-masked; over-masking destroys a post-swap
+--     write that exists on the successor and nowhere else. This predicate is the recoverable side of that trade.
+--   * Comparing the row's VERSION against the versions the frozen backup held needs neither timestamp and would close
+--     both directions — but it is impossible in a MUTATION. Those backup rows were lightweight-deleted before the table
+--     was parked, so matching them needs an unmasked read, and a lightweight DELETE ACCEPTS apply_deleted_mask = 0 in
+--     SETTINGS and then IGNORES it (verified on 26.3): the subquery reads the backup mask-honored, matches nothing, and
+--     the statement reports success having masked NOTHING. Exactly the silent success this file is written to avoid.
+-- So the residual is DETECTED rather than prevented. That version comparison works in a READ, and ships as
+-- 000006_verify_reconciliation.sql's `leak-check-forward`, which ../reconcile.sh reports beside the four counts. The
+-- mitigation is the one the runbook already carries for the other delete-side residuals — quiesce user DELETEs across
+-- the swap, which empties the window this needs. Clamping a future client last_updated_at at ingestion is the durable
+-- fix and is not this procedure's to make.
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.${LIVE_TABLE}
 WHERE created_at      <  toDateTime64('${SWAP_DONE}', 6, 'UTC')
   AND last_updated_at <  toDateTime64('${SWAP_DONE}', 6, 'UTC')

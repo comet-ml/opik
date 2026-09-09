@@ -355,12 +355,29 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    > the delta shrinks it and then stops improving, which is what was observed on the cutover that motivated this step.
    > After the swap the parked table is **frozen**, so the sweep converges by construction and its postcondition is a
    > gate rather than a snapshot.
+   >
+   > **It reconciles ONE SHARD, and says which.** Every statement it issues is shard-local, and so is the forward
+   > postcondition — a per-shard run is therefore correct, but a single `RECONCILED` certifies only the shard it
+   > connected to, while `finalize.sh` drops the parked backup `ON CLUSTER`. So on a cluster reporting more than one
+   > shard the driver refuses without `--confirm-single-shard`, and with it labels the verdict `SCOPE: …`; an unreadable
+   > shard count fails closed, the same way `rollback.sh`'s guard does. On the single-shard estate this procedure
+   > targets today, neither path triggers.
+   >
+   > **It also reports `leaked_delete_keys`, which is NOT part of the gate.** Non-zero means captured deletes are still
+   > live on the successor — the residual the replay's staleness scope cannot prevent, because `last_updated_at` is
+   > client-supplied (see the residuals in ["The final cutover window"](#the-final-cutover-window)). Those keys are
+   > still in the bridge, so they can be re-applied by hand; the reconciliation itself is complete either way.
 6. **QA over the reconciled range — `verify.sh --window-from/--window-to`** for the payload-level picture over exactly
    what step 5 swept, alongside the usual bounded weekly compare (see "Verifying the migration"):
    ```bash
    ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces \
        --window-from '<delta_start>' --window-to '<now, UTC>'
    ```
+   This compares the traces **created** in that range — `000005` bounds on `created_at`, which the weekly mode's
+   partitioning and its superseded-version logic require — so a trace created earlier and merely *updated* in the gap is
+   not in it. That set is not left uncovered: it is exactly what step 5 reports as `stale_keys` and
+   `payload_mismatch_keys`, which compare by version rather than by window. The `PASSED` line states the distinction, so
+   the pass cannot be quoted as broader than it is.
    Then work the ["When the cutover is done"](#when-the-cutover-is-done) checklist before the soak.
 
 **Dedup note.** After the delta, a row can have two physical versions on `traces_local_v2` (the backfilled one and the
@@ -515,18 +532,30 @@ Keep step 3→4 short, and step 4→5 shorter:
 | **Writes** — all of them, since nothing holds any of them across the swap | **step 5's sweep** |
 | **Deletes** bridged after step 4's replay read but before the swap | **step 5's post-swap replay**, whose resurrection guard reads the frozen backup and is therefore race-free |
 
-**Three residuals remain, all narrow, all on the delete side, and all bounded by the same mitigation — so state it once:
-quiesce user DELETES across the swap, not merely reads.**
+**Four residuals remain, all narrow. The first three are on the delete side and share one mitigation — so state it
+once: quiesce user DELETES across the swap, not merely reads.**
 
 - A delete whose bridge row lands *after* step 5's read is invisible to it.
 - Capture writes the bridge row *before* the delete executes, so for the width of the `EXCHANGE` a delete can be bridged
   before `exchange_done` while its `DELETE` lands on the successor after the swap. That key is live in the frozen backup
   and bridged before the bound, so **step 5's sweep brings it back**. It needs the trace to be written *and* deleted
   inside the gap window, with the swap falling between its capture and its delete.
+- **A pre-swap trace carrying a client-supplied future `last_updated_at` keeps its captured delete.** `lastUpdatedAt`
+  is writable through the API and validated only as "before 2300", and `TraceDAO` binds it verbatim on the batch-ingest
+  path — so such a row falls outside the post-swap replay's `created_at AND last_updated_at < exchange_done` staleness
+  scope and is spared. The predicate stays that way deliberately: scoping on `created_at` alone would instead mask a
+  post-swap *patch* of a pre-existing trace (the merge path preserves `created_at`), destroying a write that exists only
+  on the successor. Over-sparing leaves a deleted trace visible with its key still in the bridge, so it can be
+  re-applied; over-masking cannot be undone. **Step 5 reports this one as `leaked_delete_keys`**, comparing the live
+  row's version against the versions the frozen backup held — which separates a leak from a legitimate post-swap
+  re-creation and needs no timestamp at all. That comparison is only possible as a *read*: it needs an unmasked read of
+  the backup, and a lightweight `DELETE` **accepts `apply_deleted_mask = 0` and then ignores it**, so folding the check
+  into the replay would produce a statement that reports success having masked nothing. Clamping future client
+  timestamps at ingestion is the durable fix and is not this procedure's to make.
 - Between the `EXCHANGE` and the sweep, gap-window traces are briefly absent from live reads — and `TraceDAO`'s merge
   path reads the old row to preserve `created_at`, so an update landing in that hole re-stamps it.
 
-The first and third are reasons to run step 5 *immediately*; the second is a reason to quiesce deletes rather than to
+The first and last are reasons to run step 5 *immediately*; the middle two are reasons to quiesce deletes rather than to
 skip the sweep, since skipping it loses every write in the gap instead.
 
 *Rejected alternatives, recorded so they are not re-proposed (OPIK-8239).* **Widening the async-insert buffer**
@@ -947,7 +976,7 @@ run by hand.** Each `.sql` file is the single source its driver reads those stat
 | 1 — backfill | `000001_backfill_traces_local_v2.sql` | `backfill.sh` |
 | 2 — delta + replay | `000002_delta_and_deletion_replay.sql` | `delta_replay.sh` |
 | 3 — settle gate, EXCHANGE + wrap (+ the final pre-swap replay, from `000002`'s `deletion-replay` block) | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
-| 4 — **post-swap reconciliation**, forward and reverse | `000006_post_swap_reconciliation.sql` (`forward-sweep` + `forward-deletion-replay`, or `reverse-sweep` followed by the unchanged `000004_rollback_reverse_replay.sql` + `000004_rollback_verify_replay.sql`) + its postcondition `000006_verify_reconciliation.sql`, and `000003`'s three `settle-*` blocks for its own gate | `reconcile.sh` |
+| 4 — **post-swap reconciliation**, forward and reverse | `000006_post_swap_reconciliation.sql` (`forward-sweep` + `forward-deletion-replay`, or `reverse-sweep` followed by the unchanged `000004_rollback_reverse_replay.sql` + `000004_rollback_verify_replay.sql`) + its postcondition `000006_verify_reconciliation.sql` (`verify-forward` / `verify-reverse`, plus the advisory `leak-check-forward`), and `000003`'s three `settle-*` blocks for its own gate | `reconcile.sh` |
 | QA — fidelity compare, weekly or over one window (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
 | rollback | `000004_rollback_stage_{a,b,c}_*.sql`, `000004_rollback_unwrap.sql`, `000004_rollback_reverse_replay.sql` + its postcondition `000004_rollback_verify_replay.sql`, `000004_rollback_sentinel_repair.sql` + its postcondition `000004_rollback_verify_sentinels.sql` | `rollback.sh` |
 | finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
@@ -957,7 +986,8 @@ from a file, and the split is deliberate:
 
 - **In a versioned `.sql` file, extracted by marker:** every statement that changes data or schema, and every read
   whose result *is a verdict* the operator acts on. That second half is why `000005`'s `compare` / `confirm-keys` /
-  `version-ties` blocks, `000006`'s `verify-forward` / `verify-reverse` blocks and `000003`'s three `settle-*` blocks
+  `version-ties` blocks, `000006`'s `verify-forward` / `verify-reverse` / `leak-check-forward` blocks and
+  `000003`'s three `settle-*` blocks
   live in files despite being read-only — a fidelity gate, a reconciliation gate or a swap gate deciding wrongly is the
   failure this procedure exists to prevent, so its SQL is reviewed and versioned like a statement. The `settle-*` blocks
   are read by **two** drivers: `exchange_and_wrap.sh` before the swap and `reconcile.sh` after it, each rendering its own
@@ -1557,8 +1587,8 @@ Treat a stage B/C rollback as complete only when all of these hold:
 - [ ] **The post-cutover writes decided** — either recovered with
       `reconcile.sh --confirm-reimport-successor-writes` (see "Recovering the post-cutover writes"), or knowingly left
       discarded. `rollback.sh` prints the row count and both commands after the promote, so this is a decision with a
-      number attached rather than a shrug. **`finalize.sh` refuses without `--confirm-gap-reconciled`, which asserts the
-      decision was MADE** — not that a recovery ran.
+      number attached rather than a shrug. **`finalize.sh` refuses without `--confirm-post-cutover-decision`, which
+      asserts the decision was MADE** — not that a recovery ran.
 - [ ] **The parked successor still parked** — `traces_post_rollback_backup` retained, not finalized. It is the only copy
       of the post-cutover writes, and the only thing that makes a retry cheap.
 
@@ -1652,10 +1682,14 @@ reversible indefinitely via `--unwrap-only`, which needs only `traces` and `trac
   the soak, no cutover-related incidents open, and (if the wrap was applied) the retarget flag
   (`tracesDistributedWrapEnabled`) live and healthy across the backend fleet.
 
-Once those hold, run [`scripts/finalize.sh`](scripts/finalize.sh) **with `--confirm --confirm-gap-reconciled`** — the
-second flag is required on both branches and is refused by neither dry run, which name it so its first appearance is
-never a surprise. It asserts what no query can see: after a cutover, that `reconcile.sh` ran and returned `0`; after a
-rollback, that the accept-or-recover decision on the post-cutover writes has been made. The script auto-detects whichever
+Once those hold, run [`scripts/finalize.sh`](scripts/finalize.sh) **with `--confirm` plus the branch's own
+confirmation flag** — `--confirm-gap-reconciled` after a cutover, `--confirm-post-cutover-decision` after a rollback.
+They are separate flags because the two branches assert different facts, and a gate in front of an irreversible drop
+should not carry a name that is true on one branch and false on the other; each dry run names the one this estate needs,
+so its first appearance is never a surprise, and passing the other branch's flag is refused rather than accepted. They
+assert what no query can see: after a cutover, that `reconcile.sh` ran and returned `0` **on every shard** (its
+statements are shard-local, this DROP is `ON CLUSTER`); after a rollback, that the accept-or-recover decision on the
+post-cutover writes has been made. The script auto-detects whichever
 parked table is present
 (`traces_pre_cutover_backup` or `traces_post_rollback_backup`), never the live `traces`/`traces_local` or the working
 `traces_local_v2` shadow, and picks the action by case: after a **successful cutover** it **drops**
@@ -1972,7 +2006,7 @@ and a wrong verdict from a fidelity gate is the failure this whole procedure exi
   `--weeks-stride`, that an empty or inverted range is refused rather than passed vacuously, and that the `PASSED` line
   states the window it covered.
 
-`reconcile.sh` adds four of the same kind, and they decide whether the estate is reconciled rather than merely rejecting
+`reconcile.sh` adds five of the same kind, and they decide whether the estate is reconciled rather than merely rejecting
 an argument:
 
 - **direction detection** — forward on `traces_pre_cutover_backup`, reverse on a `traces_post_rollback_backup` that
@@ -1980,10 +2014,16 @@ an argument:
   post-swap `RENAME` not) with the completing `RENAME` printed;
 - **`--report-only`** issuing no mutation in either direction, and exiting non-zero when it finds a gap;
 - the **idempotent no-op**: a second run on a reconciled estate reads the postcondition, issues nothing and exits 0;
-- **failing loudly** rather than reporting progress when the gate is still non-zero after `--max-passes`.
+- **failing loudly** rather than reporting progress when the gate is still non-zero after `--max-passes`;
+- the **shard-scope guard**: a multi-shard estate refused without `--confirm-single-shard` (and refused outright in the
+  reverse direction, whose postcondition spans shards its replay cannot reach), an unreadable shard count failing
+  closed, and the `RECONCILED` line carrying its `SCOPE:` qualifier when the scope was asserted rather than proven.
+  Worth exercising by hand even on a single-shard estate — the consequence of getting it wrong is `finalize.sh`
+  dropping every shard's backup on a one-shard assertion.
 
-And `finalize.sh` adds one: refusing **both** branches without `--confirm-gap-reconciled`, with the right diagnosis for
-whichever backup is parked.
+And `finalize.sh` adds one: refusing each branch without ITS OWN confirmation flag — `--confirm-gap-reconciled` for
+the post-cutover drop, `--confirm-post-cutover-decision` for the post-rollback recycle — with the right diagnosis for
+whichever backup is parked, and refusing the other branch's flag rather than honoring it.
 
 Each rests on manual verification. Exercise them in the rehearsal alongside the driver guards, and treat a change to any
 of them as needing the same.
@@ -2045,11 +2085,17 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       **parallel traffic still flowing through the swap** — converging by stopping traffic tests an assumption this
       procedure does not make.
 - [ ] **Deletion test green** — `TracesLocalV2CutoverTest` passes; **0 deletion leaks** confirmed on staging.
-- [ ] **Reconciliation postcondition returned 0** — `reconcile.sh` ran immediately after the `EXCHANGE` and reported
-      `missing_keys=0 stale_keys=0 payload_mismatch_keys=0`. A non-zero `newer_keys` alongside those three zeros is
-      expected, not a failure. Rehearse it on the prod-clone in **both** directions and record the sweep timings. This
-      is the item that closes the tail write-gap; nothing else in this checklist does, and a weekly `verify.sh` compare
-      cannot — the gap rows sit in the cutover week, which every weekly bound excludes.
+- [ ] **Reconciliation postcondition returned 0, on every shard** — `reconcile.sh` ran immediately after the
+      `EXCHANGE` and reported `missing_keys=0 stale_keys=0 payload_mismatch_keys=0`. A non-zero `newer_keys` alongside
+      those three zeros is expected, not a failure. Rehearse it on the prod-clone in **both** directions and record the
+      sweep timings. This is the item that closes the tail write-gap; nothing else in this checklist does, and a weekly
+      `verify.sh` compare cannot — the gap rows sit in the cutover week, which every weekly bound excludes.
+      **Every statement it issues is shard-local while `finalize.sh` drops the backup `ON CLUSTER`**, so on more than one
+      shard this box needs a `RECONCILED` from each; the driver refuses a multi-shard run without `--confirm-single-shard`
+      and labels the verdict's scope when given it.
+      Also **record `leaked_delete_keys`**. It is not part of the gate — the reconciliation is complete either way — but
+      non-zero means captured deletes are still live on the successor (the client-timestamp residual in "The final
+      cutover window"), and those keys should be re-applied before the estate is called done.
 - [ ] **Final-delta→EXCHANGE gap kept short** — record the **whole** interval, not just the final replay's wall time:
       the replay's own `--time` output *plus* the elapsed-through-`EXCHANGE` figure `exchange_and_wrap.sh` prints in its
       tail summary, which itemises the settle-gate wait. This does **not** substitute for the item above: the gap cannot
