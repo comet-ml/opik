@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 import opik
-from opik import jsonable_encoder, context_storage
+from opik import jsonable_encoder, context_storage, opik_context
 from opik.api_objects import opik_client
 from opik.api_objects import span, trace
 from opik.integrations.langchain import (
@@ -663,6 +663,100 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
 
     assert len(fake_backend.trace_trees) == 1
     assert len(opik_tracer.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__astream__tracked_node__update_current_span_updates_langgraph_trace(
+    fake_backend,
+):
+    """A @track-ed node running under astream() must nest inside the LangGraph trace.
+
+    Regression test for https://github.com/comet-ml/opik/issues/3175: under async
+    LangGraph execution the OpikTracer callbacks ran in a copied context, so
+    @track saw an empty context stack, opened its own root trace, and any
+    opik_context.update_current_span(total_cost=...) written inside the node was
+    silently attributed to that second trace instead of the LangGraph one.
+    """
+
+    class State(TypedDict):
+        messages: Annotated[list, langgraph_message.add_messages]
+
+    def node_1(state: State) -> Dict[str, Any]:
+        return {"messages": [AIMessage(content="node_1")]}
+
+    @opik.track
+    def node_2(state: State) -> Dict[str, Any]:
+        opik_context.update_current_span(total_cost=100.0)
+        return {"messages": [AIMessage(content="node_2")]}
+
+    builder = StateGraph(State)
+    builder.add_node("node_1", node_1)
+    builder.add_node("node_2", node_2)
+    builder.add_edge(START, "node_1")
+    builder.add_edge("node_1", "node_2")
+    builder.add_edge("node_2", END)
+    graph = builder.compile()
+
+    opik_tracer = OpikTracer()
+
+    async for _chunk in graph.astream(
+        {"messages": [HumanMessage(content="start")]},
+        config={"callbacks": [opik_tracer]},
+        stream_mode="values",
+    ):
+        pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_1",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="node_2",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="node_2",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        total_cost=100.0,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    # The cost must not land on a second, spurious root trace.
+    assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 

@@ -93,6 +93,17 @@ class TrackRootRunResult(NamedTuple):
 class OpikTracer(BaseTracer):
     """Langchain Opik Tracer."""
 
+    # Opik keeps the current trace/span in ContextVars, so the callbacks that push
+    # them must run in the caller's context. LangChain only does that for handlers
+    # that opt in: `_ahandle_event_for_handler` dispatches a non-inline sync handler
+    # to a thread executor via `copy_context().run(...)`, and every ContextVar write
+    # dies with that copy. Without this flag a @track-ed function inside an async
+    # LangGraph node found an empty context, opened its own root trace, and silently
+    # mis-attributed everything written to it (e.g. update_current_span(total_cost=...)).
+    # LangChain's own LangChainTracer sets this for the same reason.
+    # See https://github.com/comet-ml/opik/issues/3175
+    run_inline = True
+
     def __init__(
         self,
         tags: Optional[List[str]] = None,
