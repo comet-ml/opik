@@ -425,7 +425,7 @@ assert_replication_settled() {
         read -r queue age tries failures mutations mut_age mut_failed <<<"$row"
 
         if (( queue == 0 && mutations == 0 )); then
-            echo "Replication settled across cluster '$cluster': queue drained, deletion-replay mutation done on every replica."
+            echo "Replication settled across cluster '$cluster': queue drained, no unfinished mutations on the shadow."
             return 0
         fi
         (( poll < polls && SECONDS < deadline )) || break
@@ -461,8 +461,8 @@ assert_replication_settled() {
     # "Not stuck" rather than "moving": this is a snapshot predicate over the last sample read, and no path here
     # compares consecutive samples. Polling only gives the queue time to drain (the queue == 0 exit above) or a stuck
     # entry time to age past the thresholds, so a shorter --settle-timeout is a weaker gate by exactly that much.
-    echo "Replication settled enough across cluster '$cluster': the deletion-replay mutation is done on every replica and"
-    echo "no queue entry is stuck — $queue entries, oldest ${age}s, max num_tries=$tries, none with a last_exception."
+    echo "Replication settled enough across cluster '$cluster': no unfinished mutations on the shadow, and no queue"
+    echo "entry is stuck — $queue entries, oldest ${age}s, max num_tries=$tries, none with a last_exception."
     echo "That is ordinary ingest churn on a live table."
 }
 

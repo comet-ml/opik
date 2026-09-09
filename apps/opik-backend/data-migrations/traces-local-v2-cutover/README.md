@@ -1742,8 +1742,9 @@ number — so it needs the rehearsal too, under **live ingestion**, in both dire
   numbers printed);
 - it **does** abort on a genuinely lagging replica, naming the offending entries — stop or throttle a replica, or hold
   a mutation, and confirm the gate fails loudly rather than passing;
-- the deletion-replay mutation is judged unconditionally: an unfinished mutation fails the gate however quiet the queue
-  is, and `--settle-timeout` bounds how long it waits to find out.
+- unfinished mutations on the shadow are judged unconditionally: one fails the gate however quiet the queue is, and
+  `--settle-timeout` bounds how long it waits to find out. Hold a mutation deliberately to see it — but note the gate
+  samples before the final deletion replay is issued, so that replay is not what this rehearses.
 
 The **argument guards** fail fast, before touching ClickHouse, so they are cheap to exercise by hand after any change
 here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-maintenance`, and `--settle-timeout` must
@@ -1827,10 +1828,12 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       `rollback.sh` (stages B/C) enforce `--confirm-retention-paused`, but that is an assertion — this item is the real
       "it is actually paused on every backend" verification.
 - [ ] **Reconciliation clean** — per-window source/dest counts within 0.01% across the whole backfill.
-- [ ] **Replication settled before the EXCHANGE** — the deletion-replay mutation `is_done` on **all** replicas, and the
+- [ ] **Replication settled before the EXCHANGE** — no unfinished mutation on the shadow on **any** replica, and the
       replication queue either drained or demonstrably just busy rather than stuck (`exchange_and_wrap.sh` gates on
       this — see ["The replication-settle gate"](#the-replication-settle-gate); do **not** `--force` past it in
-      production, and confirm on staging under live ingest that it does not abort on ordinary churn).
+      production, and confirm on staging under live ingest that it does not abort on ordinary churn). The **final**
+      deletion replay is not covered by this gate, which samples before that statement is issued; what covers it is
+      `lightweight_deletes_sync = 2` in its own block, asserted by the driver.
 - [ ] **`traceColumnsNonNullable = true` rolled out to every backend instance before the EXCHANGE** — confirmed live on
       the whole fleet by a **positive** check, not by the absence of ingestion errors: write an in-progress trace (no
       `end_time`, and so no `ttft`) through the API and assert the epoch/NaN **sentinel** was stored for both — then
