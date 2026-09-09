@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pythonLanguage } from "@codemirror/lang-python";
+import omit from "lodash/omit";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -17,7 +18,6 @@ import { getProviderFromModel } from "@/lib/provider";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { OPTIMIZATION_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
-import omit from "lodash/omit";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
