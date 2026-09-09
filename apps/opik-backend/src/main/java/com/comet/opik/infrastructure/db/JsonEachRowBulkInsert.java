@@ -15,7 +15,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -48,8 +47,8 @@ import java.util.function.Function;
  * which matters because trace {@code input}/{@code output} can be hundreds of KiB each, and a
  * 1000-row batch of those would otherwise be held in full (twice over, converting chars to UTF-8)
  * per concurrent request. Rows are built with Jackson, not string concatenation: the payload carries
- * user-supplied trace content, so escaping has to be correct by construction, and failures are
- * logged as a bounded summary rather than a full message or stack.
+ * user-supplied trace content, so escaping has to be correct by construction. A failure logs the
+ * table, the row count and the exception as its cause — never the rows.
  *
  * <p>The client is the shared Dropwizard-managed singleton from
  * {@link DatabaseAnalyticsModule#getClickHouseClient()}; this class never closes it.
@@ -162,11 +161,13 @@ public class JsonEachRowBulkInsert {
         })
                 // The v2 client call is blocking; keep it off the reactive event loop.
                 .subscribeOn(Schedulers.boundedElastic())
-                // Bounded on purpose. A ClickHouse parse error quotes the offending value, and the
-                // payload is customer trace content, so neither the stack nor the full message is
-                // safe to emit here: log the type and an abbreviated message, never the rows.
-                .doOnError(err -> log.error("Failed JSONEachRow insert into '{}': rows='{}', error='{} {}'",
-                        table, items.size(), err.getClass().getSimpleName(),
-                        StringUtils.abbreviate(err.getMessage(), 200)));
+                // The throwable is passed as the cause, not formatted into the message: a failed bulk
+                // insert is diagnosable only from the stack and the cause chain, which say whether it
+                // was serialization, a connection reset or a server-side rejection. Only the table and
+                // the row COUNT are logged alongside it — never the rows themselves. Note a ClickHouse
+                // parse error quotes the offending value in its own message, so this log can carry a
+                // fragment of customer content by way of the exception.
+                .doOnError(err -> log.error("Failed JSONEachRow insert into '{}': rows='{}'",
+                        table, items.size(), err));
     }
 }
