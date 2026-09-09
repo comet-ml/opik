@@ -288,6 +288,51 @@ export interface AutomationRuleDetail {
   type: string;
 }
 
+/** Fields every user-defined-metric-python rule carries, whatever it scores. */
+interface PythonRuleCommon {
+  projectId: string;
+  name: string;
+  /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+  samplingRate: number;
+  /** Python source for the metric class. */
+  metric: string;
+  triggerScope?: 'production' | 'experiment' | 'both';
+  enabled?: boolean;
+}
+
+/**
+ * Arguments for `createAutomationRule`, split by what the rule scores — because
+ * the scopes do not take the same `code`.
+ *
+ * Trace and span rules map named `score()` parameters onto extraction paths, so
+ * `arguments` is mandatory: the backend refuses to call the evaluator with an
+ * empty argument map. A thread rule has no argument map at all — the engine
+ * hands the metric the whole conversation as `score()`'s first positional
+ * argument — so `arguments` is not merely optional there, it is meaningless, and
+ * a union says that where an optional field would only imply it.
+ */
+export type CreatePythonRuleArgs =
+  | (PythonRuleCommon & {
+      /**
+       * Which entity the rule scores. Defaults to the trace-scope evaluator.
+       * `span_user_defined_metric_python` is the same metric contract applied to
+       * spans — and, because scope decides the Redis stream, the only way to
+       * assert on span-scope online scoring at all.
+       */
+      type?: 'user_defined_metric_python' | 'span_user_defined_metric_python';
+      /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
+      arguments: Record<string, string>;
+    })
+  | (PythonRuleCommon & {
+      /**
+       * Thread scope: scored once per thread when the thread is CLOSED, off its
+       * own Redis stream. Nothing scores while a thread is still open, so a spec
+       * using this must close the thread itself rather than wait.
+       */
+      type: 'trace_thread_user_defined_metric_python';
+      arguments?: never;
+    });
+
 /**
  * The score types an `llm_as_judge` output schema entry may declare, as
  * `LlmAsJudgeOutputSchemaType` enumerates them. A union rather than `string`
@@ -2042,25 +2087,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * project's rules by name: a name lookup would silently pick up a rule left
      * behind by an earlier run under the same namespace.
      */
-    async createAutomationRule(args: {
-      projectId: string;
-      name: string;
-      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
-      samplingRate: number;
-      /** Python source for the metric class. */
-      metric: string;
-      /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
-      arguments: Record<string, string>;
-      /**
-       * Which entity the rule scores. Defaults to the trace-scope evaluator.
-       * `span_user_defined_metric_python` is the same metric contract applied to
-       * spans — and, because scope decides the Redis stream, the only way to
-       * assert on span-scope online scoring at all.
-       */
-      type?: 'user_defined_metric_python' | 'span_user_defined_metric_python';
-      triggerScope?: 'production' | 'experiment' | 'both';
-      enabled?: boolean;
-    }): Promise<string> {
+    async createAutomationRule(args: CreatePythonRuleArgs): Promise<string> {
+      // The thread-scope shape is not the trace/span one with a different
+      // discriminator: `TraceThreadUserDefinedMetricPythonCode` carries `metric`
+      // and nothing else, because a thread metric is handed the whole
+      // conversation positionally instead of an argument map. The write model
+      // ignores unknown properties, so sending `arguments` anyway would be
+      // accepted and silently dropped — which reads, from the spec, exactly like
+      // a mapping that worked.
+      const isThreadScope = args.type === 'trace_thread_user_defined_metric_python';
       const { status, message, location } = await rawFetch(
         'POST',
         '/v1/private/automations/evaluators/',
@@ -2073,7 +2108,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
-            code: { metric: args.metric, arguments: args.arguments },
+            code: isThreadScope
+              ? { metric: args.metric }
+              : { metric: args.metric, arguments: args.arguments },
           },
         },
       );
@@ -2556,6 +2593,27 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Close threads through ONE `PUT /v1/private/traces/threads/close`.
+     *
+     * `threadIds` (plural) deliberately, even for a single id: the endpoint
+     * accepts either, but the batch form is a different code path — one close
+     * makes the publisher's grouped pass read every thread's persisted sampling
+     * decision in a single sweep and fan the sampled ones out to one scoring
+     * stream entry EACH (#8162; before it, one entry carried the whole list). A
+     * spec that closed n threads in n calls would drive n separate one-thread
+     * sweeps and prove nothing about the grouped one.
+     *
+     * Closing is not incidental for thread-scope online scoring, it is the
+     * trigger: an open thread is never scored.
+     */
+    async closeThreads(args: { projectName: string; threadIds: string[] }): Promise<void> {
+      await opik.api.traces.closeTraceThread({
+        projectName: args.projectName,
+        threadIds: args.threadIds,
+      });
+    },
+
+    /**
      * `GET /v1/private/traces/threads/stats` under the same filters — the
      * numbers the Threads view's count card shows, flattened to name -> value.
      *
@@ -2632,6 +2690,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       input?: TraceJsonSection;
       output?: TraceJsonSection;
       metadata?: Record<string, unknown>;
+      /**
+       * Groups this trace into a conversation. Threads are not created directly:
+       * the backend materialises a thread model from the traces that share a
+       * `thread_id`, which is also when it decides which thread-scope rules
+       * sample it — so a rule has to exist before the first trace is written.
+       */
+      threadId?: string;
       startTime?: Date;
       /**
        * Set this to make the trace eligible for online scoring.
@@ -2646,6 +2711,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         project_name: args.projectName,
         name: args.name,
         source: args.source,
+        ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
         ...(args.input === undefined ? {} : { input: args.input }),

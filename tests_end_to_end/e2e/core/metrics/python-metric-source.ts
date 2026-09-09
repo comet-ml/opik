@@ -54,6 +54,58 @@ ${params}
 }
 
 /**
+ * A thread-scope metric: a constant score for any conversation, except one that
+ * carries `poisonMarker` anywhere in it, which raises instead.
+ *
+ * Two choices here are load-bearing and both are easy to get wrong.
+ *
+ * **Plain `BaseMetric`, not `ConversationThreadMetric`.** For a `trace_thread`
+ * payload the runner calls `metric.score(data)` with the whole conversation as
+ * the first POSITIONAL argument, so the thread contract is a signature, not a
+ * base class. Subclassing `ConversationThreadMetric` would import a submodule
+ * the sandbox runner does not stub, which makes it drop its lightweight
+ * `BaseMetric` and load the real `opik` package — after which the user class no
+ * longer subclasses the `BaseMetric` the runner is still holding, and
+ * `get_metric_class` reports "no BaseMetric subclass" rather than scoring.
+ * Importing it also risks shadowing this class, per the header note above.
+ *
+ * **The marker is matched over the serialized conversation**, not over a
+ * hand-walked `message["content"]`. The engine sends `{role, content}` for a
+ * plain thread and nests a whole span tree under the assistant entries when it
+ * enriches one, so a metric that indexed into a fixed shape would stop raising —
+ * silently — the day a thread got big enough to change shape.
+ *
+ * The raise is a plain `ValueError`: what the spec asserts is that the failure
+ * is confined to its own thread, not how the evaluator classifies it.
+ */
+export function buildThreadScoreMetric(
+  scoreName: string,
+  scoreValue: number,
+  poisonMarker: string,
+): string {
+  return `import json
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+SCORE_VALUE = ${JSON.stringify(scoreValue)}
+POISON_MARKER = ${JSON.stringify(poisonMarker)}
+
+class ThreadConstantScore(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(
+        self,
+        conversation: Any = None,
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        if POISON_MARKER in json.dumps(conversation, default=str):
+            raise ValueError("refusing to score a conversation carrying " + POISON_MARKER)
+        return score_result.ScoreResult(value=SCORE_VALUE, name=self.name)`;
+}
+
+/**
  * A metric that exits 0 without ever printing its result line.
  *
  * `os._exit` is deliberate: it ends the interpreter immediately, so the runner's
