@@ -4,6 +4,7 @@ import {
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   getThinkingLevelOptions,
+  resolveEffort,
   resolveSamplingParams,
   sanitizeConfigForRequest,
   supportsGeminiThinkingLevel,
@@ -522,11 +523,13 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBeUndefined();
   });
 
-  it("strips an unsupported reasoningEffort value (xhigh on gpt-5.1)", () => {
+  it("replaces an unsupported reasoningEffort value (xhigh on gpt-5.1)", () => {
+    // Dropping it left the dropdown showing "High (Default)" while the provider applied its own
+    // default. gpt-5.1 offers high, so that is what the panel shows and what the request carries.
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_1, {
       reasoningEffort: "xhigh",
     });
-    expect(result.reasoningEffort).toBeUndefined();
+    expect(result.reasoningEffort).toBe("high");
   });
 
   it("keeps a valid reasoningEffort value for the model", () => {
@@ -543,14 +546,17 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBe("xhigh");
   });
 
-  it("does not touch reasoningEffort for non-OpenAI providers", () => {
+  it("drops an OpenAI-only reasoningEffort from an Anthropic request", () => {
+    // Anthropic takes thinkingEffort, not reasoning_effort. Only a config left over from before a
+    // provider change carries one, and passing it on would be junk on the wire.
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
       {
         reasoningEffort: "high",
       },
     );
-    expect(result.reasoningEffort).toBe("high");
+    expect(result.reasoningEffort).toBeUndefined();
+    expect(result.thinkingEffort).toBe("high");
   });
 
   it("strips both sampling params for OpenAI reasoning models", () => {
@@ -1269,5 +1275,105 @@ describe("the settings panel and the request agree on sampling params", () => {
     ).toBe(
       resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_4O_MINI, configs).topP,
     );
+  });
+});
+
+describe("resolveEffort", () => {
+  it("omits reasoningEffort for an OpenAI model with no effort options", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_4O, { reasoningEffort: "high" }),
+    ).toEqual({});
+  });
+
+  it("keeps a stored reasoningEffort the model offers", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_5, { reasoningEffort: "minimal" }),
+    ).toEqual({ reasoningEffort: "minimal" });
+  });
+
+  it("falls back to high for a reasoningEffort the model does not offer", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_1, { reasoningEffort: "xhigh" }),
+    ).toEqual({ reasoningEffort: "high" });
+  });
+
+  it("falls back to high when a supporting model has nothing stored", () => {
+    // What the dropdown has always displayed. Leaving it unresolved is how the panel came to show
+    // "High (Default)" while the request carried no reasoning_effort at all.
+    expect(resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_5, {})).toEqual({
+      reasoningEffort: "high",
+    });
+  });
+
+  it("omits thinkingEffort for an Anthropic model with no effort options", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, {
+        thinkingEffort: "high",
+      }),
+    ).toEqual({});
+  });
+
+  it("keeps a stored thinkingEffort the model offers", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: "xhigh",
+      }),
+    ).toEqual({ thinkingEffort: "xhigh" });
+  });
+
+  it("falls back to high for a thinkingEffort the model does not offer", () => {
+    // Sonnet 5 offers low/medium/high/xhigh/max — "adaptive" is a 4.6-era value.
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: "adaptive",
+      }),
+    ).toEqual({ thinkingEffort: "high" });
+  });
+
+  it("passes other providers' values through untouched", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, {
+        reasoningEffort: "low",
+        thinkingEffort: "max",
+      }),
+    ).toEqual({ reasoningEffort: "low", thinkingEffort: "max" });
+  });
+});
+
+describe("the settings panel and the request agree on effort", () => {
+  it("sends the reasoning effort the dropdown displays after switching into a reasoning model", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_5_5,
+        onReasoning as unknown as Record<string, unknown>,
+      ).reasoningEffort,
+    ).toBe(
+      resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_5, onReasoning ?? {})
+        .reasoningEffort,
+    );
+  });
+
+  it("replaces an Anthropic thinkingEffort the model does not offer", () => {
+    // updateProviderConfig coerces this on a model change, but a stored prompt whose model is still
+    // valid is never reconciled, so the wire needs its own answer.
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: "adaptive",
+        maxCompletionTokens: 4000,
+      }).thinkingEffort,
+    ).toBe("high");
   });
 });
