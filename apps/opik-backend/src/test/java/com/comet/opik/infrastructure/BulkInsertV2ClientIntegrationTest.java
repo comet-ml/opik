@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -382,5 +383,97 @@ class BulkInsertV2ClientIntegrationTest {
                         .formatted(WORKSPACE_ID, ids),
                 row -> row.get("row_count", Long.class));
         assertThat(stampedRows).isEqualTo(items.size());
+    }
+
+    // --------------------------------------------------------------- feedback scores ---
+    // FeedbackScoreService#getAuthor takes the author from the request context, so anything arriving
+    // over HTTP has one and lands in authored_feedback_scores -- the 10-column form of the row. The
+    // author-less feedback_scores form is only reachable from a context with no USER_NAME.
+
+    private FeedbackScoreBatchItem newScore(UUID traceId, String projectName, String name) {
+        return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                .id(traceId)
+                .projectName(projectName)
+                .name(name)
+                // Not "suite_assertion": that category routes to assertion_results instead
+                // (ScoreDestination#fromCategoryName) and never reaches this write path.
+                .categoryName("quality")
+                .sourceQueueId(null)
+                .build();
+    }
+
+    @Test
+    @DisplayName("feedback scores round-trip their decimal value, reason, author and source queue id")
+    void feedbackScoresRoundTrip() {
+        // Decimal(18, 9) at full scale, written as a quoted plain string; and a reason carrying a
+        // newline and quotes, which would end the JSONEachRow line early if it were not escaped.
+        var trace = newTraceBuilder().build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        var value = new BigDecimal("0.123456789");
+        var reason = "line one\nline \"two\"\ttabbed 日本語";
+        // A podam-generated trace id, which is a valid UUIDv7 -- ingestion rejects anything else.
+        var sourceQueueId = factory.manufacturePojo(Trace.class).id();
+        var score = newScore(trace.id(), trace.projectName(), "relevance").toBuilder()
+                .value(value)
+                .reason(reason)
+                .sourceQueueId(sourceQueueId)
+                .build();
+
+        traceResourceClient.feedbackScores(List.of(score), API_KEY, WORKSPACE_NAME);
+
+        var actual = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY);
+        assertThat(actual.feedbackScores()).hasSize(1);
+        var stored = actual.feedbackScores().getFirst();
+        assertThat(stored.name()).isEqualTo("relevance");
+        assertThat(stored.value()).isEqualByComparingTo(value);
+        assertThat(stored.categoryName()).isEqualTo("quality");
+        assertThat(stored.reason()).isEqualTo(reason);
+        assertThat(stored.source()).isEqualTo(score.source());
+        // The author and source_queue_id cells only surface through value_by_author. source_queue_id is
+        // a FixedString(36) with no DEFAULT: the other test covers the absent case, written as "" and
+        // read back as null, and this is the populated one.
+        assertThat(stored.valueByAuthor()).hasSize(1);
+        var entry = stored.valueByAuthor().values().iterator().next();
+        assertThat(entry.author()).isEqualTo(USER);
+        assertThat(entry.sourceQueueId()).isEqualTo(sourceQueueId.toString());
+    }
+
+    @Test
+    @DisplayName("a feedback score batch writes each row once and server-stamps created_at and last_updated_at")
+    void feedbackScoreBatchWritesEachRowOnceAndServerStampsTimestamps() {
+        var trace = newTraceBuilder().build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        // Distinct names, so each is its own row under the table's ORDER BY key rather than a dedup
+        // candidate.
+        var scores = List.of(
+                newScore(trace.id(), trace.projectName(), "relevance"),
+                newScore(trace.id(), trace.projectName(), "coherence"),
+                newScore(trace.id(), trace.projectName(), "fluency"));
+
+        traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+        // Raw rows, no FINAL: reads collapse duplicates, so cardinality is the only assertion that sees
+        // a writer emitting every row twice.
+        Long storedRows = queryOne(
+                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s'").formatted(WORKSPACE_ID, trace.id()),
+                row -> row.get("row_count", Long.class));
+        assertThat(storedRows).isEqualTo(scores.size());
+
+        // Both timestamps are omitted from the JSON row so their DEFAULT now64(9) stamps them.
+        // last_updated_at is the ReplacingMergeTree version, so a zero there would make every later
+        // score for the same key lose to the original row.
+        Long stampedRows = queryOne(
+                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s' AND created_at > toDateTime64('2000-01-01 00:00:00', 9) "
+                        + "AND last_updated_at > toDateTime64('2000-01-01 00:00:00', 9)")
+                        .formatted(WORKSPACE_ID, trace.id()),
+                row -> row.get("row_count", Long.class));
+        assertThat(stampedRows).isEqualTo(scores.size());
+
+        assertThat(traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY).feedbackScores())
+                .hasSize(scores.size());
     }
 }
