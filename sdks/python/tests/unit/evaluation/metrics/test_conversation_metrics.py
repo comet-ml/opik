@@ -62,15 +62,8 @@ def test_conversation_degeneration_low_repetition():
     ids=["KnowledgeRetentionMetric", "ConversationDegenerationMetric"],
 )
 def test_conversation_thread_metric_ascore_delegates_to_score(metric):
-    """Regression test for the `ConversationThreadMetric.ascore` bug fixed
-    in issue #8175: subclasses that don't override `ascore` themselves used
-    to have every `ascore()` call raise `NotImplementedError` regardless of
-    input, because the base class hard-raised instead of delegating to
-    `self.score(...)`. Neither `KnowledgeRetentionMetric` nor
-    `ConversationDegenerationMetric` overrides `ascore`, so both exercise
-    the base-class delegation directly. This asserts the async call
-    actually returns the same result as the sync call for the same input,
-    not just that it avoids raising.
+    """ascore() returns the same result as score() for the given
+    conversation.
     """
     conversation = [
         {"role": "user", "content": "Hi"},
