@@ -187,19 +187,26 @@ class DashboardServiceImpl implements DashboardService {
                 .map(filterQueryBuilder::toStateSQLMapping)
                 .orElse(Map.of());
 
+        // Insights views only started recording a project with OPIK-8322. Every view created before that
+        // has a null project_id, and nothing records which project made it. Listing those rows in every
+        // project keeps them reachable. Workspace dashboards are project-less by design, so the project
+        // list for that scope stays strict.
+        boolean includeUnassignedProject = scope == DashboardScope.INSIGHTS;
+
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
             String nameTerm = StringUtils.isNotBlank(name) ? name.trim() : null;
             int offset = (page - 1) * size;
 
-            long total = dao.findCount(workspaceId, nameTerm, projectId, scope.getValue(), filtersSql, filterMapping);
+            long total = dao.findCount(workspaceId, nameTerm, projectId, includeUnassignedProject, scope.getValue(),
+                    filtersSql, filterMapping);
 
             // Two-step fetch (OPIK-6482): order and paginate on id only, then load the page bodies and
             // re-order them in memory. This keeps the large JSON `config` column out of every sort
             // buffer, which otherwise triggers ER_OUT_OF_SORTMEMORY on the filesort.
-            List<UUID> pageIds = dao.findPageIdsSorted(workspaceId, nameTerm, projectId, scope.getValue(),
-                    filtersSql, filterMapping, sortingFieldsSql, size, offset);
+            List<UUID> pageIds = dao.findPageIdsSorted(workspaceId, nameTerm, projectId, includeUnassignedProject,
+                    scope.getValue(), filtersSql, filterMapping, sortingFieldsSql, size, offset);
 
             List<Dashboard> dashboards;
             if (pageIds.isEmpty()) {

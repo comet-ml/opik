@@ -55,7 +55,7 @@ const ProjectDashboardsContent: React.FunctionComponent<
   } = usePermissions();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
-    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
+    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}-${projectId}`,
     queryKey: DASHBOARD_QUERY_PARAM_KEY,
     defaultValue: null as string | null,
     queryParamConfig: StringParam,

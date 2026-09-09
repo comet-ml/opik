@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
@@ -14,8 +15,10 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
 import com.comet.opik.api.resources.utils.resources.InsightsViewResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -32,6 +35,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Set;
 import java.util.UUID;
@@ -83,9 +87,12 @@ class InsightsViewsResourceTest {
         APP = newTestDropwizardAppExtension(contextConfig);
     }
 
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
     private String baseURI;
     private InsightsViewResourceClient insightsViewClient;
     private DashboardResourceClient dashboardResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client) {
@@ -95,6 +102,7 @@ class InsightsViewsResourceTest {
 
         this.insightsViewClient = new InsightsViewResourceClient(client, baseURI);
         this.dashboardResourceClient = new DashboardResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID);
     }
@@ -191,6 +199,35 @@ class InsightsViewsResourceTest {
             assertThat(page.total()).isEqualTo(2);
             assertThat(page.content()).hasSize(2);
             page.content().forEach(d -> assertThat(d.scope()).isEqualTo(DashboardScope.INSIGHTS));
+        }
+
+        @Test
+        @DisplayName("Find insights views by project excludes other projects and keeps unassigned views")
+        void findInsightsViewsByProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            var projectViewId = insightsViewClient.create(
+                    insightsViewClient.createPartialInsightsView().projectId(projectId).build(), apiKey, workspaceName);
+            insightsViewClient.create(
+                    insightsViewClient.createPartialInsightsView().projectId(otherProjectId).build(), apiKey,
+                    workspaceName);
+
+            // Views created before OPIK-8322 have no project and stay visible in every project
+            var unassignedViewId = insightsViewClient.create(apiKey, workspaceName);
+
+            var page = insightsViewClient.find(apiKey, workspaceName, 1, 10, null, projectId, null, null,
+                    HttpStatus.SC_OK);
+
+            assertThat(page.total()).isEqualTo(2);
+            assertThat(page.content()).extracting(Dashboard::id)
+                    .containsExactlyInAnyOrder(projectViewId, unassignedViewId);
         }
     }
 
