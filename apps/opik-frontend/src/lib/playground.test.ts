@@ -104,6 +104,31 @@ describe("restoreMissingConfigKeys", () => {
     expect(restoreMissingConfigKeys(complete)).toBe(complete);
   });
 
+  it("does not throw on a prompt persisted without a config", () => {
+    // It runs over every persisted prompt during store hydration, so a throw here costs the whole
+    // playground state, not one prompt.
+    const restored = restoreMissingConfigKeys({
+      name: "p",
+      id: "p1",
+      messages: [],
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+    } as unknown as PlaygroundPromptType);
+
+    expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
+  });
+
+  it("treats a null value as missing", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        temperature: 0.4,
+        topP: null,
+      }),
+    );
+
+    expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
+  });
+
   it("leaves a prompt with no provider alone", () => {
     const noProvider = {
       name: "p",

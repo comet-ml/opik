@@ -67,12 +67,17 @@ export const restoreMissingConfigKeys = (
 
   const exclusiveSamplingPair =
     parseComposedProviderType(prompt.provider) === PROVIDER_TYPE.ANTHROPIC;
-  const configs = prompt.configs as unknown as Record<string, unknown>;
+  // A prompt persisted without a config at all has to survive this: it runs over every stored
+  // prompt during hydration, so throwing here would cost the whole playground state.
+  const stored = prompt.configs as Record<string, unknown> | undefined | null;
+  const configs = stored ?? {};
   const restored: Record<string, unknown> = { ...configs };
-  let changed = false;
+  let changed = stored == null;
 
   for (const [key, value] of Object.entries(defaults)) {
-    if (value === undefined || configs[key] !== undefined) {
+    // A stored null is as absent as a missing key, and a default that is itself nullish (Custom's
+    // custom_parameters) has nothing to restore.
+    if (value == null || configs[key] != null) {
       continue;
     }
     if (exclusiveSamplingPair && (key === "temperature" || key === "topP")) {

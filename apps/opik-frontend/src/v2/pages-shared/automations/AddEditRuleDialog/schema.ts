@@ -580,12 +580,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // keeps a temperature the user set on another model, and the providers that take none reject it at
   // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
   // a rule that never had a temperature does not gain the resolver's default.
-  const { temperature: modelTakesTemperature } = resolveSamplingParams(
+  const { temperature: resolvedTemperature } = resolveSamplingParams(
     data.model as PROVIDER_MODEL_TYPE,
     data.config,
   );
 
-  if (temperature != null && modelTakesTemperature != null) {
+  if (temperature != null && resolvedTemperature != null) {
     model.temperature = temperature;
   }
 

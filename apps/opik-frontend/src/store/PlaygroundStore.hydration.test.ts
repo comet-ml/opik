@@ -54,6 +54,26 @@ describe("PLAYGROUND_STATE hydration", () => {
     expect(configs.temperature).toBe(0.4);
   });
 
+  it("hydrates a prompt stored without a config instead of failing the whole state", async () => {
+    seed({
+      promptIds: ["p1"],
+      promptMap: {
+        p1: {
+          name: "Prompt 1",
+          id: "p1",
+          messages: [],
+          model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+          provider: PROVIDER_TYPE.OPEN_AI,
+        },
+      },
+    });
+
+    const configs = (await loadPromptMap()).p1.configs as LLMOpenAIConfigsType;
+
+    expect(configs.topP).toBe(1);
+    expect(configs.maxCompletionTokens).toBe(4000);
+  });
+
   it("never overwrites a value the user chose", async () => {
     seed({
       promptIds: ["p1"],
