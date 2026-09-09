@@ -7,7 +7,8 @@ run-name: "SDK Lib Cerebras Tests ${{ github.ref_name }} by @${{ github.actor }}
 permissions:
   contents: read
 env:
-  CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+  # No CEREBRAS_API_KEY: these tests mock the transport and never reach the API,
+  # so the secret would be exposed to PR-controlled code for nothing.
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
 on:
