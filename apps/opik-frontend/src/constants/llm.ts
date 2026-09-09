@@ -950,14 +950,14 @@ export const LLM_PROMPT_TEMPLATES: Record<
 
 export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
   metric:
-    "from typing import Any\n" +
+    "from typing import Any, Optional\n" +
     "from opik.evaluation.metrics import base_metric, score_result\n" +
     "\n" +
     "class MyCustomMetric(base_metric.BaseMetric):\n" +
     '    def __init__(self, name: str = "my_custom_metric"):\n' +
     "        self.name = name\n" +
     "\n" +
-    "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
+    "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
     "        # Add you logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
@@ -1004,14 +1004,14 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
 
 export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
   metric:
-    "from typing import Any\n" +
+    "from typing import Any, Optional\n" +
     "from opik.evaluation.metrics import base_metric, score_result\n" +
     "\n" +
     "class MyCustomMetric(base_metric.BaseMetric):\n" +
     '    def __init__(self, name: str = "my_custom_metric"):\n' +
     "        self.name = name\n" +
     "\n" +
-    "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
+    "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
     "        # Add you logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +

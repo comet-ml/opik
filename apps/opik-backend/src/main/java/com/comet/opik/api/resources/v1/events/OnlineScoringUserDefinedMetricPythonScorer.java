@@ -23,7 +23,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -115,10 +114,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         return OnlineScoringEngine.logAndPrepareEvaluatorInput(
                 userFacingLogger, log, mdc, "traceId", trace.id(), message.ruleName(),
                 () -> {
-                    if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
-                        return OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
-                    }
-                    return new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
+                    var arguments = message.code().arguments();
+                    var replacements = arguments.containsKey(SPANS_ARGUMENT_KEY)
+                            ? OnlineScoringEngine.toReplacements(arguments, trace, spans)
+                            : OnlineScoringEngine.toReplacements(arguments, trace);
+                    return OnlineScoringEngine.bindDeclaredArguments(arguments, replacements);
                 });
     }
 
