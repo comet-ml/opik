@@ -599,6 +599,8 @@ openrouter:
   - id: "deepseek/deepseek-v4-flash-vision-exp"
     label: "deepseek/deepseek-v4-flash-vision-exp"
     structuredOutput: true
+  - id: "deepseek/deepseek-v4-flash-vision-exp:batch"
+    label: "deepseek/deepseek-v4-flash-vision-exp:batch"
   - id: "deepseek/deepseek-v4-flash:free"
     label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
@@ -772,6 +774,8 @@ openrouter:
   - id: "inception/mercury-2"
     label: "inception/mercury-2"
     structuredOutput: true
+  - id: "inception/mercury-2.5"
+    label: "inception/mercury-2.5"
   - id: "inception/mercury-2.5-preview"
     label: "inception/mercury-2.5-preview"
   - id: "inception/mercury-coder"
@@ -1124,6 +1128,10 @@ openrouter:
     label: "nex-agi/nex-n2-pro"
   - id: "nex-agi/nex-n2-pro:free"
     label: "nex-agi/nex-n2-pro:free"
+  - id: "nex-agi/nex-n2.5-mini:free"
+    label: "nex-agi/nex-n2.5-mini:free"
+  - id: "nex-agi/nex-n2.5-pro:free"
+    label: "nex-agi/nex-n2.5-pro:free"
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
     label: "nousresearch/deephermes-3-mistral-24b-preview"
   - id: "nousresearch/hermes-2-pro-llama-3-8b"
@@ -1922,6 +1930,8 @@ openrouter:
     structuredOutput: true
   - id: "z-ai/glm-5.3-flash:batch"
     label: "z-ai/glm-5.3-flash:batch"
+  - id: "z-ai/glm-5.3:batch"
+    label: "z-ai/glm-5.3:batch"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
     structuredOutput: true
