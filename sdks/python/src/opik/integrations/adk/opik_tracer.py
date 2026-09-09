@@ -328,6 +328,7 @@ class OpikTracer:
             model = None
             usage = None
             output = None
+            total_cost = None
 
             # Resolve the LLM span created in before_model_callback up front, so
             # the ``finally`` can clean up its TTFT and pending-registry entries
@@ -438,6 +439,9 @@ class OpikTracer:
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                # Before the usage parsing below, which can raise - the cost must not
+                # be lost to a usage problem it has nothing to do with.
+                total_cost = llm_response_wrapper.pop_response_cost(output)
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
                     output, current_span.provider
                 )
@@ -476,6 +480,7 @@ class OpikTracer:
                 type="llm",
                 model=model,
                 usage=usage,
+                total_cost=total_cost,
                 metadata=current_span.metadata,
                 project_name=self.project_name,
             )
