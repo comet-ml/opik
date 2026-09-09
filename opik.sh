@@ -405,13 +405,20 @@ start_missing_containers() {
   cmd=$(get_docker_compose_cmd)
 
   local startup_timeout="${OPIK_STARTUP_TIMEOUT:-300}"
-  # Bounded on both ends: an out-of-range value is rejected by compose only once it parses the flag,
-  # which would be after the stack had already been started below. The digit-count check keeps an
-  # absurdly long value from overflowing the arithmetic comparison that follows it.
-  if ! [[ "$startup_timeout" =~ ^[0-9]{1,7}$ ]] || (( startup_timeout > STARTUP_TIMEOUT_MAX )); then
-    echo "❌ OPIK_STARTUP_TIMEOUT must be an integer between 0 and ${STARTUP_TIMEOUT_MAX} seconds, got '$startup_timeout'"
+  # Range-checked here because compose only rejects an out-of-range --wait-timeout once it parses
+  # the flag, which is after the stack would already have been started below. The digit-count bound
+  # keeps an absurdly long value out of the arithmetic comparison, and `10#` forces base 10 so a
+  # zero-padded value is neither read as octal (0100000 -> 32768, under the bound) nor fatal to the
+  # arithmetic (08 -> "value too great for base"). Zero is excluded: compose reads --wait-timeout 0
+  # as "no timeout", which would silently remove the deadline instead of setting one.
+  if ! [[ "$startup_timeout" =~ ^[0-9]{1,7}$ ]] \
+    || (( 10#$startup_timeout < 1 )) \
+    || (( 10#$startup_timeout > STARTUP_TIMEOUT_MAX )); then
+    echo "❌ OPIK_STARTUP_TIMEOUT must be an integer between 1 and ${STARTUP_TIMEOUT_MAX} seconds, got '$startup_timeout'"
     return 1
   fi
+  # Normalized so the value handed to compose matches the one that was validated.
+  startup_timeout=$(( 10#$startup_timeout ))
 
   if ! compose_supports_wait; then
     echo "❌ Docker Compose $(compose_version) is too old: starting Opik requires v${COMPOSE_MIN_VERSION}+"
