@@ -16,6 +16,7 @@ import {
 } from "@/ui/form";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
@@ -286,6 +287,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         provider={provider}
                         model={model}
                         configs={field.value}
+                        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
                         onChange={(partialConfig) => {
                           field.onChange({ ...field.value, ...partialConfig });
                         }}
