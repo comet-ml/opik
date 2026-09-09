@@ -267,6 +267,51 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+def user_facing_stacktrace(skip_frames: int = 1) -> str:
+    """Format the current exception with this module's own frames dropped.
+
+    Walks frames rather than slicing a fixed number of leading lines, so the
+    exception line survives however short the traceback is. A failure raised while
+    binding the call arguments has no user frame at all, so a fixed slice could
+    remove the message itself and report a cause of "".
+    """
+    exc_type, exc, tb = sys.exc_info()
+    for _ in range(skip_frames):
+        if tb is None:
+            break
+        tb = tb.tb_next
+    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
+
+
+def bind_missing_required(metric: BaseMetric, data: dict) -> dict:
+    """Pass None for required score() parameters the data has no key for.
+
+    A rule maps each score() parameter to a trace/span field, but a field the
+    entity never logged resolves to nothing and is left out of ``data`` entirely.
+    Spreading that as score(**data) then misses an argument the signature requires
+    and raises TypeError, scoring nothing.
+
+    Only parameters with no default are filled: one that has a default must keep
+    it, since None is a value and would override it. Params covered by **kwargs
+    need nothing, and a positional-only param cannot be passed by name at all, so
+    neither is touched.
+    """
+    try:
+        parameters = inspect.signature(metric.score).parameters
+    except (TypeError, ValueError):
+        # Not introspectable: leave the call exactly as it would have been.
+        return data
+    bound = dict(data)
+    for name, parameter in parameters.items():
+        if (
+            parameter.default is inspect.Parameter.empty
+            and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            and name not in bound
+        ):
+            bound[name] = None
+    return bound
+
+
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
@@ -277,7 +322,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"Field 'code' contains invalid Python code: {stacktrace}",
@@ -299,9 +344,9 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
             score_result = metric.score(data)
         else:
             # Regular scoring - unpack data as keyword arguments
-            score_result = metric.score(**data)
+            score_result = metric.score(**bind_missing_required(metric, data))
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}",

@@ -21,6 +21,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -98,8 +99,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
         var span = message.span();
         return OnlineScoringEngine.logAndPrepareEvaluatorInput(
                 userFacingLogger, log, mdc, "spanId", span.id(), message.ruleName(),
-                () -> OnlineScoringEngine.bindDeclaredArguments(message.code().arguments(),
-                        OnlineScoringEngine.toReplacements(message.code().arguments(), span)));
+                () -> new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), span)));
     }
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Span span) {
