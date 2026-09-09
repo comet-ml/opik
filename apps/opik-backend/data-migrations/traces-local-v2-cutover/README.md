@@ -191,6 +191,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    leaving `traces` a `MergeTree` where deletes still work); the `RENAME` + `Distributed` wrap runs only with
    `--with-wrap`. Afterwards, size the tail write-gap (["The final cutover window"](#the-final-cutover-window)) and
    verify (["Verifying the migration"](#verifying-the-migration-qa)).
+
+   **Check the per-host `ON CLUSTER` rows before you go further.** Each `ON CLUSTER` DDL prints one row per host
+   (`host, port, status, error, hosts_remaining, hosts_active`); status 0 with an empty error means that host applied
+   it. This is the only place a *partial* application surfaces: the driver's topology guards read `system.tables` on
+   the **connected node only**, so a host that missed the swap is invisible to every later step, and both the deferred
+   wrap and `finalize.sh` assume the cluster is uniform. If any host reports non-zero, stop and reconcile it before
+   running anything else.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
        --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused
@@ -289,7 +296,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it validates the
 > post-EXCHANGE topology and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new
 > `cutover_start`, and no replication-settle gate — neither of its signals describes this path, see
-> ["The replication-settle gate"](#the-replication-settle-gate)).
+> ["The replication-settle gate"](#the-replication-settle-gate)). Its topology guard reads the **connected node**, as
+> the EXCHANGE path's does, so it assumes the earlier `EXCHANGE` applied on every host — which is what the per-host
+> rows in step 4 are for. Confirm those before deferring the wrap, not after.
 > `--confirm-daos-retargeted` is required for **any** wrap (same-run or deferred), since the wrap makes `traces`
 > `Distributed` and breaks the delete/mutation DAOs until `tracesDistributedWrapEnabled=true` routes them at `traces_local`. To roll the wrap back, use
 > `rollback.sh --stage C`, then set `tracesDistributedWrapEnabled` back to `false` with the same rolling restart so

@@ -51,34 +51,54 @@ CROSS JOIN (
 ) AS m;
 -- >>> END settle-sample
 
--- Printed when the gate judges a replica to be lagging rather than merely busy: the oldest and most-retried queue
--- entries, per replica, with the free text the sample above deliberately omits. Same type filter as the sample, so the
--- rows shown are the population the verdict was reached on.
+-- Printed when the gate judges a replica to be lagging rather than merely busy, with the free text the sample above
+-- deliberately omits. Same type filter as the sample, so the rows shown are the population the verdict was reached on.
 --
--- LIMIT n BY replica, not a global LIMIT: the cluster is ordered as one result set, so a single replica holding many
--- retried entries would fill a global cap and hide every other replica that contributed to the verdict — which is the
--- opposite of what this block is for. The row count is bounded by the replica count instead.
+-- Selected by RANK PER TRIGGER rather than a top-N, because the driver fails on any of three independent conditions —
+-- an entry older than its age threshold, one past its retry threshold, or any entry carrying a last_exception — and a
+-- single ordering cannot surface all three. Sorting by num_tries hides an old-but-rarely-retried entry behind busier
+-- ones, which is precisely the entry an age verdict is about. So each replica contributes its oldest entry, its
+-- most-retried entry, and up to two carrying an exception: at most four rows, always including whichever tripped the
+-- verdict. Ranking per replica also keeps one noisy replica from crowding the others out of the report.
 -- >>> BEGIN settle-queue-detail
-SELECT hostName()                             AS replica,
+SELECT replica,
        table,
        type,
        create_time,
-       dateDiff('second', create_time, now()) AS age_seconds,
+       age_seconds,
        num_tries,
        num_postponed,
        postpone_reason,
        last_exception
-FROM clusterAllReplicas('{cluster}', system.replication_queue)
-WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
-  AND table IN ('traces', 'traces_local_v2')
-  AND type IN ('GET_PART', 'ATTACH_PART')
-ORDER BY num_tries DESC, create_time ASC
-LIMIT 3 BY replica;
+FROM (
+    SELECT hostName()                             AS replica,
+           table,
+           type,
+           create_time,
+           dateDiff('second', create_time, now()) AS age_seconds,
+           num_tries,
+           num_postponed,
+           postpone_reason,
+           last_exception,
+           row_number() OVER (PARTITION BY hostName() ORDER BY create_time ASC)                          AS oldest_rank,
+           row_number() OVER (PARTITION BY hostName() ORDER BY num_tries DESC)                           AS retried_rank,
+           row_number() OVER (PARTITION BY hostName() ORDER BY (last_exception != '') DESC, create_time) AS failing_rank
+    FROM clusterAllReplicas('{cluster}', system.replication_queue)
+    WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
+      AND table IN ('traces', 'traces_local_v2')
+      AND type IN ('GET_PART', 'ATTACH_PART')
+)
+WHERE oldest_rank = 1
+   OR retried_rank = 1
+   OR (last_exception != '' AND failing_rank <= 2)
+ORDER BY replica, age_seconds DESC;
 -- >>> END settle-queue-detail
 
 -- Printed when a mutation on the shadow has not finished on every replica by the gate's deadline. Bounded per replica
 -- for the same reason as the queue detail above: the point is to name which replicas are behind, and a global cap
--- would hide them behind whichever replica sorted first.
+-- would hide them behind whichever replica sorted first. Every row here is unfinished, so there is no equivalent of
+-- that block's decoy problem — only the ordering matters, and one carrying a latest_fail_reason explains more than an
+-- older one that is merely still running, so those come first.
 -- >>> BEGIN settle-mutation-detail
 SELECT hostName() AS replica,
        mutation_id,
@@ -91,7 +111,7 @@ FROM clusterAllReplicas('{cluster}', system.mutations)
 WHERE database = '${ANALYTICS_DB_DATABASE_NAME}'
   AND table = 'traces_local_v2'
   AND is_done = 0
-ORDER BY create_time
+ORDER BY (latest_fail_reason != '') DESC, create_time
 LIMIT 2 BY replica;
 -- >>> END settle-mutation-detail
 
