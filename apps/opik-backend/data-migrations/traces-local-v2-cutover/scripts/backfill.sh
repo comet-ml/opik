@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Backfill driver for the buffered traces cutover (runbook: ../README.md, step 1).
+# Backfill driver for the traces cutover (runbook: ../README.md, step 1).
 #
 # Copies traces -> traces_local_v2 oldest to newest, reconciling and aborting on divergence. It iterates by week (for
 # progress and --from-week resume), but each week is further split, adaptively, into time sub-windows so that no single

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Fidelity QA driver for the buffered traces cutover (runbook: ../README.md, "Verifying the migration").
+# Fidelity QA driver for the traces cutover (runbook: ../README.md, "Verifying the migration").
 #
 # Compares the migrated data on the old-schema and new-schema tables, week by week (created_at), using a NORMALIZED
 # fingerprint so sentinel/precision differences (end_time NULL<->epoch, ttft NULL<->NaN, ns<->us) do not count as
@@ -125,12 +125,23 @@ log() {
 # Extract one `-- >>> BEGIN <name>` .. `-- >>> END <name>` block from the reference SQL (exact-line markers), and
 # substitute this window's placeholders.
 render_block() {
-    local block="$1" lo="$2" hi="$3" sql begins ends
+    local block="$1" lo="$2" hi="$3" sql begins ends masked begin_line end_line
     # Exactly one pair: the awk otherwise runs to EOF on a missing END and sweeps the later blocks in with this one.
     begins="$(grep -cxF -e "-- >>> BEGIN $block" "$VERIFY_SQL" || true)"
     ends="$(grep -cxF -e "-- >>> END $block" "$VERIFY_SQL" || true)"
     if (( begins != 1 || ends != 1 )); then
         log "ERROR: $VERIFY_SQL holds $begins '-- >>> BEGIN $block' and $ends '-- >>> END $block'; expected one of each." >&2
+        return 1
+    fi
+    # Counting alone misses an END moved ABOVE its BEGIN, which still counts 1 and 1 and gives the same run-on capture.
+    # Here that costs queries rather than correctness: every block is a read, and each caller parses the first row,
+    # which still comes from the intended statement. Refused anyway -- drill-down and the two re-checks are not cheap
+    # to run per window by accident, and "the caller happens to parse the right row" is not a property to depend on.
+    read -r begin_line end_line <<<"$(awk -v b="-- >>> BEGIN $block" -v e="-- >>> END $block" \
+        '$0 == b {bl = NR} $0 == e {el = NR} END {print bl, el}' "$VERIFY_SQL")"
+    if (( end_line <= begin_line )); then
+        log "ERROR: $VERIFY_SQL has the '$block' markers out of order (BEGIN at line $begin_line, END at line" >&2
+        log "       $end_line), so the block would capture to end of file. Refusing to run it." >&2
         return 1
     fi
     sql="$(awk -v begin="-- >>> BEGIN $block" -v end="-- >>> END $block" \
@@ -142,15 +153,34 @@ render_block() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${SAMPLE_MOD}'/$SAMPLE_MOD}"
     # A renamed, moved or split marker yields text that is empty or only the block's own comments, and clickhouse-client
-    # exits 0 on either, so the caller would read "no output" as a verdict rather than as a failure to ask. Tested on
-    # comment-masked text because comments are not whitespace.
+    # exits 0 on either, so the caller would read "no output" as a verdict rather than as a failure to ask.
     #
     # RETURN, not exit: every caller invokes this inside a command substitution, where an exit ends only the subshell
     # and would leave the outer clickhouse-client running with an empty --query. The callers assign first, so a
     # non-zero return trips `set -e` there.
-    if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
+    #
+    # Masked first because every check below needs the executable text: comments are not whitespace, and a block's own
+    # prose can contain the token that identifies it.
+    masked="$(sed 's/--.*$//' <<<"$sql")"
+    if [[ -z "${masked//[[:space:]]/}" ]]; then
         log "ERROR: the '$block' block from $VERIFY_SQL rendered no executable SQL (empty, or comments only)." >&2
         log "       Expected the exact marker lines '-- >>> BEGIN $block' and '-- >>> END $block'." >&2
+        return 1
+    fi
+    # Markers that slipped onto prose or a non-statement leave plenty of text, so emptiness cannot catch that; every
+    # block here is a read, so requiring a SELECT does. Note the limit: this cannot tell one block's SELECT from
+    # another's, which would need a per-block token. It does not have to — the callers validate the shape of what comes
+    # back (`ok` must be 1, confirm-keys must be a count), so a block swapped for another read fails closed there.
+    if ! grep -qF 'SELECT' <<<"$masked"; then
+        log "ERROR: the '$block' block from $VERIFY_SQL has no SELECT outside its comments, so the markers are not" >&2
+        log "       around a statement. Refusing to run it." >&2
+        return 1
+    fi
+    # A surviving placeholder means a substitution was missed — a moved marker, or one added to the block and not to the
+    # list above. ClickHouse would reject the literal anyway; refusing here names the actual cause instead.
+    if grep -qF '${' <<<"$masked"; then
+        log "ERROR: the '$block' block from $VERIFY_SQL still holds an unsubstituted \${...} placeholder after" >&2
+        log "       rendering. Refusing to send SQL containing a literal placeholder." >&2
         return 1
     fi
     printf '%s' "$sql"
