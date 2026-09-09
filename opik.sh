@@ -56,6 +56,10 @@ set_containers_for_profile() {
 # `compose up --wait --wait-timeout` is only available from this version on.
 COMPOSE_MIN_VERSION="2.17.0"
 
+# Upper bound for OPIK_STARTUP_TIMEOUT (24h). Compose parses --wait-timeout as an int64 and rejects
+# anything larger, so the value is range-checked here rather than by a failed flag parse later.
+STARTUP_TIMEOUT_MAX=86400
+
 compose_version() {
   docker compose version --short 2>/dev/null
 }
@@ -401,8 +405,11 @@ start_missing_containers() {
   cmd=$(get_docker_compose_cmd)
 
   local startup_timeout="${OPIK_STARTUP_TIMEOUT:-300}"
-  if ! [[ "$startup_timeout" =~ ^[0-9]+$ ]]; then
-    echo "❌ OPIK_STARTUP_TIMEOUT must be a non-negative integer number of seconds, got '$startup_timeout'"
+  # Bounded on both ends: an out-of-range value is rejected by compose only once it parses the flag,
+  # which would be after the stack had already been started below. The digit-count check keeps an
+  # absurdly long value from overflowing the arithmetic comparison that follows it.
+  if ! [[ "$startup_timeout" =~ ^[0-9]{1,7}$ ]] || (( startup_timeout > STARTUP_TIMEOUT_MAX )); then
+    echo "❌ OPIK_STARTUP_TIMEOUT must be an integer between 0 and ${STARTUP_TIMEOUT_MAX} seconds, got '$startup_timeout'"
     return 1
   fi
 
@@ -413,23 +420,24 @@ start_missing_containers() {
     return 1
   fi
 
-  # Start everything in the profile, including the run-once jobs (mc, demo-data-generator) that
-  # nothing declares a dependency on — passing a service list to the waiting command below would
-  # otherwise silently skip them.
-  if ! $cmd up -d ${BUILD_MODE:+--build}; then
-    echo "❌ Failed to start containers"
-    $cmd ps
-    return 1
+  echo "⏳ Starting containers and waiting for them to be healthy (timeout: ${startup_timeout}s)..."
+
+  local start_failed=false
+
+  # Start and wait in one call, scoped to the long-running services: --wait treats any service exit
+  # as a failure, even a successful exit 0, so the run-once jobs must be left out of it. Carrying
+  # the deadline here bounds pulls, builds and container creation as well as readiness, and --wait
+  # is concurrent across services, so a slow one is never starved by the services ahead of it.
+  if ! $cmd up -d ${BUILD_MODE:+--build} --wait --wait-timeout "$startup_timeout" $(wait_services); then
+    start_failed=true
+  # The scoped call above starts only those services and their dependencies, so the run-once jobs
+  # (mc, demo-data-generator) that nothing depends on need a second, unwaited call to launch.
+  elif ! $cmd up -d ${BUILD_MODE:+--build}; then
+    start_failed=true
   fi
 
-  echo "⏳ Waiting for all containers to be running and healthy (timeout: ${startup_timeout}s)..."
-
-  # Wait only on the long-running services for this profile. --wait waits on them concurrently and
-  # honours each healthcheck plus the depends_on graph, so a slow service can't be starved by the
-  # time spent on the ones before it. The run-once jobs are deliberately excluded here: --wait
-  # treats any service exit as a failure, even a successful exit 0.
-  if ! $cmd up -d --wait --wait-timeout "$startup_timeout" $(wait_services); then
-    echo "❌ Containers did not become healthy within ${startup_timeout}s"
+  if [[ "$start_failed" == "true" ]]; then
+    echo "❌ Containers did not start and become healthy within ${startup_timeout}s"
     echo "   Set OPIK_STARTUP_TIMEOUT to allow more time, e.g. OPIK_STARTUP_TIMEOUT=600 $(get_start_cmd)"
     echo ""
     echo "📋 Container status:"
