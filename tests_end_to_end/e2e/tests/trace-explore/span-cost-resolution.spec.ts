@@ -239,7 +239,7 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
     backendClient,
     page,
   }) => {
-    await test.step('The server really resolved the prices the panel is about to be read for', async () => {
+    const byName = await test.step('The server really resolved the prices the panel is about to be read for', async () => {
       // A UI assertion over a seed that never got priced is a test that cannot
       // fail: the amounts below would simply never appear, and any wait for
       // them would be indistinguishable from a rendering bug.
@@ -256,6 +256,10 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
           { timeout: 60_000, intervals: [500, 1_000, 2_000] },
         )
         .toBe(priced(modelCostSpans.spans).length);
+
+      // Read back for the ids, which are what pin each panel assertion below to
+      // the span it is supposed to be about.
+      return readSeededSpans(backendClient, project.id, modelCostSpans);
     });
 
     const logs = new LogsPage(page);
@@ -278,6 +282,16 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
       // API, where "no cost was attributed" is unambiguous.
       for (const seed of priced(modelCostSpans.spans)) {
         await panel.selectSpan(seed.name);
+        // Pin the two assertions below to the span that is actually selected.
+        // `selectSpan` only waits for SOME span to be in the URL, and five of
+        // these vectors share one model while two pairs share an expected
+        // amount — so a click that left the viewer on the previous span would
+        // still satisfy both, giving an iteration that cannot fail.
+        await expect
+          .poll(() => new URL(page.url()).searchParams.get('span'), {
+            message: `the panel must be showing '${seed.name}' itself, not whichever span was selected before it`,
+          })
+          .toBe(byName.get(seed.name)!.id);
         await expect(panel.spanModelChip).toContainText(seed.model);
         await expect(panel.estimatedCost(asDisplayed(seed.expectedCost))).toBeVisible();
       }

@@ -316,6 +316,18 @@ test.describe('Trace deletion — multi-trace', { tag: ['@t2-cuj', '@area:traces
           { timeout: 60_000, intervals: [500, 1_000, 2_000] },
         )
         .toBe(0);
+
+      // And the rows hung off it. The seed attaches a comment at both levels
+      // precisely so the cascade has dependents to reach; leaving them
+      // unasserted would make seeding them prove nothing.
+      expect(
+        await backendClient.getTraceComment(traces.api.id, traces.api.traceCommentId),
+        'the deleted trace must not still serve its own comment',
+      ).toBeNull();
+      expect(
+        await backendClient.getSpanComment(traces.api.deepestSpanId, traces.api.spanCommentId),
+        "the deleted trace's span comment must go with the span",
+      ).toBeNull();
     });
 
     const logs = new LogsPage(page);
@@ -351,6 +363,15 @@ test.describe('Trace deletion — multi-trace', { tag: ['@t2-cuj', '@area:traces
           { timeout: 60_000, intervals: [500, 1_000, 2_000] },
         )
         .toBe(0);
+
+      expect(
+        await backendClient.getTraceComment(traces.ui.id, traces.ui.traceCommentId),
+        'the bulk-deleted trace must not still serve its own comment',
+      ).toBeNull();
+      expect(
+        await backendClient.getSpanComment(traces.ui.deepestSpanId, traces.ui.spanCommentId),
+        "the bulk-deleted trace's span comment must go with the span",
+      ).toBeNull();
     });
 
     await test.step('Project-wide, exactly the control survives — trace, spans and its own rows', async () => {
