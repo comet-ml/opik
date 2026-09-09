@@ -53,7 +53,10 @@ import { parseComposedProviderType } from "@/lib/provider";
 export const restoreMissingConfigKeys = (
   prompt: PlaygroundPromptType,
 ): PlaygroundPromptType => {
-  if (!prompt.provider) {
+  // Runs over every stored prompt during hydration, so anything this touches has to tolerate a
+  // corrupted entry: throwing costs every sibling prompt's state, not just this one's.
+  // parseComposedProviderType calls provider.startsWith.
+  if (!prompt.provider || typeof prompt.provider !== "string") {
     return prompt;
   }
 
@@ -67,8 +70,6 @@ export const restoreMissingConfigKeys = (
 
   const exclusiveSamplingPair =
     parseComposedProviderType(prompt.provider) === PROVIDER_TYPE.ANTHROPIC;
-  // A prompt persisted without a config at all has to survive this: it runs over every stored
-  // prompt during hydration, so throwing here would cost the whole playground state.
   const stored = prompt.configs as Record<string, unknown> | undefined | null;
   const configs = stored ?? {};
   const restored: Record<string, unknown> = { ...configs };

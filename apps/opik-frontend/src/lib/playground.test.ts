@@ -129,6 +129,21 @@ describe("restoreMissingConfigKeys", () => {
     expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
   });
 
+  it("does not throw on a prompt whose stored provider is not a string", () => {
+    // parseComposedProviderType calls provider.startsWith, so a corrupted entry would throw inside
+    // the hydration map and take every sibling prompt's state with it.
+    const malformed = {
+      name: "p",
+      id: "p1",
+      messages: [],
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: { openai: true },
+      configs: {},
+    } as unknown as PlaygroundPromptType;
+
+    expect(restoreMissingConfigKeys(malformed)).toBe(malformed);
+  });
+
   it("leaves a prompt with no provider alone", () => {
     const noProvider = {
       name: "p",
