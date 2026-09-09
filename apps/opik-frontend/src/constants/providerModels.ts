@@ -668,6 +668,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash-vision-exp",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP_BATCH,
+      label: "deepseek/deepseek-v4-flash-vision-exp:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
       label: "deepseek/deepseek-v4-flash:free",
     },
@@ -942,6 +946,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2,
       label: "inception/mercury-2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2_5,
+      label: "inception/mercury-2.5",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2_5_PREVIEW,
@@ -1546,6 +1554,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
       label: "nex-agi/nex-n2-pro:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_MINI_FREE,
+      label: "nex-agi/nex-n2.5-mini:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO_FREE,
+      label: "nex-agi/nex-n2.5-pro:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
@@ -2887,6 +2903,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASH_BATCH,
       label: "z-ai/glm-5.3-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_BATCH,
+      label: "z-ai/glm-5.3:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
