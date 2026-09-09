@@ -203,6 +203,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.namespaceDomainPattern | string | `""` |  |
+| clickhouse.preferLocalhostReplica | string | `""` | Whether an insert with a local replica available bypasses the Distributed forwarding queue and writes straight into the local `_local` table (OPIK-8255). Empty derives it from the topology:   - multi-node (replicasCount > 1 or shardsCount > 1) -> 0, so inserts take the queue, which     is the path the batching settings above fix. The bypass is no substitute: at N shards only     ~1/N of inserts could take it.   - single node -> 1, since every replica is already local. 0 there buys nothing and only     turns an in-process write into an async queue file, which also stops anything written     through a Distributed wrapper from being immediately readable.  Either way a value is always rendered explicitly, never inherited: the Altinity operator ships 0 and vanilla ClickHouse ships 1. Set 0 or 1 to pin it regardless of topology; setting `prefer_localhost_replica` on a `default` entry in additionalProfiles also wins and suppresses the derived value, so the manifest never carries the key twice. |
 | clickhouse.readinessProbe.failureThreshold | int | `30` |  |
 | clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.readinessProbe.httpGet.port | int | `8123` |  |

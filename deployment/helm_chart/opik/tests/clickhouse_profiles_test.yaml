@@ -27,6 +27,13 @@ tests:
       - equal:
           path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
           value: 1
+      # Always rendered, never inherited: the Altinity operator ships 0 and vanilla ClickHouse
+      # ships 1, so leaving it unset makes the insert path depend on flavour alone. 1 here
+      # because the chart's default topology is a SINGLE node, where every replica is already
+      # local — see the topology cases below.
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 1
 
   # The settings have to reach the *default* profile specifically: that is the profile the
   # backend's ClickHouse user inherits, and so the one the insert path runs under.
@@ -37,6 +44,7 @@ tests:
           value:
             default/distributed_background_insert_batch: 1
             default/distributed_background_insert_split_batch_on_failure: 1
+            default/prefer_localhost_replica: 1
 
   # The rendered key shape is `<profile>/<setting>`, which is what the Altinity operator
   # flattens into the users.d XML. Asserted separately so a template refactor that changed the
@@ -57,6 +65,7 @@ tests:
           settings:
             distributed_background_insert_batch: 1
             distributed_background_insert_split_batch_on_failure: 1
+            prefer_localhost_replica: 0
         - name: readonly_profile
           settings:
             readonly: 1
@@ -69,13 +78,20 @@ tests:
           path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
           value: 1
       - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 0
+      - equal:
           path: spec.configuration.profiles["readonly_profile/readonly"]
           value: 1
 
   # The trap, asserted rather than only commented: a values file that declares its own list and
-  # omits `default` loses the queue settings entirely. Any consumer that overrides the list must
-  # repeat the `default` entry — which is what the test above covers.
-  - it: loses the settings when a consumer replaces the list without the default entry
+  # omits `default` loses the BATCHING settings entirely, because Helm replaces lists wholesale.
+  # Any consumer that overrides the list must repeat the `default` entry.
+  #
+  # prefer_localhost_replica is deliberately not subject to this: it is resolved in the template
+  # from the topology rather than carried in the list, so it survives a consumer's replacement.
+  # Asserted so that immunity is pinned rather than incidental.
+  - it: loses only the batching settings when a consumer replaces the list without the default entry
     set:
       clickhouse.additionalProfiles:
         - name: readonly_profile
@@ -86,6 +102,85 @@ tests:
           path: spec.configuration.profiles["default/distributed_background_insert_batch"]
       - notExists:
           path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles["readonly_profile/readonly"]
+          value: 1
+
+  # ---------------------------------------------------------------------------------------------
+  # prefer_localhost_replica: derived from topology, because neither value is universally right.
+  # ---------------------------------------------------------------------------------------------
+
+  # Multi-node: 0, so inserts go through the forwarding queue — the path the batching settings
+  # fix. The local-write bypass is not a substitute for fixing the queue; at N shards only ~1/N
+  # of inserts could take it.
+  - it: resolves to 0 on a replicated cluster
+    set:
+      clickhouse.replicasCount: 2
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 0
+
+  # Sharding counts as multi-node too, independently of replicas: a shard with no local replica
+  # has to forward regardless.
+  - it: resolves to 0 on a sharded cluster with a single replica
+    set:
+      clickhouse.shardsCount: 3
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 0
+
+  # Single node: 1. Every replica is already local, so 0 buys nothing and only converts an
+  # in-process write into an async queue file — which also makes anything written through a
+  # Distributed wrapper stop being immediately readable. That failed TracesLocalV2CutoverTest and
+  # TracesSchemaParityPostCutoverTest on a single-node container, which is why this is 1.
+  - it: resolves to 1 on a single node
+    set:
+      clickhouse.shardsCount: 1
+      clickhouse.replicasCount: 1
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 1
+
+  - it: honours an explicit pin over the topology, in both directions
+    set:
+      clickhouse.preferLocalhostReplica: 0
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 0
+
+  - it: honours an explicit pin of 1 on a multi-node cluster
+    set:
+      clickhouse.replicasCount: 2
+      clickhouse.preferLocalhostReplica: 1
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 1
+
+  # A consumer setting the key through additionalProfiles must win AND suppress the derived value,
+  # or the rendered manifest carries `default/prefer_localhost_replica` twice — a duplicate YAML
+  # key in a live manifest.
+  - it: suppresses the derived value when a default entry sets the key, without duplicating it
+    set:
+      clickhouse.additionalProfiles:
+        - name: default
+          settings:
+            prefer_localhost_replica: 1
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/prefer_localhost_replica"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles
+          value:
+            default/prefer_localhost_replica: 1
 
   # The monitoring user's readonly flag shares the profiles block with these settings; it is
   # gated separately, so check the two coexist rather than one gate shadowing the other.
