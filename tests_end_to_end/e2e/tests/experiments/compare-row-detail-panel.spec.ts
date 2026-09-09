@@ -35,6 +35,12 @@ import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
  * storage and pass whether or not the panels held their widths in the live
  * document. The test asserts it never reloaded, so that premise cannot rot
  * silently.
+ *
+ * Scope: the arrows step within the loaded page only. `useExperimentItemsSidebar`
+ * derives `hasNext` from the current page's `rows`, so the last row of a page
+ * disables Next rather than fetching the following one — both the button and the
+ * `k` hotkey are gated on it. Crossing a page boundary is therefore not a
+ * behaviour to assert here; it is a capability the panel does not have.
  */
 
 /**
@@ -109,7 +115,7 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
   );
 
   test(
-    'a dragged panel width survives stepping to the next dataset item',
+    'dragged panel widths survive stepping to the next dataset item and back',
     { tag: ['@cap:experiments.compare-row-detail'] },
     async ({ comparison, project, page }) => {
       const [expA, expB] = comparison.experiments;
@@ -160,7 +166,14 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
       // Every experiment section has to move on, not just the first: DataTab
       // renders one panel per experiment, so a refresh that reaches only some of
       // them leaves the rest showing the previous item.
+      //
+      // Order is re-asserted alongside the contents because the layout check
+      // below reads `data-panel-size` positionally. Sections that swapped while
+      // keeping their percentages would hold the same layout by position and
+      // hand each experiment the other's width — a section-identity regression
+      // that positional sizes alone cannot see.
       const expectPanelShows = async (datasetItemId: string) => {
+        await compare.expectPanelExperimentOrder([expA.experimentName, expB.experimentName]);
         for (const exp of comparison.experiments) {
           await compare.expectPanelExperimentResult(exp.experimentName, {
             output: exp.outputsByItemId[datasetItemId],
