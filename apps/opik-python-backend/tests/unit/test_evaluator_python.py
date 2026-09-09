@@ -682,3 +682,11 @@ def test_non_string_code_is_rejected_as_bad_request(process_client, code):
     })
 
     assert response.status_code == 400, "must not surface as a 500"
+    error = str(response.json["error"])
+    # Pin the cause, not just the status: an unrelated 400 would otherwise pass.
+    assert "Field 'code' contains invalid Python code" in error, (
+        "the rejection must come from the executor's invalid-code path"
+    )
+    # exec() raises with no user frame, so this is also the shortest traceback
+    # there is -- the shape a fixed-length slice used to leave empty.
+    assert "TypeError" in error
