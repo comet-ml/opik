@@ -52,7 +52,7 @@ public class ProjectDashboardsResource {
     private final @NonNull FiltersFactory filtersFactory;
 
     @GET
-    @Operation(operationId = "findDashboardsByProject", summary = "Find dashboards by project", description = "Find dashboards scoped to a project", responses = {
+    @Operation(operationId = "findDashboardsByProject", summary = "Find dashboards by project", description = "Find the dashboards that belong to a project. Dashboards created before project scoping have no project and are listed for every project.", responses = {
             @ApiResponse(responseCode = "200", description = "Dashboard page", content = @Content(schema = @Schema(implementation = DashboardPage.class)))
     })
     @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
@@ -73,7 +73,7 @@ public class ProjectDashboardsResource {
                 projectId, workspaceId, page, size);
 
         DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters,
-                DashboardScope.WORKSPACE);
+                DashboardScope.INSIGHTS);
 
         log.info("Found '{}' dashboards for project '{}' in workspace '{}'", dashboardPage.total(), projectId,
                 workspaceId);

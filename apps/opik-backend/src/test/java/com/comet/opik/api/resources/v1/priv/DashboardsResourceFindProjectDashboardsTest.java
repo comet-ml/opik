@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.TestContainersSetup;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
+import com.comet.opik.api.resources.utils.resources.InsightsViewResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
@@ -62,6 +63,7 @@ class DashboardsResourceFindProjectDashboardsTest {
 
     private String baseURI;
     private DashboardResourceClient dashboardResourceClient;
+    private InsightsViewResourceClient insightsViewClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
@@ -71,6 +73,7 @@ class DashboardsResourceFindProjectDashboardsTest {
         ClientSupportUtils.config(client);
 
         this.dashboardResourceClient = new DashboardResourceClient(client, baseURI);
+        this.insightsViewClient = new InsightsViewResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
     }
 
@@ -105,14 +108,14 @@ class DashboardsResourceFindProjectDashboardsTest {
 
         var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
 
-        var dashboard1 = dashboardResourceClient.createPartialDashboard().projectId(projectId).build();
-        var dashboard2 = dashboardResourceClient.createPartialDashboard().projectId(projectId).build();
+        var dashboard1 = insightsViewClient.createPartialInsightsView().projectId(projectId).build();
+        var dashboard2 = insightsViewClient.createPartialInsightsView().projectId(projectId).build();
 
-        var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-        var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+        var id1 = insightsViewClient.create(dashboard1, apiKey, workspaceName);
+        var id2 = insightsViewClient.create(dashboard2, apiKey, workspaceName);
 
-        dashboard1 = dashboardResourceClient.get(id1, apiKey, workspaceName, HttpStatus.SC_OK);
-        dashboard2 = dashboardResourceClient.get(id2, apiKey, workspaceName, HttpStatus.SC_OK);
+        dashboard1 = insightsViewClient.get(id1, apiKey, workspaceName, HttpStatus.SC_OK);
+        dashboard2 = insightsViewClient.get(id2, apiKey, workspaceName, HttpStatus.SC_OK);
 
         var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
                 null);
@@ -131,19 +134,19 @@ class DashboardsResourceFindProjectDashboardsTest {
         var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
 
         var uniqueName = "UniqueSearchName-" + UUID.randomUUID();
-        var dashboard1 = dashboardResourceClient.createPartialDashboard()
+        var dashboard1 = insightsViewClient.createPartialInsightsView()
                 .name(uniqueName)
                 .projectId(projectId)
                 .build();
-        var dashboard2 = dashboardResourceClient.createPartialDashboard()
+        var dashboard2 = insightsViewClient.createPartialInsightsView()
                 .name("Other Dashboard")
                 .projectId(projectId)
                 .build();
 
-        var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-        dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+        var id1 = insightsViewClient.create(dashboard1, apiKey, workspaceName);
+        insightsViewClient.create(dashboard2, apiKey, workspaceName);
 
-        dashboard1 = dashboardResourceClient.get(id1, apiKey, workspaceName, HttpStatus.SC_OK);
+        dashboard1 = insightsViewClient.get(id1, apiKey, workspaceName, HttpStatus.SC_OK);
 
         var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10,
                 "UniqueSearch", null, null);
@@ -163,12 +166,12 @@ class DashboardsResourceFindProjectDashboardsTest {
 
         var dashboards = new ArrayList<Dashboard>();
         for (int i = 0; i < 5; i++) {
-            var dashboard = dashboardResourceClient.createPartialDashboard()
+            var dashboard = insightsViewClient.createPartialInsightsView()
                     .name("Pagination Test " + i)
                     .projectId(projectId)
                     .build();
-            var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
-            dashboards.add(dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK));
+            var id = insightsViewClient.create(dashboard, apiKey, workspaceName);
+            dashboards.add(insightsViewClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK));
         }
 
         var page1 = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 2, null, null,
@@ -194,19 +197,19 @@ class DashboardsResourceFindProjectDashboardsTest {
         var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
 
         var dashboards = List.of(
-                dashboardResourceClient.createPartialDashboard()
+                insightsViewClient.createPartialInsightsView()
                         .type(DashboardType.MULTI_PROJECT)
                         .projectId(projectId)
                         .build(),
-                dashboardResourceClient.createPartialDashboard()
+                insightsViewClient.createPartialInsightsView()
                         .type(DashboardType.EXPERIMENTS)
                         .projectId(projectId)
                         .build());
 
         var created = dashboards.stream()
                 .map(d -> {
-                    var id = dashboardResourceClient.create(d, apiKey, workspaceName);
-                    return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
+                    var id = insightsViewClient.create(d, apiKey, workspaceName);
+                    return insightsViewClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
                 })
                 .toList();
 
@@ -241,13 +244,13 @@ class DashboardsResourceFindProjectDashboardsTest {
                                         .build()),
                         (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                 dashboards.get(1))),
-                // Filter by scope WORKSPACE (all project dashboards have WORKSPACE scope)
+                // Filter by scope INSIGHTS (all project dashboards have INSIGHTS scope)
                 Arguments.of(
                         (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                 DashboardFilter.builder()
                                         .field(DashboardField.SCOPE)
                                         .operator(Operator.EQUAL)
-                                        .value(DashboardScope.WORKSPACE.getValue())
+                                        .value(DashboardScope.INSIGHTS.getValue())
                                         .build()),
                         (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
                                 dashboards.get(1), dashboards.get(0))));
@@ -263,19 +266,17 @@ class DashboardsResourceFindProjectDashboardsTest {
 
         var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
 
-        var dashboard1 = dashboardResourceClient.createPartialDashboard()
+        var dashboard1 = insightsViewClient.createPartialInsightsView()
                 .type(DashboardType.MULTI_PROJECT)
-                .scope(DashboardScope.WORKSPACE)
                 .projectId(projectId)
                 .build();
-        var dashboard2 = dashboardResourceClient.createPartialDashboard()
+        var dashboard2 = insightsViewClient.createPartialInsightsView()
                 .type(DashboardType.EXPERIMENTS)
-                .scope(DashboardScope.WORKSPACE)
                 .projectId(projectId)
                 .build();
 
-        dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-        dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+        insightsViewClient.create(dashboard1, apiKey, workspaceName);
+        insightsViewClient.create(dashboard2, apiKey, workspaceName);
 
         var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
                 null);
@@ -285,31 +286,33 @@ class DashboardsResourceFindProjectDashboardsTest {
     }
 
     @Test
-    @DisplayName("Find project dashboards excludes workspace dashboards with no project")
-    void findProjectDashboardsExcludesUnassignedDashboards() {
+    @DisplayName("Find project dashboards excludes other projects and keeps dashboards with no project")
+    void findProjectDashboardsScoping() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = "test-workspace-" + UUID.randomUUID();
         String workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
 
-        var projectDashboard = dashboardResourceClient.createPartialDashboard()
-                .scope(DashboardScope.WORKSPACE)
-                .projectId(projectId)
-                .build();
-        var workspaceDashboard = dashboardResourceClient.createPartialDashboard()
-                .scope(DashboardScope.WORKSPACE)
-                .build();
+        var projectDashboardId = insightsViewClient.create(
+                insightsViewClient.createPartialInsightsView().projectId(projectId).build(), apiKey, workspaceName);
+        insightsViewClient.create(
+                insightsViewClient.createPartialInsightsView().projectId(otherProjectId).build(), apiKey,
+                workspaceName);
 
-        var projectDashboardId = dashboardResourceClient.create(projectDashboard, apiKey, workspaceName);
-        dashboardResourceClient.create(workspaceDashboard, apiKey, workspaceName);
+        // Dashboards created before project scoping have no project and stay listed in every project
+        var unassignedDashboardId = insightsViewClient.create(
+                insightsViewClient.createPartialInsightsView().build(), apiKey, workspaceName);
 
         var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
                 null);
 
-        assertThat(page.total()).isEqualTo(1);
-        assertThat(page.content()).extracting(Dashboard::id).containsExactly(projectDashboardId);
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.content()).extracting(Dashboard::id)
+                .containsExactlyInAnyOrder(projectDashboardId, unassignedDashboardId);
     }
 
     @Test
@@ -341,13 +344,13 @@ class DashboardsResourceFindProjectDashboardsTest {
         var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
 
         List<Dashboard> expectedDashboards = IntStream.range(0, 5)
-                .mapToObj(i -> dashboardResourceClient.createPartialDashboard()
+                .mapToObj(i -> insightsViewClient.createPartialInsightsView()
                         .name("Dashboard " + (char) ('A' + i))
                         .projectId(projectId)
                         .build())
                 .map(dashboard -> {
-                    var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
-                    return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
+                    var id = insightsViewClient.create(dashboard, apiKey, workspaceName);
+                    return insightsViewClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
                 })
                 .sorted(comparator)
                 .toList();

@@ -14,9 +14,9 @@ import {
   CustomViewItem,
   ProjectDashboardViewOption,
 } from "./ProjectDashboardViewItems";
-import useInsightsViewsList from "@/api/insights-views/useInsightsViewsList";
+import useProjectDashboardsList from "@/api/dashboards/useProjectDashboardsList";
 import useInsightsViewBatchDeleteMutation from "@/api/insights-views/useInsightsViewBatchDeleteMutation";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { useActiveProjectId } from "@/store/AppStore";
 import {
   Dashboard,
   DASHBOARD_TYPE,
@@ -106,7 +106,6 @@ const ProjectDashboardViewSelector: React.FC<
     isOpen: false,
   });
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const projectId = useActiveProjectId();
   const { mutate: deleteMutate } = useInsightsViewBatchDeleteMutation();
 
@@ -122,16 +121,15 @@ const ProjectDashboardViewSelector: React.FC<
     return generateDashboardTypeFilter(DASHBOARD_TYPE.MULTI_PROJECT);
   }, []);
 
-  const { data: dashboardsData } = useInsightsViewsList(
+  const { data: dashboardsData } = useProjectDashboardsList(
     {
-      workspaceName,
-      projectId,
+      projectId: projectId!,
       filters: processedFilters,
       page: 1,
       size: 1000,
     },
     {
-      enabled: Boolean(workspaceName) && Boolean(projectId),
+      enabled: Boolean(projectId),
     },
   );
 
