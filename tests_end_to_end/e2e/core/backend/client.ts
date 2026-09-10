@@ -473,6 +473,94 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** The three threshold operators a score condition can carry (`>`, `<`, `=`). */
+export type ScoreConditionOperator = '>' | '<' | '=';
+
+/** One threshold on a named feedback score, as the payload spells it. */
+export interface ScoreConditionRef {
+  score: string;
+  operator: ScoreConditionOperator;
+  value: number;
+}
+
+/** A conjunction — every condition in the group must hold. */
+export interface ScoreConditionGroupRef {
+  conditions: ScoreConditionRef[];
+}
+
+/** The disjunction of groups: an item matches when ANY group matches. */
+export interface ScoreConditionsRef {
+  groups: ScoreConditionGroupRef[];
+}
+
+/**
+ * A queue's automation config, as sent and as read back.
+ *
+ * Deliberately models `enabled` + `conditions` and nothing else. The payload
+ * also carries `max_items_in_queue`, but that field arrived in the second
+ * commit of opik#8258 and is absent from the build these specs were verified
+ * against — modelling it would make every comparison below depend on which
+ * commit the target is serving. The ceiling is untested here and stays that
+ * way until a spec can be proven against a build that has it.
+ *
+ * `conditions` is nullable because the API's three-state PATCH lets a
+ * toggle-only request omit it; a caller comparing two reads must therefore
+ * assert it is present rather than compare two absences and call that
+ * agreement.
+ */
+export interface AnnotationQueueAutomationRef {
+  enabled: boolean;
+  conditions: ScoreConditionsRef | null;
+}
+
+/**
+ * An annotation queue read back with the fields the automation specs assert on.
+ *
+ * Separate from `AnnotationQueueDetail` (items/reviewers, what the delete spec
+ * needs) because these read a different half of the record: the config a PATCH
+ * is or is not allowed to disturb.
+ */
+export interface AnnotationQueueRecordRef {
+  id: string;
+  name: string;
+  description: string | null;
+  automation: AnnotationQueueAutomationRef | null;
+}
+
+/**
+ * A queue create, with the id chosen by the caller.
+ *
+ * The endpoint answers 201 with no body, so a server-chosen id would only be
+ * recoverable from the `Location` header — and not at all if the request fails
+ * after the row lands. A caller-supplied v7 id (`uuid7()`) means teardown knows
+ * what to delete whatever the response was.
+ */
+export interface AnnotationQueueSeed {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  automation?: AnnotationQueueAutomationRef;
+}
+
+/**
+ * The subset of `AnnotationQueueUpdate` these specs PATCH.
+ *
+ * `automation` is optional *and* three-state at the API: omitting the key
+ * leaves the stored automation alone, `{enabled: false}` disables it while
+ * keeping its conditions, and a full object replaces the conditions wholesale.
+ * Modelled as an optional field precisely so a caller can express "no
+ * automation key at all", which is the case the UI's Edit dialog sends.
+ */
+export interface AnnotationQueueUpdateWrite {
+  name?: string;
+  description?: string;
+  automation?: {
+    enabled: boolean;
+    conditions?: ScoreConditionsRef;
+  };
+}
+
 /**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
@@ -3094,6 +3182,106 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Create a queue through REST, answering the raw status.
+     *
+     * Through `rawFetch` rather than the pinned SDK for two reasons: the SDK's
+     * generated `AnnotationQueue` write type predates the `automation` field
+     * and so cannot express it at all, and the status is part of what the
+     * automation specs assert (a create the backend rejects must not leave a
+     * half-written queue behind).
+     */
+    async createAnnotationQueue(seed: AnnotationQueueSeed): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/annotation-queues',
+        {
+          body: {
+            id: seed.id,
+            project_id: seed.projectId,
+            name: seed.name,
+            scope: 'trace',
+            ...(seed.description === undefined ? {} : { description: seed.description }),
+            ...(seed.automation === undefined
+              ? {}
+              : {
+                  automation: {
+                    enabled: seed.automation.enabled,
+                    ...(seed.automation.conditions === null
+                      ? {}
+                      : { conditions: seed.automation.conditions }),
+                  },
+                }),
+          },
+        },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * PATCH a queue, answering the raw status.
+     *
+     * `patch` is passed through verbatim — the three-state `automation`
+     * semantics turn on which keys are *present*, so a helper that filled in
+     * defaults would quietly convert "leave it alone" into "replace it" and
+     * destroy the distinction the specs exist to pin.
+     */
+    async updateAnnotationQueue(
+      id: string,
+      patch: AnnotationQueueUpdateWrite,
+    ): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'PATCH',
+        `/v1/private/annotation-queues/${id}`,
+        { body: patch },
+      );
+      return { status, message };
+    },
+
+    /** One queue by id with its automation config, or `null` when it is gone. */
+    async getAnnotationQueueRecord(id: string): Promise<AnnotationQueueRecordRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET annotation queue '${id}' answered ${status}: ${message}`);
+      }
+      return toAnnotationQueueRecord(json);
+    },
+
+    /**
+     * Every queue in one project, read through the LIST endpoint.
+     *
+     * Not redundant with `getAnnotationQueueRecord`: the list resolves each
+     * queue's automation through a different query than the by-id read
+     * (`findByQueueIds` vs `findByQueueId`), so one of the two can stop joining
+     * the automation row while the other keeps working. `total` is returned
+     * alongside the rows so a caller can assert the whole answer rather than
+     * finding its own queue inside a longer one.
+     */
+    async listAnnotationQueueRecords(
+      projectId: string,
+    ): Promise<{ total: number; queues: AnnotationQueueRecordRef[] }> {
+      const query = new URLSearchParams({ page: '1', size: '100' });
+      query.set(
+        'filters',
+        JSON.stringify([{ field: 'project_id', operator: '=', value: projectId }]),
+      );
+      const { status, message, json } = await rawFetch('GET', '/v1/private/annotation-queues', {
+        query,
+      });
+      if (status !== 200) {
+        throw new Error(`LIST annotation queues for project '${projectId}' answered ${status}: ${message}`);
+      }
+      const page = (json ?? {}) as { total?: number; content?: unknown[] };
+      return {
+        total: Number(page.total ?? 0),
+        queues: (page.content ?? []).map(toAnnotationQueueRecord),
+      };
+    },
+
+    /**
      * Fetch the studio run's logs. The backend returns a presigned URL to a
      * gzipped log object (the optimizer subprocess stdout); this resolves it and
      * gunzips the content.
@@ -3123,6 +3311,38 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         return { url, urlReachable: false, content: null };
       }
     },
+  };
+}
+
+/**
+ * Map one annotation queue payload onto the fields the automation specs read.
+ *
+ * A queue that has never been given an automation carries no `automation` key
+ * at all rather than a null one, so absent and explicit-null both normalise to
+ * `null` here — the two are the same fact ("this queue has no automation") and
+ * a spec asserting on the difference would be asserting about Jackson, not the
+ * product. `conditions` is NOT normalised the same way: a stored automation
+ * with its conditions missing is a real regression, so it stays distinguishable.
+ */
+function toAnnotationQueueRecord(payload: unknown): AnnotationQueueRecordRef {
+  const q = (payload ?? {}) as {
+    id?: unknown;
+    name?: unknown;
+    description?: unknown;
+    automation?: { enabled?: unknown; conditions?: ScoreConditionsRef | null } | null;
+  };
+  const automation = q.automation ?? null;
+  return {
+    id: String(q.id ?? ''),
+    name: String(q.name ?? ''),
+    description: typeof q.description === 'string' ? q.description : null,
+    automation:
+      automation === null
+        ? null
+        : {
+            enabled: Boolean(automation.enabled),
+            conditions: automation.conditions ?? null,
+          },
   };
 }
 

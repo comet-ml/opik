@@ -1,4 +1,4 @@
-import { test as baseTest } from './annotation-queue.fixture';
+import { test as baseTest } from './annotation-queue-automation.fixture';
 
 export interface ExplainTraceRef {
   id: string;
@@ -136,4 +136,4 @@ export const test = baseTest.extend<ExplainTracesFixtures>({
   },
 });
 
-export { expect } from './annotation-queue.fixture';
+export { expect } from './annotation-queue-automation.fixture';

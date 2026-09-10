@@ -68,6 +68,42 @@ export class AnnotationQueuesPage {
     });
   }
 
+  /**
+   * Rename a queue through the row's kebab → Edit → AddEditAnnotationQueueDialog,
+   * the only path a user has to editing a queue. Resolves once the dialog has
+   * closed and the row shows the new name.
+   *
+   * Same selector story as `deleteQueue`: the kebab, the menu items and the
+   * shared dialog carry no data-testids, so this scopes by the row and then
+   * uses the accessible names from AnnotationQueueRowActionsCell and the
+   * dialog's own title/submit copy. The dialog must be scoped before the Name
+   * field is filled — the queues table renders a "Name" column header, and an
+   * unscoped label match would be ambiguous.
+   */
+  async renameQueue(queueId: string, newName: string): Promise<void> {
+    return test.step(`rename annotation queue ${queueId} to "${newName}"`, async () => {
+      const row = this.queueRow(queueId);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+
+      const dialog = this.editQueueDialog;
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByLabel('Name', { exact: true }).fill(newName);
+      await dialog.getByRole('button', { name: 'Update annotation queue' }).click();
+
+      await dialog.waitFor({ state: 'hidden' });
+      await expect(row.getByText(newName, { exact: true })).toBeVisible();
+    });
+  }
+
+  /** The queue create/edit dialog, in its edit incarnation. */
+  get editQueueDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Edit annotation queue' }),
+    });
+  }
+
   /** The destructive confirm dialog raised by the row's Delete action. */
   get deleteQueueConfirmDialog(): Locator {
     return this.page.getByRole('dialog').filter({

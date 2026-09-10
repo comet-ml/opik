@@ -56,6 +56,10 @@ export type {
   AnnotationQueueTraceRef,
   AnnotationQueueFixtures,
 } from './annotation-queue.fixture';
+export type {
+  AutomatedQueueRef,
+  AnnotationQueueAutomationFixtures,
+} from './annotation-queue-automation.fixture';
 export type { ExplainTraceRef, ExplainTracesFixtures } from './explain-traces.fixture';
 export type {
   FilterableTraceRef,
