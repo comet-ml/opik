@@ -7,6 +7,7 @@ import { useMcpAnnouncementBanner } from "./useMcpAnnouncementBanner";
 const storage: Record<string, unknown> = {};
 let mockKillSwitch: boolean | undefined;
 let mockDemoBannerVisible = false;
+let mockDemoSettled = true;
 let mockRouteProjectId: string | undefined;
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -45,9 +46,12 @@ vi.mock("posthog-js/react", () => ({
 vi.mock("@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility", () => ({
   useDemoProjectBannerVisibility: () => ({
     isBannerVisible: mockDemoBannerVisible,
+    isSettled: mockDemoSettled,
   }),
-  useIsDemoProjectById: (projectId?: string | null) =>
-    projectId === DEMO_PROJECT_ID,
+  useIsDemoProjectById: (projectId?: string | null) => ({
+    isDemoProject: projectId === DEMO_PROJECT_ID,
+    isSettled: mockDemoSettled,
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -63,6 +67,7 @@ beforeEach(() => {
   for (const key of Object.keys(storage)) delete storage[key];
   mockKillSwitch = undefined;
   mockDemoBannerVisible = false;
+  mockDemoSettled = true;
   mockRouteProjectId = undefined;
   vi.useFakeTimers();
   vi.setSystemTime(new Date(INSIDE_WINDOW));
@@ -160,6 +165,30 @@ describe("useMcpAnnouncementBanner", () => {
       mockKillSwitch = undefined;
 
       expect(banner().current.visible).toBe(true);
+    });
+  });
+
+  describe("counting an impression", () => {
+    it("is countable when it is visible and every verdict has resolved", () => {
+      expect(banner().current.countable).toBe(true);
+    });
+
+    // The banner is painted optimistically while the demo verdicts are in
+    // flight. Counting it then would put a user we are about to hide it from
+    // into the funnel, and burn the session's one impression doing it.
+    it("is not countable while a demo verdict is still in flight", () => {
+      mockDemoSettled = false;
+
+      const { current } = banner();
+
+      expect(current.visible).toBe(true);
+      expect(current.countable).toBe(false);
+    });
+
+    it("is not countable when it is not visible at all", () => {
+      mockDemoBannerVisible = true;
+
+      expect(banner().current.countable).toBe(false);
     });
   });
 });

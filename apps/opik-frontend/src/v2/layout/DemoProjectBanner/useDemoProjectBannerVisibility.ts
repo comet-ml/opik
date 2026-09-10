@@ -13,23 +13,43 @@ import {
   DEFAULT_ONBOARDING_FLOW,
 } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
 
+export type DemoProjectVerdict = {
+  isDemoProject: boolean;
+  /**
+   * Whether the answer above is the real one yet. It comes from a query, so
+   * "not a demo project" and "we do not know yet" are the same `false` — a
+   * distinction that matters to anything counting impressions, which must not
+   * count a user it is about to hide the banner from.
+   */
+  isSettled: boolean;
+};
+
 /**
  * Is this project one of the seeded demo projects?
  *
  * Membership is by name — no field on the project marks a demo project — which
  * is why `DEMO_PROJECT_NAMES` is a list rather than a single constant.
  */
-export const useIsDemoProjectById = (projectId?: string | null): boolean => {
-  const { data: project } = useProjectById(
+export const useIsDemoProjectById = (
+  projectId?: string | null,
+): DemoProjectVerdict => {
+  const { data: project, isPending } = useProjectById(
     { projectId: projectId! },
     { enabled: !!projectId },
   );
 
-  return !!project?.name && DEMO_PROJECT_NAMES.includes(project.name);
+  return {
+    isDemoProject: !!project?.name && DEMO_PROJECT_NAMES.includes(project.name),
+    // No project to resolve is a settled answer, not a pending one: a disabled
+    // query stays "pending" forever.
+    isSettled: !projectId || !isPending,
+  };
 };
 
 export type DemoProjectBannerVisibility = {
   isDemoProject: boolean;
+  /** Whether the demo verdict has resolved; see DemoProjectVerdict. */
+  isSettled: boolean;
   isOnboardingActive: boolean;
   isManualFlow: boolean;
   isBannerVisible: boolean;
@@ -56,7 +76,7 @@ export const useDemoProjectBannerVisibility =
     const activeProjectId = useActiveProjectId();
     const workspaceName = useActiveWorkspaceName();
 
-    const isDemoProject = useIsDemoProjectById(activeProjectId);
+    const { isDemoProject, isSettled } = useIsDemoProjectById(activeProjectId);
 
     const [onboardingState, setOnboardingState] =
       useLocalStorageState<AgentOnboardingState>(
@@ -76,6 +96,7 @@ export const useDemoProjectBannerVisibility =
 
     return {
       isDemoProject,
+      isSettled,
       isOnboardingActive,
       isManualFlow,
       isBannerVisible: isDemoProject && (isOnboardingActive || isManualFlow),

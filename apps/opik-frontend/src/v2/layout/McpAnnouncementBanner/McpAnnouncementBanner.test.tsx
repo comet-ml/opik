@@ -14,6 +14,7 @@ import {
 // ── mutable state the mock factories read ──────────────────────────────────
 const storage: Record<string, unknown> = {};
 let mockIsPhonePortrait = false;
+let mockDemoSettled = true;
 // ───────────────────────────────────────────────────────────────────────────
 
 vi.mock("use-local-storage-state", async () => {
@@ -40,7 +41,7 @@ vi.mock("use-local-storage-state", async () => {
 });
 
 vi.mock("@/store/AppStore", () => ({
-  useActiveWorkspaceName: () => "my-workspace",
+  default: { getState: () => ({ activeWorkspaceName: "my-workspace" }) },
 }));
 
 // Boundaries of the visibility rule, each with its own tests elsewhere. Here
@@ -50,8 +51,14 @@ vi.mock("posthog-js/react", () => ({
 }));
 
 vi.mock("@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility", () => ({
-  useDemoProjectBannerVisibility: () => ({ isBannerVisible: false }),
-  useIsDemoProjectById: () => false,
+  useDemoProjectBannerVisibility: () => ({
+    isBannerVisible: false,
+    isSettled: mockDemoSettled,
+  }),
+  useIsDemoProjectById: () => ({
+    isDemoProject: false,
+    isSettled: mockDemoSettled,
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -85,6 +92,7 @@ beforeEach(() => {
   for (const key of Object.keys(storage)) delete storage[key];
   window.sessionStorage.clear();
   mockIsPhonePortrait = false;
+  mockDemoSettled = true;
   vi.mocked(trackEvent).mockClear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date("2026-10-01T09:00:00Z"));
@@ -195,6 +203,23 @@ describe("McpAnnouncementBanner", () => {
 
       expect(screen.getByRole("link", { name: /learn more/i })).toBeVisible();
       expect(screen.getByRole("button", { name: /dismiss/i })).toBeVisible();
+    });
+  });
+
+  describe("while the suppression verdicts are in flight", () => {
+    it("shows the bar but does not spend the session's impression", () => {
+      mockDemoSettled = false;
+
+      renderBanner();
+
+      expect(screen.getByText(MCP_BANNER_COPY)).toBeInTheDocument();
+      expect(trackEvent).not.toHaveBeenCalledWith(
+        OpikEvent.MCP_BANNER_SHOWN,
+        expect.anything(),
+      );
+      expect(
+        window.sessionStorage.getItem(MCP_BANNER_SHOWN_SESSION_KEY),
+      ).toBeNull();
     });
   });
 });

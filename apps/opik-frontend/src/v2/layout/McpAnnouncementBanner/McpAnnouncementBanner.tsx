@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useLayoutEffect, useRef } from "react";
 import { ArrowUpRight, Plug, X } from "lucide-react";
 
-import { useActiveWorkspaceName } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import { buildDocsUrl } from "@/lib/utils";
@@ -13,7 +13,9 @@ import {
   MCP_BANNER_COPY_SHORT,
   MCP_BANNER_COPY_VARIANT,
   MCP_BANNER_DOCS_PATH,
+  MCP_BANNER_HEIGHT,
   MCP_BANNER_SHOWN_SESSION_KEY,
+  McpBannerCopyVariant,
 } from "./constants";
 import { useMcpAnnouncementBanner } from "./useMcpAnnouncementBanner";
 
@@ -24,11 +26,11 @@ interface McpAnnouncementBannerProps {
 }
 
 /**
- * Has this session already been counted? Session storage rather than a ref:
- * the layout survives navigation but not a reload, and a reload should not
- * put a second impression into the funnel's denominator.
+ * Take this session's one impression, if it is still going. Session storage
+ * rather than a ref: the layout survives navigation but not a reload, and a
+ * reload should not put a second impression into the funnel's denominator.
  */
-const markSessionImpression = (): boolean => {
+const claimSessionImpression = (): boolean => {
   try {
     if (window.sessionStorage.getItem(MCP_BANNER_SHOWN_SESSION_KEY)) {
       return false;
@@ -42,13 +44,23 @@ const markSessionImpression = (): boolean => {
   }
 };
 
+/**
+ * Read at call time rather than through a subscription: the workspace name is
+ * never rendered here, only reported, so subscribing would re-render the bar
+ * on every store change for a value nobody sees.
+ */
+const bannerEventProperties = (copyVariant: McpBannerCopyVariant) => ({
+  workspace_name: useAppStore.getState().activeWorkspaceName,
+  campaign_id: MCP_BANNER_CAMPAIGN_ID,
+  copy_variant: copyVariant,
+});
+
 const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   onChangeHeight,
   retentionBannerVisible = false,
 }) => {
-  const heightRef = useRef(0);
-  const workspaceName = useActiveWorkspaceName();
-  const { visible, dismiss } = useMcpAnnouncementBanner({
+  const heightRef = useRef(MCP_BANNER_HEIGHT);
+  const { visible, countable, dismiss } = useMcpAnnouncementBanner({
     retentionBannerVisible,
   });
   const { isPhonePortrait } = useIsPhone();
@@ -63,35 +75,33 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
     onChangeHeight(node.clientHeight);
   });
 
-  const eventProperties = {
-    workspace_name: workspaceName,
-    campaign_id: MCP_BANNER_CAMPAIGN_ID,
-    copy_variant: copyVariant,
-  };
-
-  useEffect(() => {
+  // Layout effect, and the height known from the design rather than the
+  // measured one: the layout animates its content offset, so publishing the
+  // height a frame late reads as the whole page sliding down on every load.
+  useLayoutEffect(() => {
     onChangeHeight(visible ? heightRef.current : 0);
   }, [visible, onChangeHeight]);
 
-  useEffect(() => {
-    if (!visible || !markSessionImpression()) return;
+  useLayoutEffect(() => {
+    if (!countable || !claimSessionImpression()) return;
 
-    trackEvent(OpikEvent.MCP_BANNER_SHOWN, eventProperties);
-    // The impression describes one render of one banner; re-firing it because
-    // a property object was recreated would be the bug, not the fix.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+    trackEvent(OpikEvent.MCP_BANNER_SHOWN, bannerEventProperties(copyVariant));
+  }, [countable, copyVariant]);
 
   const handleCtaClick = useCallback(() => {
-    trackEvent(OpikEvent.MCP_BANNER_CTA_CLICKED, eventProperties);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceName, copyVariant]);
+    trackEvent(
+      OpikEvent.MCP_BANNER_CTA_CLICKED,
+      bannerEventProperties(copyVariant),
+    );
+  }, [copyVariant]);
 
   const handleDismiss = useCallback(() => {
-    trackEvent(OpikEvent.MCP_BANNER_DISMISSED, eventProperties);
+    trackEvent(
+      OpikEvent.MCP_BANNER_DISMISSED,
+      bannerEventProperties(copyVariant),
+    );
     dismiss();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dismiss, workspaceName, copyVariant]);
+  }, [dismiss, copyVariant]);
 
   if (!visible) {
     return null;

@@ -31,7 +31,15 @@ type UseMcpAnnouncementBannerParams = {
 };
 
 type UseMcpAnnouncementBannerResult = {
+  /** Whether to render. Decided synchronously, so the first frame is right. */
   visible: boolean;
+  /**
+   * Whether this render may be counted as an impression. Stricter than
+   * `visible`: the demo verdicts arrive from queries, so a banner can be
+   * painted and then withdrawn. Counting on `visible` would put suppressed
+   * users into the funnel and burn the session's one impression on them.
+   */
+  countable: boolean;
   dismiss: () => void;
 };
 
@@ -64,7 +72,7 @@ export const useMcpAnnouncementBanner = ({
 
   const killed = useFeatureFlagEnabled(MCP_BANNER_FEATURE_FLAG_KEY) === false;
 
-  const { isBannerVisible: demoBannerVisible } =
+  const { isBannerVisible: demoBannerVisible, isSettled: demoSettled } =
     useDemoProjectBannerVisibility();
 
   // The route's own project, not the sticky active one: the question is which
@@ -73,18 +81,22 @@ export const useMcpAnnouncementBanner = ({
     strict: false,
     select: (params) => (params as { projectId?: string }).projectId,
   });
-  const onDemoProjectPage = useIsDemoProjectById(routeProjectId);
+  const { isDemoProject: onDemoProjectPage, isSettled: routeSettled } =
+    useIsDemoProjectById(routeProjectId);
 
   const dismiss = useCallback(() => setDismissed(true), [setDismissed]);
 
+  const visible =
+    isWithinCampaign() &&
+    !dismissed &&
+    !killed &&
+    !retentionBannerVisible &&
+    !demoBannerVisible &&
+    !onDemoProjectPage;
+
   return {
-    visible:
-      isWithinCampaign() &&
-      !dismissed &&
-      !killed &&
-      !retentionBannerVisible &&
-      !demoBannerVisible &&
-      !onDemoProjectPage,
+    visible,
+    countable: visible && demoSettled && routeSettled,
     dismiss,
   };
 };

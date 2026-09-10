@@ -31,6 +31,16 @@ export const MCP_BANNER_SHOWN_SESSION_KEY = "mcp-announcement-shown-v1";
 
 export const MCP_BANNER_DOCS_PATH = "/mcp-server";
 
+/**
+ * The bar's height, in px, known statically from the design (h-8).
+ *
+ * The layout offsets its content by the summed banner height and animates that
+ * offset, so a height measured a frame late reads as the page sliding down on
+ * every load — exactly the shift the ticket forbids. The measured height from
+ * the resize observer still corrects this if the bar ever changes size.
+ */
+export const MCP_BANNER_HEIGHT = 32;
+
 export const MCP_BANNER_COPY =
   "Opik MCP: debug traces and fix failing evals from Claude Code, Codex, Cursor or VS Code.";
 

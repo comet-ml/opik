@@ -11,6 +11,7 @@ import {
 // ── mutable state the mock factories read ──────────────────────────────────
 let mockActiveProjectId: string | null = "project-1";
 let mockProjectsById: Record<string, { name: string }> = {};
+let mockProjectPending = false;
 let mockOnboardingState: { step: string | null; agentName: string } | undefined;
 let mockVariant: string | null | undefined;
 // ───────────────────────────────────────────────────────────────────────────
@@ -22,7 +23,13 @@ vi.mock("@/store/AppStore", () => ({
 
 vi.mock("@/api/projects/useProjectById", () => ({
   default: ({ projectId }: { projectId?: string }) => ({
-    data: projectId ? mockProjectsById[projectId] : undefined,
+    // A pending query has no data yet, which is the whole reason "not a demo
+    // project" and "not known yet" have to be told apart.
+    data:
+      projectId && !mockProjectPending
+        ? mockProjectsById[projectId]
+        : undefined,
+    isPending: mockProjectPending,
   }),
 }));
 
@@ -43,6 +50,7 @@ beforeEach(() => {
     [DEMO_ID]: { name: DEMO_PROJECT_NAME },
     [OWN_ID]: { name: "my-agent" },
   };
+  mockProjectPending = false;
   mockOnboardingState = undefined;
   // The onboarding flow variant resolves to "manual" by default, so tests that
   // care about the non-manual branch have to opt into it explicitly.
@@ -120,18 +128,34 @@ describe("useDemoProjectBannerVisibility", () => {
 });
 
 describe("useIsDemoProjectById", () => {
+  const verdict = (projectId?: string) =>
+    renderHook(() => useIsDemoProjectById(projectId)).result.current;
+
   it("is true for the seeded demo project's id", () => {
-    const { result } = renderHook(() => useIsDemoProjectById(DEMO_ID));
-    expect(result.current).toBe(true);
+    expect(verdict(DEMO_ID)).toEqual({ isDemoProject: true, isSettled: true });
   });
 
   it("is false for another project's id", () => {
-    const { result } = renderHook(() => useIsDemoProjectById(OWN_ID));
-    expect(result.current).toBe(false);
+    expect(verdict(OWN_ID)).toEqual({ isDemoProject: false, isSettled: true });
   });
 
-  it("is false when no project id is given", () => {
-    const { result } = renderHook(() => useIsDemoProjectById(undefined));
-    expect(result.current).toBe(false);
+  // A disabled query stays "pending" forever, so having nothing to resolve has
+  // to count as settled or nothing downstream ever gets an answer.
+  it("counts having no project as settled", () => {
+    mockProjectPending = true;
+    expect(verdict(undefined)).toEqual({
+      isDemoProject: false,
+      isSettled: true,
+    });
+  });
+
+  // The distinction anything counting impressions depends on: not-a-demo and
+  // not-known-yet are the same `false`.
+  it("is unsettled while the project is still loading", () => {
+    mockProjectPending = true;
+    expect(verdict(DEMO_ID)).toEqual({
+      isDemoProject: false,
+      isSettled: false,
+    });
   });
 });
