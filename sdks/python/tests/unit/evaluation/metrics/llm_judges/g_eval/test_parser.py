@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 
 from opik import logging_messages, exceptions
@@ -258,6 +258,15 @@ def _geval_on_stubbed_provider(monkeypatch, content, entries):
         "generate_chat_completion",
         lambda *args, **kwargs: {"content": "stub chain of thought"},
     )
+
+    async def fake_agenerate_chat_completion(*args, **kwargs):
+        return {"content": "stub chain of thought"}
+
+    monkeypatch.setattr(
+        metric._model,
+        "agenerate_chat_completion",
+        fake_agenerate_chat_completion,
+    )
     captured = {}
 
     @contextmanager
@@ -266,6 +275,15 @@ def _geval_on_stubbed_provider(monkeypatch, content, entries):
         yield _provider_response(content, entries)
 
     monkeypatch.setattr(base_model, "get_provider_response", fake_get_provider_response)
+
+    @asynccontextmanager
+    async def fake_aget_provider_response(model_provider, messages, **kwargs):
+        captured.update(kwargs)
+        yield _provider_response(content, entries)
+
+    monkeypatch.setattr(
+        base_model, "aget_provider_response", fake_aget_provider_response
+    )
     return metric, captured
 
 
@@ -336,6 +354,87 @@ def test_geval_litellm_path_folded_whitespace_is_scored(monkeypatch):
     metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
 
     result = metric.score("any input")
+
+    assert captured["logprobs"] is True
+    assert captured["top_logprobs"] == 20
+    assert result.value == pytest.approx(0.07984052568223204, abs=1e-9)
+    assert result.reason == "none"
+
+
+# --- async provider-shaped GEval coverage ------------------------------------
+# GEval.ascore goes through aget_provider_response (an independent call site)
+# into the same parser, so the sync tests above cannot catch an async-only
+# regression. Fixtures and expectations mirror the sync twins exactly: the
+# parser is synchronous and shared, so identical entries/content must yield
+# identical values.
+
+
+@pytest.mark.asyncio
+async def test_geval_litellm_path_split_score_scores_near_one_async(monkeypatch):
+    # Async twin of test_geval_litellm_path_split_score_scores_near_one.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            "1",
+            -0.05,
+            top=[
+                {"token": "1", "logprob": -0.05},
+                {"token": "0", "logprob": -2.30},
+                {"token": "2", "logprob": -2.40},
+            ],
+        ),
+        _entry(
+            "0",
+            -0.02,
+            top=[{"token": "0", "logprob": -0.02}, {"token": "1", "logprob": -3.00}],
+        ),
+        _entry(",", -0.01),
+        _entry('"reason"', -0.01),
+        _entry('":', -0.01),
+        _entry(" ", -0.01),
+        _entry('"excellent"', -0.01),
+        _entry("}", -0.01),
+    ]
+    content = '{"score":10, "reason": "excellent"}'
+    metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
+
+    result = await metric.ascore("any input")
+
+    assert captured["logprobs"] is True
+    assert captured["top_logprobs"] == 20
+    assert result.value == pytest.approx(0.9007723389857002, abs=1e-9)
+    assert result.reason == "excellent"
+
+
+@pytest.mark.asyncio
+async def test_geval_litellm_path_folded_whitespace_is_scored_async(monkeypatch):
+    # Async twin of test_geval_litellm_path_folded_whitespace_is_scored.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            " 0",
+            -0.02,
+            top=[
+                {"token": " 0", "logprob": -0.02},
+                {"token": " 1", "logprob": -2.00},
+                {"token": " 10", "logprob": -2.50},
+            ],
+        ),
+        _entry(",", -0.01),
+        _entry('"reason"', -0.01),
+        _entry('":', -0.01),
+        _entry(" ", -0.01),
+        _entry('"none"', -0.01),
+        _entry("}", -0.01),
+    ]
+    content = '{"score": 0, "reason": "none"}'
+    metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
+
+    result = await metric.ascore("any input")
 
     assert captured["logprobs"] is True
     assert captured["top_logprobs"] == 20
