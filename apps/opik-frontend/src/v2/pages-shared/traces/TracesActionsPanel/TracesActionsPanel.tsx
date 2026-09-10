@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { PenLine, Tag, Trash } from "lucide-react";
 import slugify from "slugify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonProps } from "@/ui/button";
@@ -12,6 +12,7 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/v2/pages-shared/traces/AddTagDialog/AddTagDialog";
+import AnnotateTracesDialog from "@/v2/pages-shared/traces/AnnotateTracesDialog/AnnotateTracesDialog";
 import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
@@ -70,7 +71,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces, canLogTraceSpanThread },
+    permissions: {
+      canDeleteTraces,
+      canLogTraceSpanThread,
+      canAnnotateTraceSpanThread,
+    },
   } = usePermissions();
 
   const showEvaluate =
@@ -121,6 +126,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           confirmButtonVariant="destructive"
         />
       )}
+      {canAnnotateTraceSpanThread && (
+        <AnnotateTracesDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 5}
+          setOpen={setOpen}
+          type={type}
+        />
+      )}
       {canLogTraceSpanThread && (
         <AddTagDialog
           key={`tag-${resetKeyRef.current}`}
@@ -151,6 +165,23 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         buttonVariant={buttonVariant}
         buttonSize={buttonSize}
       />
+      {canAnnotateTraceSpanThread && (
+        <TooltipWrapper content="Annotate">
+          <Button
+            variant={buttonVariant}
+            size={buttonSize}
+            onClick={() => {
+              setOpen(5);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+            data-testid="traces-bulk-annotate-button"
+          >
+            <PenLine className={leadIconClassName} />
+            <span>Annotate</span>
+          </Button>
+        </TooltipWrapper>
+      )}
       {canLogTraceSpanThread && (
         <TooltipWrapper content="Manage tags">
           <Button
