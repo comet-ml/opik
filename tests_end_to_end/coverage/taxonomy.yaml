@@ -670,6 +670,8 @@ areas:
     routes: ["/projects/$projectId/online-evaluation", "/$workspaceName/automation-logs"]
     spec_dir: online-evaluation
     specs:
+      - online-evaluation/online-evaluation-declared-argument-binding.spec.ts
+      - online-evaluation/online-evaluation-default-code-metric-template.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
