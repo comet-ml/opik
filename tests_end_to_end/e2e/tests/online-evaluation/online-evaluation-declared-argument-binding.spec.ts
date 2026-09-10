@@ -19,7 +19,7 @@ const DEFAULT_ARGUMENTS = { input: 'input', output: 'output', metadata: 'metadat
 const SCORING_TIMEOUT_MS = 180_000;
 
 /**
- * `bindDeclaredArguments` itself, pinned end to end.
+ * The missing-argument fill itself, pinned end to end.
  *
  * No page is opened. The subject is which arguments the engine passes to the
  * metric, which the backend states in the score it stores and in the rule's log
@@ -47,7 +47,7 @@ test.describe('Online Evaluation — declared argument binding', { tag: ['@t2-cu
     testNamespace,
     automationRulesCleanup,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(300_000);
 
     const traceRuleName = `${testNamespace}-bind-trace`;
     const spanRuleName = `${testNamespace}-bind-span`;
@@ -248,14 +248,14 @@ test.describe('Online Evaluation — declared argument binding', { tag: ['@t2-cu
     testNamespace,
     automationRulesCleanup,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(300_000);
 
     // The guard on the other side of the same change. `spans` is not resolved
     // from an extraction path — it is injected as a typed `List<Span>` when the
-    // rule's arguments name it — so `bindDeclaredArguments` skips it. Getting
-    // that skip wrong would null a typed list on every rule that declares
-    // `spans`, which is a regression this fix could plausibly have introduced
-    // and which no other spec would catch.
+    // rule's arguments name it — so it is already in the map when the fill runs
+    // and must survive it untouched. Getting that wrong would null a typed list
+    // on every rule that declares `spans`, which is a regression this fix could
+    // plausibly have introduced and which no other spec would catch.
     //
     // Both behaviours are asserted from ONE call: the same invocation has to
     // keep the injected list and bind the absent metadata to None.

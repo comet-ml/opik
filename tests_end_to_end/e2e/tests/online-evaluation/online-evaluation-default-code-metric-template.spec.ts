@@ -2,7 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { uuid7 } from '@e2e/core/backend';
-import type { AutomationRuleLogRef } from '@e2e/core/backend';
+import type { AutomationRuleLogRef, BackendClient } from '@e2e/core/backend';
 
 /**
  * The score name the dialog's default template hard-codes
@@ -38,6 +38,39 @@ const EVALUATOR_CALL_LINE = 'to Python evaluator';
 const SCORING_TIMEOUT_MS = 180_000;
 
 /**
+ * Block until the rule logged one evaluator call line per entity, and return the
+ * whole stream.
+ *
+ * The stored score and the rule's log stream settle on different paths, so a
+ * stream read straight after the score can be a call line short: the scores
+ * prove the rule ran, not that everything it wrote has arrived. Polling for the
+ * expected count is what lets the assertions below read a settled stream instead
+ * of a half-flushed one — and it keeps the ERROR-line assertion meaningful,
+ * since an empty stream would otherwise pass for a clean one.
+ */
+async function waitForEvaluatorCallLines(
+  backendClient: BackendClient,
+  ruleId: string,
+  expected: number,
+): Promise<AutomationRuleLogRef[]> {
+  let lines: AutomationRuleLogRef[] = [];
+  await expect
+    .poll(
+      async () => {
+        lines = await backendClient.getAutomationRuleLogs(ruleId);
+        return lines.filter((l) => l.message.includes(EVALUATOR_CALL_LINE)).length;
+      },
+      {
+        timeout: 60_000,
+        intervals: [1_000, 2_000],
+        message: `rule '${ruleId}' never logged ${expected} evaluator call lines`,
+      },
+    )
+    .toBe(expected);
+  return lines;
+}
+
+/**
  * The rule the create dialog builds when a user picks "Code metric" and changes
  * nothing else.
  *
@@ -71,7 +104,7 @@ test.describe('Online Evaluation — the dialog\'s default code metric', { tag: 
     page,
     automationRulesCleanup,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(300_000);
 
     const ruleName = `${testNamespace}-default-trace`;
 
@@ -172,12 +205,9 @@ test.describe('Online Evaluation — the dialog\'s default code metric', { tag: 
       }
     });
 
-    const logs = await test.step('The rule reported no failure, and bound metadata as null', async () => {
-      const lines: AutomationRuleLogRef[] = await backendClient.getAutomationRuleLogs(ruleId);
+    const logs = await test.step('The rule reported no failure, and passed metadata only where the trace logged it', async () => {
+      const lines = await waitForEvaluatorCallLines(backendClient, ruleId, 2);
 
-      // Read after both scores landed, so an empty stream cannot pass for a
-      // clean one: the scores prove the rule ran, which is what makes the
-      // absence of an ERROR line meaningful.
       expect(
         lines.filter((l) => l.level === 'ERROR').map((l) => l.message),
         'a rule that scored both traces must not also have reported a failure',
@@ -194,20 +224,25 @@ test.describe('Online Evaluation — the dialog\'s default code metric', { tag: 
         return matching[0].message;
       };
 
-      // `summarizeEvaluatorInput` renders one `name=<len>c` part per argument
-      // the engine actually passed. `metadata` appearing at length 0 is the
-      // observable difference between "bound as null" and "dropped from the
-      // call" — the latter omits the key entirely, and is what made the metric
-      // raise before OPIK-8292.
+      // `summarizeEvaluatorInput` renders one `name=<len>c` part per argument the
+      // ENGINE passed, and the engine drops a mapping that resolved to nothing
+      // (`toReplacements` filters null values out of the map). The fill that
+      // rescues a missing argument runs in the python backend, DOWNSTREAM of
+      // this line — so an absent `metadata` here is the engine behaving
+      // correctly, not the argument being lost on the way to the metric. What
+      // the metric actually received is asserted where it is observable, by
+      // encoding it into the score: see
+      // online-evaluation-declared-argument-binding.spec.ts.
       expect(
         callLine(traces.noMetadata),
-        'metadata must be passed to the metric, at length 0, not omitted from the call',
-      ).toMatch(/metadata=0c/);
+        'a trace logging no metadata resolves to nothing, so the engine omits the key',
+      ).not.toMatch(/metadata=/);
       expect(
         callLine(traces.withMetadata),
         'a trace that logged metadata must still pass its real value',
-        // The complement: a non-zero length proves the null binding did not
-        // flatten a value the entity carried.
+        // The complement, and the assertion that still earns its place here: a
+        // non-zero length proves the engine did not flatten a value the entity
+        // carried into an empty one.
       ).toMatch(/metadata=[1-9]\d*c/);
 
       return lines;
@@ -260,7 +295,7 @@ test.describe('Online Evaluation — the dialog\'s default code metric', { tag: 
     page,
     automationRulesCleanup,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(300_000);
 
     const ruleName = `${testNamespace}-default-span`;
 
@@ -373,15 +408,14 @@ test.describe('Online Evaluation — the dialog\'s default code metric', { tag: 
       }
     });
 
-    await test.step('The span scorer reported no failure, and bound metadata as null', async () => {
-      const lines = await backendClient.getAutomationRuleLogs(ruleId);
+    await test.step('The span scorer reported no failure, and passed metadata only where the span logged it', async () => {
+      const lines = await waitForEvaluatorCallLines(backendClient, ruleId, 2);
       expect(
         lines.filter((l) => l.level === 'ERROR').map((l) => l.message),
         'a rule that scored both spans must not also have reported a failure',
       ).toEqual([]);
 
       const callLines = lines.filter((l) => l.message.includes(EVALUATOR_CALL_LINE));
-      expect(callLines, 'both spans must have reached the evaluator').toHaveLength(2);
 
       const callLine = (spanId: string) => {
         const matching = callLines.filter((l) => l.message.includes(spanId));
@@ -393,8 +427,8 @@ test.describe('Online Evaluation — the dialog\'s default code metric', { tag: 
       };
       expect(
         callLine(spans.noMetadata),
-        'metadata must be passed to the metric, at length 0, not omitted from the call',
-      ).toMatch(/metadata=0c/);
+        'a span logging no metadata resolves to nothing, so the engine omits the key',
+      ).not.toMatch(/metadata=/);
       expect(
         callLine(spans.withMetadata),
         'a span that logged metadata must still pass its real value',

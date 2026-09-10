@@ -162,9 +162,9 @@ class UnparseableMetric(base_metric.BaseMetric):
  * `metadata` is declared as a REQUIRED positional with no default, which is the
  * PRE-FIX shape of the dialog's shipped template — and therefore the shape every
  * rule saved before OPIK-8292 still holds. The frontend half of that fix
- * (`metadata: Optional[str] = None`) does nothing for those rules; only
- * `bindDeclaredArguments` binding the declared argument keeps them callable, so
- * this signature is the one that pins the backend half on its own.
+ * (`metadata: Optional[str] = None`) does nothing for those rules; only the
+ * backend filling the parameter from the signature keeps them callable, so this
+ * signature is the one that pins the backend half on its own.
  *
  * The bound value is encoded into the SCORE rather than merely scoring, because
  * "scored at all" cannot tell a bound `None` from a value the entity really
@@ -203,12 +203,13 @@ class MetadataBindingProbe(base_metric.BaseMetric):
  * A metric declaring `spans` alongside an absent `metadata`, scoring the span
  * count.
  *
- * `spans` is the one declared argument `bindDeclaredArguments` deliberately does
- * NOT bind: it is injected as a typed list by `toReplacements(Map, Trace, List)`
- * rather than resolved from an extraction path, so binding it to `null` for want
- * of a path would break every rule that declares it. Scoring `len(spans)` is what
- * makes that observable — a nulled `spans` raises instead of scoring, and a
- * `spans` degraded to a string would still have a length.
+ * `spans` is the argument the fill must leave alone: it is injected as a typed
+ * list by `toReplacements(Map, Trace, List)` rather than resolved from an
+ * extraction path, so it is already present when the fill runs and
+ * `setdefault` must not replace it. Nulling it would break every rule that
+ * declares it. Scoring `len(spans)` is what makes that observable — a nulled
+ * `spans` raises instead of scoring, and a `spans` degraded to a string would
+ * still have a length.
  *
  * Both behaviours are asserted from one call on purpose: the same invocation has
  * to keep the injected list AND bind the absent metadata to `None`, which is
@@ -233,36 +234,40 @@ class SpansAndMetadataMetric(base_metric.BaseMetric):
 }
 
 /**
- * A metric declaring a parameter the rule's variable mapping does not name.
+ * A metric whose `score()` refuses an argument the rule's variable mapping names.
  *
  * The failure lands at CALL-SITE BINDING — `metric.score(**data)` raises before
  * the interpreter enters `score()` — so the traceback holds no user frame at all.
- * That is the zero-frame case `scoring_runner`'s old fixed `splitlines()[3:]`
- * slice emptied: the runtime image ships `scoring_runner.pyc` only, built with
- * `PYTHONNODEBUGRANGES=1`, so neither a source nor a caret line pads the three
- * lines the slice removed and the reported cause came back blank.
+ * That is the case a fixed `splitlines()[3:]` slice reported as an empty cause:
+ * with no frame to pad it, the traceback is exactly the lines the slice removed.
+ * `user_facing_stacktrace` walks frames instead, so the exception line survives
+ * however short the traceback is.
  *
- * `bindDeclaredArguments` does not paper over it: it binds the keys the rule's
- * `arguments` map DECLARES, and this parameter is deliberately not one of them.
+ * Note the direction. A parameter the mapping does NOT name is no longer a
+ * failure at all — `required_score_params` fills it with `None` before dispatch,
+ * which is the OPIK-8292 fix itself. The reverse stays unbindable, because
+ * filling only adds names the signature asks for and cannot withdraw one it
+ * refuses. Hence also no `**ignored_kwargs` here: it would swallow the extra key
+ * and the call would succeed.
  */
-export function buildUnboundArgumentMetric(scoreName: string, unboundArgument: string): string {
+export function buildRejectedArgumentMetric(scoreName: string): string {
   return `from typing import Any
 from opik.evaluation.metrics import base_metric, score_result
 
 SCORE_NAME = ${JSON.stringify(scoreName)}
 
-class UnboundArgumentMetric(base_metric.BaseMetric):
+class RejectedArgumentMetric(base_metric.BaseMetric):
     def __init__(self, name: str = SCORE_NAME):
         self.name = name
 
-    def score(self, output, ${unboundArgument}, **ignored_kwargs: Any) -> score_result.ScoreResult:
+    def score(self, output: Any = None) -> score_result.ScoreResult:
         return score_result.ScoreResult(value=1.0, name=self.name)`;
 }
 
 /**
  * A metric that raises inside `score()`.
  *
- * The contrasting case to `buildUnboundArgumentMetric`: here a user frame DOES
+ * The contrasting case to `buildRejectedArgumentMetric`: here a user frame DOES
  * exist, so the reported cause must keep both the exception line and the
  * `File "<string>"` frame that names where in the user's own code it happened.
  * The old slice discarded that frame even when it left the message intact.

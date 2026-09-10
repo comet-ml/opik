@@ -5,7 +5,7 @@ export {
   buildUnparseableMetric,
   buildMetadataBindingProbeMetric,
   buildSpansAndMetadataMetric,
-  buildUnboundArgumentMetric,
+  buildRejectedArgumentMetric,
   buildRaisingMetric,
   buildModuleLevelRaisingMetric,
 } from './python-metric-source';

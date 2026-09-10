@@ -5,7 +5,7 @@ import {
   buildModuleLevelRaisingMetric,
   buildRaisingMetric,
   buildSilentMetric,
-  buildUnboundArgumentMetric,
+  buildRejectedArgumentMetric,
   buildUnparseableMetric,
 } from '@e2e/core/metrics';
 
@@ -200,20 +200,21 @@ test.describe('Online Evaluation — python metric failure classification', { ta
     // strings ("the metric produced no output"), and neither metric ever raises,
     // so no formatted stacktrace is produced by either.
     //
-    // `scoring_runner` used to strip its own frames with a fixed
+    // The runner used to strip its own frames with a fixed
     // `traceback.format_exc().splitlines()[3:]`. A call-site binding failure
-    // raises before any user frame exists, and the runtime image ships
-    // `scoring_runner.pyc` only, built with `PYTHONNODEBUGRANGES=1` — so neither
-    // a source nor a caret line pads the traceback, it is exactly the three
-    // lines the slice removed, and the reported cause came back EMPTY. The three
-    // rules below cover the zero-frame case, the other call site (module-level
-    // `exec`), and the ordinary with-a-frame case, whose frame the same slice
-    // discarded even where the message survived.
+    // raises before any user frame exists, so nothing pads the traceback: it is
+    // exactly the three lines the slice removed, and the reported cause came
+    // back EMPTY. `user_facing_stacktrace` walks frames instead. Asserted
+    // against the deployment's own runner rather than a named file — both
+    // executor strategies carry the same helper, so these assertions hold on
+    // either. The three rules below cover the zero-frame case, the other call
+    // site (module-level `exec`), and the ordinary with-a-frame case, whose
+    // frame the same slice discarded even where the message survived.
     //
     // Pure string assertions over the rule log stream: no timing, no LLM, no UI.
 
     const controlRuleName = `${testNamespace}-trace-control`;
-    const unboundRuleName = `${testNamespace}-unbound-arg`;
+    const rejectedRuleName = `${testNamespace}-rejected-arg`;
     const moduleRaiseRuleName = `${testNamespace}-module-raise`;
     const scoreRaiseRuleName = `${testNamespace}-score-raise`;
 
@@ -233,13 +234,17 @@ test.describe('Online Evaluation — python metric failure classification', { ta
         control: await create(controlRuleName, buildConstantScoreMetric(controlRuleName), {
           output: 'output.output',
         }),
-        // Declares `reference`, which the mapping deliberately does not name —
-        // so `bindDeclaredArguments` has nothing to bind it from and the call
-        // itself raises, before any user frame exists.
-        unbound: await create(
-          unboundRuleName,
-          buildUnboundArgumentMetric(unboundRuleName, 'reference'),
-          { output: 'output.output' },
+        // The mapping names `reference`; the metric's `score()` does not accept
+        // it and declares no `**kwargs`, so the call itself raises before any
+        // user frame exists. It has to fail this way round: a parameter the
+        // mapping omits is filled with `None` before dispatch now, which is the
+        // fix under test. What `reference` points at is irrelevant — only that it
+        // RESOLVES, so the engine actually passes the key; `output.output` is
+        // already proven resolvable by the control rule above.
+        rejected: await create(
+          rejectedRuleName,
+          buildRejectedArgumentMetric(rejectedRuleName),
+          { output: 'output.output', reference: 'output.output' },
         ),
         moduleRaise: await create(
           moduleRaiseRuleName,
@@ -298,8 +303,8 @@ test.describe('Online Evaluation — python metric failure classification', { ta
     await test.step(
       'A binding failure with no user frame still reports the exception type and message',
       async () => {
-        const logs = await waitForRuleErrorLogs(backendClient, rules.unbound, unboundRuleName);
-        const message = singleError(logs, unboundRuleName);
+        const logs = await waitForRuleErrorLogs(backendClient, rules.rejected, rejectedRuleName);
+        const message = singleError(logs, rejectedRuleName);
         const cause = causeAfter(message, "can't be evaluated:");
 
         expect(cause, 'the reported cause must not be empty — the whole regression').not.toBe('');
@@ -307,7 +312,7 @@ test.describe('Online Evaluation — python metric failure classification', { ta
           'TypeError',
         );
         expect(cause, 'and so must its message').toContain(
-          "missing 1 required positional argument: 'reference'",
+          "unexpected keyword argument 'reference'",
         );
       },
     );
@@ -349,16 +354,18 @@ test.describe('Online Evaluation — python metric failure classification', { ta
           cause,
           'a failure raised inside the user\'s own code must name the frame it came from',
         ).toContain('File "<string>"');
-        expect(
-          cause,
-          'the runner must still hide its own frame',
-        ).not.toContain('scoring_runner');
+        // Neither runner may appear: the sandbox strategy runs `scoring_runner`
+        // and the process strategy `process_worker`, and the frame-dropping is
+        // the same guarantee in both.
+        for (const runner of ['scoring_runner', 'process_worker']) {
+          expect(cause, `the runner must still hide its own ${runner} frame`).not.toContain(runner);
+        }
       },
     );
 
     await test.step('None of the three failures fell back to the opaque 500 wording', async () => {
       for (const [name, ruleId] of [
-        [unboundRuleName, rules.unbound],
+        [rejectedRuleName, rules.rejected],
         [moduleRaiseRuleName, rules.moduleRaise],
         [scoreRaiseRuleName, rules.scoreRaise],
       ] as const) {
