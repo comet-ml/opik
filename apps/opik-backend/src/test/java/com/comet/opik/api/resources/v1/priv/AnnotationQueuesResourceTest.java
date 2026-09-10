@@ -2107,6 +2107,9 @@ class AnnotationQueuesResourceTest {
                 .lockTimeoutSeconds(updateRequest.lockTimeoutSeconds() != null
                         ? updateRequest.lockTimeoutSeconds()
                         : existingQueue.lockTimeoutSeconds())
+                .automation(updateRequest.automation() != null
+                        ? updateRequest.automation()
+                        : existingQueue.automation())
                 .build();
     }
 

@@ -1,7 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueAutomation;
 import com.comet.opik.api.AnnotationQueueBatch;
+import com.comet.opik.api.AnnotationQueueItem;
+import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.LockResponse;
@@ -11,6 +14,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -37,9 +41,11 @@ public interface AnnotationQueueService {
 
     Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
 
-    Mono<Long> addItems(UUID queueId, Set<UUID> itemIds);
+    Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, AnnotationQueueItemSource source);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds);
+
+    Mono<AnnotationQueueItem.AnnotationQueueItems> findItemsByIds(UUID queueId, Set<UUID> itemIds);
 
     Mono<Long> deleteBatch(Set<UUID> ids);
 
@@ -53,15 +59,17 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
     private final @NonNull AnnotationQueueItemLockService lockService;
+    private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
 
     @Override
     public Mono<UUID> create(AnnotationQueue annotationQueue) {
-        annotationQueue = prepareAnnotationQueue(annotationQueue);
+        AnnotationQueue queue = prepareAnnotationQueue(annotationQueue);
 
-        return annotationQueueDAO.createBatch(List.of(annotationQueue))
-                .thenReturn(annotationQueue.id())
+        return annotationQueueDAO.createBatch(List.of(queue))
+                .then(saveAutomations(List.of(queue)))
+                .thenReturn(queue.id())
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -76,8 +84,48 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .toList();
 
         return annotationQueueDAO.createBatch(processedQueues)
+                .then(saveAutomations(processedQueues))
                 .thenReturn(processedQueues.size())
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Queue first, automation second. The two live in different stores so this is not transactional, and
+     * the ordering is deliberate: a failure here leaves a queue whose automation is off — visible in the
+     * UI and fixable by editing — rather than an automation row pointing at a queue that does not exist,
+     * which the sweep would have to defend against on every run.
+     *
+     * <p>A failed automation write does not fail the request. Creating the queue was the caller's primary
+     * intent and it succeeded; failing the whole call would let a transient MySQL blip turn into duplicate
+     * queues on retry. The response reflects reality because the automation is read back from storage
+     * rather than echoed from the request, so an unsaved automation comes back absent.
+     */
+    private Mono<Void> saveAutomations(List<AnnotationQueue> queues) {
+        List<AnnotationQueue> withAutomation = queues.stream()
+                .filter(queue -> queue.automation() != null)
+                .toList();
+
+        if (withAutomation.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return Mono.fromRunnable(() -> withAutomation.forEach(queue -> {
+                try {
+                    automationService.save(workspaceId, userName, queue.id(), queue.projectId(),
+                            queue.scope(), queue.automation());
+                } catch (BadRequestException e) {
+                    // Invalid conditions are the caller's error, not a partial failure — surface them.
+                    throw e;
+                } catch (Exception e) {
+                    log.error("Failed to save automation for annotation queue '{}'; the queue was created "
+                            + "without it", queue.id(), e);
+                }
+            }));
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     @Override
@@ -88,6 +136,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         return annotationQueueDAO.findById(id)
                 .switchIfEmpty(Mono.error(createNotFoundError(id)))
                 .flatMap(this::enhanceWithProjectName)
+                .flatMap(this::enhanceWithAutomation)
                 .doOnSuccess(queue -> log.debug("Found annotation queue with id '{}'", id))
                 .doOnError(error -> log.info("Annotation queue not found with id '{}'", id));
     }
@@ -99,10 +148,21 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .validateVersionAsync(id, "AnnotationQueue")
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
                     return annotationQueueDAO.findQueueInfoById(id)
                             .switchIfEmpty(Mono.error(createNotFoundError(id)))
                             .flatMap(queueInfo -> {
                                 Mono<Void> updateMono = annotationQueueDAO.update(id, updateRequest);
+
+                                if (updateRequest.automation() != null) {
+                                    updateMono = updateMono.then(Mono.fromRunnable(
+                                            () -> automationService.save(workspaceId, userName, id,
+                                                    queueInfo.projectId(), queueInfo.scope(),
+                                                    updateRequest.automation()))
+                                            .subscribeOn(Schedulers.boundedElastic())
+                                            .then());
+                                }
+
                                 if (updateRequest.annotatorsPerItem() == null) {
                                     return updateMono;
                                 }
@@ -121,6 +181,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return annotationQueueDAO.find(page, size, searchCriteria)
                 .flatMap(this::enhancePageWithProjectNames)
+                .flatMap(this::enhancePageWithAutomations)
                 .doOnSuccess(result -> log.debug("Found annotation queues by '{}', count '{}', page '{}', size '{}'",
                         searchCriteria, result.content().size(), page, size))
                 .doOnError(error -> log.info("Failed to find annotation queues by '{}'", searchCriteria, error));
@@ -128,7 +189,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     @WithSpan
     @Override
-    public Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds) {
+    public Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds,
+            @NonNull AnnotationQueueItemSource source) {
         if (itemIds.isEmpty()) {
             log.debug("Item ids list is empty, returning");
             return Mono.just(0L);
@@ -140,10 +202,56 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
-                .flatMap(queue -> annotationQueueDAO.addItems(queueId, itemIds, queue.projectId()))
+                .flatMap(queue -> eligibleItems(queueId, queue.projectId(), itemIds, source)
+                        .flatMap(eligible -> eligible.isEmpty()
+                                ? Mono.just(0L)
+                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source)))
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
                         addedCount, queueId))
                 .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
+    }
+
+    /**
+     * Automation never re-adds an item this queue has held before; a person may.
+     *
+     * <p>The asymmetry is deliberate. A manual re-add is an explicit act by someone who can see the queue,
+     * and it is the escape hatch for recovering an item removed by mistake. Automation re-adding something
+     * a reviewer deliberately removed is the loop the history table exists to prevent, so the check lives
+     * here rather than in the routing listener — no automated caller can forget it.
+     */
+    private Mono<Set<UUID>> eligibleItems(UUID queueId, UUID projectId, Set<UUID> itemIds,
+            AnnotationQueueItemSource source) {
+
+        if (source != AnnotationQueueItemSource.AUTOMATED) {
+            return Mono.just(itemIds);
+        }
+
+        return annotationQueueDAO.findPreviouslyAddedItems(queueId, projectId, itemIds)
+                .map(alreadyAdded -> {
+                    if (alreadyAdded.isEmpty()) {
+                        return itemIds;
+                    }
+                    Set<UUID> eligible = itemIds.stream()
+                            .filter(itemId -> !alreadyAdded.contains(itemId))
+                            .collect(Collectors.toSet());
+                    log.debug("Skipping '{}' items already routed to annotation queue '{}'",
+                            alreadyAdded.size(), queueId);
+                    return eligible;
+                });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueueItem.AnnotationQueueItems> findItemsByIds(@NonNull UUID queueId,
+            @NonNull Set<UUID> itemIds) {
+        log.debug("Finding '{}' items of annotation queue with id '{}'", itemIds.size(), queueId);
+
+        return annotationQueueDAO.findQueueInfoById(queueId)
+                .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
+                .flatMapMany(queue -> annotationQueueDAO.findItemsByIds(queueId, queue.projectId(), itemIds))
+                .collectList()
+                .map(items -> AnnotationQueueItem.AnnotationQueueItems.builder().content(items).build())
+                .doOnError(error -> log.info("Failed to find items of annotation queue with id '{}'", queueId, error));
     }
 
     @Override
@@ -174,6 +282,12 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         log.info("Deleting annotation queue batch with '{}' items", ids.size());
 
         return annotationQueueDAO.deleteBatch(ids)
+                .flatMap(deletedCount -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return Mono.fromRunnable(
+                            () -> automationService.deleteByQueueIds(workspaceId, List.copyOf(ids)))
+                            .thenReturn(deletedCount);
+                }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
                 .doOnError(error -> log.info("Failed to delete annotation queue batch", error));
@@ -199,6 +313,46 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                             entry.getKey().annotatorsPerItem(),
                             entry.getValue(),
                             entry.getKey().lockTimeoutSeconds()));
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<AnnotationQueue> enhanceWithAutomation(AnnotationQueue annotationQueue) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.just(automationService.findByQueueId(workspaceId, annotationQueue.id())
+                    .map(automation -> annotationQueue.toBuilder().automation(automation).build())
+                    .orElse(annotationQueue));
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    // One batched lookup per page rather than one per row — same shape as the project-name enrichment above.
+    private Mono<AnnotationQueue.AnnotationQueuePage> enhancePageWithAutomations(
+            AnnotationQueue.AnnotationQueuePage page) {
+        if (page.content().isEmpty()) {
+            return Mono.just(page);
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            List<UUID> queueIds = page.content().stream()
+                    .map(AnnotationQueue::id)
+                    .toList();
+
+            Map<UUID, AnnotationQueueAutomation> automations = automationService.findByQueueIds(workspaceId, queueIds);
+
+            if (automations.isEmpty()) {
+                return Mono.just(page);
+            }
+
+            return Mono.just(page.toBuilder()
+                    .content(page.content().stream()
+                            .map(queue -> queue.toBuilder()
+                                    .automation(automations.get(queue.id()))
+                                    .build())
+                            .toList())
+                    .build());
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
