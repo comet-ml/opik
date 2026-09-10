@@ -136,6 +136,133 @@ describe("alertTriggersToFormTriggers", () => {
   });
 });
 
+describe("window_in_seconds alias", () => {
+  it("loads simple threshold window from window_in_seconds when canonical window is absent", () => {
+    const [trigger] = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_errors,
+        trigger_configs: [
+          {
+            type: ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
+            config_value: { threshold: "2", window_in_seconds: "300" },
+          },
+        ],
+      },
+    ]);
+
+    expect(trigger.window).toBe("300");
+    expect(trigger.threshold).toBe("2");
+  });
+
+  it("prefers canonical window over window_in_seconds on simple thresholds", () => {
+    const [trigger] = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_cost,
+        trigger_configs: [
+          {
+            type: ALERT_TRIGGER_CONFIG_TYPE["threshold:cost"],
+            config_value: {
+              threshold: "2",
+              window: "300",
+              window_in_seconds: "999",
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(trigger.window).toBe("300");
+  });
+
+  it("falls back to window_in_seconds when canonical window is blank", () => {
+    const [trigger] = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_latency,
+        trigger_configs: [
+          {
+            type: ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
+            config_value: {
+              threshold: "2",
+              window: "   ",
+              window_in_seconds: "300",
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(trigger.window).toBe("300");
+  });
+
+  it("loads grouped feedback-score window from window_in_seconds", () => {
+    const [trigger] = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_feedback_score,
+        trigger_configs: [
+          fbScore(
+            {
+              name: "a",
+              operator: ">",
+              threshold: "0.7",
+              window_in_seconds: "3600",
+            },
+            0,
+          ),
+        ],
+      },
+    ]);
+
+    expect(trigger.groups?.[0].conditions[0].window).toBe("3600");
+  });
+
+  it("serializes the resolved window as canonical window so alias-only alerts stay editable", () => {
+    const form = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_errors,
+        trigger_configs: [
+          {
+            type: ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
+            config_value: { threshold: "2", window_in_seconds: "300" },
+          },
+        ],
+      },
+    ]);
+    const back = formTriggersToAlertTriggers(form);
+
+    expect(back[0].trigger_configs).toHaveLength(1);
+    expect(back[0].trigger_configs?.[0].config_value).toEqual({
+      threshold: "2",
+      window: "300",
+    });
+  });
+
+  it("round-trips grouped alias-only configs without dropping trigger_configs", () => {
+    const form = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_thread_feedback_score,
+        trigger_configs: [
+          fbScore(
+            {
+              name: "a",
+              operator: ">",
+              threshold: "0.7",
+              window_in_seconds: "3600",
+            },
+            0,
+          ),
+        ],
+      },
+    ]);
+    const back = formTriggersToAlertTriggers(form);
+
+    expect(back[0].trigger_configs).toHaveLength(1);
+    expect(back[0].trigger_configs?.[0].config_value.window).toBe("3600");
+    expect(
+      back[0].trigger_configs?.[0].config_value.window_in_seconds,
+    ).toBeUndefined();
+  });
+});
+
 describe("formTriggersToAlertTriggers", () => {
   it("flattens groups and stamps group_index per group", () => {
     const [trigger] = formTriggersToAlertTriggers([
