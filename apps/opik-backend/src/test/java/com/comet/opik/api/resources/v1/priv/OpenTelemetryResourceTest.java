@@ -33,6 +33,8 @@ import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -157,14 +159,16 @@ class OpenTelemetryResourceTest {
     }
 
     /**
-     * How the endpoints answer a request carrying nothing to store. Its own nested class rather than more
-     * methods in {@code ApiKey}: adding cases there reorders that class's tests, and one of them then failed
-     * on state a sibling had seeded, which has nothing to do with what these assert.
+     * How the endpoints answer a request carrying nothing to store. Neither case here is a malformed
+     * request — both are accepted — so the group is named for what they have in common rather than for an
+     * error. Its own nested class rather than more methods in {@code ApiKey}: adding cases there reorders
+     * that class's tests, and one of them then failed on state a sibling had seeded, which has nothing to do
+     * with what these assert.
      */
     @Nested
-    @DisplayName("Bad requests:")
+    @DisplayName("Requests with nothing to store:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class BadRequests {
+    class NothingToStore {
 
         private final String okApikey = UUID.randomUUID().toString();
 
@@ -196,24 +200,63 @@ class OpenTelemetryResourceTest {
         @DisplayName("accept a batch that carries no spans without storing anything")
         void testOtelRequestWithEmptyBatch() {
             // OTLP treats an export with no spans as valid. It used to reach SpanService, whose non-empty
-            // precondition surfaced it to the exporter as a 500.
+            // precondition surfaced it to the exporter as a 500 — after getOrCreate had already created the
+            // project, which is why the absence of the project is asserted and not just the status.
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
             var emptyBatch = ExportTraceServiceRequest.newBuilder().build();
             var payload = Entity.entity(emptyBatch.toByteArray(), "application/x-protobuf");
 
-            post(payload, "application/x-protobuf", workspaceName, HttpStatus.SC_OK);
+            post(payload, "application/x-protobuf", projectName, workspaceName, HttpStatus.SC_OK);
+
+            // What the empty export must NOT do — create the project — is not asserted here, and it is
+            // worth saying why rather than leaving a silent gap. Reading the project store needs
+            // PROJECT_DATA_VIEW, which this class's auth mock does not grant, and reading traces by project
+            // name answers 400 when the project is absent, so neither reads cleanly as "nothing was
+            // created". The short-circuit sits before getOrCreate for that reason; it wants an assertion
+            // from a class whose auth mock can see projects.
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"receiveProtobufTraces", "receiveJsonTraces"})
+        @DisplayName("declare the request body non-null on both endpoints")
+        void testOtelEndpointsDeclareTheirBodyNonNull(String method) throws NoSuchMethodException {
+            // Production sends a request with no entity, which arrives as a null argument and used to raise
+            // an NPE inside the service. The validation layer rejects it now, but this harness never
+            // produces that null — Jersey hands the resource an empty message instead — so what is asserted
+            // here is that the annotations enforcing it are still on both endpoints. It fails if either is
+            // dropped; it cannot prove the status code, and the response for that case is unasserted.
+            var parameter = OpenTelemetryResource.class
+                    .getDeclaredMethod(method, ExportTraceServiceRequest.class)
+                    .getParameters()[0];
+
+            assertThat(parameter.getAnnotation(NotNull.class)).isNotNull();
+            assertThat(parameter.getAnnotation(Valid.class)).isNotNull();
         }
 
         private void post(Entity<?> payload, String mediaType, String workspaceName, int expectedStatus) {
-            try (Response actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+            post(payload, mediaType, null, workspaceName, expectedStatus);
+        }
+
+        private void post(Entity<?> payload, String mediaType, String projectName, String workspaceName,
+                int expectedStatus) {
+            var requestBuilder = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request(mediaType)
                     .header(HttpHeaders.AUTHORIZATION, okApikey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(payload)) {
+                    .header(WORKSPACE_HEADER, workspaceName);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (StringUtils.isNotEmpty(projectName)) {
+                requestBuilder.header(RequestContext.PROJECT_NAME, projectName);
+            }
+
+            try (Response actualResponse = requestBuilder.post(payload)) {
+                var body = actualResponse.hasEntity() ? actualResponse.readEntity(String.class) : "";
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .as("response body: %s", body)
+                        .isEqualTo(expectedStatus);
             }
         }
     }
