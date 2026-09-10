@@ -18,6 +18,7 @@ import com.comet.opik.api.resources.utils.resources.InsightsViewResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -228,6 +229,18 @@ class InsightsViewsResourceTest {
             assertThat(page.total()).isEqualTo(2);
             assertThat(page.content()).extracting(Dashboard::id)
                     .containsExactlyInAnyOrder(projectViewId, unassignedViewId);
+        }
+
+        @Test
+        @DisplayName("Find insights views returns 403 when the dashboard permission is denied")
+        void findInsightsViewsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DASHBOARD_VIEW.getValue());
+
+            insightsViewClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_FORBIDDEN);
         }
     }
 
