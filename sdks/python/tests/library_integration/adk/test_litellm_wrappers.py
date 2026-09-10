@@ -7,11 +7,17 @@ model - so no proxy configuration can fix it either. The proxy does compute the 
 cost server-side and LiteLLM hands it back on the response, so the integration has to
 forward that instead of estimating one.
 
-These tests build the same response objects a proxied LiteLLM call produces, which
-keeps them offline. The end-to-end chain (live proxy -> ``x-litellm-response-cost``
--> ``_hidden_params`` -> span) was verified against a real local LiteLLM proxy when
-this was fixed; what can regress silently afterwards is our side of it, which is what
-is pinned here.
+Crucially the cost is taken from the proxy's ``x-litellm-response-cost`` header and
+not from ``_hidden_params["response_cost"]``, which LiteLLM sets on *every*
+completion: since the backend prefers a client-supplied cost, reading the latter
+would move every ADK LiteLLM span off Opik's price table as a side effect. The
+direct-route tests below pin that boundary using real LiteLLM responses.
+
+These tests stay offline: ``mock_response`` runs LiteLLM's full ``@client`` wrapper
+without a network call, so ``_hidden_params`` is populated for real. The end-to-end
+chain (live proxy -> header -> span) was verified against a real local LiteLLM proxy
+in front of real OpenAI; what can regress silently afterwards is our side of it,
+which is what is pinned here.
 """
 
 import asyncio
@@ -43,13 +49,38 @@ RESPONSE_COST = 0.0009352500000000001
 RESPONSE_TEXT = "It is sunny and 22C."
 
 
-def _build_proxy_model_response() -> "litellm.types.utils.ModelResponse":
-    """The response object a ``litellm_proxy/<alias>`` call produces.
+PROXY_COST_HEADER = "llm_provider-x-litellm-response-cost"
 
-    ``model`` echoes the proxy alias, and the cost the proxy computed arrives in
-    ``_hidden_params`` - LiteLLM folds the ``x-litellm-response-cost`` response
-    header into it. ``provider_and_model`` is what Opik's own ``acompletion``
-    patch attaches upstream of this point.
+
+def _real_litellm_response(model: str) -> "litellm.types.utils.ModelResponse":
+    """A real LiteLLM response, produced offline by LiteLLM's own ``@client`` wrapper.
+
+    ``mock_response`` short-circuits the network but still runs the full wrapper, so
+    ``_hidden_params`` is populated exactly as a live call populates it. That matters
+    for the direct-route assertions: hand-setting the dict would pin a state LiteLLM
+    never produces, and the whole point is that LiteLLM *does* compute a cost for
+    unproxied calls.
+    """
+    response = litellm.completion(
+        model=model,
+        messages=[{"role": "user", "content": "weather?"}],
+        mock_response=RESPONSE_TEXT,
+    )
+    # What Opik's own acompletion patch attaches upstream of the conversion.
+    response.provider_and_model = model
+    return response
+
+
+def _build_proxy_model_response() -> "litellm.types.utils.ModelResponse":
+    """The response object a proxied call produces.
+
+    ``model`` echoes the proxy alias, and the cost the proxy computed arrives as the
+    ``x-litellm-response-cost`` response header, which LiteLLM folds into
+    ``_hidden_params["additional_headers"]`` under the ``llm_provider-`` prefix. That
+    exact shape was confirmed against a real local LiteLLM proxy; a live proxy cannot
+    be stood up from a unit test, so the header is set here rather than earned.
+    ``provider_and_model`` is what Opik's own ``acompletion`` patch attaches upstream
+    of this point.
     """
     response = litellm.types.utils.ModelResponse(
         id="chatcmpl-proxy-1",
@@ -69,7 +100,9 @@ def _build_proxy_model_response() -> "litellm.types.utils.ModelResponse":
             prompt_tokens=100, completion_tokens=50, total_tokens=150
         ),
     )
-    response._hidden_params = {"response_cost": RESPONSE_COST}
+    response._hidden_params = {
+        "additional_headers": {PROXY_COST_HEADER: str(RESPONSE_COST)}
+    }
     response.provider_and_model = PROXY_ROUTE
     return response
 
@@ -108,15 +141,42 @@ def test_generate_content_response_decorator__proxy_cost__attached_for_the_trace
     assert llm_response.custom_metadata["model_version"] == PROXY_ALIAS
 
 
-def test_generate_content_response_decorator__no_cost_reported__no_cost_key():
-    """A call LiteLLM reported no cost for must not gain a null cost entry.
+def test_direct_call__litellm_computes_a_cost_that_must_not_be_forwarded():
+    """A non-proxied call must keep Opik's own pricing.
 
-    ``total_cost=None`` is skipped by the span update, but an ``opik_response_cost``
-    key would still leak into the logged span output.
+    LiteLLM's ``@client`` wrapper sets ``_hidden_params["response_cost"]`` on *every*
+    completion, and the backend prefers a client-supplied cost over its own table -
+    so reading that unconditionally would silently move every ADK LiteLLM span onto
+    LiteLLM's price map. Asserted on a real LiteLLM response, since the premise is
+    precisely that LiteLLM really does compute a cost here.
     """
     patchers.patch_adk()
-    model_response = _build_proxy_model_response()
-    model_response._hidden_params = {}
+    model_response = _real_litellm_response("openai/gpt-4o-mini")
+
+    # The premise, stated rather than assumed.
+    assert model_response._hidden_params["response_cost"] is not None
+    assert litellm_wrappers.try_get_proxy_response_cost(model_response) is None
+
+    llm_response = adk_lite_llm._model_response_to_generate_content_response(
+        model_response
+    )
+
+    assert "opik_response_cost" not in llm_response.custom_metadata
+    # The usage/provider handling still has to work on this route.
+    assert llm_response.custom_metadata["provider"] == opik.LLMProvider.OPENAI
+
+
+def test_proxy_route__no_cost_header__no_cost_key():
+    """A proxied route LiteLLM reported no cost header for gains no cost entry.
+
+    Real state, not a contrived one: LiteLLM cannot price an arbitrary proxy alias
+    locally, so a ``litellm_proxy/`` response carries no cost of its own until the
+    proxy's header supplies one.
+    """
+    patchers.patch_adk()
+    model_response = _real_litellm_response(PROXY_ROUTE)
+
+    assert litellm_wrappers.try_get_proxy_response_cost(model_response) is None
 
     llm_response = adk_lite_llm._model_response_to_generate_content_response(
         model_response
@@ -126,25 +186,27 @@ def test_generate_content_response_decorator__no_cost_reported__no_cost_key():
 
 
 @pytest.mark.parametrize("raw_cost", [float("nan"), float("inf"), float("-inf")])
-def test_try_get_response_cost__non_finite__returns_none(raw_cost):
+def test_try_get_proxy_response_cost__non_finite__returns_none(raw_cost):
     """A nan/inf cost must not reach the span.
 
-    `float()` accepts both, and they serialize to bare NaN/Infinity, which is not
-    valid JSON - so forwarding one risks the span it rides on, not just the cost.
+    They serialize to bare NaN/Infinity, which is not valid JSON - so forwarding one
+    risks the span it rides on, not just the cost.
     """
     model_response = _build_proxy_model_response()
-    model_response._hidden_params = {"response_cost": raw_cost}
+    model_response._hidden_params = {
+        "additional_headers": {PROXY_COST_HEADER: raw_cost}
+    }
 
-    assert litellm_wrappers.try_get_response_cost(model_response) is None
+    assert litellm_wrappers.try_get_proxy_response_cost(model_response) is None
 
 
-def test_try_get_response_cost__no_hidden_params__returns_none():
+def test_try_get_proxy_response_cost__no_hidden_params__returns_none():
     """LiteLLM owns ``_hidden_params``; losing it must degrade, not raise.
 
     The conversion this runs inside is ADK's, so an exception here would cost the
     response, not just the cost.
     """
-    assert litellm_wrappers.try_get_response_cost(object()) is None
+    assert litellm_wrappers.try_get_proxy_response_cost(object()) is None
 
 
 def test_pop_response_cost__reads_and_removes_the_cost():
