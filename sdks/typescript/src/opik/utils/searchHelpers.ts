@@ -60,8 +60,13 @@ export async function searchAndWaitForDone<T>(
       return result;
     }
 
-    // Sleep before next attempt
-    await new Promise((resolve) => setTimeout(resolve, sleepTime));
+    // Sleep before next attempt, capped to the remaining timeout budget so we
+    // never intentionally oversleep past the caller-provided waitForTimeout
+    // (e.g. a long poll interval must not make a short timeout wait longer).
+    const remainingTime = waitForTimeout - elapsedTime;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(sleepTime, remainingTime))
+    );
   }
 }
 
