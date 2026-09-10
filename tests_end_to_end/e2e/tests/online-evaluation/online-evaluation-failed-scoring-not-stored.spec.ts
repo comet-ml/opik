@@ -271,9 +271,15 @@ test.describe('Online Evaluation — a failed scoring is dropped, not stored as 
         'a failed scoring has no row to render',
       ).toHaveCount(0);
 
-      // Every score this test seeds is namespaced, so this counts the panel's
-      // whole answer rather than just confirming ours are among it — a fourth
-      // row, whatever its name, fails here.
+      // Counts the panel's whole answer for this test's scores rather than just
+      // confirming ours are among it, so a fourth namespaced row fails here.
+      //
+      // Scoped deliberately, because the filter keys on `testNamespace`: the
+      // unnamed dropped score would NOT be caught by this count if it leaked
+      // into the panel. That case is guarded server-side above, where the whole
+      // score set is compared and a blank name is asserted against explicitly.
+      // The panel's job in this step is rendering, not being the sole guard on
+      // the unnamed path.
       await expect(
         panel.feedbackScoresTabPanel.getByRole('row').filter({ hasText: testNamespace }),
         'the panel shows exactly the three storable scores',
@@ -418,15 +424,23 @@ test.describe('Online Evaluation — a failed scoring is dropped, not stored as 
     await test.step('Each rule called the evaluator once and reported once', async () => {
       // A 400 is a terminal answer: the caller must not re-run the metric hoping
       // for a different one. Both counts are asserted because they fail
-      // differently — a re-queued message repeats the call line, while a retry
-      // loop that eventually gives up repeats only the error line.
+      // differently — a re-queued stream message repeats the call line, while a
+      // scorer that reported twice repeats only the error line.
+      //
+      // Scoped to the scorer, which is the layer that writes both lines. The
+      // call line is emitted once per invocation and BEFORE the request, so HTTP
+      // attempts inside `RetriableHttpClient` are not observable in this stream.
+      // Nothing is hidden for a 400 — that client retries 503/504 only, so a
+      // classified rejection is terminal there with no attempt to repeat — but
+      // what this pair pins is "the scorer ran once and answered once", not
+      // "exactly one HTTP request reached the evaluator".
       for (const [name, logs] of [
         [`${testNamespace}-rule-allfailed`, allFailedLogs],
         [`${testNamespace}-rule-valueless`, valuelessLogs],
       ] as const) {
         expect(
           logs.filter((l) => l.message.includes(EVALUATOR_CALL_LINE)),
-          `rule '${name}' must send the trace to the evaluator exactly once`,
+          `rule '${name}' must invoke the evaluator scorer exactly once for this trace — a repeated call line means the stream message was redelivered`,
         ).toHaveLength(1);
         expect(
           logs.filter((l) => l.level === 'ERROR'),
