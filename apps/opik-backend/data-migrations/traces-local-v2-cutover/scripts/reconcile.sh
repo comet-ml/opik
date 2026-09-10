@@ -69,10 +69,16 @@
 #                             (forward) or `RECORD promote_done=` (reverse). Required. Bridged deletes at or after it are
 #                             excluded from the sweep, so a gap-window trace deleted after the swap is not brought back.
 #                             UNLIKE --gap-start THIS IS NOT FREE TO GUESS, and the two directions of error are not
-#                             symmetric: too EARLY excludes too much, so a legitimately live key stays missing and the
-#                             postcondition FAILS LOUDLY; too LATE excludes too little and can RESURRECT a deleted trace
-#                             silently. If the printed value was lost, use `cutover_start` — it is earlier than the swap
-#                             by construction, i.e. on the side that fails loudly.
+#                             symmetric — WHEN IN DOUBT, GUESS EARLY:
+#                               * too EARLY excludes too much, so a legitimately live key stays missing and the
+#                                 postcondition FAILS LOUDLY. Widen and re-run.
+#                               * too LATE excludes too little: a delete that fired AFTER the swap is bridged below the
+#                                 bound, the key is live in the frozen backup, the sweep re-inserts it and the replay's
+#                                 resurrection guard spares it. The delete is undone, and nothing reports it.
+#                             If the printed value was lost, use `cutover_start` — earlier than the swap by
+#                             construction, i.e. on the side that fails loudly. Do NOT round it up "to be safe": the
+#                             recorded value already trails the swap (../README.md, "The final cutover window"), so
+#                             every second added is a second of silent resurrection window.
 #   --slack-seconds N         widen --gap-start DOWNWARD by N seconds (default 300) to absorb cross-replica clock skew on
 #                             the server-side timestamp defaults the gap window matches on. Free, per the widening note
 #                             above. Pass 0 to use the anchor exactly as given.

@@ -545,10 +545,20 @@ Keep step 3→4 short, and step 4→5 shorter:
 once: quiesce user DELETES across the swap, not merely reads.**
 
 - A delete whose bridge row lands *after* step 5's read is invisible to it.
-- Capture writes the bridge row *before* the delete executes, so for the width of the `EXCHANGE` a delete can be bridged
-  before `exchange_done` while its `DELETE` lands on the successor after the swap. That key is live in the frozen backup
-  and bridged before the bound, so **step 5's sweep brings it back**. It needs the trace to be written *and* deleted
-  inside the gap window, with the swap falling between its capture and its delete.
+- **A delete bridged below `exchange_done` but effective after the swap is undone by the sweep**, because the key is
+  live in the frozen backup and the bound does not exclude it — the sweep re-inserts it and the post-swap replay's
+  resurrection guard spares it. Two things put a delete there:
+  - *Capture ordering.* The bridge row is written **before** the `DELETE` executes, so a delete can be bridged below
+    the bound while its `DELETE` lands on the successor after the swap. One statement wide.
+  - *The bound trails the swap.* `exchange_done` is read after the `exchange` block returns, and that block holds the
+    `EXCHANGE` **and** the `RENAME` that parks the backup, both `ON CLUSTER`, so the RENAME and its distributed-DDL
+    wait sit inside the window. Stamping the clock between the two would shrink this and **not** close it: the
+    `EXCHANGE` is itself `ON CLUSTER`, so the hosts' commit skew stays inside the window wherever it is read. The
+    Go/No-Go records that interval; tighten the capture point only if it measures in seconds.
+
+  Either way the trace has to be written *and* deleted inside the gap window, with the swap falling between the
+  delete's capture and its effect — and quiescing deletes across the swap empties the window, which is why this shares
+  the mitigation above rather than getting its own.
 - **A pre-swap trace carrying a client-supplied future `last_updated_at` keeps its captured delete.** `lastUpdatedAt`
   is writable through the API and validated only as "before 2300", and `TraceDAO` binds it verbatim on the batch-ingest
   path — so such a row falls outside the post-swap replay's `created_at AND last_updated_at < exchange_done` staleness
@@ -2111,6 +2121,10 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       be driven to zero, because the procedure places a full deletion replay and a settle gate inside it. Its length
       decides how much the sweep has to carry and how long gap-window traces are transiently absent from live reads, and
       on a busy cluster the gate is the part of it that varies.
+      **Also record the `EXCHANGE`→`RENAME` interval inside the `exchange` block** (both `ON CLUSTER`; read it from
+      `query_log` by `log_comment`). It sits inside the delete-side resurrection window in "The final cutover window",
+      because `exchange_done` is read only after both statements return, and that section says what a large value
+      would justify.
 - [ ] **Far-future partitions quantified — and `max_partitions_per_insert_block` sized from the result.** Run the
       bad-`id` audit query above; remediated or explicitly accepted. The count is not just informational: if
       `far_future_weeks` exceeds the ClickHouse default of 100, the backfill **aborts** without a raised
