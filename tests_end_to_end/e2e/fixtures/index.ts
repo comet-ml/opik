@@ -1,4 +1,4 @@
-export { test, expect } from './summarised-datasets.fixture';
+export { test, expect } from './annotation-queue-automation-ui.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -126,4 +126,13 @@ export type {
   SummarisedDatasetsFixtures,
 } from './summarised-datasets.fixture';
 export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
+export type {
+  AutomationQueueSeed,
+  AutomationTraceSeed,
+  AutomationQueuePairRef,
+  AutomationEditQueueRef,
+  AutomationRoutingRef,
+  RegisterAnnotationQueueCleanup,
+  AnnotationQueueAutomationFixtures,
+} from './annotation-queue-automation-ui.fixture';
 export type { ProjectRef } from '../core/backend';

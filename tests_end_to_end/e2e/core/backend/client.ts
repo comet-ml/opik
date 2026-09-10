@@ -473,6 +473,61 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** One `score <op> value` test inside an automation condition group. */
+export interface AnnotationQueueAutomationCondition {
+  score: string;
+  operator: '>' | '<' | '=';
+  value: number;
+}
+
+/**
+ * A queue's self-population rules. Groups are OR-ed, conditions inside a group
+ * AND-ed.
+ *
+ * `enabled` is carried separately from the groups because the two move
+ * independently: switching automation off leaves the configured conditions in
+ * place, and asserting the groups survived is the only way to tell a disable
+ * from a wipe.
+ */
+export interface AnnotationQueueAutomationRef {
+  enabled: boolean;
+  groups: Array<{ conditions: AnnotationQueueAutomationCondition[] }>;
+}
+
+/**
+ * The queue fields the create/update payload persists, as the API returns them.
+ *
+ * Deliberately separate from `AnnotationQueueDetail`: that one describes the
+ * queue's runtime state (item count, reviewers) and is what the delete spec
+ * reads, whereas this is the round-trip of what a form submitted. `scope` and
+ * `commentsEnabled` are here because the queue form no longer renders a
+ * comments control, so `comments_enabled` can only regress silently — it is
+ * observable in what was stored and nowhere else.
+ */
+export interface AnnotationQueueSettingsRef {
+  id: string;
+  name: string;
+  scope: string;
+  commentsEnabled: boolean;
+  instructions: string;
+  /** Null when the queue was created without an `automation` object at all. */
+  automation: AnnotationQueueAutomationRef | null;
+}
+
+/** How an item came to be in a queue — a person added it, or automation matched it. */
+export const ANNOTATION_QUEUE_ITEM_SOURCE = {
+  MANUAL: 'manual',
+  AUTOMATED: 'automated',
+} as const;
+
+export type AnnotationQueueItemSource =
+  (typeof ANNOTATION_QUEUE_ITEM_SOURCE)[keyof typeof ANNOTATION_QUEUE_ITEM_SOURCE];
+
+export interface AnnotationQueueItemRef {
+  id: string;
+  source: AnnotationQueueItemSource;
+}
+
 /**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
@@ -3091,6 +3146,193 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Create a queue with an `automation` block, returning its id.
+     *
+     * Through `rawFetch` rather than the pinned SDK (or the python bridge's
+     * `createAnnotationQueue`) because neither can express `automation` — the
+     * field is newer than both, and the bridge route takes only trace ids and
+     * feedback definition names. The id comes off the `Location` header, the
+     * same way `createOptimization` and the python creator take theirs, since
+     * the 201 carries no body.
+     */
+    async createAnnotationQueueWithAutomation(args: {
+      projectId: string;
+      name: string;
+      scope?: 'trace' | 'thread';
+      commentsEnabled?: boolean;
+      instructions?: string;
+      feedbackDefinitionNames?: string[];
+      /** Omitted entirely when null — which is the pre-automation payload shape. */
+      automation?: AnnotationQueueAutomationRef | null;
+    }): Promise<string> {
+      const { automation = null } = args;
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/annotation-queues',
+        {
+          body: {
+            project_id: args.projectId,
+            name: args.name,
+            description: '',
+            instructions: args.instructions ?? '',
+            scope: args.scope ?? 'trace',
+            comments_enabled: args.commentsEnabled ?? true,
+            feedback_definition_names: args.feedbackDefinitionNames ?? [],
+            annotators_per_item: 1,
+            lock_timeout_seconds: 1800,
+            ...(automation === null
+              ? {}
+              : {
+                  automation: {
+                    enabled: automation.enabled,
+                    conditions: { groups: automation.groups },
+                  },
+                }),
+          },
+        },
+      );
+
+      if (status !== 201) {
+        throw new Error(
+          `createAnnotationQueueWithAutomation('${args.name}'): expected 201, got ${status}: ${message}`,
+        );
+      }
+
+      const id = location?.split('/').pop();
+      if (!id) {
+        throw new Error(
+          `createAnnotationQueueWithAutomation('${args.name}'): 201 carried no Location header to take the id from`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * The queue's persisted settings, including `automation` and
+     * `comments_enabled`.
+     *
+     * `rawFetch` for the same reason as the creator: the pinned SDK's queue
+     * shape predates `automation`, so reading it through the typed client would
+     * silently drop the field this asserts on.
+     */
+    async getAnnotationQueueSettings(id: string): Promise<AnnotationQueueSettingsRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`getAnnotationQueueSettings(${id}): expected 200, got ${status}: ${message}`);
+      }
+
+      const q = json as {
+        id?: string;
+        name?: string;
+        scope?: string;
+        comments_enabled?: boolean;
+        instructions?: string;
+        automation?: {
+          enabled?: boolean;
+          conditions?: { groups?: Array<{ conditions?: AnnotationQueueAutomationCondition[] }> };
+        };
+      };
+
+      // Not defaulted: `comments_enabled` is the field under test in the edit
+      // round-trip, and a `?? true` here would turn "the API stopped returning
+      // it" into a passing assertion that comments are enabled.
+      if (typeof q.comments_enabled !== 'boolean') {
+        throw new Error(
+          `getAnnotationQueueSettings(${id}): response carried no comments_enabled — cannot assert on it`,
+        );
+      }
+
+      return {
+        id: String(q.id ?? id),
+        name: q.name ?? '',
+        scope: q.scope ?? '',
+        commentsEnabled: q.comments_enabled,
+        instructions: q.instructions ?? '',
+        automation:
+          q.automation === undefined
+            ? null
+            : {
+                enabled: Boolean(q.automation.enabled),
+                groups: (q.automation.conditions?.groups ?? []).map((g) => ({
+                  conditions: g.conditions ?? [],
+                })),
+              },
+      };
+    },
+
+    /**
+     * Add items to a queue by hand — the API behind the UI's
+     * "Add to → Annotation queue".
+     *
+     * Used as seeding for the provenance assertions: what is under test there
+     * is how the Source column renders a manual item next to an automated one,
+     * not the add-to menu itself, so this goes through the API for the same
+     * reason every other precondition does.
+     */
+    async addItemsToAnnotationQueue(queueId: string, itemIds: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/add`,
+        { body: { ids: itemIds } },
+      );
+      // 204 in practice; accept any 2xx rather than pinning a code the API is
+      // free to change between a 200 and a 204 without changing behaviour.
+      if (status < 200 || status >= 300) {
+        throw new Error(
+          `addItemsToAnnotationQueue(${queueId}): expected 2xx, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * Queue membership for the given item ids — how each one got into the queue.
+     *
+     * Ids with no membership are simply absent from the response, which is what
+     * makes this the check for "the queue did NOT pick that one up": a routed
+     * item and an unrouted one differ by presence, not by a flag.
+     *
+     * The endpoint rejects an empty `ids` list (422, "size must be between 1 and
+     * 1000"), so callers must pass at least one.
+     */
+    async searchAnnotationQueueItems(
+      queueId: string,
+      itemIds: string[],
+    ): Promise<AnnotationQueueItemRef[]> {
+      if (itemIds.length === 0) {
+        throw new Error('searchAnnotationQueueItems: itemIds must not be empty (the API rejects it)');
+      }
+
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/search`,
+        { body: { ids: itemIds } },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `searchAnnotationQueueItems(${queueId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+
+      const content = (json as { content?: Array<{ id?: string; source?: string }> })?.content ?? [];
+      return content.map((item) => {
+        // The source is the whole point of the lookup, so an item that arrives
+        // without one fails here rather than being quietly read as manual.
+        if (item.source !== ANNOTATION_QUEUE_ITEM_SOURCE.MANUAL &&
+            item.source !== ANNOTATION_QUEUE_ITEM_SOURCE.AUTOMATED) {
+          throw new Error(
+            `searchAnnotationQueueItems(${queueId}): item ${item.id} returned source '${item.source}', ` +
+              `expected one of manual|automated`,
+          );
+        }
+        return { id: String(item.id), source: item.source };
+      });
     },
 
     /**
