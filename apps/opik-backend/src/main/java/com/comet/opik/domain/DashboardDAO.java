@@ -90,14 +90,15 @@ public interface DashboardDAO {
             @Define("scope") @Bind("scope") String scope);
 
     /**
-     * Legacy project dashboards have no {@code project_id}, so they stay listed in every project.
-     * Workspace dashboards are project-less by design, which is why the scope column decides.
+     * Legacy project dashboards have no {@code project_id}, so an insights request also matches rows
+     * with no project. A workspace dashboard is project-less by design, so a workspace request does
+     * not: the requested scope, not the row, decides.
      */
     @SqlQuery("SELECT COUNT(id) FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif>" +
             "<if(project_id)> AND (project_id = :projectId " +
-            "OR (scope = 'insights' AND project_id IS NULL)) <endif>" +
+            "OR (:scope = 'insights' AND project_id IS NULL)) <endif>" +
             "<if(scope)> AND scope = :scope <endif>" +
             "<if(filters)> AND <filters> <endif>")
     @UseStringTemplateEngine
@@ -126,7 +127,7 @@ public interface DashboardDAO {
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
             "<if(project_id)> AND (project_id = :projectId " +
-            "OR (scope = 'insights' AND project_id IS NULL)) <endif>" +
+            "OR (:scope = 'insights' AND project_id IS NULL)) <endif>" +
             "<if(scope)> AND scope = :scope <endif>" +
             "<if(filters)> AND <filters> <endif> " +
             "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
