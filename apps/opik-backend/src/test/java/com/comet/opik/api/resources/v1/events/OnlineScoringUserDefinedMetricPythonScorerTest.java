@@ -204,6 +204,36 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void dropsAScoreTheMetricFlaggedAsFailedBeforeStoring() {
+            // The SDK pairs scoring_failed with a placeholder 0.0, so such a score is storable and would be
+            // recorded as a genuine zero. The split classifies it; this pins that the scorer stores what the
+            // split kept, rather than the list it was handed.
+            var message = sampleMessage();
+            var valued = PythonScoreResult.builder()
+                    .name("answer_relevance")
+                    .value(BigDecimal.valueOf(0.75))
+                    .reason("relevant")
+                    .build();
+            var failed = PythonScoreResult.builder()
+                    .name("hallucination")
+                    .value(BigDecimal.ZERO)
+                    .scoringFailed(true)
+                    .reason("upstream call failed")
+                    .build();
+
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(valued, failed)));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfTraces(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    traceScore("answer_relevance", BigDecimal.valueOf(0.75), "relevant", message.trace())));
+        }
+
+        @Test
         void reportsTheDroppedScoreOnTheRuleLog() {
             var message = sampleMessage();
             var valueless = PythonScoreResult.builder().name("hallucination").build();
