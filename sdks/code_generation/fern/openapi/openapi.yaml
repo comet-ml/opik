@@ -9657,6 +9657,12 @@ components:
           type: string
         logo_uri:
           type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
+          type: string
         redirect_uris:
           uniqueItems: true
           type: array
@@ -9694,6 +9700,12 @@ components:
         logo_uri:
           maxLength: 2048
           minLength: 0
+          type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
           type: string
     TokenResponse:
       type: object
@@ -11773,9 +11785,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -12244,9 +12256,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -12725,9 +12737,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:

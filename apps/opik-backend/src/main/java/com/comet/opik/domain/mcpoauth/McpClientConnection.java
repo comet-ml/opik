@@ -18,6 +18,8 @@ public record McpClientConnection(
         @NonNull String workspaceId,
         @NonNull String clientId,
         @NonNull String clientName,
+        String softwareId,
+        String softwareVersion,
         String logoUri,
         @NonNull String resource,
         @NonNull String redirectUri,

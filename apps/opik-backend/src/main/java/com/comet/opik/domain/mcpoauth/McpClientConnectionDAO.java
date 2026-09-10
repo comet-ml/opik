@@ -21,13 +21,16 @@ interface McpClientConnectionDAO {
      */
     @SqlUpdate("""
             INSERT INTO mcp_client_connections (id, user_name, workspace_name, workspace_id, client_id,
-                client_name, logo_uri, resource, redirect_uri)
+                client_name, software_id, software_version, logo_uri, resource, redirect_uri)
             VALUES (:bean.id, :bean.userName, :bean.workspaceName, :bean.workspaceId, :bean.clientId,
-                :bean.clientName, :bean.logoUri, :bean.resource, :bean.redirectUri)
+                :bean.clientName, :bean.softwareId, :bean.softwareVersion, :bean.logoUri, :bean.resource,
+                :bean.redirectUri)
             ON DUPLICATE KEY UPDATE
                 last_connected_at = NOW(6),
                 workspace_name = VALUES(workspace_name),
                 client_name = VALUES(client_name),
+                software_id = VALUES(software_id),
+                software_version = VALUES(software_version),
                 logo_uri = VALUES(logo_uri),
                 resource = VALUES(resource),
                 redirect_uri = VALUES(redirect_uri)
