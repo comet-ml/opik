@@ -17,12 +17,15 @@
 --
 -- WHY IT IS RACE-FREE, which is the property that makes it a gate rather than a snapshot. The parked side is frozen, so
 -- its row set cannot move under the read. Post-swap traffic can only ever move a key from a gating bucket into the
--- tolerated one: a write bumps last_updated_at, so the key becomes `newer_keys`; it cannot turn a matching key into a
--- missing or stale one. So a 0 stays true, and a non-zero is a real finding rather than a race.
+-- tolerated one: a write that bumps last_updated_at makes the key `newer_keys`, and nothing turns a matching key into a
+-- missing or stale one. So a 0 stays true, and a non-zero is a real finding rather than a race. What a 0 does NOT
+-- certify is that every post-swap write SURVIVED: last_updated_at is client-writable and can regress, and a write that
+-- regresses it below the parked version is overwritten by the sweep and invisible here. See the sweep's note in
+-- 000006_post_swap_reconciliation.sql, and the runbook's residual.
 --
--- WHAT `newer_keys` MEANS, and why it is not a gate. It is EXPECTED to be non-zero on a busy estate: any gap-window trace
--- that was written again after the swap is newer on the live side, and the sweep deliberately leaves it that way (its
--- INSERT loses the ReplacingMergeTree version comparison). Gating on it would fail every healthy reconciliation. It is
+-- WHAT `newer_keys` MEANS, and why it is not a gate. It is EXPECTED to be non-zero on a busy estate: a gap-window trace
+-- whose post-swap write ADVANCED the version is newer on the live side, and the sweep deliberately leaves it that way
+-- (its INSERT loses the ReplacingMergeTree version comparison). Gating on it would fail every healthy reconciliation. It is
 -- reported because an operator sizing the window wants the number.
 --
 -- WHY NOT clusterAllReplicas, unlike 000004_rollback_verify_replay.sql. A Replicated table returns one full copy per
@@ -262,8 +265,9 @@ SETTINGS join_use_nulls = 1,
 --
 -- THE VERSION COMPARISON IS WHAT MAKES IT PRECISE, and it needs no timestamp. A leaked row is a COPY of a backup row
 -- (placed by the backfill/delta before the delete fired, or re-inserted by the sweep), so its (key, last_updated_at) is
--- one the backup holds. A legitimate post-swap re-creation carries a version the backup never held, whatever the client
--- claimed, because the client's value went into the successor and not into the frozen table.
+-- one the backup holds. A legitimate post-swap re-creation carries a version the backup never held, because the
+-- client's value went into the successor and not into the frozen table — unless it names the exact microsecond the
+-- backup recorded for that key, which makes this advisory OVER-report rather than miss.
 --
 -- WHY IT OVERRIDES THE DELETE MASK, given that ClickHouse filters lightweight-deleted rows automatically. That
 -- filtering is the obstacle, not a substitute: the versions to match against belong to rows DELETED in the backup, so

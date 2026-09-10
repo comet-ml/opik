@@ -79,9 +79,16 @@
 --
 -- Mask-honored: apply_deleted_mask stays at its default 1, so a row already lightweight-deleted on the old table when it
 -- was parked is never copied back. Idempotent: the target is a ReplacingMergeTree keyed on (workspace_id, project_id, id)
--- with last_updated_at as the version, so re-running the sweep re-inserts rows that lose to anything newer — including
--- every post-swap write, which is why the sweep cannot clobber live traffic. A key whose live row is NEWER keeps the
--- newer row; the postcondition reports that as `newer_keys` and tolerates it.
+-- with last_updated_at as the version, so re-running the sweep re-inserts rows that lose to anything newer. A key whose
+-- live row is NEWER keeps the newer row; the postcondition reports that as `newer_keys` and tolerates it.
+--
+-- That protects live traffic only as far as last_updated_at is MONOTONIC, and it is not: the column is client-writable
+-- and bound verbatim on the batch-ingest path, so a post-swap write can carry a value BELOW the parked row's. The
+-- parked payload then wins the version comparison and that write is lost, while the gate compares parked against parked
+-- and reports zeros. Nothing inside this statement fixes it: the version column is the successor's, and both
+-- alternatives defeat the sweep's purpose — skipping keys already live would abandon exactly the stale and partial rows
+-- it exists to repair, and re-stamping last_updated_at would clobber legitimate newer writes. Same root cause and the
+-- same durable fix as the runbook's client-timestamp residual: clamp client timestamps at ingestion.
 --
 -- The NOT IN arm is what stops the sweep resurrecting a gap-window trace the user deleted AFTER the swap: such a trace is
 -- still live in the frozen backup (it was live when the backup froze), so without this arm the sweep would insert a fresh

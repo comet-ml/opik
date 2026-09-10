@@ -2076,6 +2076,124 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * <b>Residual:</b> a post-swap write that REGRESSES {@code last_updated_at} is overwritten by the sweep, and the
+     * gate reports the estate clean.
+     *
+     * <p>The sweep is safe to re-run because its INSERT is meant to LOSE the {@code ReplacingMergeTree} version
+     * comparison against anything written after the swap. That rests on {@code last_updated_at} being monotonic, and
+     * it is not: the column is client-writable and bound verbatim on the batch-ingest path (see class Javadoc), so a
+     * post-swap write can carry a value below the parked row's. The parked payload then wins and the live write is
+     * gone, while the gate compares the parked payload against itself and returns zeros.
+     *
+     * <p><b>This asserts the residual, not a bug to be fixed here.</b> Neither alternative survives contact with the
+     * sweep's purpose: skipping keys already live would abandon exactly the stale and partial rows it exists to
+     * repair, and re-stamping the version would clobber legitimate newer writes. Clamping client timestamps at
+     * ingestion is the durable fix, as it is for the future-dated residual in
+     * {@link #postSwapReplaySparesAFutureDatedRowAndTheLeakCheckReportsIt()}.
+     *
+     * <p>The second key is the control, and it is what makes the first assertion mean anything: identical in every
+     * respect except that its post-swap version moves FORWARD, it keeps its live payload and lands in
+     * {@code newer_keys}. So the sweep is behaving normally on this estate and the loss is the regression's doing.
+     */
+    @Test
+    void aPostSwapWriteThatRegressesTheVersionIsOverwrittenAndTheGateStillReportsReconciled() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = Instant.parse("2025-03-04T10:00:00Z");
+        var gapStart = "2025-03-04 09:00:00";
+
+        // Both written pre-swap inside the gap window, at the same version, carrying the payload the backup freezes.
+        var regressed = ID_GENERATOR.generateId().toString();
+        var honest = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(regressed, workspaceId, projectId, "regressed-parked", at, null, null, at, at);
+        insertShapedTrace(honest, workspaceId, projectId, "honest-parked", at, null, null, at, at);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        // Post-swap traffic on both keys, differing ONLY in the client-supplied version each write carries.
+        insertShapedTrace(regressed, workspaceId, projectId, "regressed-live", at, Instant.EPOCH, Double.NaN, at,
+                at.minusSeconds(60));
+        insertShapedTrace(honest, workspaceId, projectId, "honest-live", at, Instant.EPOCH, Double.NaN, at,
+                at.plusSeconds(60));
+
+        forwardSweep("traces", gapStart, swapDone);
+
+        assertThat(countMatchingLive(workspaceId, "name = 'regressed-live'"))
+                .as("the residual: the post-swap write carried a version below the parked row's, so the sweep's"
+                        + " re-insert wins the version comparison and that write is no longer live")
+                .isZero();
+        assertThat(countMatchingLive(workspaceId, "name = 'honest-live'"))
+                .as("control: the same sweep on the same estate leaves a post-swap write alone when its version moves"
+                        + " forward, so the loss above is the regression and not the sweep")
+                .isEqualTo(1L);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("and the gate cannot see the loss: the live row IS the parked payload, so the key matches on both"
+                        + " version and fingerprint and enters no bucket — only the control shows, as newer_keys")
+                .isEqualTo(ReconciliationCounts.builder().missing(0).stale(0).payloadMismatch(0).newer(1).build());
+    }
+
+    /**
+     * <b>Residual:</b> a {@code --swap-done} EARLIER than the real swap silently drops a key that was deleted and
+     * RE-CREATED in between — from the sweep and from the gate alike.
+     *
+     * <p>The exclusion arm is what stops the sweep resurrecting a trace the user deleted after the swap, and
+     * {@code verify-forward} applies the identical arm so the gate cannot demand a key the sweep is right to skip.
+     * That sharing is also the hazard. With an anchor earlier than the swap, a delete that fired BEFORE the swap sits
+     * at or after the bound, so both arms drop the key — and the backup's live row for it is the RE-CREATED trace, a
+     * genuine gap-window write. It stays missing under a clean gate.
+     *
+     * <p>So the early direction is not the safe one it looks like, which is why the flag's help says so and why the
+     * runbook tells the operator to pass the RECORDED {@code exchange_done}: neither {@code EXCHANGE} nor
+     * {@code RENAME} leaves a server-side commit instant to validate an estimate against.
+     *
+     * <p>The same estate is then swept again with the recorded anchor. That is the control: the key comes back and
+     * the gate still reads clean, so the first result is attributable to the anchor and not to a broken fixture.
+     */
+    @Test
+    void anEarlySwapDoneDropsARecreatedKeyFromTheSweepAndTheGateAlike() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = Instant.parse("2025-03-04T10:00:00Z");
+        var gapStart = "2025-03-04 09:00:00";
+        // The bridge rows below carry the column's now64() default, so this sits before them and stands in for an
+        // operator estimate that predates the swap.
+        var earlyAnchor = "2025-03-04 09:30:00";
+
+        // Written, deleted and RE-CREATED inside the gap window, all before the swap: the backup freezes with the
+        // re-created row live, and the bridge holds the delete.
+        var id = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(id, workspaceId, projectId, "recreated-first", at, null, null, at, at);
+        recordDeletionEvents(Set.of(id), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(Set.of(id), workspaceId, projectId);
+        insertShapedTrace(id, workspaceId, projectId, "recreated-again", at, null, null, at, at.plusSeconds(60));
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        forwardSweep("traces", gapStart, earlyAnchor);
+
+        assertThat(liveCount("traces", Set.of(id), workspaceId))
+                .as("the residual: the bridged delete sits at or after the early anchor, so the exclusion arm fires"
+                        + " and the re-created trace is never copied")
+                .isZero();
+        assertThat(forwardCounts(gapStart, earlyAnchor))
+                .as("and the gate applies that same arm, so the key never enters the parked set and the estate reads"
+                        + " reconciled over a trace that is missing")
+                .isEqualTo(reconciled());
+
+        forwardSweep("traces", gapStart, swapDone);
+
+        assertThat(countMatchingLive(workspaceId, "name = 'recreated-again'"))
+                .as("control: with the RECORDED anchor the delete falls below the bound, the key is swept, and the"
+                        + " version that lands is the re-created one")
+                .isEqualTo(1L);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("and the gate agrees on the same estate, so the fixture reconciles when the anchor is right")
+                .isEqualTo(reconciled());
+    }
+
+    /**
      * The postcondition's classification, one key per bucket, on the FULL {@code (workspace_id, project_id, id)} key.
      *
      * <p>The baseline matters as much as the perturbations: a clean sweep must classify NOTHING, which is what makes a

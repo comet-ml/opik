@@ -70,15 +70,18 @@
 #   --swap-done TS            what NOT to RESURRECT: the instant the swap statement RETURNED — `RECORD exchange_done=`
 #                             (forward) or `RECORD promote_done=` (reverse). Required. Bridged deletes at or after it are
 #                             excluded from the sweep, so a gap-window trace deleted after the swap is not brought back.
-#                             UNLIKE --gap-start THIS IS NOT FREE TO GUESS, and the two directions of error are not
-#                             symmetric — WHEN IN DOUBT, GUESS EARLY:
-#                               * too EARLY excludes too much, so a legitimately live key stays missing and the
-#                                 postcondition FAILS LOUDLY. Widen and re-run.
+#                             UNLIKE --gap-start THIS IS NOT FREE TO GUESS. PASS THE RECORDED VALUE. The two directions
+#                             of error are not symmetric, but NEITHER is fully self-reporting:
+#                               * too EARLY excludes too much. Usually that leaves a live key missing and the
+#                                 postcondition fails, so you widen and re-run. It is SILENT for one shape: a key
+#                                 deleted and then RE-CREATED between the value passed and the real swap. The gate
+#                                 applies the same exclusion as the sweep, so both drop that key and the re-created
+#                                 trace stays missing under a clean gate.
 #                               * too LATE excludes too little: a delete that fired AFTER the swap is bridged below the
 #                                 bound, the key is live in the frozen backup, the sweep re-inserts it and the replay's
 #                                 resurrection guard spares it. The delete is undone, and nothing reports it.
 #                             If the printed value was lost, use `cutover_start` — earlier than the swap by
-#                             construction, i.e. on the side that fails loudly. Do NOT round it up "to be safe": the
+#                             construction, i.e. on the side that usually reports. Do NOT round it up "to be safe": the
 #                             recorded value already trails the swap (../README.md, "The final cutover window"), so
 #                             every second added is a second of silent resurrection window.
 #   --slack-seconds N         widen --gap-start DOWNWARD by N seconds (default 300) to absorb cross-replica clock skew on
@@ -999,8 +1002,8 @@ echo "RECONCILIATION FAILED: the gate is still non-zero after $MAX_PASSES pass(e
 echo "  missing_keys=$MISSING stale_keys=$STALE payload_mismatch_keys=$PAYLOAD" >&2
 echo "This is NOT convergence stalling on write volume: the parked table is frozen, so repeated passes cannot keep" >&2
 echo "finding new work unless something else is wrong. Investigate before re-running:" >&2
-echo "  * missing_keys — the sweep did not land those rows. Check the run's errors, and check that --swap-done is not" >&2
-echo "    LATER than the actual swap (a late value under-excludes; an early one over-excludes and shows up exactly here)." >&2
+echo "  * missing_keys — the sweep did not land those rows. Check the run's errors, and check --swap-done against the" >&2
+echo "    RECORDED value (a late value under-excludes; an early one over-excludes and usually surfaces here)." >&2
 echo "  * stale_keys / payload_mismatch_keys — the live row disagrees with the frozen one at the same or an older" >&2
 echo "    version, which a sweep cannot fix by re-inserting. Triage with:" >&2
 # verify.sh's --old-table is always the OLD-SCHEMA side (Nullable, nanosecond), which is the parked backup forward and

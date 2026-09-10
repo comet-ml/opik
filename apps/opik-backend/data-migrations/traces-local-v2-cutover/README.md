@@ -531,7 +531,10 @@ The tail is still worth running tightly, because its length is what decides how 
    recording `exchange_done` and printing the **CUTOVER INCOMPLETE** banner.
 5. Run `reconcile.sh --gap-start '<delta_start> UTC' --swap-done '<exchange_done> UTC'`, **immediately** again. It
    sweeps the parked writes into the live successor, re-applies the deletes bridged across the swap, and does not exit 0
-   until its four-count postcondition says the gap is closed.
+   until its four-count postcondition says the gap is closed. Pass the **recorded** `exchange_done`, never an estimate:
+   the sweep and the gate apply the same `--swap-done` exclusion, so a value earlier than the real swap drops a key
+   deleted and re-created in between from *both*, leaving that trace missing under a clean gate. `--help` states both
+   directions of error; only `--gap-start` is free to widen.
 
 Keep step 3→4 short, and step 4→5 shorter:
 
@@ -541,7 +544,7 @@ Keep step 3→4 short, and step 4→5 shorter:
 | **Writes** — all of them, since nothing holds any of them across the swap | **step 5's sweep** |
 | **Deletes** bridged after step 4's replay read but before the swap | **step 5's post-swap replay**, whose resurrection guard reads the frozen backup and is therefore race-free |
 
-**Four residuals remain, all narrow. The first three are on the delete side and share one mitigation — so state it
+**Five residuals remain, all narrow. The first three are on the delete side and share one mitigation — so state it
 once: quiesce user DELETES across the swap, not merely reads.**
 
 - A delete whose bridge row lands *after* step 5's read is invisible to it.
@@ -571,6 +574,14 @@ once: quiesce user DELETES across the swap, not merely reads.**
   the backup, and a lightweight `DELETE` **accepts `apply_deleted_mask = 0` and then ignores it**, so folding the check
   into the replay would produce a statement that reports success having masked nothing. Clamping future client
   timestamps at ingestion is the durable fix and is not this procedure's to make.
+- **A post-swap write that REGRESSES `last_updated_at` is overwritten by the sweep, and the gate reports it clean.**
+  The same writable column as above, in the other direction. The sweep re-inserts the parked payload,
+  `ReplacingMergeTree` keeps the higher version, and a client-supplied value below the parked row's loses the live
+  write; the postcondition then compares the parked payload against itself and returns zeros, so `newer_keys` does not
+  see it either. It needs a gap-window key *and* a post-swap write that moves `last_updated_at` backwards. Nothing in
+  the reconciliation can fix it: skipping keys already live would abandon exactly the stale and partial rows the sweep
+  exists to repair, and re-stamping the version would clobber legitimate newer writes. Clamping client timestamps at
+  ingestion is the durable fix here too.
 - Between the `EXCHANGE` and the sweep, gap-window traces are briefly absent from live reads — and `TraceDAO`'s merge
   path reads the old row to preserve `created_at`, so an update landing in that hole re-stamps it.
 
