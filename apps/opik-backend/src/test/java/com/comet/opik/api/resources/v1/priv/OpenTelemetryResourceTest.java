@@ -196,20 +196,21 @@ class OpenTelemetryResourceTest {
             }
         }
 
-        @Test
-        @DisplayName("accept a batch that carries no spans without storing anything")
-        void testOtelRequestWithEmptyBatch() {
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("batchesWithoutSpans")
+        @DisplayName("accept a batch that carries no spans, whichever way it is empty")
+        void testOtelRequestWithEmptyBatch(String shape, String mediaType, Entity<?> payload) {
             // OTLP treats an export with no spans as valid. It used to reach SpanService, whose non-empty
-            // precondition surfaced it to the exporter as a 500 — after getOrCreate had already created the
-            // project, which is why the absence of the project is asserted and not just the status.
+            // precondition surfaced it to the exporter as a 500.
+            //
+            // The three shapes matter: a batch can be empty at the request, at a ResourceSpans, or at a
+            // ScopeSpans, and only the last two distinguish the check that walks into the batch from one
+            // that just asks whether the resource-spans list is empty.
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
             String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
-            var emptyBatch = ExportTraceServiceRequest.newBuilder().build();
-            var payload = Entity.entity(emptyBatch.toByteArray(), "application/x-protobuf");
-
-            post(payload, "application/x-protobuf", projectName, workspaceName, HttpStatus.SC_OK);
+            post(payload, mediaType, projectName, workspaceName, HttpStatus.SC_OK);
 
             // What the empty export must NOT do — create the project — is not asserted here, and it is
             // worth saying why rather than leaving a silent gap. Reading the project store needs
@@ -217,6 +218,32 @@ class OpenTelemetryResourceTest {
             // name answers 400 when the project is absent, so neither reads cleanly as "nothing was
             // created". The short-circuit sits before getOrCreate for that reason; it wants an assertion
             // from a class whose auth mock can see projects.
+        }
+
+        Stream<Arguments> batchesWithoutSpans() {
+            var noScopeSpans = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder().build())
+                    .build();
+            var noSpans = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().build())
+                            .build())
+                    .build();
+
+            // The protobuf encoding of an entirely empty request is zero bytes, and a zero-length entity
+            // leaves the shared test client's connection in a state that makes Jetty reject the *next*
+            // request with "400 No URI". That shape is what testOtelRequestWithoutABody covers instead, so
+            // it is left to that test rather than sent from here; json carries it as "{}".
+            return Stream.of(
+                    arguments("protobuf, resource spans with no scope spans", "application/x-protobuf",
+                            Entity.entity(noScopeSpans.toByteArray(), "application/x-protobuf")),
+                    arguments("protobuf, scope spans with no spans", "application/x-protobuf",
+                            Entity.entity(noSpans.toByteArray(), "application/x-protobuf")),
+                    arguments("json, no resource spans", MediaType.APPLICATION_JSON, Entity.json("{}")),
+                    arguments("json, resource spans with no scope spans", MediaType.APPLICATION_JSON,
+                            Entity.json("{\"resourceSpans\":[{}]}")),
+                    arguments("json, scope spans with no spans", MediaType.APPLICATION_JSON,
+                            Entity.json("{\"resourceSpans\":[{\"scopeSpans\":[{}]}]}")));
         }
 
         @ParameterizedTest
