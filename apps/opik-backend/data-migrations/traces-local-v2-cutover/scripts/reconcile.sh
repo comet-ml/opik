@@ -584,13 +584,25 @@ extract() {
 # is empty or only the block's own comments, and clickhouse-client exits 0 on either, so `set -e` never fires and the
 # step prints its success line having done nothing. Same guard, same reasoning, as exchange_and_wrap.sh's.
 require_rendered() {
-    local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends
+    local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends begin_line end_line
     # Exactly one pair, checked on the FILE rather than the extraction: the awk stops at the first END and otherwise runs
     # to EOF, so a missing or renamed END sweeps every later block into this one. The content checks cannot see that.
     begins="$(grep -cxF -e "-- >>> BEGIN $what" "$file" || true)"
     ends="$(grep -cxF -e "-- >>> END $what" "$file" || true)"
     if (( begins != 1 || ends != 1 )); then
         echo "ERROR: $file holds $begins '-- >>> BEGIN $what' and $ends '-- >>> END $what'; expected one of each." >&2
+        exit 2
+    fi
+    # Second: the END must sit AFTER its BEGIN, the same check exchange_and_wrap.sh's copy makes. Counting alone misses
+    # a reordered END, which still counts 1 and 1: extract's awk clears its flag only on a line equal to END, so with
+    # the END behind the BEGIN it captures to end of file and sweeps every later block in. That run-on is non-empty,
+    # mentions the identity token and holds no placeholder, so all the checks below pass on several statements — and
+    # the multi-result-set output it produces is what read_postcondition would otherwise read a verdict from.
+    read -r begin_line end_line <<<"$(awk -v b="-- >>> BEGIN $what" -v e="-- >>> END $what" \
+        '$0 == b {bl = NR} $0 == e {el = NR} END {print bl, el}' "$file")"
+    if (( end_line <= begin_line )); then
+        echo "ERROR: $file has the '$what' markers out of order (BEGIN at line $begin_line, END at line $end_line)," >&2
+        echo "       so the block would capture to end of file and sweep every later block into it. Refusing to run it." >&2
         exit 2
     fi
     masked="$(sed 's/--.*$//' <<<"$sql")"
@@ -677,7 +689,7 @@ verify_reverse_replay() {
     sql="$(cat "$REVERSE_VERIFY_SQL")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
-    resurrected="$(clickhouse-client "${CH_ARGS[@]}" --query "$sql")"
+    resurrected="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")"
     if [[ "$resurrected" == "0" ]]; then
         echo "  Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored '$LIVE_TABLE'."
         return 0
@@ -714,7 +726,7 @@ validate_block() {
 # The four counts, as one tab-separated line, so the driver gates on them instead of leaving numbers on a screen.
 # Called inside a command substitution, so it deliberately does NO validation of its own — see validate_blocks.
 reconciliation_counts() {
-    clickhouse-client "${CH_ARGS[@]}" --multiquery \
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery \
         --query "$(render "$(extract "$VERIFY_SQL" "verify-$DIRECTION")")"
 }
 
@@ -724,6 +736,17 @@ MISSING=""; STALE=""; PAYLOAD=""; NEWER=""
 read_postcondition() {
     local out
     if ! out="$(reconciliation_counts)"; then out=""; fi
+    # ONE row, for the same reason the settle gate insists on it: `read` takes only the first line, so a second result
+    # set is discarded in silence and the verdict is reached on a fragment — and every field on line 1 can be a
+    # legitimate number, so the regex below cannot catch it. This is the read finalize.sh's --confirm-gap-reconciled
+    # rests on, and a false clean here ends with the parked backup dropped ON CLUSTER. verify-forward / verify-reverse
+    # are single global aggregates with no GROUP BY, so more than one row means the markers are around a different
+    # statement — the state require_rendered's out-of-order check catches at the file level.
+    if [[ "$out" == *$'\n'* ]]; then
+        echo "ERROR: the reconciliation postcondition read MORE THAN ONE ROW. verify-$DIRECTION returns exactly one;" >&2
+        echo "       extra rows mean the markers are around a different statement in $VERIFY_SQL." >&2
+        return 1
+    fi
     read -r MISSING STALE PAYLOAD NEWER <<< "$out"
     [[ "$MISSING" =~ ^[0-9]+$ && "$STALE" =~ ^[0-9]+$ && "$PAYLOAD" =~ ^[0-9]+$ && "$NEWER" =~ ^[0-9]+$ ]]
 }
@@ -856,6 +879,14 @@ print_leak_check
 if gate_is_clean; then
     echo "Nothing to reconcile: every key live in '$PARKED_TABLE' inside the gap window is present on '$LIVE_TABLE' at the"
     echo "same version or newer. No statement issued."
+    # Same qualifier as the RECONCILED verdict below, and for the same reason: this is a success outcome an operator
+    # acts on with finalize.sh, whose DROP is ON CLUSTER. A shard-local "nothing to do" must not read as an estate-wide
+    # one either. (The --report-only exit below needs no qualifier: it exits non-zero saying the estate is NOT
+    # reconciled, and assert_shard_scope has already named the scope on stderr.)
+    [[ -z "$SHARD_SCOPE_NOTE" ]] || {
+        echo "SCOPE: $SHARD_SCOPE_NOTE. This covers that shard ONLY — every other shard needs its own clean gate"
+        echo "       before finalize.sh, which drops the parked backup on all of them."
+    }
     exit 0
 fi
 

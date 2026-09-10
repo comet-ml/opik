@@ -175,9 +175,24 @@ fi
 if [[ "$BACKUP" == "traces_pre_cutover_backup" ]]; then
     REQUIRED_FLAG="--confirm-gap-reconciled"
     FLAG_GIVEN="$CONFIRM_GAP_RECONCILED"
+    WRONG_FLAG="--confirm-post-cutover-decision"
+    WRONG_GIVEN="$CONFIRM_POST_CUTOVER_DECISION"
 else
     REQUIRED_FLAG="--confirm-post-cutover-decision"
     FLAG_GIVEN="$CONFIRM_POST_CUTOVER_DECISION"
+    WRONG_FLAG="--confirm-gap-reconciled"
+    WRONG_GIVEN="$CONFIRM_GAP_RECONCILED"
+fi
+
+# The other branch's flag is an ERROR, not surplus. Demanding the right one already stops the gate being discharged by
+# the wrong assertion alone, so this catches the other shape: both passed, which means the operator asserted a fact
+# that is not established on this estate — copy-paste rather than a decision. reconcile.sh refuses its own
+# cross-direction flags for the same reason, and the two drivers should not disagree on that.
+if [[ "$WRONG_GIVEN" == "1" ]]; then
+    echo "ERROR: $WRONG_FLAG does not apply to this estate — '$BACKUP' is parked, so the assertion this step needs is" >&2
+    echo "       $REQUIRED_FLAG. The two are not interchangeable and asserting both asserts something that is not" >&2
+    echo "       established here. Drop $WRONG_FLAG and re-run." >&2
+    exit 2
 fi
 
 if [[ "$CONFIRM" == "1" && "$FLAG_GIVEN" != "1" ]]; then

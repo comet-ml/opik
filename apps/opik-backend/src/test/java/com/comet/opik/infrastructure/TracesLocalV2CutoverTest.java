@@ -1451,6 +1451,15 @@ class TracesLocalV2CutoverTest {
         var gapWritten = mintIdsAt(5, gapAt);
         insertRows(gapWritten, workspaceId, projectId, "gap", _ -> gapAt);
 
+        // Also in the gap window, but DELETED on the old table before the freeze — and deliberately NOT bridged, since
+        // capture is best-effort and an unrecorded delete is reachable. That absence is what isolates the property:
+        // the replay cannot mask a key the bridge never recorded, so if this stays gone the only thing keeping it gone
+        // is the sweep honoring the delete mask on its read of the frozen backup. Masked rows never enter the parked
+        // set either (it reads FINAL), so the four counts below are unaffected.
+        var gapDeleted = mintIdsAt(2, gapAt);
+        insertRows(gapDeleted, workspaceId, projectId, "gap-deleted", _ -> gapAt);
+        lightweightDeleteScoped(idStrings(gapDeleted), workspaceId, projectId);
+
         exchangeTables();
         var swapDone = nowMicros();
 
@@ -1472,6 +1481,10 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(gapWritten), workspaceId))
                 .as("after the sweep every gap-window trace is live on the successor")
                 .isEqualTo(gapWritten.size());
+        assertThat(liveCount("traces", idStrings(gapDeleted), workspaceId))
+                .as("while a gap-window trace deleted before the freeze is NOT brought back — the sweep reads the"
+                        + " parked backup mask-honored, and with no bridge row nothing else could have masked it")
+                .isZero();
         assertThat(forwardCounts(deltaStart, swapDone))
                 .as("and the gate clears: nothing missing, nothing stale, no payload differing")
                 .isEqualTo(reconciled());
@@ -1766,7 +1779,8 @@ class TracesLocalV2CutoverTest {
 
         forwardSweep("traces", deltaStart, swapDone);
         assertThat(liveCount("traces", idStrings(leaked), workspaceId))
-                .as("the sweep alone cannot fix a delete — it is mask-honored, so it neither copies nor removes it")
+                .as("the sweep alone cannot fix a delete: these rows pre-date the gap window, so it never reads them"
+                        + " — only the replay can mask them")
                 .isEqualTo(leaked.size());
 
         postSwapDeletionReplay("traces", deltaStart, swapDone);
@@ -1835,7 +1849,8 @@ class TracesLocalV2CutoverTest {
                 .as("the post-swap re-creation SURVIVES: the staleness scope spares any row written since the swap")
                 .isEqualTo(1L);
         assertThat(forwardCounts(deltaStart, swapDone))
-                .as("and the gate clears — the key is masked in the frozen backup, so it never enters the parked set")
+                .as("and the gate clears — the key pre-dates the gap window, so it never enters the parked set the"
+                        + " four counts classify")
                 .isEqualTo(reconciled());
 
         // NEGATIVE CONTROL: the same replay with the PRE-swap scope, which is inert, destroys the write.
