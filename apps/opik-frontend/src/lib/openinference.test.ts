@@ -116,3 +116,41 @@ describe("isSafeOpenInferenceMediaUrl", () => {
     },
   );
 });
+
+describe("historical nested JSON values", () => {
+  it.each(["text", "data", "signature", "encrypted_content"])(
+    "matches decoded %s without duplicating repeated turns",
+    (field) => {
+      const message = {
+        role: "user",
+        content: "Summary",
+        contents: [{ type: "text", [field]: '{"a":1}' }],
+      };
+      const input = {
+        messages: [message, message],
+        ...Object.fromEntries(
+          [0, 1].flatMap((i) => [
+            [`llm.input_messages.${i}.message.role`, "user"],
+            [`llm.input_messages.${i}.message.content`, "Summary"],
+            [
+              `llm.input_messages.${i}.message.contents.0.message_content.type`,
+              "text",
+            ],
+            [
+              `llm.input_messages.${i}.message.contents.0.message_content.${field}`,
+              { a: 1 },
+            ],
+          ]),
+        ),
+      };
+      expect(parseOpenInferenceFields(input, undefined).inputMessages).toEqual([
+        message,
+        message,
+      ]);
+      expect(
+        parseOpenInferenceFields({ ...input, messages: undefined }, undefined)
+          .inputMessages,
+      ).toHaveLength(2);
+    },
+  );
+});

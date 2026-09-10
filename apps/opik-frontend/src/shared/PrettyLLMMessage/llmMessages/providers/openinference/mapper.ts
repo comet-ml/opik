@@ -1,4 +1,6 @@
 import {
+  OPENINFERENCE_USER_ROLES,
+  OPENINFERENCE_ASSISTANT_ROLES,
   OpenInferenceContent,
   OpenInferenceMessage,
   OpenInferenceToolCall,
@@ -22,21 +24,16 @@ const normalizeRole = (
   role: string | undefined,
   fieldType: "input" | "output",
 ): MessageRole => {
-  switch (role?.toLowerCase()) {
-    case "assistant":
-    case "model":
-    case "ai":
-    case "agent":
-      return "assistant";
+  const normalized = role?.toLowerCase() ?? "";
+  if (OPENINFERENCE_USER_ROLES.has(normalized)) return "user";
+  if (OPENINFERENCE_ASSISTANT_ROLES.has(normalized)) return "assistant";
+  switch (normalized) {
     case "system":
     case "developer":
       return "system";
     case "tool":
     case "function":
       return "tool";
-    case "user":
-    case "human":
-      return "user";
     default:
       return fieldType === "output" ? "assistant" : "user";
   }
@@ -119,46 +116,39 @@ const contentBlocks = (
   const orderedToolCalls: OpenInferenceToolCall[] = [];
 
   contents.forEach((content, index) => {
-    switch (content.type) {
-      case "image": {
-        const url = content.image?.url;
-        if (url && isSafeOpenInferenceMediaUrl(url, "image")) {
-          blocks.push({
-            blockType: "image",
-            component: PrettyLLMMessage.ImageBlock,
-            props: { images: [{ url, name: mediaName(url, "Image", index) }] },
-          });
-        }
-        break;
-      }
-      case "audio": {
-        const url = content.audio?.url;
-        if (url && isSafeOpenInferenceMediaUrl(url, "audio")) {
-          blocks.push({
-            blockType: "audio",
-            component: PrettyLLMMessage.AudioPlayerBlock,
-            props: { audios: [{ url, name: mediaName(url, "Audio", index) }] },
-          });
-        }
-        if (content.audio?.transcript) {
-          blocks.push(textBlock(content.audio.transcript, role));
-        }
-        break;
-      }
-      case "tool_use": {
-        if (
-          content.tool_call &&
-          isRenderableOpenInferenceToolCall(content.tool_call)
-        ) {
-          orderedToolCalls.push(content.tool_call);
-          blocks.push(toolCallBlock(content.tool_call));
-        }
-        break;
-      }
-      case "reasoning":
-      case "text":
-      default:
-        if (content.text) blocks.push(textBlock(content.text, role));
+    if (content.text) blocks.push(textBlock(content.text, role));
+    const imageUrl = content.image?.url;
+    if (imageUrl && isSafeOpenInferenceMediaUrl(imageUrl, "image")) {
+      blocks.push({
+        blockType: "image",
+        component: PrettyLLMMessage.ImageBlock,
+        props: {
+          images: [
+            { url: imageUrl, name: mediaName(imageUrl, "Image", index) },
+          ],
+        },
+      });
+    }
+    const audioUrl = content.audio?.url;
+    if (audioUrl && isSafeOpenInferenceMediaUrl(audioUrl, "audio")) {
+      blocks.push({
+        blockType: "audio",
+        component: PrettyLLMMessage.AudioPlayerBlock,
+        props: {
+          audios: [
+            { url: audioUrl, name: mediaName(audioUrl, "Audio", index) },
+          ],
+        },
+      });
+    }
+    if (content.audio?.transcript)
+      blocks.push(textBlock(content.audio.transcript, role));
+    if (
+      content.tool_call &&
+      isRenderableOpenInferenceToolCall(content.tool_call)
+    ) {
+      orderedToolCalls.push(content.tool_call);
+      blocks.push(toolCallBlock(content.tool_call));
     }
   });
 
@@ -366,3 +356,17 @@ export const mapOpenInferenceMessages: FormatMapper = (
 
 export const combineOpenInferenceMessages: FormatCombiner = (input, output) =>
   mapParsed(parseOpenInferenceFields(input.raw, output.raw));
+
+// The orchestrator already knows which side permits raw fallback. Keep recovery of
+// structured historical output independent from permission to render an unknown sibling.
+export const mapOpenInferencePair = (
+  input: unknown,
+  output: unknown,
+  allowInputFallback: boolean,
+  allowOutputFallback: boolean,
+): LLMMapperResult => {
+  const parsed = parseOpenInferenceFields(input, output);
+  if (!allowInputFallback) parsed.inputFallback = undefined;
+  if (!allowOutputFallback) parsed.outputFallback = undefined;
+  return mapParsed(parsed);
+};

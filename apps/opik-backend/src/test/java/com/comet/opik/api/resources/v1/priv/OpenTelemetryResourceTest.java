@@ -77,6 +77,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -669,9 +670,8 @@ class OpenTelemetryResourceTest {
             assertThat(persistedOpenInferenceSpan.model()).isEqualTo("gpt-4o-mini");
             assertThat(persistedOpenInferenceSpan.provider()).isEqualTo("openai");
             assertThat(persistedOpenInferenceSpan.usage())
-                    .containsEntry("prompt_tokens", 3)
-                    .containsEntry("completion_tokens", 4)
-                    .containsEntry("total_tokens", 7);
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of("prompt_tokens", 3, "completion_tokens", 4, "total_tokens", 7));
             assertThat(persistedOpenInferenceSpan.input().path("request_id").asText()).isEqualTo("request-7");
             assertThat(persistedOpenInferenceSpan.input().path("messages").get(0).path("role").asText())
                     .isEqualTo("user");

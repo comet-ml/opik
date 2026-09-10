@@ -1,5 +1,6 @@
 import React from "react";
 import { Span, Trace } from "@/types/traces";
+import { getPrettifyConfig } from "@/lib/traces";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
@@ -12,16 +13,20 @@ type DetailsTabProps = {
   data: Trace | Span;
   isLoading: boolean;
   search?: string;
-  openInferenceHint: boolean;
 };
 
 const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
   data,
   isLoading,
   search,
-  openInferenceHint,
 }) => {
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
+
+  const prettifySource = {
+    metadata: data.metadata,
+    input: transformedInput,
+    output: transformedOutput,
+  };
 
   const hasMetadata = Boolean(data.metadata);
   const hasTokenUsage = Boolean(data.usage);
@@ -38,7 +43,10 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
           <CodeBlock
             title="Input"
             data={transformedInput}
-            prettifyConfig={{ fieldType: "input", openInferenceHint }}
+            prettifyConfig={{
+              ...getPrettifyConfig(prettifySource, "input"),
+              fieldType: "input",
+            }}
             preserveKey="syntax-highlighter-trace-sidebar-input"
             search={search}
             withSearch
@@ -54,9 +62,8 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
             title="Output"
             data={transformedOutput}
             prettifyConfig={{
+              ...getPrettifyConfig(prettifySource, "output"),
               fieldType: "output",
-              openInferenceHint,
-              openInferenceInput: transformedInput,
             }}
             preserveKey="syntax-highlighter-trace-sidebar-output"
             search={search}

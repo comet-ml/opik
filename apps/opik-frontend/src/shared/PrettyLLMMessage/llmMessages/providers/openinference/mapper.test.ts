@@ -168,27 +168,6 @@ describe("OpenInference message mapping", () => {
     ]);
   });
 
-  it.each([{}, { completion_tokens: 5 }])(
-    "retains provider usage when span usage is incomplete: %j",
-    (spanUsage) => {
-      const result = mapAndCombineMessages(
-        { messages: [{ role: "user", content: "Question" }] },
-        {
-          choices: [{ message: { role: "assistant", content: "Answer" } }],
-          usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 },
-        },
-        { spanUsage },
-      );
-
-      expect(result.usage).toEqual({
-        prompt_tokens: 3,
-        completion_tokens: 4,
-        total_tokens: 7,
-        ...spanUsage,
-      });
-    },
-  );
-
   it("maps canonical chat, roles, tools, usage and ordered multimodal content", () => {
     const toolCall = {
       id: "call-1",
@@ -405,7 +384,7 @@ describe("OpenInference message mapping", () => {
   });
 
   it("handles malformed and partial messages without throwing", () => {
-    expect(() =>
+    expect(
       mapOpenInferenceMessages(
         {
           messages: [
@@ -413,13 +392,13 @@ describe("OpenInference message mapping", () => {
             { role: "unknown-role", contents: [null, { type: "text" }] },
           ],
         },
-        { fieldType: "output", formatHint: "openinference" },
-      ),
-    ).not.toThrow();
+        { fieldType: "output" },
+      ).messages,
+    ).toEqual([]);
 
     const result = mapOpenInferenceMessages(
       { messages: [{ role: "unknown-role", content: "safe" }] },
-      { fieldType: "output", formatHint: "openinference" },
+      { fieldType: "output" },
     );
     expect(result.messages[0].role).toBe("assistant");
   });
@@ -480,7 +459,7 @@ describe("OpenInference message mapping", () => {
           },
         ],
       },
-      { fieldType: "output", formatHint: "openinference" },
+      { fieldType: "output" },
     );
 
     expect(
@@ -499,7 +478,7 @@ describe("OpenInference message mapping", () => {
         ],
         value: "Raw answer",
       },
-      { fieldType: "output", formatHint: "openinference" },
+      { fieldType: "output" },
     );
 
     expect(result.messages).toHaveLength(1);
@@ -520,8 +499,6 @@ describe("OpenInference message mapping", () => {
       },
       {
         fieldType: "input",
-        formatHint: "openinference",
-        formatHintIsAuthoritative: true,
       },
     );
 
@@ -557,7 +534,7 @@ describe("OpenInference message mapping", () => {
           },
         ],
       },
-      { fieldType: "output", formatHint: "openinference" },
+      { fieldType: "output" },
     );
 
     expect(result.messages[0].blocks.map((block) => block.blockType)).toEqual([

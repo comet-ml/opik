@@ -11,20 +11,15 @@ import {
 } from "@/lib/annotation-queues";
 import { Trace, Thread } from "@/types/traces";
 import { isObjectThread } from "@/lib/traces";
-import { prettifyMessage } from "@/lib/traces";
+import { prettifyMessage, prettifyTraceField } from "@/lib/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
-import { hasOpenInferenceHint } from "@/lib/openinference";
 
 const getPreviewText = (
   obj: object | undefined,
   type: "input" | "output",
-  openInferenceInput?: object,
-  openInferenceHint?: boolean,
 ): string => {
   const result = prettifyMessage(obj, {
     type,
-    openInferenceInput,
-    openInferenceHint,
   });
   if (typeof result.message === "string") return result.message;
   return obj ? JSON.stringify(obj).slice(0, 80) : "";
@@ -47,20 +42,18 @@ const getItemPreviews = (
     };
   }
   const trace = item as Trace;
-  const openInferenceHint = hasOpenInferenceHint(
-    trace.metadata,
-    trace.input,
-    trace.output,
-  );
+  const preview = (type: "input" | "output") => {
+    const { message } = prettifyTraceField(trace, type);
+    return typeof message === "string"
+      ? message
+      : message
+        ? JSON.stringify(message).slice(0, 80)
+        : "";
+  };
   return {
     name: trace.name || trace.id.slice(-12),
-    input: getPreviewText(trace.input, "input", undefined, openInferenceHint),
-    output: getPreviewText(
-      trace.output,
-      "output",
-      trace.input,
-      openInferenceHint,
-    ),
+    input: preview("input"),
+    output: preview("output"),
   };
 };
 
