@@ -1,4 +1,4 @@
-import { test as baseTest } from './alert.fixture';
+import { test as baseTest } from './scored-traces.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7 } from '../core/backend';
 import type { SpanSeedUsage } from '../core/sdk';
@@ -311,4 +311,4 @@ export const test = baseTest.extend<ModelCostSpansFixtures>({
   },
 });
 
-export { expect } from './alert.fixture';
+export { expect } from './scored-traces.fixture';
