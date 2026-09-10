@@ -97,6 +97,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_IMAGE_2_5_FLARE = "gpt-image-2.5-flare",
+  GPT_IMAGE_2_5_SUNBURST = "gpt-image-2.5-sunburst",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",

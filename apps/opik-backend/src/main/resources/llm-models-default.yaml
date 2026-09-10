@@ -115,6 +115,8 @@ openai:
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"
   - id: "gpt-image-2"
+  - id: "gpt-image-2.5-flare"
+  - id: "gpt-image-2.5-sunburst"
   - id: "o1-2024-12-17"
     reasoning: true
   - id: "o1-mini"
