@@ -36,6 +36,12 @@ export interface DashboardRef {
  * `projectId` and `scope` are carried rather than dropped because they are the
  * subject: a scoping assertion that only compared ids could not tell a view the
  * backend attached to the right project from one it attached to none.
+ *
+ * `projectId` is normalised to `null`, never left absent, for a view created
+ * before dashboards were scoped to a project. That distinction is load-bearing:
+ * a project-less view is visible from every project and a project-bound one only
+ * from its own, so a caller has to be able to tell "no project" apart from "the
+ * API did not say".
  */
 export interface InsightsViewRef {
   id: string;
@@ -1348,10 +1354,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * which is not `0`, so the guard does not fire and the unguarded read
      * happens anyway. A seed should look like what the product's
      * own create dialog writes, not like the minimum the API will accept.
+     *
+     * `projectId` is optional, and omitting it is a deliberate case rather than
+     * a convenience: a view carrying no project at all is the shape every view
+     * created before the scoping change has, and the scoping rules treat it
+     * specially — it stays visible from every project. Passing a project and
+     * expecting the backend to ignore it would seed something else entirely.
      */
     async createInsightsView(args: {
       name: string;
-      projectId: string;
+      projectId?: string;
       sections?: Array<{
         id: string;
         title: string;
@@ -1361,7 +1373,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }): Promise<InsightsViewRef> {
       const created = await opik.api.insightsViews.createInsightsView({
         name: args.name,
-        projectId: args.projectId,
+        ...(args.projectId ? { projectId: args.projectId } : {}),
         // The type the project page's own create dialog sends. The picker filters
         // its list on it, so a view seeded without it is invisible there — which
         // would read as the scoping under test rather than as a bad seed.

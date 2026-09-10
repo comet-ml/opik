@@ -1,4 +1,4 @@
-export { test, expect } from './bulk-tag-traces.fixture';
+export { test, expect } from './project-insights-views.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -191,4 +191,8 @@ export {
   FM_SPAN_MODEL,
 } from './field-mapping-seed.fixture';
 export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
+export type {
+  ProjectInsightsViewsRef,
+  ProjectInsightsViewsFixtures,
+} from './project-insights-views.fixture';
 export type { ProjectRef } from '../core/backend';
