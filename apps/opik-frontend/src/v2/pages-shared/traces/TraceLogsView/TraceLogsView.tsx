@@ -1,3 +1,4 @@
+import { getPrettifyConfig } from "@/lib/traces";
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
@@ -159,6 +160,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      getPrettifyConfig,
     },
   },
   {
@@ -169,6 +171,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      getPrettifyConfig,
     },
   },
   {

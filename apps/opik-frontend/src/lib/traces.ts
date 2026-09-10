@@ -15,6 +15,8 @@ import {
   extractLegacyOpenInferenceOutputText,
   extractOpenInferencePrettyText,
   hasLegacyOpenInferenceAttributes,
+  hasLegacyOpenInferenceOutputAttributes,
+  hasOpenInferenceHint,
   isOpenInferenceField,
 } from "@/lib/openinference";
 
@@ -45,7 +47,7 @@ export const traceExist = (item: ExperimentItem) =>
 export const traceVisible = (item: ExperimentItem) =>
   item.trace_visibility_mode === TRACE_VISIBILITY_MODE.default;
 
-type PrettifyMessageConfig = {
+export type PrettifyMessageConfig = {
   type: "input" | "output";
   openInferenceInput?: object | string;
   openInferenceHint?: boolean;
@@ -625,7 +627,7 @@ export const prettifyMessage = (
     return { message: String(message), prettified: true };
   }
 
-  if (isString(message)) {
+  if (isString(message) && message.trim().length > 0) {
     const extracted = extractTextFieldFromTruncatedJson(message, config);
     return {
       message: extracted || message,
@@ -673,18 +675,19 @@ export const prettifyMessage = (
       processedMessage = prettifyCustomMessagingLogic(message, config);
     }
 
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyGenericLogic(message, config);
+    }
+
     if (
-      !isString(processedMessage) &&
+      (!isString(processedMessage) || processedMessage.trim().length === 0) &&
       config.type === "output" &&
+      hasLegacyOpenInferenceOutputAttributes(config.openInferenceInput) &&
       !isOpenInferenceField(message, "output", true)
     ) {
       processedMessage = extractLegacyOpenInferenceOutputText(
         config.openInferenceInput,
       );
-    }
-
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyGenericLogic(message, config);
     }
 
     // attempt to improve JSON string if the message is serialised JSON string
@@ -707,3 +710,27 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
 };
+
+export type PrettifySource = {
+  input?: object | string;
+  output?: object | string;
+  metadata?: unknown;
+};
+
+export const getPrettifyConfig = (
+  source: PrettifySource,
+  type: "input" | "output",
+): PrettifyMessageConfig => ({
+  type,
+  openInferenceHint: hasOpenInferenceHint(
+    source.metadata,
+    source.input,
+    source.output,
+  ),
+  openInferenceInput: type === "output" ? source.input : undefined,
+});
+
+export const prettifyTraceField = (
+  source: PrettifySource,
+  type: "input" | "output",
+) => prettifyMessage(source[type], getPrettifyConfig(source, type));

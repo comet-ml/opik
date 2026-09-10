@@ -136,10 +136,11 @@ public class OpenTelemetryMapper {
     }
 
     private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
+    private static final String THREAD_ID = "thread_id";
     private static final String NEW_CONTEXT_ATTR = "new_context";
 
     // Reserved metadata keys that must not be overwritten by user-supplied JSON merged from opik.metadata.
-    private static final Set<String> RESERVED_METADATA_KEYS = Set.of("thread_id", "integration", "server.address");
+    private static final Set<String> RESERVED_METADATA_KEYS = Set.of(THREAD_ID, "integration", "server.address");
 
     /**
      * Same as {@link #enrichSpanWithAttributes(SpanBuilder, List, String, List)} but with the OTEL
@@ -173,6 +174,7 @@ public class OpenTelemetryMapper {
         // Provider reported via the current `gen_ai.provider.name`, held separately so the
         // deprecated `gen_ai.system` stays authoritative. See the PROVIDER case below.
         String providerName = null;
+        boolean hasExplicitThreadId = false;
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
@@ -264,11 +266,13 @@ public class OpenTelemetryMapper {
                     break;
 
                 case THREAD_ID :
-                    // Store as 'thread_id' in metadata for trace grouping
-                    // First value wins if multiple attributes map to THREAD_ID
-                    if (!metadata.has("thread_id")) {
-                        extractToJsonColumn(metadata, "thread_id", value);
+                    // On OpenInference spans: explicit Opik ID > GenAI conversation > session.
+                    // Repeated attributes of the same priority retain the first value.
+                    boolean explicit = THREAD_ID.equals(key);
+                    if (!metadata.has(THREAD_ID) || (openInference != null && explicit && !hasExplicitThreadId)) {
+                        extractToJsonColumn(metadata, THREAD_ID, value);
                     }
+                    hasExplicitThreadId |= explicit;
                     break;
 
                 case DROP :
@@ -293,16 +297,8 @@ public class OpenTelemetryMapper {
             // authoritative and unknown OpenInference fields retain their original dotted key.
             metadata.setAll(openInference.metadata());
 
-            // An explicit Opik thread_id wins regardless of OTLP attribute order. Otherwise use
-            // the OpenInference session identifier as the trace-grouping thread id.
-            var explicitThreadId = attributes.stream()
-                    .filter(attribute -> "thread_id".equals(attribute.getKey()))
-                    .map(KeyValue::getValue)
-                    .findFirst();
-            if (explicitThreadId.isPresent()) {
-                extractToJsonColumn(metadata, "thread_id", explicitThreadId.get());
-            } else if (StringUtils.isNotBlank(openInference.sessionId())) {
-                metadata.put("thread_id", openInference.sessionId());
+            if (!metadata.has(THREAD_ID) && StringUtils.isNotBlank(openInference.sessionId())) {
+                metadata.put(THREAD_ID, openInference.sessionId());
             }
 
             usage.putAll(openInference.usage());
@@ -335,18 +331,19 @@ public class OpenTelemetryMapper {
         model = resolved.model();
         provider = resolved.provider();
 
-        if (openInference != null && usage.containsKey("prompt_tokens")) {
+        if (openInference != null && openInference.usage().containsKey("prompt_tokens")) {
             // OpenInference prompt totals include cache reads/writes. Preserve those totals for
             // display, but provide the exclusive input count expected by these providers' pricing.
+            // Only OpenInference-sourced totals carry this contract; do not reinterpret generic usage.
             String exclusiveInputKey = switch (provider) {
                 case "anthropic", "anthropic_vertexai" -> "original_usage.input_tokens";
-                case "bedrock", "bedrock_converse" -> "original_usage.inputTokens";
+                case "bedrock" -> "original_usage.inputTokens";
                 case null, default -> null;
             };
             if (exclusiveInputKey != null) {
-                long uncachedTokens = Math.max(0L, usage.get("prompt_tokens"))
-                        - Math.max(0L, usage.getOrDefault("cache_read_input_tokens", 0))
-                        - Math.max(0L, usage.getOrDefault("cache_creation_input_tokens", 0));
+                long uncachedTokens = Math.max(0L, openInference.usage().get("prompt_tokens"))
+                        - Math.max(0L, openInference.usage().getOrDefault("cache_read_input_tokens", 0))
+                        - Math.max(0L, openInference.usage().getOrDefault("cache_creation_input_tokens", 0));
                 usage.put(exclusiveInputKey, Math.clamp(uncachedTokens, 0, Integer.MAX_VALUE));
             }
         }

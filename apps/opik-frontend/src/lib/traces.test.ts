@@ -748,3 +748,54 @@ describe("prettifyMessage", () => {
     });
   });
 });
+
+describe("OpenInference review regressions", () => {
+  it.each(["answer", "response", "reply", "final_output"])(
+    "prefers current %s over legacy output",
+    (key) => {
+      expect(
+        prettifyMessage(
+          { [key]: "Current" },
+          {
+            type: "output",
+            openInferenceInput: {
+              "llm.output_messages.0.message.content": "Stale",
+            },
+          },
+        ).message,
+      ).toBe("Current");
+    },
+  );
+  it.each([true, false])(
+    "keeps type-based input direction with hint %s",
+    (openInferenceHint) => {
+      expect(
+        prettifyMessage(
+          {
+            messages: [
+              { type: "human", content: "Question" },
+              { type: "ai", content: "Answer" },
+            ],
+          },
+          { type: "input", openInferenceHint },
+        ).message,
+      ).toBe("Question");
+    },
+  );
+  it("finds text before a trailing tool-only assistant message", () => {
+    expect(
+      prettifyMessage(
+        {
+          messages: [
+            { role: "assistant", content: "Answer" },
+            {
+              role: "assistant",
+              tool_calls: [{ function: { name: "finish" } }],
+            },
+          ],
+        },
+        { type: "output", openInferenceHint: true },
+      ).message,
+    ).toBe("Answer");
+  });
+});

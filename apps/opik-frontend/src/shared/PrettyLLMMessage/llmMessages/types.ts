@@ -1,3 +1,4 @@
+import { MessageUsage } from "../usage";
 import { ComponentType } from "react";
 import {
   PrettyLLMMessageTextBlockProps,
@@ -5,7 +6,6 @@ import {
   PrettyLLMMessageVideoBlockProps,
   PrettyLLMMessageAudioPlayerBlockProps,
   PrettyLLMMessageCodeBlockProps,
-  PrettyLLMMessageUsageProps,
   MessageRole,
 } from "@/shared/PrettyLLMMessage/types";
 
@@ -72,7 +72,7 @@ export interface LLMMessageDescriptor {
 // Mapper result with messages and shared usage
 export interface LLMMapperResult {
   messages: LLMMessageDescriptor[];
-  usage?: PrettyLLMMessageUsageProps["usage"];
+  usage?: MessageUsage;
 }
 
 // Format detector contract

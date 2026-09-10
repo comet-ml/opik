@@ -100,25 +100,31 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const formatHintIsAuthoritative = openInferenceHint.authoritative;
 
   // Show Messages tab when at least one field is supported and neither is invalid
-  const canShowMessagesTab = useMemo(() => {
-    const input = detectLLMMessages(
-      transformedInput,
-      { fieldType: "input", formatHintIsAuthoritative },
+  const messageDetections = useMemo(() => {
+    const input = detectLLMMessages(transformedInput, {
+      fieldType: "input",
+      formatHintIsAuthoritative,
       formatHint,
-    );
-    const output = detectLLMMessages(
-      transformedOutput,
-      { fieldType: "output", formatHintIsAuthoritative },
+    });
+    const output = detectLLMMessages(transformedOutput, {
+      fieldType: "output",
+      formatHintIsAuthoritative,
       formatHint,
-    );
+    });
 
-    return canShowLLMMessages(input, output, formatHint === "openinference");
+    return { input, output };
   }, [
     formatHint,
     formatHintIsAuthoritative,
     transformedInput,
     transformedOutput,
   ]);
+
+  const canShowMessagesTab = canShowLLMMessages(
+    messageDetections.input,
+    messageDetections.output,
+    formatHint === "openinference",
+  );
 
   const defaultTab = canShowMessagesTab ? "messages" : "details";
 
@@ -340,7 +346,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 scrollContainerRef={rootScrollRef}
                 formatHint={formatHint}
                 formatHintIsAuthoritative={formatHintIsAuthoritative}
-                spanUsage={data.usage}
+                spanUsage={isTrace ? undefined : data.usage}
+                detections={messageDetections}
               />
             </TabsContent>
           )}
@@ -349,7 +356,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               data={data}
               isLoading={isSpanInputOutputLoading}
               search={search}
-              openInferenceHint={openInferenceHint.detected}
             />
           </TabsContent>
           <TabsContent value="feedback_scores">

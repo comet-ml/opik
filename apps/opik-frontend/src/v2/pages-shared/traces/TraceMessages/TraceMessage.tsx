@@ -10,10 +10,9 @@ import LikeFeedback from "@/v2/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
-import { prettifyMessage } from "@/lib/traces";
+import { prettifyTraceField } from "@/lib/traces";
 import { toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
-import { hasOpenInferenceHint } from "@/lib/openinference";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -25,11 +24,6 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   handleOpenTrace,
 }) => {
   const jsonViewTheme = useJsonViewTheme();
-  const openInferenceHint = hasOpenInferenceHint(
-    trace.metadata,
-    trace.input,
-    trace.output,
-  );
 
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
@@ -38,10 +32,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.feedback_scores]);
 
   const input = useMemo(() => {
-    const message = prettifyMessage(trace.input, {
-      type: "input",
-      openInferenceHint,
-    }).message;
+    const message = prettifyTraceField(trace, "input").message;
 
     if (isObject(message)) {
       return (
@@ -58,14 +49,10 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input, jsonViewTheme, openInferenceHint]);
+  }, [trace, jsonViewTheme]);
 
   const output = useMemo(() => {
-    const message = prettifyMessage(trace.output, {
-      type: "output",
-      openInferenceInput: trace.input,
-      openInferenceHint,
-    }).message;
+    const message = prettifyTraceField(trace, "output").message;
 
     if (isObject(message)) {
       return (
@@ -82,7 +69,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input, trace.output, jsonViewTheme, openInferenceHint]);
+  }, [trace, jsonViewTheme]);
 
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>

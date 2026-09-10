@@ -66,9 +66,9 @@ public class CostService {
     // public pricing to map to. Vertex is unambiguous here because only Gemini models are offered on
     // Vertex for online evaluation. Canonical names (and any not listed) pass through unchanged.
     private static final Map<String, String> RUNTIME_PROVIDER_MAPPING = Map.of(
-            "gemini", "google_ai",
+            "gemini", PROVIDERS_MAPPING.get("gemini"),
             "vertex-ai", "google_vertexai",
-            "bedrock_converse", "bedrock");
+            "bedrock_converse", PROVIDERS_MAPPING.get("bedrock_converse"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";

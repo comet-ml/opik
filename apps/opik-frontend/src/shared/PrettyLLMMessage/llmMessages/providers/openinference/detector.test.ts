@@ -29,8 +29,7 @@ describe("detectOpenInferenceFormat", () => {
     expect(
       detectLLMMessages(
         { messages: [{ role: "human", content: "hello" }] },
-        { fieldType: "input" },
-        "openinference",
+        { fieldType: "input", formatHint: "openinference" },
       ),
     ).toMatchObject({
       supported: true,
@@ -78,8 +77,11 @@ describe("detectOpenInferenceFormat", () => {
         ],
         usage: { total_tokens: 7 },
       },
-      { fieldType: "output", formatHintIsAuthoritative: true },
-      "openinference",
+      {
+        fieldType: "output",
+        formatHintIsAuthoritative: true,
+        formatHint: "openinference",
+      },
     );
 
     expect(output).toMatchObject({
@@ -95,8 +97,22 @@ describe("detectOpenInferenceFormat", () => {
   it("does not expose Messages for an authoritative marker without renderable fields", () => {
     expect(
       canShowLLMMessages(
-        { supported: false, empty: true },
-        { supported: false, empty: true },
+        detectLLMMessages(
+          { "openinference.span.kind": "LLM" },
+          {
+            fieldType: "input",
+            formatHint: "openinference",
+            formatHintIsAuthoritative: true,
+          },
+        ),
+        detectLLMMessages(
+          { "openinference.span.kind": "LLM" },
+          {
+            fieldType: "output",
+            formatHint: "openinference",
+            formatHintIsAuthoritative: true,
+          },
+        ),
         true,
       ),
     ).toBe(false);

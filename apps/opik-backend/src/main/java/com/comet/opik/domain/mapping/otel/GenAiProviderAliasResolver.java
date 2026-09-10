@@ -50,6 +50,7 @@ public class GenAiProviderAliasResolver implements ProviderResolver {
             Map.entry("gcp.vertex_ai", GoogleProviderResolver.GOOGLE_VERTEX_AI),
             Map.entry("gcp.gemini", GoogleProviderResolver.GOOGLE_AI),
             Map.entry("aws.bedrock", "bedrock"),
+            Map.entry("bedrock_converse", "bedrock"),
             Map.entry("azure.ai.openai", "azure"),
             Map.entry("mistral_ai", "mistral"),
             Map.entry("x_ai", "xai"));

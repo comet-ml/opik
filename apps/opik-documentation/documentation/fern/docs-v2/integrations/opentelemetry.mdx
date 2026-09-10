@@ -10,8 +10,6 @@ title: OpenTelemetry
 toc_max_heading_level: 4
 ---
 
-# Get Started with OpenTelemetry
-
 Opik provides native support for OpenTelemetry (OTel), allowing you to instrument
 your ML/AI applications with distributed tracing. This guide will show you how
 to directly integrate OpenTelemetry SDKs with Opik.
@@ -65,33 +63,77 @@ export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://<YOUR-OPIK-INSTANCE>/api/v1/pr
 
 ## OpenInference messages
 
-Spans with the `openinference.span.kind` attribute support the **Messages** tab and
-**Pretty** input/output previews. Newly ingested spans store chat messages in
-`input.messages` and `output.messages`, including tool calls and multimodal content.
-Previously stored spans with flattened OpenInference attributes remain readable in
-the UI; their stored data is not rewritten.
+Spans with OpenInference chat messages support the **Messages** tab and **Pretty**
+input/output previews. Newly ingested spans store chat messages in `input.messages`
+and `output.messages`, including tool calls and multimodal content. Previously
+stored spans with flattened OpenInference attributes remain readable in the UI;
+their stored data is not rewritten.
 
-<Note>
-  Existing online evaluation rules can keep using supported
-  `input.llm.input_messages.*` and `input.llm.output_messages.*` paths. Newly
-  ingested spans retain these original message attributes in `input` alongside
-  the structured messages, with their original indices. For new rules, use the
-  structured paths below. Historical records retain their original paths.
-</Note>
+A span marked `openinference.span.kind=LLM` can also show a non-empty raw input or
+output as a message. Other kinds, such as `CHAIN`, `AGENT`, `TOOL`, and `RETRIEVER`,
+need actual message content; their raw payloads remain available in **Details**.
+An OpenInference marker does not override an explicit framework message schema,
+such as LangChain messages with `type: "human"` or `type: "ai"`.
 
-| Compatible historical variable mapping        | Structured variable mapping      |
-| --------------------------------------------- | -------------------------------- |
-| `input.llm.input_messages.0.message.content`  | `input.messages[0].content`      |
-| `input.llm.output_messages.0.message.content` | `output.messages[0].content`     |
+### Evaluation paths and compatibility
+
+<Warning>
+  Compatibility aliases cover only successfully normalized message fields under
+  `llm.input_messages.*.message.*` and `llm.output_messages.*.message.*`. They are
+  retained in `input` with their original indices. Unknown fields, invalid indices,
+  and values with an unsupported type are preserved under their original keys in
+  `metadata`, not as evaluation aliases in `input`. Prompts, choices, tools outside
+  messages, and invocation parameters use their new structured paths.
+</Warning>
+
+The supported message fields are `role`, `content`, `name`, `tool_call_id`,
+`function_call_name`, and `function_call_arguments_json`, plus the nested fields
+listed below. These attributes must be strings; `function_call_arguments_json`
+must also contain valid JSON. Compatibility aliases retain the existing ingestion
+behavior: strings containing valid JSON can be stored as parsed JSON values.
+Structured text and opaque tool-call arguments retain their string form.
+
+For new evaluation rules, use structured paths:
+
+| Historical variable mapping | Structured variable mapping |
+| --- | --- |
+| `input.llm.input_messages.0.message.content` | `input.messages[0].content` |
+| `input.llm.output_messages.0.message.content` | `output.messages[0].content` |
+| `input.llm.input_messages.0.message.contents.0.message_content.text` | `input.messages[0].contents[0].text` |
+| `input.llm.input_messages.0.message.contents.0.message_content.image.image.url` | `input.messages[0].contents[0].image.url` |
+| `input.llm.input_messages.0.message.contents.0.message_content.audio.audio.url` | `input.messages[0].contents[0].audio.url` |
+| `input.llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments` | `output.messages[0].tool_calls[0].function.arguments` |
+| `input.llm.output_messages.0.message.contents.0.tool_call.function.name` | `output.messages[0].contents[0].tool_call.function.name` |
+
+Within `contents`, Opik accepts `message_content.type`, `text`, `id`, `signature`,
+`data`, and `encrypted_content` (each with the `message_content.` prefix),
+`message_content.image.image.url`, and `message_content.audio.audio.url`,
+`mime_type`, and `transcript` (each with the `message_content.audio.audio.` prefix).
+Both message-level and content-level `tool_call` fields support `id`,
+`function.name`, `function.arguments`, and `reasoning_signature`.
 
 Structured message, content, and tool-call arrays are ordered by their original
 numeric indices and compacted. For example, an original message index of `7` can
 become `messages[0]`, while its compatibility attribute keeps index `7`. Inspect a
-new span when switching a rule to structured paths. Other normalized OpenInference
-fields, such as prompts, choices, and invocation parameters, require their new paths.
-Raw `input.value` and `output.value` are parsed according to their MIME type. When a
-raw scalar or array is the only content, it becomes the entire input or output;
-when combined with structured fields, it remains under `value`.
+new span when switching a rule to structured paths.
+
+### Raw input and output
+
+Opik parses `input.value` and `output.value` according to their MIME type. JSON
+objects merge at the top level with the normalized fields, with normalized fields
+winning on collisions. For example, raw `{"question":"Hi","messages":["raw"]}`
+plus a semantic user message becomes
+`{"question":"Hi","messages":[{"role":"user","content":"Hello"}]}`.
+Compatibility aliases may also be present in `input`.
+
+| Raw value | No structured fields | With structured fields |
+| --- | --- | --- |
+| JSON object | The object itself | Top-level merge; normalized fields take precedence |
+| Scalar or array | The scalar or array itself | Stored under `value` alongside structured fields |
+| Text or invalid JSON | The original text | Original text under `value` alongside structured fields |
+
+The Messages view displays only the remaining raw content alongside structured
+prompts or tools, so those structured fields are not repeated in a raw JSON block.
 
 ## Custom via OpenTelemetry SDKs
 

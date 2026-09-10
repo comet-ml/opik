@@ -14,8 +14,7 @@ export const generateSyntaxHighlighterCode = (
   const response = prettifyConfig
     ? prettifyMessage(data, {
         type: prettifyConfig.fieldType,
-        openInferenceHint: prettifyConfig.openInferenceHint,
-        openInferenceInput: prettifyConfig.openInferenceInput,
+        ...prettifyConfig,
       })
     : {
         message: data,

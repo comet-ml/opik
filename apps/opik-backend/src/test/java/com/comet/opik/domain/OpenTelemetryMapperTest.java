@@ -2357,20 +2357,38 @@ class OpenTelemetryMapperTest {
         }
 
         @ParameterizedTest
-        @CsvSource({
-                "2147483647,-2147483648,-1,2147483647",
-                "100,-5,20,80",
-                "100,80,50,0",
-                "-1,0,0,0"
-        })
-        void boundsUncachedTokensFromMixedUsageAttributes(int prompt, int cacheRead, int cacheWrite, int expected) {
-            var span = enrich(List.of(
-                    str("openinference.span.kind", "LLM"),
-                    str("llm.provider", "anthropic"),
+        @CsvSource({"100,80,50", "100,20,10", "2147483647,0,0"})
+        void doesNotReinterpretGenericUsageOnMarkedSpans(int prompt, int cacheRead, int cacheWrite) {
+            var span = enrich(List.of(str("openinference.span.kind", "LLM"), str("llm.provider", "anthropic"),
                     integer("gen_ai.usage.prompt_tokens", prompt),
                     integer("gen_ai.usage.cache_read_input_tokens", cacheRead),
                     integer("gen_ai.usage.cache_creation_input_tokens", cacheWrite)));
+            assertThat(span.usage()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                    "prompt_tokens", prompt, "cache_read_input_tokens", cacheRead, "cache_creation_input_tokens",
+                    cacheWrite));
+        }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {false, true})
+        void preservesThreadIdPriorityAcrossAttributeOrder(boolean reverse) {
+            var attributes = new ArrayList<>(List.of(str("openinference.span.kind", "LLM"),
+                    str("session.id", "session"), str("gen_ai.conversation.id", "conversation")));
+            if (reverse) Collections.reverse(attributes);
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("conversation");
+            attributes.add(str("thread_id", "explicit"));
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("explicit");
+            Collections.reverse(attributes);
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("explicit");
+        }
+
+        @ParameterizedTest
+        @CsvSource({"100,80,50,0", "100,20,10,70", "2147483647,0,0,2147483647"})
+        void boundsExclusiveOpenInferenceUsage(int prompt, int read, int write, int expected) {
+            var span = enrich(List.of(str("openinference.span.kind", "LLM"), str("llm.provider", "anthropic"),
+                    integer("llm.token_count.prompt", prompt),
+                    integer("llm.token_count.prompt_details.cache_read", read),
+                    integer("llm.token_count.prompt_details.cache_write", write),
+                    integer("gen_ai.usage.cache_read_input_tokens", 999)));
             assertThat(span.usage()).containsEntry("original_usage.input_tokens", expected);
         }
 
@@ -2512,30 +2530,27 @@ class OpenTelemetryMapperTest {
             assertThat(jsonObject.input().path("messages").isArray()).isTrue();
             assertThat(jsonObject.input().path("messages").get(0).path("content").asText()).isEqualTo("semantic");
 
-            var plainText = enrich(List.of(
-                    str("openinference.span.kind", "CHAIN"),
-                    str("input.value", "{\"kept\":\"as text\"}")));
-            assertThat(plainText.input().isTextual()).isTrue();
-            assertThat(plainText.input().asText()).isEqualTo("{\"kept\":\"as text\"}");
+        }
 
-            var malformedJson = enrich(List.of(
-                    str("openinference.span.kind", "CHAIN"),
-                    str("output.mime_type", "application/json"),
-                    str("output.value", "{invalid")));
-            assertThat(malformedJson.output().isTextual()).isTrue();
-            assertThat(malformedJson.output().asText()).isEqualTo("{invalid");
+        @ParameterizedTest
+        @CsvSource(value = {"|{\"kept\":\"as text\"}", "application/json|{invalid", "application/json|''",
+                "text/plain|plain output", "application/xml|<request />"}, delimiter = '|')
+        void preservesRawTextByMimeType(String mime, String value) {
+            var attributes = new ArrayList<>(
+                    List.of(str("openinference.span.kind", "CHAIN"), str("input.value", value)));
+            if (mime != null) attributes.add(str("input.mime_type", mime));
+            assertThat(enrich(attributes).input()).isEqualTo(JsonUtils.valueToTree(value));
+        }
 
-            var blankJson = enrich(List.of(
-                    str("openinference.span.kind", "CHAIN"),
-                    str("input.mime_type", "application/json"),
-                    str("input.value", ""),
-                    str("output.mime_type", "application/json"),
-                    str("output.value", "   ")));
-            assertThat(blankJson.input().isTextual()).isTrue();
-            assertThat(blankJson.input().asText()).isEmpty();
-            assertThat(blankJson.output().isTextual()).isTrue();
-            assertThat(blankJson.output().asText()).isEqualTo("   ");
+        @Test
+        void preservesWhitespaceRawJson() {
+            var span = enrich(List.of(str("openinference.span.kind", "CHAIN"),
+                    str("output.mime_type", "application/json"), str("output.value", "   ")));
+            assertThat(span.output()).isEqualTo(JsonUtils.valueToTree("   "));
+        }
 
+        @Test
+        void keepsRawArrayAlongsideStructuredMessages() {
             var scalarWithStructure = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     str("output.mime_type", "application/json"),
@@ -2546,18 +2561,10 @@ class OpenTelemetryMapperTest {
             assertThat(scalarWithStructure.output().path("messages").get(0).path("content").asText())
                     .isEqualTo("done");
 
-            var textPlain = enrich(List.of(
-                    str("openinference.span.kind", "CHAIN"),
-                    str("output.mime_type", "text/plain"),
-                    str("output.value", "plain output")));
-            assertThat(textPlain.output().asText()).isEqualTo("plain output");
+        }
 
-            var unsupportedMime = enrich(List.of(
-                    str("openinference.span.kind", "CHAIN"),
-                    str("input.mime_type", "application/xml"),
-                    str("input.value", "<request />")));
-            assertThat(unsupportedMime.input().asText()).isEqualTo("<request />");
-
+        @Test
+        void mergesNativeObjectsWithSemanticMessages() {
             var nativeObject = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     object("input.value", str("question", "native object"), str("messages", "raw collision")),
@@ -2567,6 +2574,10 @@ class OpenTelemetryMapperTest {
             assertThat(nativeObject.input().path("messages").get(0).path("content").asText())
                     .isEqualTo("semantic wins");
 
+        }
+
+        @Test
+        void preservesNativeArrays() {
             var nativeArray = enrich(List.of(
                     str("openinference.span.kind", "CHAIN"),
                     array("input.value",
@@ -2772,19 +2783,22 @@ class OpenTelemetryMapperTest {
 
             assertThat(span.input()).isNull();
             assertThat(span.output()).isNull();
-            assertThat(span.metadata().fieldNames()).toIterable().contains(
-                    "llm.input_messages.-1.message.content",
-                    "llm.output_messages.not-a-number.message.content",
-                    "llm.input_messages.0.message.role",
-                    "llm.output_messages.0.message.function_call_arguments_json",
-                    "llm.invocation_parameters",
-                    "llm.function_call",
-                    "llm.prompt_template.variables",
-                    "llm.tools.0.tool.json_schema",
-                    "llm.token_count.prompt",
-                    "tag.tags",
-                    "llm.tools.999999999999999999999.tool.name");
+            assertThat(span.metadata()).isEqualTo(JsonUtils.valueToTree(Map.ofEntries(
+                    Map.entry("openinference.span.kind", "LLM"), Map.entry("integration", "mixed-batch-scope"),
+                    Map.entry("llm.input_messages.-1.message.content", "negative"),
+                    Map.entry("llm.output_messages.not-a-number.message.content", "invalid"),
+                    Map.entry("llm.input_messages.0.message.role", 7L),
+                    Map.entry("llm.output_messages.0.message.function_call_arguments_json", 8L),
+                    Map.entry("llm.invocation_parameters", 9L), Map.entry("llm.function_call", 10L),
+                    Map.entry("llm.prompt_template.variables", 11L), Map.entry("llm.tools.0.tool.json_schema", 12L),
+                    Map.entry("llm.token_count.prompt", -1L), Map.entry("tag.tags", true),
+                    Map.entry("llm.tools.999999999999999999999.tool.name", "overflow"))));
+            assertThat(span.usage()).isNullOrEmpty();
+            assertThat(span.tags()).isNullOrEmpty();
+        }
 
+        @Test
+        void preservesMalformedJsonMetadata() {
             var malformedJsonStrings = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     str("llm.invocation_parameters", "{broken"),
@@ -2806,6 +2820,10 @@ class OpenTelemetryMapperTest {
                     .path("llm.output_messages.0.message.function_call_arguments_json").asText())
                     .isEqualTo("{arguments-broken");
 
+        }
+
+        @Test
+        void preservesTrailingJsonTokens() {
             var trailingJsonTokens = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     str("input.mime_type", "application/json"),
