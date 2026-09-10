@@ -124,24 +124,23 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+
+
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
     """Format the current exception with the runner's own frames dropped.
 
     Walks frames rather than slicing a fixed number of leading lines, so the
-    exception line survives however short the traceback is. A metric declaring a
-    parameter the data has no key for fails at call-site binding, before any user
-    frame exists, and the image ships bytecode built with PYTHONNODEBUGRANGES=1 --
-    so no source or caret line pads the traceback and a three-line slice removed
-    the message itself, reporting an empty cause.
+    exception line survives however short the traceback is. A failure raised while
+    binding the call arguments has no user frame at all, and how many lines pad the
+    traceback depends on how the runner was packaged, so a fixed slice could remove
+    the message itself and report a cause of "".
     """
     exc_type, exc, tb = sys.exc_info()
     for _ in range(skip_frames):
         if tb is None:
             break
         tb = tb.tb_next
-    formatted = "".join(traceback.format_exception(exc_type, exc, tb))
-    return "\\n".join(formatted.splitlines())
-
+    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
 
 code = argv[1]
 data = json.loads(argv[2])
