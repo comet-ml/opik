@@ -1,4 +1,5 @@
 import logging
+import math
 from functools import wraps
 from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING
 
@@ -55,10 +56,18 @@ def try_get_response_cost(
         return None
 
     try:
-        return float(raw_cost)
+        cost = float(raw_cost)
     except (TypeError, ValueError):
         LOGGER.debug("Failed to parse LiteLLM response cost from value: %r", raw_cost)
         return None
+
+    # nan/inf serialize to bare NaN/Infinity, which is not valid JSON, so letting one
+    # through would risk the span it rides on rather than just the cost.
+    if not math.isfinite(cost):
+        LOGGER.debug("Ignoring non-finite LiteLLM response cost: %r", raw_cost)
+        return None
+
+    return cost
 
 
 def generate_content_response_decorator(func: Callable) -> Callable:

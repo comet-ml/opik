@@ -68,9 +68,12 @@ def build_opik_usage_from_unknown_provider(
         return opik_usage.OpikUsage.from_unknown_usage_dict(usage)
     except Exception:
         # Not debug: the usage is silently dropped, and nothing else reports it.
+        # Only the type is logged, never the value: this runs on whatever a caller
+        # passed to `Opik.span(usage=...)`, which is arbitrary and unbounded. The
+        # traceback carries the actual diagnosis.
         LOGGER.error(
-            "Failed to parse token usage of an unknown provider from: %r",
-            usage,
+            "Failed to parse token usage of an unknown provider (received %s)",
+            type(usage).__name__,
             exc_info=True,
         )
         return None

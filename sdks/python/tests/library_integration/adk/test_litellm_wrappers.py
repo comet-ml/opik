@@ -125,6 +125,19 @@ def test_generate_content_response_decorator__no_cost_reported__no_cost_key():
     assert "opik_response_cost" not in llm_response.custom_metadata
 
 
+@pytest.mark.parametrize("raw_cost", [float("nan"), float("inf"), float("-inf")])
+def test_try_get_response_cost__non_finite__returns_none(raw_cost):
+    """A nan/inf cost must not reach the span.
+
+    `float()` accepts both, and they serialize to bare NaN/Infinity, which is not
+    valid JSON - so forwarding one risks the span it rides on, not just the cost.
+    """
+    model_response = _build_proxy_model_response()
+    model_response._hidden_params = {"response_cost": raw_cost}
+
+    assert litellm_wrappers.try_get_response_cost(model_response) is None
+
+
 def test_try_get_response_cost__no_hidden_params__returns_none():
     """LiteLLM owns ``_hidden_params``; losing it must degrade, not raise.
 
@@ -255,3 +268,49 @@ def test_adk_llm_span__usage_extraction_raises__cost_still_recorded(
     llm_span = fake_backend.trace_trees[0].spans[0]
     assert llm_span.usage is None
     assert llm_span.total_cost == RESPONSE_COST
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_adk_trace_output__no_span_to_charge__cost_marker_not_leaked(fake_backend):
+    """The recovery path must not surface the cost marker as agent output.
+
+    With no LLM span registered, after_model_callback can only recover the model
+    output into the per-invocation cache, which after_agent_callback then stamps as
+    the trace output. `opik_response_cost` is ours, not the model's, so leaving it in
+    that dict would publish an internal marker as ordinary output.
+    """
+    tracer = OpikTracer(project_name="adk-litellm-cost-test")
+    # Only the agent callbacks: without before_model_callback there is no span for
+    # after_model_callback to find, which is the path being exercised.
+    agent = adk_agents.LlmAgent(
+        name="weather_agent",
+        model=_FakeLiteLlmProxyModel(),
+        instruction="Answer the weather question.",
+        before_agent_callback=tracer.before_agent_callback,
+        after_agent_callback=tracer.after_agent_callback,
+        after_model_callback=tracer.after_model_callback,
+    )
+
+    session_service = in_memory_session_service.InMemorySessionService()
+    runner = adk_runners.Runner(
+        agent=agent, app_name="litellm-cost-probe", session_service=session_service
+    )
+
+    async def _run() -> None:
+        await session_service.create_session(
+            app_name="litellm-cost-probe", user_id="u1", session_id="s1"
+        )
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id="s1",
+            new_message=genai_types.Content(
+                role="user", parts=[genai_types.Part(text="weather?")]
+            ),
+        ):
+            pass
+
+    asyncio.run(_run())
+    tracer.flush()
+
+    trace_output = fake_backend.trace_trees[0].output
+    assert "opik_response_cost" not in (trace_output.get("custom_metadata") or {})

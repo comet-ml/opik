@@ -384,9 +384,16 @@ class OpikTracer:
                 self._last_model_output.discard(callback_context.invocation_id)
                 if not is_partial:
                     try:
+                        recovered_output = adk_helpers.convert_adk_base_model_to_dict(
+                            llm_response
+                        )
+                        # There is no span to charge here, but the cost must still be
+                        # taken out of the output: after_agent_callback stamps this
+                        # dict as the trace output, so leaving it in would surface an
+                        # internal marker as ordinary agent output.
+                        llm_response_wrapper.pop_response_cost(recovered_output)
                         self._last_model_output.set(
-                            callback_context.invocation_id,
-                            adk_helpers.convert_adk_base_model_to_dict(llm_response),
+                            callback_context.invocation_id, recovered_output
                         )
                     except Exception:
                         LOGGER.debug(
