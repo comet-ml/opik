@@ -33,8 +33,6 @@ import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -164,6 +162,11 @@ class OpenTelemetryResourceTest {
      * error. Its own nested class rather than more methods in {@code ApiKey}: adding cases there reorders
      * that class's tests, and one of them then failed on state a sibling had seeded, which has nothing to do
      * with what these assert.
+     *
+     * <p>The null request production sends is not covered here. This harness gives the resource an empty
+     * message for a bodiless POST rather than a null, so there is no request it can send that reaches the
+     * {@code @NotNull} on the endpoints — and asserting the annotations by reflection would test the
+     * implementation rather than the API.
      */
     @Nested
     @DisplayName("Requests with nothing to store:")
@@ -244,23 +247,6 @@ class OpenTelemetryResourceTest {
                             Entity.json("{\"resourceSpans\":[{}]}")),
                     arguments("json, scope spans with no spans", MediaType.APPLICATION_JSON,
                             Entity.json("{\"resourceSpans\":[{\"scopeSpans\":[{}]}]}")));
-        }
-
-        @ParameterizedTest
-        @ValueSource(strings = {"receiveProtobufTraces", "receiveJsonTraces"})
-        @DisplayName("declare the request body non-null and valid on both endpoints")
-        void testOtelEndpointsDeclareTheirBodyNonNullAndValid(String method) throws NoSuchMethodException {
-            // Production sends a request with no entity, which arrives as a null argument and used to raise
-            // an NPE inside the service. The validation layer rejects it now, but this harness never
-            // produces that null — Jersey hands the resource an empty message instead — so what is asserted
-            // here is that the annotations enforcing it are still on both endpoints. It fails if either is
-            // dropped; it cannot prove the status code, and the response for that case is unasserted.
-            var parameter = OpenTelemetryResource.class
-                    .getDeclaredMethod(method, ExportTraceServiceRequest.class)
-                    .getParameters()[0];
-
-            assertThat(parameter.getAnnotation(NotNull.class)).isNotNull();
-            assertThat(parameter.getAnnotation(Valid.class)).isNotNull();
         }
 
         private void post(Entity<?> payload, String mediaType, String workspaceName, int expectedStatus) {
