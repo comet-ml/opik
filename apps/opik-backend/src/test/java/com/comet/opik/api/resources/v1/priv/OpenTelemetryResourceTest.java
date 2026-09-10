@@ -156,6 +156,68 @@ class OpenTelemetryResourceTest {
         wireMock.server().stop();
     }
 
+    /**
+     * How the endpoints answer a request carrying nothing to store. Its own nested class rather than more
+     * methods in {@code ApiKey}: adding cases there reorders that class's tests, and one of them then failed
+     * on state a sibling had seeded, which has nothing to do with what these assert.
+     */
+    @Nested
+    @DisplayName("Bad requests:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BadRequests {
+
+        private final String okApikey = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("do not answer 500 when the request carries no body at all")
+        void testOtelRequestWithoutABody() {
+            // The shape production sends: a POST with a content type but no entity. It used to answer 500 —
+            // the reader produced an empty request, which reached SpanService's non-empty precondition.
+            // Answered as an empty export here.
+            //
+            // Production also reaches this endpoint with a null request, which is what raised the NPE
+            // parseAndStoreSpans' @NonNull threw. This harness never produces that null — Jersey hands the
+            // resource an empty message instead — so the guard for it is not asserted here.
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            try (Response actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/x-protobuf")
+                    .method("POST")) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            }
+        }
+
+        @Test
+        @DisplayName("accept a batch that carries no spans without storing anything")
+        void testOtelRequestWithEmptyBatch() {
+            // OTLP treats an export with no spans as valid. It used to reach SpanService, whose non-empty
+            // precondition surfaced it to the exporter as a 500.
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var emptyBatch = ExportTraceServiceRequest.newBuilder().build();
+            var payload = Entity.entity(emptyBatch.toByteArray(), "application/x-protobuf");
+
+            post(payload, "application/x-protobuf", workspaceName, HttpStatus.SC_OK);
+        }
+
+        private void post(Entity<?> payload, String mediaType, String workspaceName, int expectedStatus) {
+            try (Response actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request(mediaType)
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(payload)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
+        }
+    }
+
     @Nested
     @DisplayName("Api Key Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
