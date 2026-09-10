@@ -1,0 +1,95 @@
+import { useCallback } from "react";
+import useLocalStorageState from "use-local-storage-state";
+import { useFeatureFlagEnabled } from "posthog-js/react";
+
+import { useDemoProjectBannerVisibility } from "@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility";
+import {
+  MCP_BANNER_CAMPAIGN_END,
+  MCP_BANNER_DISMISSED_KEY,
+  MCP_BANNER_FEATURE_FLAG_KEY,
+} from "./constants";
+
+/**
+ * The campaign ends at the close of its last day, in UTC. A user's own
+ * timezone is not worth the ambiguity here: the banner is an announcement, and
+ * a few hours either side of midnight changes nothing for anyone.
+ */
+const isWithinCampaign = () =>
+  Date.now() <= Date.parse(`${MCP_BANNER_CAMPAIGN_END}T23:59:59.999Z`);
+
+type UseMcpAnnouncementBannerParams = {
+  /**
+   * Whether the quota banner holds the slot, and whether that answer is final.
+   * Both come from the layout, which mounts both banners: this stays unaware
+   * of quota concepts, and the quota banner's own visibility arrives from a
+   * query, so "not up yet" and "not up" are different answers.
+   */
+  retentionBannerVisible: boolean;
+  retentionBannerSettled: boolean;
+};
+
+type UseMcpAnnouncementBannerResult = {
+  /** Whether to render. Decided synchronously, so the first frame is right. */
+  visible: boolean;
+  /**
+   * Whether this render may be counted as an impression. Stricter than
+   * `visible`: the demo and quota verdicts arrive from queries, so a banner can
+   * be painted and then withdrawn. Counting on `visible` would put suppressed
+   * users into the funnel and burn the session's one impression on them.
+   */
+  countable: boolean;
+  dismiss: () => void;
+};
+
+/**
+ * Whether the MCP announcement banner may be on screen, and how to put it away.
+ *
+ * The campaign window and the dismissal are synchronous, which is what lets the
+ * banner render in the first painted frame instead of appearing a tick later
+ * and pushing the page down (OPIK-8260 forbids that shift explicitly).
+ *
+ * The rest can only ever take the banner away, never delay it:
+ *
+ * - The kill switch hides on an explicit `false` only. Unresolved is the normal
+ *   first-render state on cloud — PostHog initialises behind a fetch of the
+ *   runtime config — and the permanent state in OSS, where it never initialises
+ *   at all. A truthiness check here would blank the banner on first paint and
+ *   reveal it a tick later, and would hide it from OSS entirely.
+ * - The demo banner and the quota banner outrank an announcement. Both verdicts
+ *   arrive from queries, so they can remove a painted banner; the demo case
+ *   costs no movement because both bars are the same height, and the quota case
+ *   moves the page once, only for users who are over their limit.
+ */
+export const useMcpAnnouncementBanner = ({
+  retentionBannerVisible,
+  retentionBannerSettled,
+}: UseMcpAnnouncementBannerParams): UseMcpAnnouncementBannerResult => {
+  const [dismissed, setDismissed] = useLocalStorageState<boolean>(
+    MCP_BANNER_DISMISSED_KEY,
+    { defaultValue: false },
+  );
+
+  const killed = useFeatureFlagEnabled(MCP_BANNER_FEATURE_FLAG_KEY) === false;
+
+  const {
+    isBannerVisible: demoBannerVisible,
+    isOnDemoProjectPage,
+    isSettled: demoSettled,
+  } = useDemoProjectBannerVisibility();
+
+  const dismiss = useCallback(() => setDismissed(true), [setDismissed]);
+
+  const visible =
+    isWithinCampaign() &&
+    !dismissed &&
+    !killed &&
+    !retentionBannerVisible &&
+    !demoBannerVisible &&
+    !isOnDemoProjectPage;
+
+  return {
+    visible,
+    countable: visible && demoSettled && retentionBannerSettled,
+    dismiss,
+  };
+};

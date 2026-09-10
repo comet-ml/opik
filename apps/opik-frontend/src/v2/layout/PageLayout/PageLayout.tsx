@@ -20,6 +20,7 @@ import {
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
+import McpAnnouncementBanner from "@/v2/layout/McpAnnouncementBanner/McpAnnouncementBanner";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -30,7 +31,10 @@ const PageLayout = () => {
   const [smallScreenExpanded, setSmallScreenExpanded] = useState(false);
   const [retentionBannerHeight, setRetentionBannerHeight] = useState(0);
   const [demoBannerHeight, setDemoBannerHeight] = useState(0);
-  const bannerHeight = retentionBannerHeight + demoBannerHeight;
+  const [mcpBannerHeight, setMcpBannerHeight] = useState(0);
+  const [retentionResolved, setRetentionResolved] = useState(false);
+  const bannerHeight =
+    retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
   const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
     isAssistantSidebarOpen()
@@ -48,6 +52,13 @@ const PageLayout = () => {
   });
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
+  // Whether this build ships a retention banner at all. Read from the plugin
+  // manifests, which are known at build time, rather than from the component:
+  // plugin components are imported asynchronously, so a null component on the
+  // first render means "not loaded yet" on cloud and "never" only in OSS.
+  const retentionBannerPossible = usePluginsStore((state) =>
+    state.hasPlugin("comet"),
+  );
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
   const matchRoute = useMatchRoute();
@@ -104,6 +115,11 @@ const PageLayout = () => {
     }
   }, [welcomeWizardEnabled, wizardStatus, showWelcomeWizard]);
 
+  const handleRetentionResolved = useCallback(
+    () => setRetentionResolved(true),
+    [],
+  );
+
   const handleCloseWelcomeWizard = useCallback(() => {
     setShowWelcomeWizard(false);
   }, []);
@@ -126,8 +142,18 @@ const PageLayout = () => {
             className="relative min-w-0 flex-1 overflow-hidden [transform:translateZ(0)]"
           >
             {RetentionBanner ? (
-              <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
+              <RetentionBanner
+                onChangeHeight={setRetentionBannerHeight}
+                onVisibilityResolved={handleRetentionResolved}
+              />
             ) : null}
+            <McpAnnouncementBanner
+              onChangeHeight={setMcpBannerHeight}
+              retentionBannerVisible={retentionBannerHeight > 0}
+              retentionBannerSettled={
+                !retentionBannerPossible || retentionResolved
+              }
+            />
             <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
 
             <SideBar

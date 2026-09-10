@@ -34,6 +34,9 @@ export const OpikEvent = {
   DIAGNOSTICS_ISSUE_RESOLVED: "opik_diagnostics_issue_resolved",
   DIAGNOSTICS_ISSUE_REOPENED: "opik_diagnostics_issue_reopened",
   DIAGNOSTICS_CONTINUE_WITH_OLLIE: "opik_diagnostics_continue_with_ollie",
+  MCP_BANNER_SHOWN: "opik_mcp_banner_shown",
+  MCP_BANNER_CTA_CLICKED: "opik_mcp_banner_cta_clicked",
+  MCP_BANNER_DISMISSED: "opik_mcp_banner_dismissed",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];
