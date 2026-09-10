@@ -1,9 +1,11 @@
-import React, { useEffect, useRef } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import { cn } from "@/lib/utils";
 import { AGENT_ONBOARDING_STEPS } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { DEMO_BANNER_HEIGHT, DEMO_BANNER_HEIGHT_CLASS } from "./constants";
 import { useDemoProjectBannerVisibility } from "./useDemoProjectBannerVisibility";
 import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
@@ -14,7 +16,7 @@ interface DemoProjectBannerProps {
 const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   onChangeHeight,
 }) => {
-  const heightRef = useRef(0);
+  const heightRef = useRef(DEMO_BANNER_HEIGHT);
   const workspaceName = useActiveWorkspaceName();
 
   const {
@@ -39,7 +41,11 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     enabled: isDemoProjectActive && isOnboardingActive,
   });
 
-  useEffect(() => {
+  // Layout effect, and the height known from the styling rather than a
+  // measurement: visibility resolves from a query, so the bar appears a beat
+  // after mount, and a height published only once a resize observer had run
+  // left the layout at 0 with the bar overlapping the content.
+  useLayoutEffect(() => {
     onChangeHeight(isBannerVisible ? heightRef.current : 0);
   }, [isBannerVisible, onChangeHeight]);
 
@@ -62,7 +68,10 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   return (
     <div
       ref={ref}
-      className="z-10 flex h-8 items-center justify-center gap-1.5 bg-primary px-4"
+      className={cn(
+        "z-10 flex items-center justify-center gap-1.5 bg-primary px-4",
+        DEMO_BANNER_HEIGHT_CLASS,
+      )}
     >
       <span className="comet-body-xs text-center text-white">
         You are viewing a demo project,{" "}
