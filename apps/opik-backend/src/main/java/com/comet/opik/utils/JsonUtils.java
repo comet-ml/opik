@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.annotations.VisibleForTesting;
 import dev.langchain4j.model.openai.internal.chat.Message;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -358,7 +359,7 @@ public class JsonUtils {
      * exceeded, so an oversized payload costs O(1) transient heap and stops at the limit instead of being
      * serialized in full and then copied into a byte array. A {@code null} value never exceeds the limit.
      */
-    public boolean exceedsSerializedLengthInBytes(Object value, long maxSizeInBytes) {
+    public boolean exceedsSerializedLengthInBytes(@Nullable Object value, long maxSizeInBytes) {
         if (value == null) {
             return false;
         }

@@ -22,6 +22,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JsonUtilsTest {
 
+    private static final long SHORT_CIRCUIT_BUDGET_BYTES = 1_024L;
+
+    /**
+     * Jackson buffers generator output before it reaches the stream, so the abort surfaces only on the
+     * first flush past the budget: the serializer can legitimately write about (budget + buffer) bytes.
+     * Bound the short-circuit assertion by that rather than by the fixture size, with slack so a change
+     * in Jackson's buffer size cannot make the test flaky.
+     */
+    private static final int GENERATOR_BUFFER_BYTES = 8 * 1_024;
+    private static final int MAX_CHUNKS_BEFORE_ABORT = 2
+            * (int) ((SHORT_CIRCUIT_BUDGET_BYTES + GENERATOR_BUFFER_BYTES) / ChunkedValue.CHUNK_SIZE);
+
     private static JsonNode node(String json) {
         return JsonUtils.getJsonNodeFromString(json);
     }
@@ -142,8 +154,13 @@ class JsonUtilsTest {
     @DisplayName("exceedsSerializedLengthInBytes: agrees with the exact UTF-8 byte length at the boundary")
     void exceedsSerializedLengthAgreesWithExactLength(String json) {
         var node = node(json);
-        long exact = JsonUtils.getSerializedLengthInBytes(node);
+        // Own the expected count independently of production serialization. Deriving it from
+        // getSerializedLengthInBytes would let a UTF-8 sizing regression shift both sides together and
+        // leave the test green; these fixtures are already in Jackson's canonical, whitespace-free form,
+        // so their own UTF-8 length is the expectation.
+        long exact = json.getBytes(StandardCharsets.UTF_8).length;
 
+        assertThat(JsonUtils.getSerializedLengthInBytes(node)).isEqualTo(exact);
         assertThat(JsonUtils.exceedsSerializedLengthInBytes(node, exact)).isFalse();
         assertThat(JsonUtils.exceedsSerializedLengthInBytes(node, exact - 1)).isTrue();
     }
@@ -162,12 +179,11 @@ class JsonUtilsTest {
     void exceedsSerializedLengthShortCircuits() {
         var value = new ChunkedValue();
 
-        assertThat(JsonUtils.exceedsSerializedLengthInBytes(value, 1_024L)).isTrue();
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(value, SHORT_CIRCUIT_BUDGET_BYTES)).isTrue();
         // The behaviour under test is the early abort, so assert it directly on how much the serializer
-        // actually wrote rather than inferring it from a large fixture. Keeps the test cheap on
-        // constrained CI heaps while making the short circuit an explicit assertion instead of a side
-        // effect of allocation size.
-        assertThat(value.chunksWritten()).isLessThan(ChunkedValue.CHUNKS);
+        // actually wrote. Bounding by ChunkedValue.CHUNKS would also accept 9,999 chunks, i.e. an abort
+        // that never really short circuits.
+        assertThat(value.chunksWritten()).isLessThanOrEqualTo(MAX_CHUNKS_BEFORE_ABORT);
     }
 
     @Test
@@ -188,7 +204,8 @@ class JsonUtilsTest {
     static final class ChunkedValue {
 
         static final int CHUNKS = 10_000;
-        private static final String CHUNK = "x".repeat(64);
+        static final int CHUNK_SIZE = 64;
+        private static final String CHUNK = "x".repeat(CHUNK_SIZE);
 
         private int chunksWritten;
 
