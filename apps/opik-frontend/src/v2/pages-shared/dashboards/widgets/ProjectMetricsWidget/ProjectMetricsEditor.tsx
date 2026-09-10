@@ -125,6 +125,11 @@ const METRIC_OPTIONS = [
     label: "Span token usage",
     filterType: "span" as const,
   },
+  {
+    value: METRIC_NAME_TYPE.SPAN_COST,
+    label: "Span cost",
+    filterType: "span" as const,
+  },
 ];
 
 const DURATION_METRIC_OPTIONS = [
