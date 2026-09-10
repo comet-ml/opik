@@ -24,6 +24,7 @@ export {
   type FeedbackScoreRef,
   type PromptVersionRef,
   type SpanCostRef,
+  type SpanRef,
   type TraceDetail,
   type TracePayload,
   type SpanDetail,

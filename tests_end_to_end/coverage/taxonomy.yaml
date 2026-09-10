@@ -266,7 +266,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls" }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage. one, and both clamps" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
@@ -280,8 +280,8 @@ areas:
       attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
       set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
-      delete-traces:          { covered: true,  tier: t2-cuj }
-      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
+      delete-traces:          { covered: true,  tier: t2-cuj, note: "Logs bulk delete; also the span cascade behind it — a 5-deep span chain, asserted gone project-wide rather than only through a filter on the deleted trace_id, against a bystander trace that keeps its own spans, scores and comments" }
+      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table; also the span cascade behind DELETE /v1/private/traces/{id}, same shape as delete-traces" }
       update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 

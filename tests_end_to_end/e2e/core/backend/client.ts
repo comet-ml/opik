@@ -192,6 +192,14 @@ export interface SpanCostRef {
   totalEstimatedCost: number | null;
 }
 
+/** A span reduced to the fields a cascade assertion needs: who it is, and whose it is. */
+export interface SpanRef {
+  id: string;
+  name: string;
+  traceId: string;
+  parentSpanId: string | null;
+}
+
 export interface TraceDetail {
   id: string;
   name: string;
@@ -1990,6 +1998,119 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Spans in a project, optionally narrowed to one trace.
+     *
+     * The `traceId`-less form is what makes a cascade assertion mean anything.
+     * `GET /spans?trace_id=<deleted>` answering "0 spans" is not evidence the
+     * cascade ran: a filter on a trace that no longer exists matches nothing
+     * either way, so a delete that removed the trace and orphaned every span
+     * would produce that same zero. Listing the whole project and naming the
+     * spans that survived tells the two apart.
+     *
+     * `projectId` is mandatory for the same reason it is on `listSpanCosts`:
+     * without it the backend falls back to the Default Project and answers with
+     * an empty page, which again reads identically to "everything was deleted".
+     */
+    async listSpanRefs(args: { projectId: string; traceId?: string }): Promise<SpanRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            ...(args.traceId ? { traceId: args.traceId } : {}),
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        traceId: String(s.traceId ?? ''),
+        parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
+      }));
+    },
+
+    /**
+     * Attach a feedback score to a trace, so a delete has a dependent row to
+     * cascade to. `source: 'sdk'` matches how a logged score arrives.
+     */
+    async addTraceFeedbackScore(args: {
+      traceId: string;
+      name: string;
+      value: number;
+    }): Promise<void> {
+      await opik.api.traces.addTraceFeedbackScore(args.traceId, {
+        body: { name: args.name, value: args.value, source: 'sdk' },
+      });
+    },
+
+    /** The span-level counterpart of `addTraceFeedbackScore`. */
+    async addSpanFeedbackScore(args: {
+      spanId: string;
+      name: string;
+      value: number;
+    }): Promise<void> {
+      await opik.api.spans.addSpanFeedbackScore(args.spanId, {
+        body: { name: args.name, value: args.value, source: 'sdk' },
+      });
+    },
+
+    /**
+     * Comment on a trace or a span, returning the comment's id.
+     *
+     * Through `rawFetch` rather than the pinned SDK because the id has to come
+     * back. `CommentServiceImpl.create` mints its own id and IGNORES any the
+     * caller sends, answering 201 with the real one in `Location` — which the
+     * SDK's `void` return discards. Sending an id and then reading it back
+     * would 404 every time, against a comment that was created perfectly well.
+     */
+    async addComment(args: {
+      entity: 'traces' | 'spans';
+      entityId: string;
+      text: string;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        `/v1/private/${args.entity}/${args.entityId}/comments`,
+        { body: { text: args.text } },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `addComment on ${args.entity}/${args.entityId}: expected 201, got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `addComment on ${args.entity}/${args.entityId}: 201 carried no usable Location header (got ${location ?? '<none>'})`,
+        );
+      }
+      return id;
+    },
+
+    /** One trace comment by id, or null once it is no longer readable. */
+    async getTraceComment(traceId: string, commentId: string): Promise<string | null> {
+      try {
+        const comment = await opik.api.traces.getTraceComment(traceId, commentId);
+        return comment.text ?? '';
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /** One span comment by id, or null once it is no longer readable. */
+    async getSpanComment(spanId: string, commentId: string): Promise<string | null> {
+      try {
+        const comment = await opik.api.spans.getSpanComment(spanId, commentId);
+        return comment.text ?? '';
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
      * A trace's rolled-up estimated cost — the number the trace panel's stats
      * row renders, aggregated server-side over the trace's spans.
      *
@@ -2804,6 +2925,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * keeps only spans whose source `isLoggingSource`, so a span written without
      * it is dropped before any rule sees it — silently, which is exactly how a
      * scoring spec ends up asserting nothing.
+     *
+     * The `id` must be a UUIDv7 (`uuid7()`); the backend rejects a v4 outright
+     * with "Span id must be a version 7 UUID".
      */
     async createSpan(args: {
       id: string;
@@ -2816,6 +2940,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       output?: TraceJsonSection;
       startTime?: Date;
       endTime?: Date;
+      model?: string;
+      provider?: string;
+      /**
+       * The span's `usage` map, written through to the backend VERBATIM.
+       *
+       * This is the whole reason an LLM span is ever seeded here rather than
+       * through `sdkClient.python.createNestedTrace`. The Python SDK normalises
+       * whatever it is handed: a bare OTel usage key such as
+       * `completion_tokens_details.reasoning_tokens` is re-emitted as
+       * `original_usage.completion_tokens_details.reasoning_tokens`, so the
+       * backend's bare-key fallback can never be reached through the bridge —
+       * a seed aimed at the fallback would silently exercise the primary key
+       * and pass for the wrong reason. Spans that really arrive with bare OTel
+       * keys come from OTel ingestion, not from the SDK, and this raw write is
+       * the faithful stand-in for that producer.
+       *
+       * Deliberately not `total_cost`: a caller that supplies a cost is not
+       * exercising server-side pricing at all.
+       */
+      usage?: Record<string, number>;
     }): Promise<string> {
       const now = new Date();
       await postSeedWrite('/v1/private/spans', `createSpan '${args.name}'`, {
@@ -2829,6 +2973,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         end_time: (args.endTime ?? now).toISOString(),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
+        ...(args.model === undefined ? {} : { model: args.model }),
+        ...(args.provider === undefined ? {} : { provider: args.provider }),
+        ...(args.usage === undefined ? {} : { usage: args.usage }),
       });
       return args.id;
     },
