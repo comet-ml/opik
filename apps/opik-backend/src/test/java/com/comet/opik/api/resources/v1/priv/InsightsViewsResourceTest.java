@@ -30,6 +30,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -40,6 +43,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -230,18 +235,6 @@ class InsightsViewsResourceTest {
             assertThat(page.content()).extracting(Dashboard::id)
                     .containsExactlyInAnyOrder(projectViewId, unassignedViewId);
         }
-
-        @Test
-        @DisplayName("Find insights views returns 403 when the dashboard permission is denied")
-        void findInsightsViewsReturnsForbiddenWhenPermissionDenied() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-
-            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.DASHBOARD_VIEW.getValue());
-
-            insightsViewClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_FORBIDDEN);
-        }
     }
 
     @Nested
@@ -315,6 +308,53 @@ class InsightsViewsResourceTest {
 
             // Dashboard should still exist
             dashboardResourceClient.get(dashboardId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+        }
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RequiredPermissionsTest {
+
+        @ParameterizedTest(name = "{0} requires {1}")
+        @MethodSource
+        @DisplayName("Insights view endpoints return 403 when the permission is denied")
+        void insightsViewEndpointsRequirePermission(String endpoint, WorkspaceUserPermission permission,
+                BiConsumer<String, String> call) {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    permission.getValue());
+
+            call.accept(apiKey, workspaceName);
+        }
+
+        Stream<Arguments> insightsViewEndpointsRequirePermission() {
+            return Stream.of(
+                    Arguments.of("create", WorkspaceUserPermission.DASHBOARD_CREATE,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> {
+                                var view = insightsViewClient.createPartialInsightsView().build();
+                                try (var response = insightsViewClient.callCreate(view, apiKey, workspaceName)) {
+                                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+                                }
+                            }),
+                    Arguments.of("get by id", WorkspaceUserPermission.DASHBOARD_VIEW,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient
+                                    .get(UUID.randomUUID(), apiKey, workspaceName, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("find", WorkspaceUserPermission.DASHBOARD_VIEW,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient
+                                    .find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("update", WorkspaceUserPermission.DASHBOARD_EDIT,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient.update(
+                                    UUID.randomUUID(), DashboardUpdate.builder().name("Denied").build(), apiKey,
+                                    workspaceName, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("delete", WorkspaceUserPermission.DASHBOARD_DELETE,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient
+                                    .delete(UUID.randomUUID(), apiKey, workspaceName, HttpStatus.SC_FORBIDDEN)),
+                    Arguments.of("delete batch", WorkspaceUserPermission.DASHBOARD_DELETE,
+                            (BiConsumer<String, String>) (apiKey, workspaceName) -> insightsViewClient.batchDelete(
+                                    Set.of(UUID.randomUUID()), apiKey, workspaceName, HttpStatus.SC_FORBIDDEN)));
         }
     }
 }
