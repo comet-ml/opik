@@ -524,6 +524,77 @@ export class FeedbackScoreConditionsSection {
     );
   }
 
+  /**
+   * The four rendered values of one condition row, read back as a spec states
+   * them — the inverse of `fillCondition`.
+   *
+   * Exists so an assertion can compare the whole builder at once rather than
+   * row by row. `expectCondition` is the sharper tool when the row's position
+   * is known; this one is for when it is the *contents* that must be pinned and
+   * the position is not the product's to promise.
+   */
+  async readCondition(
+    groupIndex: number,
+    conditionIndex: number,
+  ): Promise<FeedbackScoreCondition> {
+    return test.step(
+      `read group ${groupIndex + 1} condition ${conditionIndex + 1}`,
+      async () => {
+        // Exactly one input registered under this path: the row exists, and it
+        // is not one of two fields fighting over the same path.
+        await expect(this.thresholdInput(groupIndex, conditionIndex)).toHaveCount(1);
+
+        const score = (
+          await this.scoreSelect(groupIndex, conditionIndex).textContent()
+        )?.trim();
+        const threshold = await this.thresholdInput(groupIndex, conditionIndex).inputValue();
+        const windowLabel = (
+          await this.windowSelect(groupIndex, conditionIndex).textContent()
+        )?.trim();
+
+        // Read rather than asserted, so a row holding neither operator is
+        // reported as the difference it is instead of throwing here.
+        const operators = Object.keys(CONDITION_OPERATOR_LABEL) as ConditionOperator[];
+        const checked = await Promise.all(
+          operators.map((op) =>
+            this.operatorOption(groupIndex, conditionIndex, op).isChecked(),
+          ),
+        );
+
+        return {
+          score: score ?? '',
+          operator: operators[checked.indexOf(true)],
+          threshold,
+          // The trigger renders "In the last 24 hours"; a spec states "24 hours".
+          window: windowLabel?.replace(/^In the last\s+/, '') as AlertWindow,
+        };
+      },
+    );
+  }
+
+  /**
+   * Every group the builder currently renders, each as its list of conditions.
+   *
+   * Reads the group and condition counts from the DOM rather than taking them
+   * from the caller, so a builder that came back with the wrong shape shows up
+   * as a difference in the comparison instead of being silently not-read.
+   */
+  async readGroups(): Promise<FeedbackScoreCondition[][]> {
+    return test.step('read the rendered condition groups', async () => {
+      const groupCount = await this.groups.count();
+      const groups: FeedbackScoreCondition[][] = [];
+      for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+        const conditionCount = await this.conditions(groupIndex).count();
+        const conditions: FeedbackScoreCondition[] = [];
+        for (let conditionIndex = 0; conditionIndex < conditionCount; conditionIndex++) {
+          conditions.push(await this.readCondition(groupIndex, conditionIndex));
+        }
+        groups.push(conditions);
+      }
+      return groups;
+    });
+  }
+
   async removeCondition(groupIndex: number, conditionIndex: number): Promise<void> {
     return test.step(
       `remove group ${groupIndex + 1} condition ${conditionIndex + 1}`,

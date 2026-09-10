@@ -88,7 +88,7 @@ test.describe('Alerts — feedback score conditions', { tag: ['@t2-cuj', '@area:
         await conditions.fillCondition(1, 1, GROUPS[1][1]);
       });
 
-      await test.step('Verify the four rows read AND, OR, AND', async () => {
+      await test.step('Verify the four conditions are separated by AND, OR, AND', async () => {
         await expect(conditions.groups).toHaveCount(2);
         await expect(conditions.conditions(0)).toHaveCount(2);
         await expect(conditions.conditions(1)).toHaveCount(2);
@@ -100,12 +100,7 @@ test.describe('Alerts — feedback score conditions', { tag: ['@t2-cuj', '@area:
       const alertId = await test.step('Submit and find the new alert on the list', async () => {
         await editor.submit();
         await alerts.waitForReady();
-
-        const row = page.locator('tbody tr[data-row-id]').filter({ hasText: name });
-        await expect(row).toHaveCount(1);
-        const id = await row.getAttribute('data-row-id');
-        expect(id).toBeTruthy();
-        return id!;
+        return alerts.alertIdByName(name);
       });
 
       await test.step('Reopen the alert and verify every condition came back on its own row', async () => {
@@ -121,11 +116,38 @@ test.describe('Alerts — feedback score conditions', { tag: ['@t2-cuj', '@area:
         await expect(reloaded.conditions(0)).toHaveCount(2);
         await expect(reloaded.conditions(1)).toHaveCount(2);
 
-        for (const [groupIndex, group] of GROUPS.entries()) {
-          for (const [conditionIndex, condition] of group.entries()) {
-            await reloaded.expectCondition(groupIndex, conditionIndex, condition);
-          }
-        }
+        /**
+         * Compared as a set of groups rather than group 0 against `GROUPS[0]`,
+         * because nothing in the round trip promises a position. `AlertDAO.FIND`
+         * aggregates the configs with `JSON_ARRAYAGG` and no `ORDER BY`, and the
+         * form hydrates them by bucketing into a `Map` keyed on `group_index`
+         * and returning `Array.from(buckets.values())` — first-seen order, never
+         * sorted (`AddEditAlertPage/helpers.ts`). So the row order is whatever
+         * order the rows came back in. OR groups are a set and AND conditions
+         * commute, so that is not a defect — but a positional assertion would
+         * pass on today's row order and flake the day it changes.
+         *
+         * This still pins everything the test is about: all four rows carry the
+         * fields they were given, and the *bucketing* survives — a condition
+         * that moved between groups, or a field that landed on another row, is
+         * a difference here. That is what the deliberately all-different values
+         * above are for.
+         */
+        const canonicalGroups = (groups: readonly FeedbackScoreCondition[][]) =>
+          groups
+            .map((group) =>
+              group
+                .map((c) =>
+                  JSON.stringify([c.score, c.operator, c.threshold, c.window]),
+                )
+                .sort(),
+            )
+            .map((group) => JSON.stringify(group))
+            .sort();
+
+        expect(canonicalGroups(await reloaded.readGroups())).toEqual(
+          canonicalGroups(GROUPS),
+        );
       });
 
       // The form could round-trip its own state and still be writing the wrong

@@ -768,6 +768,7 @@ areas:
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
     spec_dir: alerts
     specs:
+      - alerts/alert-feedback-score-conditions.spec.ts
       - alerts/alerts-crud.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }
