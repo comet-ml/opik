@@ -123,7 +123,9 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
           variant="link"
           size="2xs"
           asChild
-          className="shrink-0 text-white underline underline-offset-2 hover:text-white focus-visible:ring-white"
+          // The link variant's own hover language is the underline, so a link
+          // that is always underlined inverts it: the rule lifts on hover.
+          className="shrink-0 text-white underline underline-offset-2 hover:text-white hover:no-underline focus-visible:ring-white"
         >
           <a
             href={buildDocsUrl(MCP_BANNER_DOCS_PATH)}
@@ -141,7 +143,7 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
         size="icon-2xs"
         aria-label="Dismiss announcement"
         onClick={handleDismiss}
-        className="shrink-0 focus-visible:ring-white"
+        className="shrink-0 text-white focus-visible:ring-white"
       >
         <X />
       </Button>
