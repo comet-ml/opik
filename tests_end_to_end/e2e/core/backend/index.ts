@@ -3,6 +3,7 @@ export {
   type BackendClient,
   type ProjectRef,
   type DashboardRef,
+  type InsightsViewRef,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,

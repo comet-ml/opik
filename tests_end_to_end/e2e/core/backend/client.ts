@@ -29,6 +29,22 @@ export interface DashboardRef {
   description: string;
 }
 
+/**
+ * A project-scope dashboard — an "insights view", served by
+ * `/v1/private/insights-views` rather than by `/v1/private/dashboards`.
+ *
+ * `projectId` is `null`, never absent, for a view created before dashboards
+ * were scoped to a project. That distinction is the whole subject of
+ * `project-insights-views.spec.ts`: a project-less view is visible from every
+ * project, a project-bound one only from its own, so a caller must be able to
+ * tell "no project" apart from "the API did not tell me".
+ */
+export interface InsightsViewRef {
+  id: string;
+  name: string;
+  projectId: string | null;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -939,6 +955,66 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
       }
+    },
+
+    /**
+     * Seeds a project-scope dashboard (an insights view).
+     *
+     * Omitting `projectId` is not an oversight at the call site — it is how a
+     * legacy, project-less view is reproduced, which is the case the scoping
+     * rules treat specially. `type` is pinned to `multi_project` because the
+     * project view selector lists that type and nothing else.
+     */
+    async createInsightsView(args: {
+      name: string;
+      projectId?: string;
+    }): Promise<InsightsViewRef> {
+      const created = await opik.api.insightsViews.createInsightsView({
+        name: args.name,
+        type: 'multi_project',
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+        // The shape the app itself writes for a freshly created view. The
+        // selector reads `config.sections` to render its widget count and
+        // falls back to 0 when it cannot, so an empty section list keeps the
+        // row identical to a real one rather than exercising the fallback.
+        config: { version: 4, sections: [] },
+      });
+      const id = (created as { id?: unknown } | null)?.id;
+      if (typeof id !== 'string') {
+        throw new Error(`createInsightsView(${args.name}) returned no id`);
+      }
+      return { id, name: args.name, projectId: args.projectId ?? null };
+    },
+
+    /**
+     * Every insights view the workspace answers with, optionally scoped to a
+     * project — the read behind the project view selector.
+     *
+     * Returns the whole answer rather than a lookup by name: the assertions
+     * this exists for are about what the list must *not* contain, and a caller
+     * that could only find its own rows could not tell a leak from a clean
+     * list.
+     */
+    async findInsightsViews(args: { projectId?: string } = {}): Promise<InsightsViewRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.insightsViews.findInsightsViews({
+            ...(args.projectId ? { projectId: args.projectId } : {}),
+            size: 500,
+            page,
+          }),
+        500,
+      );
+      return content.map((view) => ({
+        id: String(view.id),
+        name: view.name,
+        projectId: view.projectId ?? null,
+      }));
+    },
+
+    async deleteInsightsViewsBatch(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await opik.api.insightsViews.deleteInsightsViewsBatch({ ids });
     },
 
     async createProject(name: string, description?: string): Promise<void> {
