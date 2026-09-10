@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS annotation_queue_automations (
     scope ENUM('trace', 'thread') NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     conditions JSON NOT NULL,
+    -- Ceiling on how many items automation may leave in the queue. NULL means no ceiling, which is why
+    -- this is nullable rather than a sentinel like 0 — "unbounded" is the default state, not a magic value.
+    max_items_in_queue INT UNSIGNED NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by VARCHAR(255) NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),

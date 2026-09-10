@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
@@ -39,7 +40,13 @@ public record AnnotationQueueAutomation(
         // toggle from clobbering each other's conditions. "An enabled automation needs at least one
         // group" is a cross-field rule and lives in the service.
         @JsonView({AnnotationQueue.View.Public.class,
-                AnnotationQueue.View.Write.class}) @Nullable @Valid Conditions conditions) {
+                AnnotationQueue.View.Write.class}) @Nullable @Valid Conditions conditions,
+
+        // Ceiling on how large automation is allowed to grow the queue: once the queue holds this many
+        // items, automation stops adding. Absent means no ceiling. Nullable for the same reason as
+        // conditions — a toggle-only request must not silently drop it.
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable @Positive Integer maxItemsInQueue) {
 
     public static final int MAX_GROUPS = 5;
     public static final int MAX_CONDITIONS_PER_GROUP = 5;

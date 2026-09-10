@@ -59,7 +59,13 @@ public class AnnotationQueueAutomationService {
                 throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
             }
 
-            dao.save(workspaceId, queueId, projectId, scope.getValue(), enabled, conditions, userName);
+            // Same "null means leave it alone" rule as conditions, so a toggle-only request cannot drop
+            // the ceiling as a side effect.
+            Integer maxItemsInQueue = automation.maxItemsInQueue() != null
+                    ? automation.maxItemsInQueue()
+                    : existing.map(AnnotationQueueAutomationModel::maxItemsInQueue).orElse(null);
+
+            dao.save(workspaceId, queueId, projectId, scope.getValue(), enabled, conditions, maxItemsInQueue, userName);
             return null;
         });
 
@@ -151,6 +157,7 @@ public class AnnotationQueueAutomationService {
         return AnnotationQueueAutomation.builder()
                 .enabled(model.enabled())
                 .conditions(JsonUtils.readValue(model.conditions(), AnnotationQueueAutomation.Conditions.class))
+                .maxItemsInQueue(model.maxItemsInQueue())
                 .build();
     }
 }

@@ -70,6 +70,8 @@ public interface AnnotationQueueDAO {
 
     Mono<Set<UUID>> findPreviouslyAddedItems(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
+    Mono<Long> countItems(UUID queueId, UUID projectId);
+
     Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, String entityType,
             UUID queueId,
             List<String> feedbackDefinitionNames);
@@ -244,6 +246,17 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND project_id = :project_id
             AND queue_id = :queue_id
             AND item_id IN :item_ids
+            """;
+
+    // Counts what the queue holds now, not what it has ever held — items removed by a reviewer free up
+    // room again. DISTINCT because the table is a ReplacingMergeTree and an unmerged part can still hold
+    // more than one row per item.
+    private static final String COUNT_ITEMS = """
+            SELECT count(DISTINCT item_id) AS count
+            FROM annotation_queue_items
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND queue_id = :queue_id
             """;
 
     // Lookup, not a listing: the caller renders the queue-items table from the traces/threads API with
@@ -626,6 +639,20 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .flatMap(result -> result.map(
                         (row, metadata) -> UUID.fromString(row.get("item_id", String.class))))
                 .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Mono<Long> countItems(@NonNull UUID queueId, @NonNull UUID projectId) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(COUNT_ITEMS)
+                            .bind("project_id", projectId.toString())
+                            .bind("queue_id", queueId.toString());
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                .reduce(0L, Long::sum);
     }
 
     private Publisher<? extends Result> recordItemHistory(UUID queueId, Set<UUID> itemIds, UUID projectId,

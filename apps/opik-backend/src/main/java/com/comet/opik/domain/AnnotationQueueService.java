@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -237,7 +238,55 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                     log.debug("Skipping '{}' items already routed to annotation queue '{}'",
                             alreadyAdded.size(), queueId);
                     return eligible;
-                });
+                })
+                .flatMap(eligible -> withinMaxItems(queueId, projectId, eligible));
+    }
+
+    /**
+     * Holds automation to the queue's configured ceiling. Sits beside the already-added check for the same
+     * reason: both are limits on what automation may do, and neither should depend on a caller remembering
+     * to apply it.
+     *
+     * <p>A queue over its ceiling is filled to the ceiling rather than skipped wholesale — dropping a batch
+     * of 500 because there is room for 3 would waste the 3. The remainder is not held anywhere; automation
+     * will consider those entities again the next time one of their scores changes.
+     */
+    private Mono<Set<UUID>> withinMaxItems(UUID queueId, UUID projectId, Set<UUID> eligible) {
+        if (eligible.isEmpty()) {
+            return Mono.just(eligible);
+        }
+
+        return Mono.deferContextual(ctx -> Mono.just(
+                automationService.findByQueueId(ctx.get(RequestContext.WORKSPACE_ID), queueId)
+                        .map(AnnotationQueueAutomation::maxItemsInQueue)))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(maxItemsInQueue -> maxItemsInQueue
+                        .map(max -> annotationQueueDAO.countItems(queueId, projectId)
+                                .map(held -> fillToMaxItems(queueId, eligible, max, held)))
+                        .orElseGet(() -> Mono.just(eligible)));
+    }
+
+    static Set<UUID> fillToMaxItems(UUID queueId, Set<UUID> eligible, int maxItemsInQueue, long held) {
+        long headroom = maxItemsInQueue - held;
+
+        if (headroom <= 0) {
+            log.info("Annotation queue '{}' holds '{}' items and its automation ceiling is '{}'; "
+                    + "skipping '{}' items", queueId, held, maxItemsInQueue, eligible.size());
+            return Set.of();
+        }
+
+        if (eligible.size() <= headroom) {
+            return eligible;
+        }
+
+        log.info("Annotation queue '{}' has room for '{}' of '{}' items before its automation ceiling of '{}'",
+                queueId, headroom, eligible.size(), maxItemsInQueue);
+
+        // Sorted so which items land is deterministic rather than dependent on hash order.
+        return eligible.stream()
+                .sorted()
+                .limit(headroom)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     @Override

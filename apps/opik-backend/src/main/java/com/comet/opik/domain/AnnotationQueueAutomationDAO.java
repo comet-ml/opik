@@ -22,11 +22,12 @@ interface AnnotationQueueAutomationDAO {
      */
     @SqlUpdate("""
             INSERT INTO annotation_queue_automations
-                (workspace_id, queue_id, project_id, scope, enabled, conditions, created_by, last_updated_by)
-            VALUES (:workspaceId, :queueId, :projectId, :scope, :enabled, :conditions, :userName, :userName)
+                (workspace_id, queue_id, project_id, scope, enabled, conditions, max_items_in_queue, created_by, last_updated_by)
+            VALUES (:workspaceId, :queueId, :projectId, :scope, :enabled, :conditions, :maxItemsInQueue, :userName, :userName)
             ON DUPLICATE KEY UPDATE
                 enabled = :enabled,
                 conditions = :conditions,
+                max_items_in_queue = :maxItemsInQueue,
                 last_updated_by = :userName
             """)
     void save(@Bind("workspaceId") String workspaceId,
@@ -35,6 +36,7 @@ interface AnnotationQueueAutomationDAO {
             @Bind("scope") String scope,
             @Bind("enabled") boolean enabled,
             @Bind("conditions") String conditions,
+            @Bind("maxItemsInQueue") Integer maxItemsInQueue,
             @Bind("userName") String userName);
 
     @SqlQuery("""

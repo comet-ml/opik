@@ -17,6 +17,7 @@ public record AnnotationQueueAutomationModel(
         String scope,
         boolean enabled,
         String conditions,
+        Integer maxItemsInQueue,
         Instant createdAt,
         String createdBy,
         Instant lastUpdatedAt,
