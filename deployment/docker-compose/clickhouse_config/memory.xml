@@ -1,0 +1,12 @@
+<!--
+  Cap ClickHouse's total memory usage to 85% of the container's cgroup
+  memory limit, leaving headroom for the OS, merges, and TTL mutations
+  on large tables. Without this, ClickHouse will use the default ratio
+  (~90% of detected RAM) and OOM during merge-heavy workloads.
+
+  Mirrors the Helm chart block at deployment/helm_chart/opik/values.yaml
+  (under `clickhouse.configuration.files."conf.d/memory.xml"`).
+-->
+<clickhouse>
+    <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
+</clickhouse>

@@ -1,0 +1,68 @@
+<!--
+  Disable ClickHouse internal observability tables that Opik does not use,
+  and cap retention on the ones we keep. Without this config, a long-running
+  ClickHouse instance accumulates tens of GiB in `system.trace_log` (memory
+  profiler stack traces, 4 MiB step, no TTL) until the Docker data volume
+  fills and Redis enters `stop-writes-on-bgsave-error` read-only mode,
+  which takes down Opik span ingestion.
+
+  This mirrors the hardening applied to the Helm chart in PR #3756
+  (merged 2025-10-28), ported here to close the docker-compose gap.
+  See also: https://github.com/comet-ml/opik/issues/6224
+-->
+<clickhouse>
+    <opentelemetry_span_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <text_log remove="1"/>
+    <trace_log remove="1"/>
+    <blob_storage_log remove="1"/>
+
+    <error_log>
+        <engine>
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(event_date)
+            ORDER BY (event_date, event_time)
+            TTL event_date + toIntervalDay(30)
+            SETTINGS index_granularity = 8192
+        </engine>
+        <database>system</database>
+        <table>error_log</table>
+    </error_log>
+
+    <latency_log>
+        <engine>
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(event_date)
+            ORDER BY (event_date, event_time)
+            TTL event_date + toIntervalDay(30)
+            SETTINGS index_granularity = 8192
+        </engine>
+        <database>system</database>
+        <table>latency_log</table>
+    </latency_log>
+
+    <metric_log>
+        <engine>
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(event_date)
+            ORDER BY (event_date, event_time)
+            TTL event_date + toIntervalDay(30)
+            SETTINGS index_granularity = 8192
+        </engine>
+        <database>system</database>
+        <table>metric_log</table>
+    </metric_log>
+
+    <query_metric_log>
+        <engine>
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(event_date)
+            ORDER BY (event_date, event_time)
+            TTL event_date + toIntervalDay(30)
+            SETTINGS index_granularity = 8192
+        </engine>
+        <database>system</database>
+        <table>query_metric_log</table>
+    </query_metric_log>
+</clickhouse>
