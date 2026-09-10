@@ -29,7 +29,7 @@ helm-docs	Regenerate Helm chart README
 actionlint	Lint GitHub Actions workflows
 zizmor	Security-scan GitHub Actions workflows
 hadolint	Lint Dockerfiles
-semgrep	Block SQL injection-prone string formatting
+semgrep	Enforce the repo's own backend Java rules
 spotless	Format Java code
 eslint	Lint + autofix JS/TS
 typecheck	Whole-project tsc type check
