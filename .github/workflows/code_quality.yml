@@ -172,6 +172,12 @@ jobs:
         env:
           HOOK_ID: ${{ matrix.leg.id }}
           HOOK_FILES: ${{ matrix.leg.files }}
+          # Scope for hooks that gate only what a change touches. The runner
+          # checks out a clean tree, so `git diff HEAD` is empty here and such a
+          # hook would see no changed lines at all; the PR/push base gives it the
+          # real range. Empty on workflow_dispatch (full-repo audit), which the
+          # consumer treats as "scope unknown" and checks everything.
+          PMD_SUPPRESSION_DIFF_BASE: ${{ needs.detect.outputs.from }}
         run: |
           set -o pipefail
           set +e

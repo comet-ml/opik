@@ -31,6 +31,7 @@ zizmor	Security-scan GitHub Actions workflows
 hadolint	Lint Dockerfiles
 semgrep	Block SQL injection-prone string formatting
 spotless	Format Java code
+pmd	Gate inline fully-qualified Java names
 eslint	Lint + autofix JS/TS
 typecheck	Whole-project tsc type check
 non-public FE plugins	Block non-public FE plugins
