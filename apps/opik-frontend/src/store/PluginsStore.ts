@@ -25,6 +25,13 @@ type PluginStore = {
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
+    /**
+     * Called once the banner knows whether it belongs on screen. Height alone
+     * cannot say that: it is 0 both while the quota answer is loading and when
+     * the answer is "no banner", and anything ranked below this one needs to
+     * tell those apart before it counts an impression.
+     */
+    onVisibilityResolved?: () => void;
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;

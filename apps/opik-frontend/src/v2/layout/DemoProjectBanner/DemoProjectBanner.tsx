@@ -1,19 +1,12 @@
-import React, { useEffect, useRef } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
-import useLocalStorageState from "use-local-storage-state";
-import { useFeatureFlagVariantKey } from "posthog-js/react";
 
-import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import useProjectById from "@/api/projects/useProjectById";
-import { DEMO_PROJECT_NAME } from "@/constants/shared";
-import {
-  AGENT_ONBOARDING_KEY,
-  AGENT_ONBOARDING_STEPS,
-  AgentOnboardingState,
-  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
-  DEFAULT_ONBOARDING_FLOW,
-} from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { cn } from "@/lib/utils";
+import { AGENT_ONBOARDING_STEPS } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { DEMO_BANNER_HEIGHT, DEMO_BANNER_HEIGHT_CLASS } from "./constants";
+import { useDemoProjectBannerVisibility } from "./useDemoProjectBannerVisibility";
 import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
 interface DemoProjectBannerProps {
@@ -23,47 +16,40 @@ interface DemoProjectBannerProps {
 const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   onChangeHeight,
 }) => {
-  const heightRef = useRef(0);
-  const activeProjectId = useActiveProjectId();
+  const heightRef = useRef(DEMO_BANNER_HEIGHT);
   const workspaceName = useActiveWorkspaceName();
 
-  const { data: project } = useProjectById(
-    { projectId: activeProjectId! },
-    { enabled: !!activeProjectId },
-  );
-
-  const [onboardingState, setOnboardingState] =
-    useLocalStorageState<AgentOnboardingState>(
-      `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
-    );
+  const {
+    isBannerVisible,
+    isDemoProjectActive,
+    isOnboardingActive,
+    isManualFlow,
+    onboardingState,
+    setOnboardingState,
+  } = useDemoProjectBannerVisibility();
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
     onChangeHeight(node.clientHeight);
   });
 
-  const variant =
-    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
-    DEFAULT_ONBOARDING_FLOW;
-  const isManualFlow = variant === "manual";
-
-  const isDemoProject = project?.name === DEMO_PROJECT_NAME;
-  const isOnboardingActive =
-    !!onboardingState?.step &&
-    onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
-
+  // Keyed to the sticky active project, not the page: this watches the user's
+  // own project for its first trace and has to keep doing that wherever they
+  // navigate, including away from the demo project that started the flow.
   useAutoCompleteAgentOnboarding({
     agentName: onboardingState?.agentName,
-    enabled: isDemoProject && isOnboardingActive,
+    enabled: isDemoProjectActive && isOnboardingActive,
   });
 
-  const hideBanner = !isDemoProject || (!isOnboardingActive && !isManualFlow);
+  // Layout effect, and the height known from the styling rather than a
+  // measurement: visibility resolves from a query, so the bar appears a beat
+  // after mount, and a height published only once a resize observer had run
+  // left the layout at 0 with the bar overlapping the content.
+  useLayoutEffect(() => {
+    onChangeHeight(isBannerVisible ? heightRef.current : 0);
+  }, [isBannerVisible, onChangeHeight]);
 
-  useEffect(() => {
-    onChangeHeight(!hideBanner ? heightRef.current : 0);
-  }, [hideBanner, onChangeHeight]);
-
-  if (hideBanner) {
+  if (!isBannerVisible) {
     return null;
   }
 
@@ -82,7 +68,10 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   return (
     <div
       ref={ref}
-      className="z-10 flex h-8 items-center justify-center gap-1.5 bg-primary px-4"
+      className={cn(
+        "z-10 flex items-center justify-center gap-1.5 bg-primary px-4",
+        DEMO_BANNER_HEIGHT_CLASS,
+      )}
     >
       <span className="comet-body-xs text-center text-white">
         You are viewing a demo project,{" "}

@@ -14,7 +14,10 @@ export function useObserveResizeNode<NodeType = HTMLElement>(
     if (node) {
       const resizeObserver = new ResizeObserver(() => {
         window.requestAnimationFrame(() => {
-          if (node) {
+          // By the time the frame runs the node may have been unmounted, and a
+          // detached node measures 0. Reporting that overwrites a good value
+          // with a wrong one.
+          if (node && (node as unknown as Element).isConnected !== false) {
             onChange(node);
           }
         });
