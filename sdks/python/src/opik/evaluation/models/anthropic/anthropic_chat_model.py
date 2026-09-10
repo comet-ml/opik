@@ -22,7 +22,7 @@ def is_available() -> bool:
 class AnthropicChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
-        model_name: str = "anthropic/claude-sonnet-4-20250514",
+        model_name: str = "anthropic/claude-sonnet-4-6",
         track: bool = True,
         **completion_kwargs: Any,
     ) -> None:

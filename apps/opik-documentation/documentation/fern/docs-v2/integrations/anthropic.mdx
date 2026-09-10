@@ -72,7 +72,7 @@ anthropic_client = track_anthropic(anthropic_client, project_name="anthropic-int
 PROMPT = "Why is it important to use a LLM Monitoring like CometML Opik tool that allows you to log traces and spans when working with Anthropic LLM Models?"
 
 response = anthropic_client.messages.create(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-6",
     max_tokens=1024,
     messages=[
         {"role": "user", "content": PROMPT}
@@ -104,7 +104,7 @@ anthropic_client = track_anthropic(anthropic_client)
 @track
 def generate_story(prompt):
     res = anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -114,7 +114,7 @@ def generate_story(prompt):
 def generate_topic():
     prompt = "Generate a topic for a story about Opik."
     res = anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
