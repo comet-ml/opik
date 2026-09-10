@@ -8,40 +8,33 @@ import {
   MCP_BANNER_CAMPAIGN_ID,
   MCP_BANNER_COPY,
   MCP_BANNER_COPY_SHORT,
+  MCP_BANNER_HEIGHT,
+  MCP_BANNER_HEIGHT_CLASS,
   MCP_BANNER_SHOWN_SESSION_KEY,
 } from "./constants";
 
 // ── mutable state the mock factories read ──────────────────────────────────
-const storage: Record<string, unknown> = {};
-let mockIsPhonePortrait = false;
+// Hoisted, because vi.mock factories are lifted above ordinary declarations.
+const { storage } = vi.hoisted(() => ({
+  storage: {} as Record<string, unknown>,
+}));
+let mockIsPhone = false;
 let mockDemoSettled = true;
 // ───────────────────────────────────────────────────────────────────────────
 
-vi.mock("use-local-storage-state", async () => {
-  const { useCallback, useState } = await import("react");
-  return {
-    default: function useLocalStorageStateMock(
-      key: string,
-      options?: { defaultValue?: unknown },
-    ) {
-      const [value, setValue] = useState(() =>
-        key in storage ? storage[key] : options?.defaultValue,
-      );
-      const set = useCallback(
-        (next: unknown) => {
-          const resolved = typeof next === "function" ? next(value) : next;
-          storage[key] = resolved;
-          setValue(resolved);
-        },
-        [key, value],
-      );
-      return [value, set];
-    },
-  };
-});
+vi.mock("use-local-storage-state", async () => ({
+  default: (
+    await import("@/testing/localStorageStateMock")
+  ).createLocalStorageStateMock(storage),
+}));
 
 vi.mock("@/store/AppStore", () => ({
   default: { getState: () => ({ activeWorkspaceName: "my-workspace" }) },
+}));
+
+// The height wiring belongs to the layout, not to this seam.
+vi.mock("@/hooks/useObserveResizeNode", () => ({
+  useObserveResizeNode: () => ({ ref: vi.fn(), node: undefined }),
 }));
 
 // Boundaries of the visibility rule, each with its own tests elsewhere. Here
@@ -53,45 +46,32 @@ vi.mock("posthog-js/react", () => ({
 vi.mock("@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility", () => ({
   useDemoProjectBannerVisibility: () => ({
     isBannerVisible: false,
+    isOnDemoProjectPage: false,
     isSettled: mockDemoSettled,
   }),
-  useIsDemoProjectById: () => ({
-    isDemoProject: false,
-    isSettled: mockDemoSettled,
-  }),
-}));
-
-vi.mock("@tanstack/react-router", () => ({
-  useParams: () => undefined,
 }));
 
 vi.mock("@/hooks/useIsPhone", () => ({
   useIsPhone: () => ({
-    isPhone: mockIsPhonePortrait,
-    isPhonePortrait: mockIsPhonePortrait,
+    isPhone: mockIsPhone,
+    isPhonePortrait: mockIsPhone,
     isPhoneLandscape: false,
   }),
 }));
 
-// The height wiring belongs to the layout, not to this seam.
-vi.mock("@/hooks/useObserveResizeNode", () => ({
-  useObserveResizeNode: () => ({ ref: vi.fn(), node: undefined }),
-}));
-
-vi.mock("@/lib/analytics/tracking", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/lib/analytics/tracking")
-  >("@/lib/analytics/tracking");
-  return { ...actual, trackEvent: vi.fn() };
-});
-
-const renderBanner = () =>
-  render(<McpAnnouncementBanner onChangeHeight={vi.fn()} />);
+const renderBanner = (props?: { retentionBannerSettled?: boolean }) =>
+  render(
+    <McpAnnouncementBanner
+      onChangeHeight={vi.fn()}
+      retentionBannerVisible={false}
+      retentionBannerSettled={props?.retentionBannerSettled ?? true}
+    />,
+  );
 
 beforeEach(() => {
   for (const key of Object.keys(storage)) delete storage[key];
   window.sessionStorage.clear();
-  mockIsPhonePortrait = false;
+  mockIsPhone = false;
   mockDemoSettled = true;
   vi.mocked(trackEvent).mockClear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -100,6 +80,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+vi.mock("@/lib/analytics/tracking", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/analytics/tracking")
+  >("@/lib/analytics/tracking");
+  return { ...actual, trackEvent: vi.fn() };
 });
 
 describe("McpAnnouncementBanner", () => {
@@ -183,7 +170,7 @@ describe("McpAnnouncementBanner", () => {
 
   describe("on a phone", () => {
     it("shows a message that fits, and says so in the events", () => {
-      mockIsPhonePortrait = true;
+      mockIsPhone = true;
 
       renderBanner();
 
@@ -197,7 +184,7 @@ describe("McpAnnouncementBanner", () => {
     });
 
     it("keeps both controls reachable next to the shortened message", () => {
-      mockIsPhonePortrait = true;
+      mockIsPhone = true;
 
       renderBanner();
 
@@ -206,8 +193,8 @@ describe("McpAnnouncementBanner", () => {
     });
   });
 
-  describe("while the suppression verdicts are in flight", () => {
-    it("shows the bar but does not spend the session's impression", () => {
+  describe("while a suppression verdict is in flight", () => {
+    it("shows the bar but does not spend the session's impression on the demo verdict", () => {
       mockDemoSettled = false;
 
       renderBanner();
@@ -221,5 +208,27 @@ describe("McpAnnouncementBanner", () => {
         window.sessionStorage.getItem(MCP_BANNER_SHOWN_SESSION_KEY),
       ).toBeNull();
     });
+
+    it("does not spend it on the quota verdict either", () => {
+      renderBanner({ retentionBannerSettled: false });
+
+      expect(screen.getByText(MCP_BANNER_COPY)).toBeInTheDocument();
+      expect(trackEvent).not.toHaveBeenCalledWith(
+        OpikEvent.MCP_BANNER_SHOWN,
+        expect.anything(),
+      );
+    });
+  });
+});
+
+describe("the height the layout is told about", () => {
+  it("matches the class that actually sets it", () => {
+    // The layout offsets its content by MCP_BANNER_HEIGHT before the bar is
+    // measured. If the class and the constant disagree, the page shifts by the
+    // difference on every load, which is the one thing this banner must not do.
+    const classHeightRem =
+      Number(MCP_BANNER_HEIGHT_CLASS.replace("h-", "")) * 0.25;
+
+    expect(classHeightRem * 16).toBe(MCP_BANNER_HEIGHT);
   });
 });

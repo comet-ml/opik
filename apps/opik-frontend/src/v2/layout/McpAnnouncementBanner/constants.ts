@@ -7,6 +7,7 @@
  * The date is the only one that works in OSS, where PostHog never initialises.
  */
 
+/** Names the campaign, dated by when it started rather than when it ends. */
 export const MCP_BANNER_CAMPAIGN_ID = "mcp-announcement-2026-09";
 
 /** Last day the banner may appear, inclusive, in UTC. */
@@ -40,6 +41,13 @@ export const MCP_BANNER_DOCS_PATH = "/mcp-server";
  * the resize observer still corrects this if the bar ever changes size.
  */
 export const MCP_BANNER_HEIGHT = 32;
+
+/**
+ * The Tailwind class that must render `MCP_BANNER_HEIGHT`. Kept beside it so
+ * the pair is edited together: change one alone and the anti-shift guarantee
+ * silently inverts. A test asserts they agree.
+ */
+export const MCP_BANNER_HEIGHT_CLASS = "h-8";
 
 export const MCP_BANNER_COPY =
   "Opik MCP: debug traces and fix failing evals from Claude Code, Codex, Cursor or VS Code.";
