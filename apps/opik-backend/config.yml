@@ -1128,6 +1128,71 @@ agentInsightsReport:
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: ${AGENT_INSIGHTS_REPORT_STREAM_TRIM_LIMIT:-100}
 
+# Configuration for automatic annotation queue population (OPIK-6303). A feedback-score event is guarded
+# in the listener and the routing work is done by a stream consumer, so it survives a replica restart.
+annotationQueueRouting:
+  # Default: true
+  # Description: When false, score events are never published and nothing is routed automatically
+  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-true}
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
+  # Default: 5s
+  # Description: How long an entity waits after its first score before being evaluated. Later scores on the
+  #   same entity land inside the window and collapse into one evaluation rather than repeating it. The
+  #   deadline is set by the first score and is NOT reset by later ones, so a continuously scored entity
+  #   cannot starve.
+  debounceDelay: ${ANNOTATION_QUEUE_ROUTING_DEBOUNCE_DELAY:-5s}
+  # Default: 2s
+  # Description: How often the flush job drains entities whose debounce window has elapsed
+  jobInterval: ${ANNOTATION_QUEUE_ROUTING_JOB_INTERVAL:-2s}
+  # Default: 500
+  # Description: Entities taken per flush, and the cap on how many entity ids one published message carries
+  jobBatchSize: ${ANNOTATION_QUEUE_ROUTING_JOB_BATCH_SIZE:-500}
+  # Default: 4s
+  # Description: How long the flush job holds its lock before it is released
+  jobLockTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: How long the flush job waits to acquire the lock before giving up until the next tick
+  jobLockWaitTime: ${ANNOTATION_QUEUE_ROUTING_JOB_LOCK_WAIT_TIME:-300ms}
+  # Default: annotation-queue-routing-consumers
+  # Description: Consumer group name for annotation queue routing
+  consumerGroupName: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_GROUP_NAME:-'annotation-queue-routing-consumers'}
+  # Default: 10
+  # Description: Messages processed per batch; the main cap on concurrent database work during score bursts
+  consumerBatchSize: ${ANNOTATION_QUEUE_ROUTING_CONSUMER_BATCH_SIZE:-10}
+  # Default: 500ms
+  # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
+  #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
+  #   consumerBatchSize / (poolingInterval x claimIntervalRatio), because every claimIntervalRatio-th tick
+  #   spends its turn on autoClaim rather than reading new work. Set too low and the backlog grows until
+  #   streamMaxLen trimming silently discards the oldest messages.
+  poolingInterval: ${ANNOTATION_QUEUE_ROUTING_POOLING_INTERVAL:-500ms}
+  # Default: 500ms
+  # Description: Delay before re-reading scores for entities the event named but the first read found none
+  #   for — covers ClickHouse replication lag and the async-insert buffer window. Only paid when an
+  #   inconsistency is actually detected.
+  staleReadRetryDelay: ${ANNOTATION_QUEUE_ROUTING_STALE_READ_RETRY_DELAY:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: ${ANNOTATION_QUEUE_ROUTING_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Maximum number of retries for a failing message before it is dropped
+  maxRetries: ${ANNOTATION_QUEUE_ROUTING_MAX_RETRIES:-3}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals. Lower values recover stuck work sooner
+  #   but cost new-message throughput, since a claim tick reads nothing new — see poolingInterval above.
+  claimIntervalRatio: ${ANNOTATION_QUEUE_ROUTING_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 5m
+  # Description: How long a message can stay pending before it is auto-claimed by another consumer
+  pendingMessageDuration: ${ANNOTATION_QUEUE_ROUTING_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: ${ANNOTATION_QUEUE_ROUTING_STREAM_MAX_LEN:-100000}
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: ${ANNOTATION_QUEUE_ROUTING_STREAM_TRIM_LIMIT:-1000}
+
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
   # Default: true
