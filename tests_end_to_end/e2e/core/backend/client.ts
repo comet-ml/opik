@@ -241,6 +241,16 @@ export interface SpanDetail {
   traceId: string;
   feedbackScores: FeedbackScoreRef[];
   output: unknown;
+  /**
+   * The span's `metadata` payload, or null when it carried none.
+   *
+   * Kept distinct from `{}` on purpose: "the span logged no metadata" is a
+   * different state from "the span logged an empty object", and it is the first
+   * one that decides whether an argument mapped to `metadata` resolves at all.
+   * A spec seeding a span deliberately without metadata has to be able to prove
+   * the seed really is in that state before asserting anything about it.
+   */
+  metadata: unknown;
 }
 
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
@@ -360,6 +370,20 @@ export interface LlmJudgeModelRef {
 export interface AutomationRuleLogRef {
   level: string;
   message: string;
+}
+
+/**
+ * The `code` block of a `user_defined_metric_python` rule as REST stores it.
+ *
+ * `arguments` is the score() parameter -> extraction path map the engine spreads
+ * into the metric call, and `metric` is the source it executes. Read back
+ * together because a rule created through the dialog is only proven correct by
+ * both: a mapping naming `metadata` is worthless if the persisted signature
+ * cannot tolerate the argument being absent, and vice versa.
+ */
+export interface PythonRuleCodeRef {
+  metric: string;
+  arguments: Record<string, string>;
 }
 
 /**
@@ -899,6 +923,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           source: String(fs.source),
         })),
         output: s.output ?? null,
+        metadata: s.metadata ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -2499,6 +2524,41 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The `code` block of a python-metric rule — the metric source and the
+     * variable mapping, exactly as REST stores them.
+     *
+     * Separate from `getAutomationRule` (which models the rule's own scalar
+     * fields) because this is the half a spec asserting about the CREATE DIALOG
+     * needs: what the form serialized out of a template the user never touched.
+     * `rawFetch` for the same reason as its siblings — the pinned SDK's evaluator
+     * union does not surface `code` in a shape that survives narrowing.
+     *
+     * Both fields are required rather than defaulted: an absent `arguments` would
+     * present as the empty mapping, which is precisely the state a caller is
+     * asserting the rule is NOT in.
+     */
+    async getPythonRuleCode(ruleId: string): Promise<PythonRuleCodeRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getPythonRuleCode: ${ruleId} answered ${status}: ${message}`);
+      }
+      const code = (json as { code?: { metric?: unknown; arguments?: unknown } }).code;
+      if (typeof code?.metric !== 'string') {
+        throw new Error(`getPythonRuleCode: ${ruleId} returned no metric source`);
+      }
+      if (code.arguments === null || typeof code.arguments !== 'object') {
+        throw new Error(`getPythonRuleCode: ${ruleId} returned no argument mapping`);
+      }
+      return {
+        metric: code.metric,
+        arguments: code.arguments as Record<string, string>,
+      };
+    },
+
+    /**
      * A rule's user-facing log stream — the lines `/automation-logs` renders.
      *
      * This is the only place the engine says why it did or did not score a
@@ -2744,6 +2804,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       type?: 'general' | 'llm' | 'tool';
       input?: TraceJsonSection;
       output?: TraceJsonSection;
+      /**
+       * Omitted from the request entirely when not given, rather than sent as
+       * `null`. A span that never logged metadata is the shape a rule mapping
+       * `metadata` has to survive, so "absent" has to stay reachable from here —
+       * sending an explicit null would make every seeded span carry the field.
+       */
+      metadata?: Record<string, unknown>;
       startTime?: Date;
       endTime?: Date;
     }): Promise<string> {
@@ -2759,6 +2826,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         end_time: (args.endTime ?? now).toISOString(),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
+        ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
       });
       return args.id;
     },
