@@ -102,14 +102,29 @@ test.describe('Thread duration — panel formatting', { tag: ['@t2-cuj', '@area:
     await test.step('The header reads the formatted duration', async () => {
       // toHaveCount(1) before toBeVisible: two chips rendering the same string
       // would mean the header is not the element being asserted on.
-      await expect(panel.durationChip(thread.expectedDisplay)).toHaveCount(1);
-      await expect(panel.durationChip(thread.expectedDisplay)).toBeVisible();
+      //
+      // The locator is built FROM the expected string, so a miss reports "0
+      // elements" and says nothing about what the header actually read — hence
+      // the messages, which name the regression this count is standing in for.
+      await expect(
+        panel.durationChip(thread.expectedDisplay),
+        `the header must read exactly '${thread.expectedDisplay}' for a ${thread.durationMs} ms thread; zero matches means the remainder reached the page unrounded`,
+      ).toHaveCount(1);
+      await expect(
+        panel.durationChip(thread.expectedDisplay),
+        'the duration chip must be on screen, not merely in the DOM',
+      ).toBeVisible();
     });
 
     await test.step('The unrounded remainder appears nowhere in the panel', async () => {
-      // The whole panel, not just the chip: the same value also reaches the
-      // header tooltip, and a leak into either is the regression.
-      await expect(panel.root).not.toContainText('15.30000');
+      // The whole panel, not just the chip. The header tooltip is the static
+      // string "Thread duration" and never carries the value, but the panel
+      // renders per-turn durations through the same formatter, so a leak is
+      // worth ruling out everywhere it could surface rather than in one chip.
+      await expect(
+        panel.root,
+        'the raw float remainder (15.300000000000182) must not reach any duration the panel renders',
+      ).not.toContainText('15.30000');
     });
   });
 
@@ -138,14 +153,23 @@ test.describe('Thread duration — panel formatting', { tag: ['@t2-cuj', '@area:
     });
 
     await test.step('The header keeps the millisecond precision', async () => {
-      await expect(panel.durationChip(thread.expectedDisplay)).toHaveCount(1);
-      await expect(panel.durationChip(thread.expectedDisplay)).toBeVisible();
+      await expect(
+        panel.durationChip(thread.expectedDisplay),
+        `the header must read exactly '${thread.expectedDisplay}' for a ${thread.durationMs} ms thread; zero matches means the sub-second branch lost precision`,
+      ).toHaveCount(1);
+      await expect(
+        panel.durationChip(thread.expectedDisplay),
+        'the duration chip must be on screen, not merely in the DOM',
+      ).toBeVisible();
     });
 
     await test.step('Nothing in the panel reads as a zero-length thread', async () => {
       // The failure mode a coarser rounding of the hour remainder would
       // introduce here: a real interval rendered as no interval at all.
-      await expect(panel.durationChip('0s')).toHaveCount(0);
+      await expect(
+        panel.durationChip('0s'),
+        'a 5 ms thread must never render as "0s" — that is formatDuration\'s empty-result fallback, not a duration',
+      ).toHaveCount(0);
     });
   });
 });

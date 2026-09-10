@@ -309,7 +309,11 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  *
  * Teardown deletes the trace (and with it its spans) here rather than in the
  * test: an assertion failure must not leave priced spans behind, since the
- * project's own rolled-up cost is one of the things asserted.
+ * project's own rolled-up cost is one of the things asserted. It runs from a
+ * `finally` that opens the moment the trace exists, because the REST seeds and
+ * the span-count check all run BEFORE `use()` — a failure in any of them would
+ * otherwise skip the only cleanup and leave a half-seeded, already-priced trace
+ * behind.
  */
 export const test = baseTest.extend<ModelCostSpansFixtures>({
   modelCostSpans: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
@@ -343,46 +347,50 @@ export const test = baseTest.extend<ModelCostSpansFixtures>({
       })),
     });
 
-    if (created.span_count !== sdkSpans.length) {
-      throw new Error(
-        `[modelCostSpans fixture] expected ${sdkSpans.length} spans, bridge reported ${created.span_count}`,
-      );
-    }
+    try {
+      if (created.span_count !== sdkSpans.length) {
+        throw new Error(
+          `[modelCostSpans fixture] expected ${sdkSpans.length} spans, bridge reported ${created.span_count}`,
+        );
+      }
 
-    for (const span of restSpans) {
-      await backendClient.createSpan({
-        id: uuid7(),
+      for (const span of restSpans) {
+        await backendClient.createSpan({
+          id: uuid7(),
+          traceId: created.id,
+          projectName: project.name,
+          name: span.name,
+          source: 'sdk',
+          type: 'llm',
+          model: span.model,
+          provider: span.provider,
+          usage: usageFor(span),
+        });
+      }
+
+      const ref: ModelCostSpansRef = {
         traceId: created.id,
-        projectName: project.name,
-        name: span.name,
-        source: 'sdk',
-        type: 'llm',
-        model: span.model,
-        provider: span.provider,
-        usage: usageFor(span),
+        spans,
+        promptTokens: PROMPT_TOKENS,
+        completionTokens: COMPLETION_TOKENS,
+        expectedTraceCost: spans.reduce((acc, s) => acc + s.expectedCost, 0),
+      };
+
+      await testInfo.attach('opik.modelCostSpans', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
       });
-    }
 
-    const ref: ModelCostSpansRef = {
-      traceId: created.id,
-      spans,
-      promptTokens: PROMPT_TOKENS,
-      completionTokens: COMPLETION_TOKENS,
-      expectedTraceCost: spans.reduce((acc, s) => acc + s.expectedCost, 0),
-    };
-
-    await testInfo.attach('opik.modelCostSpans', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteTraces([created.id]);
-      } catch (err) {
-        console.warn(`[modelCostSpans fixture] delete warning for trace ${created.id}:`, err);
+      await use(ref);
+    } finally {
+      // Swallow-and-warn, never rethrow: a delete that fails here would replace
+      // whichever seeding or assertion error actually broke the test.
+      if (!shouldLeaveArtifacts(testInfo)) {
+        try {
+          await backendClient.deleteTraces([created.id]);
+        } catch (err) {
+          console.warn(`[modelCostSpans fixture] delete warning for trace ${created.id}:`, err);
+        }
       }
     }
   },
