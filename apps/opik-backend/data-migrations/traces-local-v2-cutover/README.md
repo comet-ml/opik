@@ -533,8 +533,8 @@ The tail is still worth running tightly, because its length is what decides how 
    sweeps the parked writes into the live successor, re-applies the deletes bridged across the swap, and does not exit 0
    until its four-count postcondition says the gap is closed. Pass the **recorded** `exchange_done`, never an estimate:
    the sweep and the gate apply the same `--swap-done` exclusion, so a value earlier than the real swap drops a key
-   deleted and re-created in between from *both*, leaving that trace missing under a clean gate. `--help` states both
-   directions of error; only `--gap-start` is free to widen.
+   deleted and re-created in between from *both*, leaving that trace missing under a clean gate. The driver's header
+   states both directions of error; only `--gap-start` is free to widen.
 
 Keep step 3→4 short, and step 4→5 shorter:
 
@@ -576,8 +576,8 @@ once: quiesce user DELETES across the swap, not merely reads.**
   timestamps at ingestion is the durable fix and is not this procedure's to make.
 - **A post-swap write that REGRESSES `last_updated_at` is overwritten by the sweep, and the gate reports it clean.**
   The same writable column as above, in the other direction. The sweep re-inserts the parked payload,
-  `ReplacingMergeTree` keeps the higher version, and a client-supplied value below the parked row's loses the live
-  write; the postcondition then compares the parked payload against itself and returns zeros, so `newer_keys` does not
+  `ReplacingMergeTree` keeps the higher version, and a client-supplied `last_updated_at` below the parked row's loses
+  the live write; the postcondition then compares the parked payload against itself and returns zeros, so `newer_keys` does not
   see it either. It needs a gap-window key *and* a post-swap write that moves `last_updated_at` backwards. Nothing in
   the reconciliation can fix it: skipping keys already live would abandon exactly the stale and partial rows the sweep
   exists to repair, and re-stamping the version would clobber legitimate newer writes. Clamping client timestamps at

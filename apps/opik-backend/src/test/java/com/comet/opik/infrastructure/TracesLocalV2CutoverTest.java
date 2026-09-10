@@ -1671,7 +1671,8 @@ class TracesLocalV2CutoverTest {
         reconcileForward(deltaStart, swapDone);
 
         assertThat(newestNames("traces", idStrings(target), workspaceId))
-                .as("the sweep's re-insert loses to the post-swap version — it cannot clobber live traffic")
+                .as("the sweep's re-insert loses to the post-swap version, so live traffic that ADVANCED the"
+                        + " version survives it")
                 .containsOnly("post-swap");
         assertThat(forwardCounts(deltaStart, swapDone))
                 .as("reported as newer_keys, which is informational: the three gating buckets are still 0")
@@ -2094,9 +2095,13 @@ class TracesLocalV2CutoverTest {
      * <p>The second key is the control, and it is what makes the first assertion mean anything: identical in every
      * respect except that its post-swap version moves FORWARD, it keeps its live payload and lands in
      * {@code newer_keys}. So the sweep is behaving normally on this estate and the loss is the regression's doing.
+     * Carrying it here rather than leaning on {@link #sweepKeepsANewerPostSwapVersionAndTheGateStillPasses()} is
+     * deliberate: on one estate, under one sweep, the version direction is the only variable between the two keys.
+     *
+     * @see #sweepKeepsANewerPostSwapVersionAndTheGateStillPasses() the same sweep where the version advances
      */
     @Test
-    void aPostSwapWriteThatRegressesTheVersionIsOverwrittenAndTheGateStillReportsReconciled() {
+    void postSwapWriteRegressingTheVersionIsOverwrittenAndTheGateStillReportsReconciled() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var at = Instant.parse("2025-03-04T10:00:00Z");
@@ -2117,16 +2122,16 @@ class TracesLocalV2CutoverTest {
         insertShapedTrace(honest, workspaceId, projectId, "honest-live", at, Instant.EPOCH, Double.NaN, at,
                 at.plusSeconds(60));
 
-        forwardSweep("traces", gapStart, swapDone);
+        reconcileForward(gapStart, swapDone);
 
-        assertThat(countMatchingLive(workspaceId, "name = 'regressed-live'"))
-                .as("the residual: the post-swap write carried a version below the parked row's, so the sweep's"
-                        + " re-insert wins the version comparison and that write is no longer live")
-                .isZero();
-        assertThat(countMatchingLive(workspaceId, "name = 'honest-live'"))
-                .as("control: the same sweep on the same estate leaves a post-swap write alone when its version moves"
+        assertThat(newestNames("traces", Set.of(regressed), workspaceId))
+                .as("the residual: the post-swap write carried a last_updated_at below the parked row's, so the"
+                        + " sweep's re-insert wins the version comparison and the parked payload is what is live")
+                .containsOnly("regressed-parked");
+        assertThat(newestNames("traces", Set.of(honest), workspaceId))
+                .as("control: the same pass on the same estate leaves a post-swap write alone when its version moves"
                         + " forward, so the loss above is the regression and not the sweep")
-                .isEqualTo(1L);
+                .containsOnly("honest-live");
         assertThat(forwardCounts(gapStart, swapDone))
                 .as("and the gate cannot see the loss: the live row IS the parked payload, so the key matches on both"
                         + " version and fingerprint and enters no bucket — only the control shows, as newer_keys")
@@ -2147,11 +2152,15 @@ class TracesLocalV2CutoverTest {
      * runbook tells the operator to pass the RECORDED {@code exchange_done}: neither {@code EXCHANGE} nor
      * {@code RENAME} leaves a server-side commit instant to validate an estimate against.
      *
-     * <p>The same estate is then swept again with the recorded anchor. That is the control: the key comes back and
-     * the gate still reads clean, so the first result is attributable to the anchor and not to a broken fixture.
+     * <p>The same estate is then reconciled again with the recorded anchor. That is the control: the key comes back
+     * and the gate still reads clean, so the first result is attributable to the anchor and not to a broken fixture.
+     * {@link #sweepRestoresAGapWindowTraceDeletedAndReCreatedBeforeTheSwap()} covers that recovery from a full
+     * cutover; holding it here too is what isolates the anchor as the single variable.
+     *
+     * @see #sweepRestoresAGapWindowTraceDeletedAndReCreatedBeforeTheSwap() the same shape with a correct anchor
      */
     @Test
-    void anEarlySwapDoneDropsARecreatedKeyFromTheSweepAndTheGateAlike() {
+    void earlySwapDoneDropsARecreatedKeyFromTheSweepAndTheGateAlike() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var at = Instant.parse("2025-03-04T10:00:00Z");
@@ -2171,7 +2180,7 @@ class TracesLocalV2CutoverTest {
         exchangeTables();
         var swapDone = nowMicros();
 
-        forwardSweep("traces", gapStart, earlyAnchor);
+        reconcileForward(gapStart, earlyAnchor);
 
         assertThat(liveCount("traces", Set.of(id), workspaceId))
                 .as("the residual: the bridged delete sits at or after the early anchor, so the exclusion arm fires"
@@ -2182,12 +2191,12 @@ class TracesLocalV2CutoverTest {
                         + " reconciled over a trace that is missing")
                 .isEqualTo(reconciled());
 
-        forwardSweep("traces", gapStart, swapDone);
+        reconcileForward(gapStart, swapDone);
 
-        assertThat(countMatchingLive(workspaceId, "name = 'recreated-again'"))
-                .as("control: with the RECORDED anchor the delete falls below the bound, the key is swept, and the"
-                        + " version that lands is the re-created one")
-                .isEqualTo(1L);
+        assertThat(newestNames("traces", Set.of(id), workspaceId))
+                .as("control: with the RECORDED anchor the delete falls below the bound, the sweep copies the key and"
+                        + " the replay's guard spares it, so the re-created version is what lands")
+                .containsOnly("recreated-again");
         assertThat(forwardCounts(gapStart, swapDone))
                 .as("and the gate agrees on the same estate, so the fixture reconciles when the anchor is right")
                 .isEqualTo(reconciled());

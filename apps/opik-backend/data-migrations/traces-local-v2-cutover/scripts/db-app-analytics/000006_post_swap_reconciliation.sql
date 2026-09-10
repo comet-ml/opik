@@ -83,9 +83,9 @@
 -- live row is NEWER keeps the newer row; the postcondition reports that as `newer_keys` and tolerates it.
 --
 -- That protects live traffic only as far as last_updated_at is MONOTONIC, and it is not: the column is client-writable
--- and bound verbatim on the batch-ingest path, so a post-swap write can carry a value BELOW the parked row's. The
--- parked payload then wins the version comparison and that write is lost, while the gate compares parked against parked
--- and reports zeros. Nothing inside this statement fixes it: the version column is the successor's, and both
+-- and bound verbatim on the batch-ingest path, so a post-swap write can carry a last_updated_at BELOW the parked row's.
+-- The parked payload then wins the version comparison and that write is lost, while the gate compares parked against
+-- parked and reports zeros. Nothing inside this statement fixes it: the version column is the successor's, and both
 -- alternatives defeat the sweep's purpose — skipping keys already live would abandon exactly the stale and partial rows
 -- it exists to repair, and re-stamping last_updated_at would clobber legitimate newer writes. Same root cause and the
 -- same durable fix as the runbook's client-timestamp residual: clamp client timestamps at ingestion.
