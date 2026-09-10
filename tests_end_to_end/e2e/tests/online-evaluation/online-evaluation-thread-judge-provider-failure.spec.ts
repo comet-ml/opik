@@ -2,15 +2,35 @@ import { test, expect } from '@e2e/fixtures';
 import type { AutomationRuleLogRef } from '@e2e/core/backend';
 import { AutomationLogsPage } from '@e2e/pom/automation-logs.page';
 
-/** Emitted once per thread, when the scorer starts preparing that thread's request. */
-const EVALUATING_LINE = 'Evaluating threadId';
-/** Emitted once per thread, immediately before the provider call. */
-const SENDING_LINE = 'Sending threadId';
-/** The thread scorer's own wording for a failure raised while scoring a thread. */
-const SCORING_FAILURE_LINE = 'Unexpected error while scoring threadId';
+/** Line PREFIX, emitted once per thread when the scorer starts preparing that thread's request. */
+const EVALUATING_PREFIX = 'Evaluating threadId';
+/** Line PREFIX, emitted once per thread immediately before the provider call. */
+const SENDING_PREFIX = 'Sending threadId';
+/**
+ * Substring, not a prefix: the thread scorer's own wording for a failure raised
+ * while scoring a thread, which the line wraps in surrounding context.
+ */
+const SCORING_FAILURE_PHRASE = 'Unexpected error while scoring threadId';
 
 /** Both the INFO and the ERROR lines name the thread they are about, in quotes. */
 const THREAD_ID_IN_MESSAGE = /threadId '([^']+)'/;
+
+/**
+ * How long the log stream must stop changing before its contents count as an
+ * answer rather than as a snapshot caught mid-retry.
+ *
+ * A provider failure the subscriber classifies as transient leaves the message
+ * pending until `XAUTOCLAIM` reclaims it, and a replay appends a second
+ * `Sending`/ERROR pair per thread. Asserting "exactly once" the instant both
+ * threads have failed once would therefore pass over a stream that is still
+ * growing — and then contradict the page assertion below, which reads later.
+ *
+ * A duration, not a state wait, and deliberately so: the claim IS that nothing
+ * changes over an interval, which no response or locator can stand in for.
+ * Same reasoning as `QUIET_PERIOD_MS` in
+ * `online-evaluation-thread-scope-batch-close.spec.ts`.
+ */
+const QUIET_PERIOD_MS = 30_000;
 
 function threadIdOf(line: AutomationRuleLogRef): string {
   const match = THREAD_ID_IN_MESSAGE.exec(line.message);
@@ -33,7 +53,9 @@ test.describe('Online Evaluation — thread-scope LLM judge over a failing provi
     automationRulesCleanup,
     page,
   }) => {
-    test.setTimeout(240_000);
+    // 180s for the failure poll, plus the quiet period, plus seeding and the
+    // page read — the previous 240s left no room once the settle was added.
+    test.setTimeout(300_000);
 
     // Closing several threads in ONE call is the whole point: a thread-scope
     // rule then fans a single stream message out over both thread ids, and the
@@ -106,12 +128,11 @@ test.describe('Online Evaluation — thread-scope LLM judge over a failing provi
       await backendClient.closeThreads({ projectName: project.name, threadIds });
     });
 
-    const logs = await test.step('Wait for the rule to report a failure for both threads', async () => {
-      let stream: AutomationRuleLogRef[] = [];
+    await test.step('Wait for the rule to report a failure for both threads', async () => {
       await expect
         .poll(
           async () => {
-            stream = await backendClient.getAutomationRuleLogs(ruleId);
+            const stream = await backendClient.getAutomationRuleLogs(ruleId);
             const failed = new Set(
               stream.filter((l) => l.level === 'ERROR').map((l) => threadIdOf(l)),
             );
@@ -127,7 +148,15 @@ test.describe('Online Evaluation — thread-scope LLM judge over a failing provi
           },
         )
         .toBe(2);
-      return stream;
+    });
+
+    const logs = await test.step('Let the stream settle, then read it once', async () => {
+      // Every count below is computed over THIS read, and the page assertion at
+      // the end re-reads the same settled stream through the UI. Asserting the
+      // poll's own first-success snapshot instead would compare two different
+      // moments and call the difference a product bug.
+      await new Promise((resolve) => setTimeout(resolve, QUIET_PERIOD_MS));
+      return backendClient.getAutomationRuleLogs(ruleId);
     });
 
     await test.step('Each thread was evaluated exactly once, and no other thread was', async () => {
@@ -135,7 +164,7 @@ test.describe('Online Evaluation — thread-scope LLM judge over a failing provi
       // appearing twice (a sibling processed twice) and a third thread
       // appearing (a fan-out over the wrong ids) are both bugs this rules out,
       // and neither would fail a per-thread `find()`.
-      const evaluating = logs.filter((l) => l.message.startsWith(EVALUATING_LINE));
+      const evaluating = logs.filter((l) => l.message.startsWith(EVALUATING_PREFIX));
       expect(
         evaluating.map(threadIdOf).sort(),
         'exactly one Evaluating line per closed thread',
@@ -146,7 +175,7 @@ test.describe('Online Evaluation — thread-scope LLM judge over a failing provi
       // Without this the failures below could equally be a rule that never got
       // as far as a provider call — a template that failed to render, say —
       // which is a different bug wearing the same ERROR line.
-      const sending = logs.filter((l) => l.message.startsWith(SENDING_LINE));
+      const sending = logs.filter((l) => l.message.startsWith(SENDING_PREFIX));
       expect(sending.map(threadIdOf).sort(), 'exactly one provider call per thread').toEqual(
         [...threadIds].sort(),
       );
@@ -168,7 +197,7 @@ test.describe('Online Evaluation — thread-scope LLM judge over a failing provi
       );
       for (const line of errors) {
         expect(line.message, 'the failure is raised while scoring the thread').toContain(
-          SCORING_FAILURE_LINE,
+          SCORING_FAILURE_PHRASE,
         );
       }
     });

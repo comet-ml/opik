@@ -1,8 +1,16 @@
 import { test, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
-/** The levels the rule log stream renders in its Level column. */
-export type AutomationLogLevel = 'INFO' | 'WARN' | 'ERROR';
+/**
+ * The levels the rule log stream renders in its Level column.
+ *
+ * All five the product defines, not just the three today's specs assert on:
+ * the backend's `LogItem.LogLevel` and the frontend's `EVALUATOR_LOG_LEVEL`
+ * both carry `DEBUG` and `TRACE`, and a union narrower than the surface would
+ * make a future spec reach for a type escape to address a row the page can
+ * genuinely render.
+ */
+export type AutomationLogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'TRACE';
 
 /**
  * `/$workspaceName/automation-logs?rule_id=<id>` — the page behind an online
