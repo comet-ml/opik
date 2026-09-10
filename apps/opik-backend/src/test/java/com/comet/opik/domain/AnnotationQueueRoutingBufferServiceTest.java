@@ -246,6 +246,35 @@ class AnnotationQueueRoutingBufferServiceTest {
             assertThat(captor.getValue()).containsEntry(traceId, Set.of("relevance", "safety"));
         }
 
+        /**
+         * When more is due than one drain can take, the excess stays put. The read is bounded by
+         * jobBatchSize and ZRANGEBYSCORE returns ascending by score - and the score is the due
+         * timestamp - so each tick takes the oldest deadlines and the backlog cannot starve a member
+         * that keeps being overtaken by newer ones.
+         */
+        @Test
+        void takesAtMostOneBatchAndLeavesTheRestPending() {
+            config.setJobBatchSize(3);
+            List<UUID> ids = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+            List<String> firstPage = ids.stream().map(id -> member(id)).toList();
+            givenDue(firstPage);
+            givenAuthors(firstPage.stream()
+                    .collect(java.util.stream.Collectors.toMap(m -> m, m -> USER_NAME)));
+            when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
+
+            assertThat(service.flush().block()).isEqualTo(3L);
+
+            // The read asked Redis for no more than a batch.
+            verify(pending).valueRange(anyDouble(), any(Boolean.class), anyDouble(), any(Boolean.class),
+                    eq(0), eq(3));
+
+            // And only what was published is removed, so anything beyond the page is still pending.
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Collection<Object>> removed = ArgumentCaptor.forClass(Collection.class);
+            verify(pending).removeAll(removed.capture());
+            assertThat(removed.getValue()).hasSize(3).containsExactlyInAnyOrderElementsOf(firstPage);
+        }
+
         @Test
         void publishesNothingWhenDisabled() {
             config.setEnabled(false);
