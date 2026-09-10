@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
+import com.comet.opik.api.resources.v1.jobs.AnnotationQueueRoutingFlushJob;
 import com.comet.opik.api.resources.v1.jobs.ClickHousePartitionMetricsJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
@@ -64,6 +65,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setMetricsAlertJob();
                 setAgentInsightsReportJob();
                 setExperimentDenormalizationJob();
+                setAnnotationQueueRoutingFlushJob();
                 setProjectLastUpdatedFlushJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
@@ -129,6 +131,18 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(ExperimentDenormalizationJob.class,
                 denormConfig.getJobInterval().toJavaDuration(), null);
+    }
+
+    private void setAnnotationQueueRoutingFlushJob() {
+        var routingConfig = injector.get().getInstance(OpikConfiguration.class).getAnnotationQueueRouting();
+
+        if (routingConfig == null || !routingConfig.isEnabled()) {
+            log.info("Annotation queue routing is disabled, skipping flush job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(AnnotationQueueRoutingFlushJob.class,
+                routingConfig.getJobInterval().toJavaDuration(), null);
     }
 
     private void setMetricsAlertJob() {
