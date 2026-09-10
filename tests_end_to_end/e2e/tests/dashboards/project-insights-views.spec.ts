@@ -42,10 +42,14 @@ test.describe(
 
         await test.step("Project A's list request is scoped to project A", async () => {
           // Registered before the navigation: the page issues this once, on
-          // mount. The pathname is matched loosely because the app is served
-          // under /api on some deployments and /opik/api on others.
+          // mount. Matched on the pathname's tail rather than the whole URL
+          // because the app is served under /api on some deployments and
+          // /opik/api on others — but matched on the *collection* pathname
+          // exactly, so the read-one `/insights-views/{id}` a deep link
+          // triggers cannot answer this wait with a null `project_id`. The
+          // collection endpoint carries a trailing slash, hence the strip.
           const listRequest = page.waitForRequest((request) =>
-            request.url().includes('/v1/private/insights-views'),
+            new URL(request.url()).pathname.replace(/\/$/, '').endsWith('/v1/private/insights-views'),
           );
           await dashboardsA.goto();
           await dashboardsA.waitForReady();
