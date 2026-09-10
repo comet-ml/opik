@@ -1,3 +1,4 @@
+import { MessageUsage } from "./usage";
 import { ReactNode, ComponentPropsWithoutRef } from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 
@@ -60,11 +61,7 @@ export interface PrettyLLMMessageAudioPlayerBlockProps {
 }
 
 export interface PrettyLLMMessageFooterProps {
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
+  usage?: MessageUsage;
   finishReason?: string;
   className?: string;
 }
@@ -75,12 +72,6 @@ export interface PrettyLLMMessageFinishReasonProps {
 }
 
 export interface PrettyLLMMessageUsageProps {
-  usage?:
-    | {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-      }
-    | Record<string, number | undefined>;
+  usage?: MessageUsage;
   className?: string;
 }

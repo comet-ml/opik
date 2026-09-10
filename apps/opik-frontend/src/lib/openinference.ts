@@ -1,4 +1,5 @@
 import { isBackendAttachmentPlaceholder } from "@/lib/images";
+import { isHttpUrl } from "@/lib/media";
 
 export const OPENINFERENCE_SPAN_KIND = "openinference.span.kind";
 
@@ -72,12 +73,7 @@ export const isSafeOpenInferenceMediaUrl = (
       INLINE_IMAGE_SUBTYPES.has(dataUriMatch[2].toLowerCase())
     );
   }
-  try {
-    const protocol = new URL(url).protocol.toLowerCase();
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
+  return isHttpUrl(url);
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -138,7 +134,9 @@ const sortedValues = <T>(values: Map<number, T>): T[] =>
 const toStringValue = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
-const toArguments = (value: unknown): string | undefined => {
+// Historical ingestion JSON-decodes valid strings in compatibility aliases.
+// Restore their text representation without changing the stored aliases.
+const toStringOrJson = (value: unknown): string | undefined => {
   if (typeof value === "string") return value;
   if (value === undefined) return undefined;
   try {
@@ -162,26 +160,26 @@ class ToolCallBuilder {
 
   accept(path: string, rawValue: unknown): boolean {
     if (path === "id") {
-      const id = toStringValue(rawValue);
+      const id = toStringOrJson(rawValue);
       if (id === undefined) return false;
       this.value.id = id;
       return true;
     }
     if (path === "reasoning_signature") {
-      const signature = toStringValue(rawValue);
+      const signature = toStringOrJson(rawValue);
       if (signature === undefined) return false;
       this.value.reasoning_signature = signature;
       return true;
     }
     if (path === "function.name") {
-      const name = toStringValue(rawValue);
+      const name = toStringOrJson(rawValue);
       if (name === undefined) return false;
       this.value.function ??= {};
       this.value.function.name = name;
       return true;
     }
     if (path === "function.arguments") {
-      const args = toArguments(rawValue);
+      const args = toStringOrJson(rawValue);
       if (args === undefined) return false;
       this.value.function ??= {};
       this.value.function.arguments = args;
@@ -210,14 +208,14 @@ class ContentBuilder {
     };
     const scalarField = scalarFields[path];
     if (scalarField) {
-      const value = toStringValue(rawValue);
+      const value = toStringOrJson(rawValue);
       if (value === undefined) return false;
       Object.assign(this.value, { [scalarField]: value });
       return true;
     }
 
     if (path === "message_content.image.image.url") {
-      const url = toStringValue(rawValue);
+      const url = toStringOrJson(rawValue);
       if (url === undefined) return false;
       this.value.image = { url };
       return true;
@@ -228,7 +226,7 @@ class ContentBuilder {
       const field = path.slice(audioPrefix.length);
       if (!(["url", "mime_type", "transcript"] as string[]).includes(field))
         return false;
-      const value = toStringValue(rawValue);
+      const value = toStringOrJson(rawValue);
       if (value === undefined) return false;
       this.value.audio ??= {};
       Object.assign(this.value.audio, { [field]: value });
@@ -256,7 +254,7 @@ class MessageBuilder {
 
   accept(path: string, rawValue: unknown): boolean {
     if (["role", "name", "tool_call_id"].includes(path)) {
-      const value = toStringValue(rawValue);
+      const value = toStringOrJson(rawValue);
       if (value === undefined) return false;
       Object.assign(this.value, { [path]: value });
       return true;
@@ -266,7 +264,7 @@ class MessageBuilder {
       return true;
     }
     if (path === "function_call_name") {
-      const value = toStringValue(rawValue);
+      const value = toStringOrJson(rawValue);
       if (value === undefined) return false;
       this.functionCall.name = value;
       return true;
@@ -421,7 +419,7 @@ const parseCanonicalToolCall = (
   if (isRecord(value.function)) {
     const fn: NonNullable<OpenInferenceToolCall["function"]> = {};
     if (typeof value.function.name === "string") fn.name = value.function.name;
-    const args = toArguments(value.function.arguments);
+    const args = toStringOrJson(value.function.arguments);
     if (args !== undefined) fn.arguments = args;
     if (Object.keys(fn).length > 0) toolCall.function = fn;
   }
@@ -541,30 +539,71 @@ const extractTexts = (data: unknown, key: "prompts" | "choices"): string[] => {
     .filter((item): item is string => item !== undefined);
 };
 
-const hasUnwrappedRawObject = (data: unknown): boolean => {
-  if (!isRecord(data)) return false;
-  return Object.keys(data).some(
-    (key) =>
-      !STRUCTURED_OPENINFERENCE_KEYS.has(key) &&
-      !LEGACY_OPENINFERENCE_KEYS.has(key) &&
-      !LEGACY_OPENINFERENCE_PREFIXES.some((prefix) => key.startsWith(prefix)),
+export const isRenderableOpenInferenceFallback = (value: unknown): boolean => {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return (
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
   );
 };
 
 const extractFallback = (data: unknown): unknown => {
-  if (!isRecord(data)) return data;
-  if (hasOwn(data, "value")) return data.value;
-  return hasUnwrappedRawObject(data) ? data : undefined;
+  if (!isRecord(data))
+    return isRenderableOpenInferenceFallback(data) ? data : undefined;
+  if (hasOwn(data, "value"))
+    return isRenderableOpenInferenceFallback(data.value)
+      ? data.value
+      : undefined;
+  const raw = Object.fromEntries(
+    Object.entries(data).filter(
+      ([key]) =>
+        !STRUCTURED_OPENINFERENCE_KEYS.has(key) &&
+        !LEGACY_OPENINFERENCE_KEYS.has(key) &&
+        !LEGACY_OPENINFERENCE_PREFIXES.some((prefix) => key.startsWith(prefix)),
+    ),
+  );
+  return Object.keys(raw).length > 0 ? raw : undefined;
 };
+
+// A span-level instrumentation hint must not override an explicit message schema.
+const hasTypedMessages = (data: unknown): boolean =>
+  isRecord(data) &&
+  Array.isArray(data.messages) &&
+  data.messages.some(
+    (message) =>
+      isRecord(message) && typeof message.type === "string" && !message.role,
+  );
+
+export const OPENINFERENCE_USER_ROLES = new Set(["user", "human"]);
+export const OPENINFERENCE_ASSISTANT_ROLES = new Set([
+  "assistant",
+  "model",
+  "ai",
+  "agent",
+]);
 
 const semanticFingerprint = (value: unknown): string | undefined => {
   try {
     return JSON.stringify(value, (key, nestedValue: unknown) => {
       // Historical storage parsed JSON message content and arguments into objects.
-      const semanticValue =
-        key === "content" || key === "arguments"
-          ? parseMaybeJson(nestedValue)
-          : nestedValue;
+      const semanticValue = [
+        "content",
+        "arguments",
+        "text",
+        "transcript",
+        "data",
+        "signature",
+        "encrypted_content",
+        "name",
+        "id",
+        "role",
+        "tool_call_id",
+        "reasoning_signature",
+      ].includes(key)
+        ? parseMaybeJson(nestedValue)
+        : nestedValue;
       return isRecord(semanticValue)
         ? Object.fromEntries(
             Object.keys(semanticValue)
@@ -579,6 +618,7 @@ const semanticFingerprint = (value: unknown): string | undefined => {
 };
 
 const dedupe = <T>(values: T[]): T[] => {
+  if (values.length < 2) return [...values];
   const fingerprints = new Set<string>();
   return values.filter((value) => {
     const fingerprint = semanticFingerprint(value);
@@ -592,6 +632,8 @@ const dedupe = <T>(values: T[]): T[] => {
 // Match each legacy occurrence at most once against the canonical representation.
 // Identical turns within one conversation are still separate messages.
 const mergeRepresentations = <T>(canonical: T[], legacy: T[]): T[] => {
+  if (legacy.length === 0) return [...canonical];
+  if (canonical.length === 0) return [...legacy];
   const remaining = new Map<string, number>();
   canonical.forEach((value) => {
     const fingerprint = semanticFingerprint(value);
@@ -644,7 +686,7 @@ export const hasOpenInferenceMarker = (
 
 export type OpenInferenceHint = {
   detected: boolean;
-  authoritative: boolean;
+  authoritative: boolean | undefined;
 };
 
 export const resolveOpenInferenceHint = (
@@ -652,11 +694,18 @@ export const resolveOpenInferenceHint = (
   input: unknown,
   output?: unknown,
 ): OpenInferenceHint => {
-  const authoritative = hasOpenInferenceMarker(metadata, input, output);
+  const marker = [metadata, input, output].find(
+    (value) => isRecord(value) && hasOwn(value, OPENINFERENCE_SPAN_KIND),
+  );
+  // Only LLM raw payloads may be displayed as a synthetic chat. Other span kinds
+  // still support real structured messages and short previews.
+  const authoritative = isRecord(marker)
+    ? String(marker[OPENINFERENCE_SPAN_KIND]).toUpperCase() === "LLM"
+    : undefined;
   return {
     authoritative,
     detected:
-      authoritative ||
+      marker !== undefined ||
       hasLegacyOpenInferenceAttributes(input) ||
       hasLegacyOpenInferenceAttributes(output),
   };
@@ -763,10 +812,11 @@ export const isOpenInferenceField = (
   data: unknown,
   fieldType: OpenInferenceFieldType,
   hinted: boolean,
-  authoritativeHint: boolean = false,
+  authoritativeHint?: boolean,
 ): boolean => {
   const hasLegacyAttributes = hasLegacyOpenInferenceAttributes(data);
   if (!hinted && !hasLegacyAttributes) return false;
+  if (hasTypedMessages(data)) return false;
 
   const parsed = parseOpenInferenceFields(
     fieldType === "input" ? data : undefined,
@@ -776,7 +826,22 @@ export const isOpenInferenceField = (
 
   const fallback =
     fieldType === "input" ? parsed.inputFallback : parsed.outputFallback;
-  if (fallback !== undefined && (authoritativeHint || hasLegacyAttributes)) {
+  const marker = isRecord(data) ? data[OPENINFERENCE_SPAN_KIND] : undefined;
+  // An explicit non-LLM marker disallows synthetic messages, even if legacy
+  // attributes are also present. Unmarked historical {value, mime_type} envelopes
+  // remain readable once the sibling field establishes OpenInference provenance.
+  const legacyEnvelope =
+    hinted &&
+    isRecord(data) &&
+    hasOwn(data, "value") &&
+    typeof data.mime_type === "string" &&
+    Object.keys(data).every((key) => key === "value" || key === "mime_type");
+  const allowsRawFallback =
+    authoritativeHint ??
+    (marker !== undefined
+      ? String(marker).toUpperCase() === "LLM"
+      : hasLegacyAttributes || legacyEnvelope);
+  if (fallback !== undefined && allowsRawFallback) {
     return true;
   }
   return false;
@@ -806,15 +871,17 @@ const extractParsedPrettyText = (
     fieldType === "input" ? parsed.inputMessages : parsed.outputMessages;
   const preferredRoles =
     fieldType === "input"
-      ? new Set(["user", "human"])
-      : new Set(["assistant", "model", "ai", "agent"]);
-  const preferred = [...messages]
-    .reverse()
-    .find(
-      (message) =>
-        message.role && preferredRoles.has(message.role.toLowerCase()),
-    );
-  const text = messageText(preferred ?? messages[messages.length - 1]);
+      ? OPENINFERENCE_USER_ROLES
+      : OPENINFERENCE_ASSISTANT_ROLES;
+  const reversed = [...messages].reverse();
+  const text =
+    reversed
+      .filter(
+        (message) =>
+          message.role && preferredRoles.has(message.role.toLowerCase()),
+      )
+      .map(messageText)
+      .find(Boolean) ?? reversed.map(messageText).find(Boolean);
   if (text) return text;
 
   const completions = fieldType === "input" ? parsed.prompts : parsed.choices;
@@ -830,6 +897,7 @@ export const extractOpenInferencePrettyText = (
   data: unknown,
   fieldType: OpenInferenceFieldType,
 ): string | undefined => {
+  if (hasTypedMessages(data)) return undefined;
   const hasMessages = parseCanonicalMessages(data).some(hasRenderableMessage);
   const hasCompletionData =
     isRecord(data) &&

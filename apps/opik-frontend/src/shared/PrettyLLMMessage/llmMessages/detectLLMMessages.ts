@@ -1,6 +1,5 @@
 import {
   LLMMessageFormatDetectionResult,
-  LLMMessageFormat,
   LLMMessagePrettifyConfig,
 } from "./types";
 import { getFormat, getAllFormats } from "./providers/registry";
@@ -10,18 +9,18 @@ import { getFormat, getAllFormats } from "./providers/registry";
  *
  * Detection strategy:
  * 1. If format hint is provided, try that format first
- * 2. Fall back to trying all registered formats
+ * 2. If only an authoritative raw fallback matched, prefer a recognized provider schema
+ * 3. Fall back to trying all registered formats
  *
  * @param data - The raw trace/span input or output data
- * @param prettifyConfig - Configuration indicating if this is input or output
- * @param formatHint - Optional format string hint from the span
+ * @param prettifyConfig - Field direction, optional format hint and permission for LLM raw fallback
  * @returns Detection result with supported flag and detected format
  */
 export const detectLLMMessages = (
   data: unknown,
   prettifyConfig?: LLMMessagePrettifyConfig,
-  formatHint?: LLMMessageFormat,
 ): LLMMessageFormatDetectionResult => {
+  const formatHint = prettifyConfig?.formatHint;
   const isEmpty =
     data == null ||
     (typeof data === "object" && Object.keys(data as object).length === 0);

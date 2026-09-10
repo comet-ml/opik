@@ -5,12 +5,15 @@ import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
-import { prettifyMessage } from "@/lib/traces";
+import { prettifyMessage, PrettifyMessageConfig } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
-import { hasOpenInferenceHint } from "@/lib/openinference";
 
-type CustomMeta = {
+type CustomMeta<TData> = {
+  getPrettifyConfig?: (
+    row: TData,
+    field: "input" | "output",
+  ) => PrettifyMessageConfig;
   fieldType: "input" | "output";
   colorIndicator?: boolean;
 };
@@ -24,20 +27,15 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     defaultValue: MAX_DATA_LENGTH,
   });
   const { custom } = context.column.columnDef.meta ?? {};
-  const { fieldType = "input", colorIndicator = false } = (custom ??
-    {}) as CustomMeta;
+  const {
+    fieldType = "input",
+    colorIndicator = false,
+    getPrettifyConfig,
+  } = (custom ?? {}) as CustomMeta<TData>;
   const value = context.getValue() as string | object | undefined | null;
-  const row = context.row.original as {
-    input?: object | string;
-    output?: object | string;
-    metadata?: object;
-  };
-  const rowInput = row.input;
-  const openInferenceHint = hasOpenInferenceHint(
-    row.metadata,
-    row.input,
-    row.output,
-  );
+  const prettifyConfig = getPrettifyConfig?.(context.row.original, fieldType);
+  const rowInput = prettifyConfig?.openInferenceInput;
+  const openInferenceHint = prettifyConfig?.openInferenceHint;
 
   const displayMessage = useMemo(() => {
     const pretty = prettifyMessage(value ?? undefined, {

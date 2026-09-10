@@ -4,7 +4,7 @@ import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import CodeBlock from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlock";
-import { hasOpenInferenceHint } from "@/lib/openinference";
+import { getPrettifyConfig } from "@/lib/traces";
 
 type DefaultTraceViewProps = {
   trace: Trace;
@@ -12,11 +12,11 @@ type DefaultTraceViewProps = {
 
 const DefaultTraceView: React.FC<DefaultTraceViewProps> = ({ trace }) => {
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(trace);
-  const openInferenceHint = hasOpenInferenceHint(
-    trace.metadata,
-    transformedInput,
-    transformedOutput,
-  );
+  const prettifySource = {
+    metadata: trace.metadata,
+    input: transformedInput,
+    output: transformedOutput,
+  };
 
   return (
     <MediaProvider media={media}>
@@ -25,7 +25,10 @@ const DefaultTraceView: React.FC<DefaultTraceViewProps> = ({ trace }) => {
         <CodeBlock
           title="Input"
           data={transformedInput}
-          prettifyConfig={{ fieldType: "input", openInferenceHint }}
+          prettifyConfig={{
+            ...getPrettifyConfig(prettifySource, "input"),
+            fieldType: "input",
+          }}
           preserveKey="syntax-highlighter-annotation-input"
           withSearch
         />
@@ -33,9 +36,8 @@ const DefaultTraceView: React.FC<DefaultTraceViewProps> = ({ trace }) => {
           title="Output"
           data={transformedOutput}
           prettifyConfig={{
+            ...getPrettifyConfig(prettifySource, "output"),
             fieldType: "output",
-            openInferenceHint,
-            openInferenceInput: transformedInput,
           }}
           preserveKey="syntax-highlighter-annotation-output"
           withSearch

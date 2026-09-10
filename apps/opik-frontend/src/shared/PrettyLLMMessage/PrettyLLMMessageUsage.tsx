@@ -1,5 +1,5 @@
 import React from "react";
-import startCase from "lodash/startCase";
+import { getDisplayUsage } from "./usage";
 import { cn } from "@/lib/utils";
 import { PrettyLLMMessageUsageProps } from "./types";
 
@@ -7,9 +7,7 @@ const PrettyLLMMessageUsage: React.FC<PrettyLLMMessageUsageProps> = ({
   usage,
   className,
 }) => {
-  const entries = Object.entries(usage ?? {}).filter(
-    ([, value]) => typeof value === "number" && Number.isFinite(value),
-  );
+  const entries = getDisplayUsage(usage);
   if (entries.length === 0) {
     return null;
   }
@@ -21,11 +19,9 @@ const PrettyLLMMessageUsage: React.FC<PrettyLLMMessageUsageProps> = ({
         className,
       )}
     >
-      {entries.map(([key, value]) => (
+      {entries.map(({ key, value, label }) => (
         <div key={key} className="flex items-center gap-2">
-          <span className="font-medium">
-            {key === "completion_tokens" ? "Completion tokens" : startCase(key)}
-          </span>
+          <span className="font-medium">{label}</span>
           <span>{value}</span>
         </div>
       ))}

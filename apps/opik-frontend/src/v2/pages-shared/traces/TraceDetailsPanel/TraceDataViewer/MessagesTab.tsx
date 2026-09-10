@@ -14,6 +14,7 @@ import {
   LLMMessageDescriptor,
   LLMBlockDescriptor,
   LLMMessageFormat,
+  LLMMessageFormatDetectionResult,
 } from "@/shared/PrettyLLMMessage/llmMessages";
 import { Button } from "@/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
@@ -22,7 +23,7 @@ import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import { useLLMMessagesExpandAll } from "@/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import Loader from "@/shared/Loader/Loader";
 import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
-import { PrettyLLMMessageUsageProps } from "@/shared/PrettyLLMMessage/types";
+import { MessageUsage } from "@/shared/PrettyLLMMessage/usage";
 
 const ESTIMATED_COLLAPSED_HEIGHT = 36; // single header row height in px
 const ESTIMATED_EXPANDED_HEIGHT = 200; // fallback for expanded items before measurement
@@ -38,7 +39,11 @@ type MessagesTabProps = {
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
   formatHint?: LLMMessageFormat;
   formatHintIsAuthoritative?: boolean;
-  spanUsage?: PrettyLLMMessageUsageProps["usage"];
+  spanUsage?: MessageUsage;
+  detections?: {
+    input: LLMMessageFormatDetectionResult;
+    output: LLMMessageFormatDetectionResult;
+  };
 };
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
@@ -63,6 +68,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   formatHint,
   formatHintIsAuthoritative,
   spanUsage,
+  detections,
 }) => {
   const { messages: combinedMessages, usage } = useMemo(
     () =>
@@ -70,11 +76,13 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
         formatHint,
         formatHintIsAuthoritative,
         spanUsage,
+        detections,
       }),
     [
       formatHint,
       formatHintIsAuthoritative,
       spanUsage,
+      detections,
       transformedInput,
       transformedOutput,
     ],
