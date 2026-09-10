@@ -5,6 +5,10 @@
 # Reads db-app-analytics/000002_delta_and_deletion_replay.sql (the single source), substitutes the placeholders and runs
 # it. Run it after backfill.sh, then verify.sh, then exchange_and_wrap.sh.
 #
+# It also prints the two numbers the POST-SWAP reconciliation needs: `RECORD delta_start=`, which is the gap anchor
+# reconcile.sh sweeps from, and the pending-delta size, which is how much this pass left behind for that sweep. Neither
+# is a gate — the gap cannot be closed before the swap, because the source is live — but both make it observable.
+#
 # Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
 # NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
 # --host and --port together. The user must be able to set `log_comment` (used for cutover attribution in
@@ -87,8 +91,9 @@ done
 CH_ARGS=()
 [[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
-# No --log_comment here: this driver issues one call, and both statements in 000002 set their own log_comment in
-# SETTINGS. A per-query value overrides the session one, so a tag added here would never reach query_log.
+# No --log_comment here: the main call runs 000002, whose two statements set their own log_comment in SETTINGS, and a
+# per-query value overrides the session one — so a tag added here would never reach query_log for the statements that
+# matter. The driver's own anchor and pending-delta queries carry no SETTINGS clause, so those pass the flag per call.
 CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT")
 [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start is required (printed by backfill.sh)" >&2; exit 2; }
 # Strip the ' UTC' marker the flag is required to carry (see its option doc). For these bounds a wrong zone is worse
@@ -213,12 +218,41 @@ if grep -qF '${MAX_INSERT_THREADS}' <<<"$mit_masked"; then
     exit 2
 fi
 # <<< END max_insert_threads rendering
+# delta_start: the instant this pass began READING the source. It is the forward reconciliation's GAP_START — the lower
+# bound of what reconcile.sh sweeps out of the parked backup after the swap — so it is captured BEFORE the delta INSERT
+# and printed with the ' UTC' marker reconcile.sh requires. Captured in UTC because 000006 parses it as UTC; both halves
+# of the pair have to agree, exactly as for backfill_start (see 000001's timezone header).
+#
+# Losing it is not an escalation: widening the gap window is free, because the sweep is mask-honored and idempotent, so
+# backfill_start is always a valid fallback. That is deliberately unlike cutover_start, where estimating destroys or
+# resurrects data.
+DELTA_START="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:delta_replay' \
+    --query "SELECT toString(now64(6, 'UTC'))")"
+echo "RECORD delta_start=$DELTA_START UTC  (the gap anchor for the POST-SWAP sweep; pass it with the marker:"
+echo "       reconcile.sh --gap-start '$DELTA_START UTC')"
+
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
-# --query). The SECOND number is the deletion replay's wall time, which is how the operator sizes the tail: it sits
-# inside the final-delta -> EXCHANGE gap, which is where tail writes are left behind (see the runbook's "The final
-# cutover window"; OPIK-8238). Without this flag there is no way to record it short of digging in query_log.
+# --query). The SECOND number is the deletion replay's wall time, which is one component of the final-delta ->
+# EXCHANGE gap: the window whose writes land only on the old table and are swept back after the swap by reconcile.sh
+# (OPIK-8238). Without this flag there is no way to record it short of digging in query_log.
 echo "Statement wall times (seconds, in order: delta-insert, deletion-replay):"
 clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 
-echo "Delta + deletion replay complete. RECORD the deletion-replay wall time above (the second value) — it sizes the"
-echo "final-delta -> EXCHANGE gap where tail writes are left behind. Run verify.sh before the EXCHANGE."
+# The PENDING DELTA: rows the source took while this pass was running, i.e. exactly what a swap issued now would strand
+# in the parked backup for reconcile.sh to sweep. Printing it makes convergence something the operator WATCHES rather
+# than guesses; before this, nothing showed the gap at all. It is the same predicate the delta itself uses, so it prunes
+# on the created_at / last_updated_at minmax skip indexes (migration 000088) and costs a gap-sized read, not a table scan.
+#
+# It cannot reach 0 while the source is live — that is the whole reason reconciliation happens AFTER the swap, where the
+# parked table is frozen and convergence is by construction. Watch it to size the gap and to decide when the tail is as
+# tight as it will get, not as a gate.
+PENDING="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:delta_replay:pending' --query \
+    "SELECT count() FROM $DATABASE.traces
+     WHERE created_at >= toDateTime64('$DELTA_START', 6, 'UTC')
+        OR last_updated_at >= toDateTime64('$DELTA_START', 6, 'UTC')")"
+echo "Pending delta since delta_start: $PENDING row(s) written to 'traces' while this pass ran."
+echo "  That is the gap an EXCHANGE issued now would strand in traces_pre_cutover_backup — reconcile.sh sweeps it back"
+echo "  after the swap. Re-run this driver to watch it shrink; it will not reach 0 while the source is live."
+
+echo "Delta + deletion replay complete. RECORD delta_start above (reconcile.sh needs it) and the deletion-replay wall"
+echo "time (the second value), which sizes the gap it will sweep. Run verify.sh before the EXCHANGE."

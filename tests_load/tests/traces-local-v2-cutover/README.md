@@ -101,7 +101,7 @@ $RUNBOOK/scripts/estimate.sh --database opik --max-rows-per-insert 400 --pause-s
 #    --in-progress-ratio is likewise REQUIRED to exercise the pre-swap window's sentinel / negative-duration caveat:
 #    without it every trace is ended, so no trace is ever written with an absent end_time and the caveat (plus its
 #    rollback repair) produces ZERO affected rows. live_traffic.py warns if it left none in progress.
-#    --duration 900 is a starting point, not a recommendation: it has to outlast steps 4-8. Extend it (or re-launch
+#    --duration 900 is a starting point, not a recommendation: it has to outlast steps 4-9. Extend it (or re-launch
 #    both generators) rather than letting them expire before the EXCHANGE.
 python tests_load/tests/traces-local-v2-cutover/live_traffic.py   --tps 10 --duration 900 --update-ratio 0.2 --in-progress-ratio 0.15
 python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 3  --duration 900 --resurrect-ratio 0.05
@@ -131,7 +131,7 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 
 # 7. MANDATORY CONFIG STEP, and the one most easily skipped in a rehearsal: roll out traceColumnsNonNullable=true
 #    BEFORE the EXCHANGE (runbook "The final cutover window"). This is the only restart the cutover itself needs, and
-#    it carries no steady-state latency cost, though the roll itself consumes ingestion capacity; step 10's optional
+#    it carries no steady-state latency cost, though the roll itself consumes ingestion capacity; step 12's optional
 #    wrap has its own. Use recreate_backend() from "Changing backend config mid-rehearsal" above.
 #    Skipping this leaves the whole read-side half of the flag unexercised — and its failure mode is SILENT (writes still
 #    succeed either way; absent end_time just reads back as 1970-01-01 instead of null).
@@ -143,7 +143,7 @@ recreate_backend
 
 # 8. Final delta + replay (the last write-facing step), then the EXCHANGE immediately after. The EXCHANGE is the data
 #    cutover and leaves traces a MergeTree so the backend's deletes keep working; it also renames the displaced old data
-#    to traces_pre_cutover_backup. --skip-wrap defers the sharding-ready Distributed wrap (step 10).
+#    to traces_pre_cutover_backup. --skip-wrap defers the sharding-ready Distributed wrap (step 12).
 #    --confirm-retention-paused holds trivially here (retention is disabled by default).
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start> UTC' \
@@ -151,29 +151,47 @@ $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfil
 #    The settle gate polls (default 120s) instead of demanding an instantaneous replication_queue of 0, so with the
 #    traffic from step 3 still flowing it should pass on ordinary churn rather than abort. Watch what it prints: it
 #    reports the queue depth, the oldest entry's age and max num_tries, and says which of the two verdicts it reached.
-#    Record the cutover_start it prints. With traffic running there WILL be traces left in the tail write-gap — in
-#    traces_pre_cutover_backup but not in live traces (runbook "The final cutover window"; OPIK-8238 adds the sweep
-#    that carries them). Seeing that gap is part of the point of rehearsing with traffic, and it takes TWO different
-#    compares, because the gap and a fidelity defect live in different weeks:
+#    Record BOTH anchors: the delta_start delta_replay.sh printed and the exchange_done this driver prints (plus
+#    cutover_start, for a rollback). Note the CUTOVER INCOMPLETE banner it ends with — with traffic running there WILL
+#    be traces left in the tail write-gap, in traces_pre_cutover_backup but not in live traces (runbook "The final
+#    cutover window"). Seeing that gap is part of the point of rehearsing with traffic, and step 9 is what closes it.
 #
-#    (a) SIZE THE GAP — unbounded, straight after the swap, with --drill-down. The gap rows are in the cutover week,
-#        which every weekly bound excludes, so a bounded run cannot see them. Classify the output by the runbook's
-#        Go/No-Go item, which owns the taxonomy: backup-only keys AND both-sides keys whose newer last_updated_at is
-#        in the backup are both gap rows, so counting backup-only alone under-reports it. live_traffic.py's
-#        --update-ratio is what makes that second shape reachable here — it updates traces created earlier in the run,
-#        so some of those updates land in the tail against a trace the backfill already copied. Keep it non-zero.
-$RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --drill-down
+#    SIZE IT FIRST, before reconciling, so the rehearsal records what the sweep had to carry. --report-only issues no
+#    mutation, and its four counts are the gap's own taxonomy: missing_keys for traces CREATED in the tail, stale_keys
+#    for traces UPDATED in the tail (already on the successor at an older last_updated_at, which a presence check would
+#    report as clean). live_traffic.py's --update-ratio is what makes stale_keys reachable here, since it updates traces
+#    created earlier in the run; keep it non-zero or that arm goes unexercised.
+$RUNBOOK/scripts/reconcile.sh --database opik --report-only \
+    --gap-start '<delta_start from step 8> UTC' --swap-done '<exchange_done> UTC'
+
+# 9. RECONCILE — the second half of the data cutover, not a check. Sweeps the parked writes into live traces, re-applies
+#    the deletes bridged across the swap, and does not exit 0 until its postcondition reports
+#    missing_keys=0 stale_keys=0 payload_mismatch_keys=0. A non-zero newer_keys alongside those three is expected: those
+#    are gap-window traces written AGAIN after the swap, which the sweep deliberately leaves alone.
+#    Its settle gate is step 8's gate with a post-swap scope, and the half worth watching is the one that only shows
+#    under traffic: delete_traffic.py is still mutating live traces throughout, and the gate must NOT abort on that —
+#    it gates unfinished mutations on the PARKED table only (runbook "The replication-settle gate").
+$RUNBOOK/scripts/reconcile.sh --database opik --confirm-retention-paused \
+    --gap-start '<delta_start from step 8> UTC' --swap-done '<exchange_done> UTC'
+
+# 10. QA after the sweep. Two different compares, because the swept gap and a fidelity defect live in different weeks:
 #
-#    (b) CHECK FIDELITY — bounded below the cutover week, where any mismatch IS a defect rather than the known gap.
-#        The parked backup is frozen at cutover_start while live `traces` keeps taking writes, so the current week
-#        diverges for good. ('last-sealed' excludes the current calendar week, which in a same-week local rehearsal is
-#        the cutover week; elsewhere bound below cutover_start's week explicitly.)
+#     (a) THE RECONCILED WINDOW — payload-level fidelity over exactly what step 9 swept. The four counts already cover
+#         presence, version and payload, so this is the picture rather than a second gate. Expect the traces written
+#         after the swap to show as live-only; --drill-down lists the keys behind anything else.
+$RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces \
+    --window-from '<delta_start from step 8>' --window-to '<now>'
+#
+#     (b) SEALED HISTORY — bounded below the cutover week, where any mismatch IS a defect rather than the known
+#         divergence. The parked backup is frozen at cutover_start while live `traces` keeps taking writes, so the
+#         current week diverges for good. ('last-sealed' excludes the current calendar week, which in a same-week local
+#         rehearsal is the cutover week; elsewhere bound below cutover_start's week explicitly.)
 $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces --to-week last-sealed
 
-# 9. Leave the config as it is: keep traceColumnsNonNullable=true and deletion capture ON — capture must stay live
-#    through the soak, since the rollback reverse-replay reads the bridge.
+# 11. Leave the config as it is: keep traceColumnsNonNullable=true and deletion capture ON — capture must stay live
+#     through the soak, since the rollback reverse-replay reads the bridge.
 
-# 10. OPTIONAL — the deferred Distributed wrap. Flip tracesDistributedWrapEnabled=true FIRST (it retargets trace
+# 12. OPTIONAL — the deferred Distributed wrap. Flip tracesDistributedWrapEnabled=true FIRST (it retargets trace
 #     mutations at traces_local). --confirm-maintenance is a SEPARATE, unrelated concern: it asserts traffic is
 #     quiesced or a maintenance window is in effect for the wrap's cross-node ON CLUSTER skew, which hits reads and
 #     which no ingestion-side setting covers. Both wrap paths (--with-wrap and --wrap-only) require it.
@@ -251,6 +269,19 @@ $RUNBOOK/scripts/rollback.sh --database opik --stage C --cutover-start '<cutover
 $RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused
 
+# The REVERSE reconciliation — the other half of what --accept-post-cutover-write-loss above acknowledged discarding.
+# rollback.sh prints the discarded-write count and the accept-or-recover choice; this is the recover side, and it is
+# where the sentinel->NULL denormalization is exercised (the parked successor stores epoch/NaN for absent end_time/ttft,
+# the restored original wants NULL). Size it first, then run it. It picks the direction up from the topology on its own
+# — traces_post_rollback_backup parked, the Nullable original live — so there is no direction flag to pass:
+$RUNBOOK/scripts/reconcile.sh --database opik --report-only \
+    --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
+$RUNBOOK/scripts/reconcile.sh --database opik --confirm-reimport-successor-writes \
+    --confirm-retention-paused --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
+# Worth checking afterwards, since it is the property the sweep must not break: a trace deleted AFTER cutover_start must
+# still be gone. The sweep re-imports the post-cutover writes and the reverse replay it re-runs masks those deletes, so
+# the run's own postcondition covers it — but with --resurrect-ratio traffic above, spot-check one id by hand too.
+
 # Un-wrap — reverses the WRAP while keeping the cutover, landing in the post-EXCHANGE/pre-wrap state. Needs no
 # cutover_start and no write-loss flag: the successor stays live, so nothing is discarded and nothing is replayed.
 $RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance
@@ -262,9 +293,11 @@ $RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance
   again with `traces_local`/`traces_dist_old` gone and post-wrap writes still live, then re-apply with
   `exchange_and_wrap.sh --wrap-only …`. Note the writes surviving: this is the contrast with stage C, which would
   discard them.
-* *After `finalize.sh --confirm`* — the case with no alternative. Stages B/C now refuse (their parked original is gone),
-  so this is the only wrap recovery left. The closing message correctly reports the re-wrap as unavailable here, since
-  `--wrap-only` refuses without the parked original; do not hand-roll around that.
+* *After `finalize.sh --confirm --confirm-gap-reconciled`* — the case with no alternative. Stages B/C now refuse (their
+  parked original is gone), so this is the only wrap recovery left. The closing message correctly reports the re-wrap as
+  unavailable here, since `--wrap-only` refuses without the parked original; do not hand-roll around that. The second
+  flag is required on this branch and asserts the gap was reconciled — so run step 9 before reaching for this, or you
+  are rehearsing the drop with writes still parked.
 
 Then flip `tracesDistributedWrapEnabled` back to `false` and restart. Triggering that window on purpose is instructive:
 between the DDL and the restart, deletes fail with `Code: 60 … Table opik.traces_local does not exist` while reads and
@@ -291,9 +324,11 @@ untouched — a re-run of `backfill.sh` reuses the original anchor from the stat
 physical object, so this restores the shadow with its data intact), then resumes at `delta_replay.sh`. So all three
 stages chain on one seeded volume, with no irreversible step in between.
 
-`finalize.sh --confirm` is the *other* option and a different trade: its recycle branch TRUNCATEs the backup into an
-empty shadow, which discards the copy and forces a full re-backfill. Use it to rehearse that branch on purpose, not to
-get from one stage to the next.
+`finalize.sh --confirm --confirm-post-cutover-decision` is the *other* option and a different trade: its recycle branch
+TRUNCATEs the backup into an empty shadow, which discards the copy and forces a full re-backfill. The second flag is
+required on this branch — it asserts the accept-or-recover decision on the post-cutover writes has been made — and
+rehearsing it is also how you see that gate work. Use this to rehearse that branch on purpose, not to get from one stage
+to the next.
 
 **Then finish the config half of the rollback** — `rollback.sh` prints both steps, and stage B/C is not complete without
 them (runbook: "Rolling back the `traceColumnsNonNullable` flip"). Set `traceColumnsNonNullable=false` and
