@@ -41,6 +41,21 @@ vi.mock("@/store/AppStore", () => ({
   useActiveWorkspaceName: () => "my-workspace",
 }));
 
+// Boundaries of the visibility rule, each with its own tests elsewhere. Here
+// they are held at "nothing else is competing for the slot".
+vi.mock("posthog-js/react", () => ({
+  useFeatureFlagEnabled: () => undefined,
+}));
+
+vi.mock("@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility", () => ({
+  useDemoProjectBannerVisibility: () => ({ isBannerVisible: false }),
+  useIsDemoProjectById: () => false,
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useParams: () => undefined,
+}));
+
 // The height wiring belongs to the layout, not to this seam.
 vi.mock("@/hooks/useObserveResizeNode", () => ({
   useObserveResizeNode: () => ({ ref: vi.fn(), node: undefined }),

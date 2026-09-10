@@ -5,7 +5,12 @@ import { useMcpAnnouncementBanner } from "./useMcpAnnouncementBanner";
 
 // ── mutable state the mock factories read ──────────────────────────────────
 const storage: Record<string, unknown> = {};
+let mockKillSwitch: boolean | undefined;
+let mockDemoBannerVisible = false;
+let mockRouteProjectId: string | undefined;
 // ───────────────────────────────────────────────────────────────────────────
+
+const DEMO_PROJECT_ID = "demo-project-id";
 
 // A working in-memory stand-in, so "dismissal survives a remount" is a real
 // assertion rather than a mock echoing itself.
@@ -32,12 +37,33 @@ vi.mock("use-local-storage-state", async () => {
   };
 });
 
+vi.mock("posthog-js/react", () => ({
+  useFeatureFlagEnabled: () => mockKillSwitch,
+}));
+
+// The demo rule is its own seam with its own tests; here it is a boundary.
+vi.mock("@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility", () => ({
+  useDemoProjectBannerVisibility: () => ({
+    isBannerVisible: mockDemoBannerVisible,
+  }),
+  useIsDemoProjectById: (projectId?: string | null) =>
+    projectId === DEMO_PROJECT_ID,
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useParams: ({ select }: { select: (p: Record<string, string>) => unknown }) =>
+    select({ projectId: mockRouteProjectId } as Record<string, string>),
+}));
+
 const INSIDE_WINDOW = "2026-10-01T09:00:00Z";
 const LAST_DAY_OF_CAMPAIGN = "2026-11-15T23:30:00Z";
 const AFTER_WINDOW = "2026-11-16T00:30:00Z";
 
 beforeEach(() => {
   for (const key of Object.keys(storage)) delete storage[key];
+  mockKillSwitch = undefined;
+  mockDemoBannerVisible = false;
+  mockRouteProjectId = undefined;
   vi.useFakeTimers();
   vi.setSystemTime(new Date(INSIDE_WINDOW));
 });
@@ -80,6 +106,60 @@ describe("useMcpAnnouncementBanner", () => {
       act(() => first.current.dismiss());
 
       expect(banner().current.visible).toBe(false);
+    });
+  });
+
+  describe("standing aside", () => {
+    it("is hidden while the quota banner holds the slot", () => {
+      const { result } = renderHook(() =>
+        useMcpAnnouncementBanner({ retentionBannerVisible: true }),
+      );
+
+      expect(result.current.visible).toBe(false);
+    });
+
+    it("is hidden while the demo-project banner is on screen", () => {
+      mockDemoBannerVisible = true;
+
+      expect(banner().current.visible).toBe(false);
+    });
+
+    // The demo banner takes itself off screen once onboarding is done, so the
+    // page itself has to be checked too — otherwise the announcement turns up
+    // on seeded demo data and into the funnel with it.
+    it("is hidden on a demo project's own page even with no demo banner", () => {
+      mockRouteProjectId = DEMO_PROJECT_ID;
+
+      expect(banner().current.visible).toBe(false);
+    });
+
+    it("is visible on the user's own project page", () => {
+      mockRouteProjectId = "own-project-id";
+
+      expect(banner().current.visible).toBe(true);
+    });
+  });
+
+  describe("kill switch", () => {
+    it("is hidden when the switch resolves to false", () => {
+      mockKillSwitch = false;
+
+      expect(banner().current.visible).toBe(false);
+    });
+
+    it("is visible when the switch resolves to true", () => {
+      mockKillSwitch = true;
+
+      expect(banner().current.visible).toBe(true);
+    });
+
+    // Unresolved is the normal first-render state on cloud and the permanent
+    // state in OSS, where PostHog never initialises. Treating it as "hide"
+    // would delay the first paint on cloud and blank OSS entirely.
+    it("is visible while the switch is unresolved", () => {
+      mockKillSwitch = undefined;
+
+      expect(banner().current.visible).toBe(true);
     });
   });
 });

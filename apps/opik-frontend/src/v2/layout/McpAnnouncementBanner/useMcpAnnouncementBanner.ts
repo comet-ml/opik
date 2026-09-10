@@ -1,7 +1,17 @@
 import { useCallback } from "react";
+import { useParams } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
+import { useFeatureFlagEnabled } from "posthog-js/react";
 
-import { MCP_BANNER_CAMPAIGN_END, MCP_BANNER_DISMISSED_KEY } from "./constants";
+import {
+  useDemoProjectBannerVisibility,
+  useIsDemoProjectById,
+} from "@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility";
+import {
+  MCP_BANNER_CAMPAIGN_END,
+  MCP_BANNER_DISMISSED_KEY,
+  MCP_BANNER_FEATURE_FLAG_KEY,
+} from "./constants";
 
 /**
  * The campaign ends at the close of its last day, in UTC. A user's own
@@ -11,6 +21,15 @@ import { MCP_BANNER_CAMPAIGN_END, MCP_BANNER_DISMISSED_KEY } from "./constants";
 const isWithinCampaign = () =>
   Date.now() <= Date.parse(`${MCP_BANNER_CAMPAIGN_END}T23:59:59.999Z`);
 
+type UseMcpAnnouncementBannerParams = {
+  /**
+   * Whether the quota/retention banner holds the slot. Passed in rather than
+   * derived so this stays unaware of quota concepts — and because only the
+   * layout, which mounts both, can answer it.
+   */
+  retentionBannerVisible?: boolean;
+};
+
 type UseMcpAnnouncementBannerResult = {
   visible: boolean;
   dismiss: () => void;
@@ -19,20 +38,53 @@ type UseMcpAnnouncementBannerResult = {
 /**
  * Whether the MCP announcement banner may be on screen, and how to put it away.
  *
- * Every condition here is synchronous, which is what lets the banner render in
- * the first painted frame instead of appearing a tick later and pushing the
- * page down (OPIK-8260 forbids that shift explicitly).
+ * The campaign window and the dismissal are synchronous, which is what lets the
+ * banner render in the first painted frame instead of appearing a tick later
+ * and pushing the page down (OPIK-8260 forbids that shift explicitly).
+ *
+ * The rest can only ever take the banner away, never delay it:
+ *
+ * - The kill switch hides on an explicit `false` only. Unresolved is the normal
+ *   first-render state on cloud — PostHog initialises behind a fetch of the
+ *   runtime config — and the permanent state in OSS, where it never initialises
+ *   at all. A truthiness check here would blank the banner on first paint and
+ *   reveal it a tick later, and would hide it from OSS entirely.
+ * - The demo and quota banners outrank an announcement. Both verdicts arrive
+ *   from queries, so they can remove a painted banner; the demo case costs no
+ *   movement because both bars are the same height, and the quota case moves
+ *   the page once, only for users who are over their limit.
  */
-export const useMcpAnnouncementBanner = (): UseMcpAnnouncementBannerResult => {
+export const useMcpAnnouncementBanner = ({
+  retentionBannerVisible = false,
+}: UseMcpAnnouncementBannerParams = {}): UseMcpAnnouncementBannerResult => {
   const [dismissed, setDismissed] = useLocalStorageState<boolean>(
     MCP_BANNER_DISMISSED_KEY,
     { defaultValue: false },
   );
 
+  const killed = useFeatureFlagEnabled(MCP_BANNER_FEATURE_FLAG_KEY) === false;
+
+  const { isBannerVisible: demoBannerVisible } =
+    useDemoProjectBannerVisibility();
+
+  // The route's own project, not the sticky active one: the question is which
+  // project is on screen, and the active project outlives the page you opened it on.
+  const routeProjectId = useParams({
+    strict: false,
+    select: (params) => (params as { projectId?: string }).projectId,
+  });
+  const onDemoProjectPage = useIsDemoProjectById(routeProjectId);
+
   const dismiss = useCallback(() => setDismissed(true), [setDismissed]);
 
   return {
-    visible: isWithinCampaign() && !dismissed,
+    visible:
+      isWithinCampaign() &&
+      !dismissed &&
+      !killed &&
+      !retentionBannerVisible &&
+      !demoBannerVisible &&
+      !onDemoProjectPage,
     dismiss,
   };
 };

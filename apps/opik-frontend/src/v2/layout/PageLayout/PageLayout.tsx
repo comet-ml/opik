@@ -131,7 +131,10 @@ const PageLayout = () => {
             {RetentionBanner ? (
               <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
             ) : null}
-            <McpAnnouncementBanner onChangeHeight={setMcpBannerHeight} />
+            <McpAnnouncementBanner
+              onChangeHeight={setMcpBannerHeight}
+              retentionBannerVisible={retentionBannerHeight > 0}
+            />
             <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
 
             <SideBar

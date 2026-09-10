@@ -17,6 +17,8 @@ import { useMcpAnnouncementBanner } from "./useMcpAnnouncementBanner";
 
 interface McpAnnouncementBannerProps {
   onChangeHeight: (height: number) => void;
+  /** The quota banner outranks an announcement; only the layout knows it is up. */
+  retentionBannerVisible?: boolean;
 }
 
 /**
@@ -40,10 +42,13 @@ const markSessionImpression = (): boolean => {
 
 const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   onChangeHeight,
+  retentionBannerVisible = false,
 }) => {
   const heightRef = useRef(0);
   const workspaceName = useActiveWorkspaceName();
-  const { visible, dismiss } = useMcpAnnouncementBanner();
+  const { visible, dismiss } = useMcpAnnouncementBanner({
+    retentionBannerVisible,
+  });
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
