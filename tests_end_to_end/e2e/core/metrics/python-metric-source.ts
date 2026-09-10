@@ -147,6 +147,20 @@ export interface ScoreResultSpec {
  * returning a list keeps every case built here on one code path.
  */
 export function buildScoreListMetric(scores: readonly ScoreResultSpec[]): string {
+  // `JSON.stringify` renders NaN and ±Infinity as `null`, which is silently the
+  // *other* unusable-score case this builder seeds. A spec meaning to pass a
+  // non-finite value would get a valueless score, and its assertions about the
+  // valueless path would pass for a reason its author never wrote down. Fail at
+  // the boundary instead: no caller wants the substitution.
+  for (const s of scores) {
+    if (s.value !== null && !Number.isFinite(s.value)) {
+      throw new Error(
+        `buildScoreListMetric: score '${s.name}' has non-finite value ${s.value}; ` +
+          'JSON encoding would turn it into null and seed the valueless case instead. ' +
+          'Pass a finite number, or null to seed a valueless score deliberately.',
+      );
+    }
+  }
   const payload = scores.map((s) => ({
     name: s.name,
     value: s.value,
