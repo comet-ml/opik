@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueAutomation;
 import com.comet.opik.api.AnnotationQueueReviewer;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -527,6 +528,160 @@ class AnnotationQueuesResourceTest {
 
             annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
                     API_KEY, TEST_WORKSPACE,
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Nested
+    @DisplayName("Annotation Queue Automation Config")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AnnotationQueueAutomationConfig {
+
+        private AnnotationQueue createQueue(AnnotationQueueAutomation automation, int expectedStatus) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var queue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .automation(automation)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue)), API_KEY, TEST_WORKSPACE, expectedStatus);
+
+            return queue;
+        }
+
+        private AnnotationQueue readBack(UUID queueId) {
+            return annotationQueuesResourceClient.getAnnotationQueueById(
+                    queueId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+        }
+
+        private AnnotationQueueAutomation.Conditions conditionsOn(String score, double value) {
+            return AnnotationQueueAutomation.Conditions.builder()
+                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
+                            .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
+                                    .score(score)
+                                    .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
+                                    .value(value)
+                                    .build()))
+                            .build()))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("should persist conditions and the item ceiling and return them on get")
+        void persistsAutomation() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation())
+                    .usingRecursiveComparison()
+                    .isEqualTo(automation);
+        }
+
+        @Test
+        @DisplayName("should return no automation for a queue created without one")
+        void noAutomation() {
+            var queue = createQueue(null, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation()).isNull();
+        }
+
+        @Test
+        @DisplayName("should accept an automation without an item ceiling")
+        void automationWithoutCeiling() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("relevance", 0.8))
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            var stored = readBack(queue.id()).automation();
+            assertThat(stored.enabled()).isTrue();
+            assertThat(stored.maxItemsInQueue()).isNull();
+        }
+
+        @Test
+        @DisplayName("should keep conditions and the ceiling when a request only flips enabled off")
+        void toggleOnlyPreservesTheRest() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder().enabled(false).build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var stored = readBack(queue.id()).automation();
+            assertThat(stored.enabled()).isFalse();
+            assertThat(stored.maxItemsInQueue()).isEqualTo(25);
+            assertThat(stored.conditions())
+                    .usingRecursiveComparison()
+                    .isEqualTo(automation.conditions());
+        }
+
+        @Test
+        @DisplayName("should keep conditions when a request only changes the ceiling")
+        void ceilingOnlyUpdatePreservesConditions() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder()
+                                    .enabled(true)
+                                    .maxItemsInQueue(4)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var stored = readBack(queue.id()).automation();
+            assertThat(stored.maxItemsInQueue()).isEqualTo(4);
+            assertThat(stored.conditions())
+                    .usingRecursiveComparison()
+                    .isEqualTo(automation.conditions());
+        }
+
+        @Test
+        @DisplayName("should reject an enabled automation that has never been given conditions")
+        void enabledWithoutConditionsIsRejected() {
+            createQueue(AnnotationQueueAutomation.builder().enabled(true).build(),
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        private Stream<Arguments> invalidCeilings() {
+            return Stream.of(arguments(0, "zero"), arguments(-1, "negative"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidCeilings")
+        @DisplayName("should reject an item ceiling that is not positive:")
+        void invalidCeilingIsRejected(int value, String label) {
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(value)
+                    .build(),
                     SC_UNPROCESSABLE_ENTITY);
         }
     }
