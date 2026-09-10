@@ -1,6 +1,7 @@
 export { test, expect } from './summarised-datasets.fixture';
 export type {
   OauthProviderSeed,
+  UnreachableProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
