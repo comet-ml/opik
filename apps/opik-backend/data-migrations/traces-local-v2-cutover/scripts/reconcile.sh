@@ -3,10 +3,10 @@
 # POST-SWAP reconciliation driver for the traces cutover (runbook: ../README.md).
 #
 # The cutover loses writes across the swap (OPIK-8238). The last write-copying statement is the delta INSERT in step 2;
-# between it and the EXCHANGE completing sit a deletion replay, the operator's go/no-go gap, the topology guards, the
-# cluster-wide settle gate and a second full deletion replay. Nothing holds writes across that window — the procedure
-# takes no ingestion-path hold (OPIK-8239) — so every trace written to the old `traces` in it is orphaned when that
-# table is parked.
+# between it and the EXCHANGE completing, the procedure interposes a deletion replay, the operator's go/no-go gap, the
+# topology guards, the cluster-wide settle gate and a second full deletion replay. Nothing holds writes across that
+# window — the procedure takes no ingestion-path hold (OPIK-8239) — so every trace written to the old `traces` in it is
+# orphaned when that table is parked.
 #
 # Reconciling BEFORE the swap cannot converge — the source is live, so every pass opens a new gap. After the swap the
 # parked table is frozen, so this driver's sweep converges by construction, and its postcondition is a gate rather than a
@@ -604,17 +604,19 @@ extract() {
 
 # Refuse rendered SQL that is not what the caller asked for. A marker renamed, moved, indented or split yields text that
 # is empty or only the block's own comments, and clickhouse-client exits 0 on either, so `set -e` never fires and the
-# step prints its success line having done nothing. Same guard, same reasoning, as exchange_and_wrap.sh's.
- # KEEP IN STEP WITH exchange_and_wrap.sh's require_rendered. The two copies are the SAME validation contract, and a
-# gap between them is SILENT: drop the out-of-order check and a reordered END captures to end of file past every
-# remaining guard, which is then read as a verdict. All four checks, and their ORDER, must
-# stay identical — exactly one BEGIN and one END, the END after its BEGIN, executable SQL after comments are stripped,
-# the caller's identity token present, and no surviving ${...} placeholder. The marker grammar they parse is shared
-# too, so a change to one is a change to both.
+# step prints its success line having done nothing.
 #
-# The ONLY difference that is allowed is how failure propagates: this copy EXITS, because its callers run it inside command substitutions where a return would be swallowed. The
-# duplication is deliberate: this directory has no sourced helpers, and ch(), extract() and the settle gate are
-# duplicated the same way.
+# KEEP IN STEP WITH exchange_and_wrap.sh's require_rendered. The two copies are the SAME validation contract, and a
+# gap between them is SILENT: drop the out-of-order check and a reordered END captures to end of file past every
+# remaining guard, which is then read as a verdict. The checks, and their ORDER, must stay identical — exactly one
+# BEGIN and one END, the END after its BEGIN, executable SQL after comments are stripped, the caller's identity token
+# present, and no surviving ${...} placeholder. The marker grammar they parse is shared too, so a change to one is a
+# change to both.
+#
+# The one allowed difference is how a refusal propagates: this copy EXITS, which is decisive at validate_blocks'
+# top-level call — the reason that pre-validation exists, since an exit from a command substitution ends only the
+# subshell. The substitution call sites pair it with `|| exit 2`. The duplication is deliberate: this directory has no
+# sourced helpers, and ch(), extract() and the settle gate are duplicated the same way.
 require_rendered() {
     local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends begin_line end_line
     # Exactly one pair, checked on the FILE rather than the extraction: the awk stops at the first END and otherwise runs
@@ -856,8 +858,9 @@ else
     # sweep and its postcondition share the bound, so a later value shrinks the work and the check together and the
     # gate cannot see what it skipped. Only the replay keeps its own bound, so it still masks deletes for keys the
     # sweep never re-imported — a clean gate over a restored original that is short of writes, which finalize.sh then
-    # recycles the only copy of. Lexical comparison is chronological because both anchors passed the fixed-width shape
-    # check above, as verify.sh's --window-from/--window-to ordering check relies on.
+    # recycles the only copy of. Lexical comparison is chronological because cutover_start is always a now64(6, 'UTC')
+    # capture, so it carries exactly six fractional digits: the shape check above permits a variable-length fraction,
+    # and two differing precisions naming the same instant would not compare correctly (verify.sh normalizes for that).
     [[ -n "$GAP_START" ]] || GAP_START="$CUTOVER_START"
     [[ ! "$GAP_START" > "$CUTOVER_START" ]] || {
         echo "ERROR: --gap-start '$GAP_START' is LATER than --cutover-start '$CUTOVER_START'. In the reverse direction" >&2

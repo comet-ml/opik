@@ -2013,7 +2013,7 @@ ClickHouse rather than a stub, which is the stronger check, and it suffices beca
 refused argument, a lagging replica or a mis-marked SQL block aborts before any DDL or mutation is sent, so an untested
 guard costs a re-run, not data. Do not add per-driver suites here without revisiting that trade-off explicitly.
 
-So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and three
+So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and the
 `verify.sh` behaviours worth separating from the rest, because they decide a *verdict* rather than reject an argument —
 and a wrong verdict from a fidelity gate is the failure this whole procedure exists to avoid:
 
@@ -2022,11 +2022,11 @@ and a wrong verdict from a fidelity gate is the failure this whole procedure exi
 - the `--to-week last-sealed` resolution — the current-calendar-week bound, capped at the last populated week;
 - its refusal when that resolution lands before `--from-week`, the all-data-in-the-current-week case;
 - `--window-from` / `--window-to`: that they are refused in combination with any of `--from-week` / `--to-week` /
-  `--weeks-stride`, that an empty or inverted range is refused rather than passed vacuously, and that the `PASSED` line
-  states the window it covered.
+  `--weeks-stride`, that an empty or inverted range is refused rather than passed vacuously — including two bounds that
+  name the same instant at different precisions — and that the `PASSED` line states the window it covered.
 
-`reconcile.sh` adds six of the same kind, and they decide whether the estate is reconciled rather than merely rejecting
-an argument:
+`reconcile.sh` adds several of the same kind, and they decide whether the estate is reconciled rather than merely
+rejecting an argument:
 
 - **direction detection** — forward on `traces_pre_cutover_backup`, reverse on a `traces_post_rollback_backup` that
   carries the successor schema, refusal when both or neither is present, and the split-state diagnosis (EXCHANGE done,
@@ -2044,9 +2044,9 @@ an argument:
   Worth exercising by hand even on a single-shard estate — the consequence of getting it wrong is `finalize.sh`
   dropping every shard's backup on a one-shard assertion.
 
-And `finalize.sh` adds one: refusing each branch without ITS OWN confirmation flag — `--confirm-gap-reconciled` for
+And `finalize.sh` adds two: refusing each branch without ITS OWN confirmation flag — `--confirm-gap-reconciled` for
 the post-cutover drop, `--confirm-post-cutover-decision` for the post-rollback recycle — with the right diagnosis for
-whichever backup is parked, and refusing the other branch's flag rather than honoring it.
+whichever backup is parked; and refusing the OTHER branch's flag outright rather than honoring it.
 
 Each rests on manual verification. Exercise them in the rehearsal alongside the driver guards, and treat a change to any
 of them as needing the same.

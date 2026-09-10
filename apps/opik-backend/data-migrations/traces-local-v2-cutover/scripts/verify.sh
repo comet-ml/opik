@@ -159,10 +159,20 @@ if [[ -n "$WINDOW_FROM" || -n "$WINDOW_TO" ]]; then
         [[ "$_bound" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] \
             || { echo "ERROR: --window-from/--window-to must be 'YYYY-MM-DD HH:MM:SS[.ffffff]' (an optional ' UTC' marker is accepted): '$_bound'" >&2; exit 2; }
     done
-    # String comparison is exact here because both bounds have passed the fixed-width shape check above, so lexical order
-    # is chronological order. An empty half-open range would compare nothing and report a vacuous pass, which is the one
-    # answer a fidelity gate must never give — the same reason the checked==0 guard exists below.
-    [[ "$WINDOW_FROM" < "$WINDOW_TO" ]] \
+    # Compare on a fraction padded to DateTime64(6)'s six digits, not on the bounds as given. Lexical order is
+    # chronological for these strings in every case but one: when one fraction is a prefix of the other, the same
+    # instant at two precisions ('10:00:00' and '10:00:00.000000') compares as strictly ordered, so the EMPTY range it
+    # names passes the check below and the run reports PASSED over nothing — the one answer a fidelity gate must never
+    # give, and one the checked==0 guard does not catch, since window mode always compares exactly one window. That
+    # shape is reachable: the check above permits a variable-length fraction, and the bounds come from different
+    # places, one pasted from a driver's RECORD line and one typed.
+    _cmp=()
+    for _bound in "$WINDOW_FROM" "$WINDOW_TO"; do
+        _frac="000000"
+        [[ "$_bound" != *.* ]] || _frac="${_bound#*.}000000"
+        _cmp+=("${_bound%%.*}.${_frac:0:6}")
+    done
+    [[ "${_cmp[0]}" < "${_cmp[1]}" ]] \
         || { echo "ERROR: --window-from must be strictly before --window-to (the window is half-open, so an empty range compares nothing)." >&2; exit 2; }
 fi
 
