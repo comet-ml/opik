@@ -189,6 +189,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                    IF(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
             FROM deduped
             GROUP BY entity_id, project_id, name
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String SELECT_FEEDBACK_SCORE_NAMES = """
