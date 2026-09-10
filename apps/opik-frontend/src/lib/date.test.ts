@@ -43,7 +43,7 @@ describe("formatLocalTimeAsUtc / formatUtcTimeAsLocal roundtrip", () => {
 });
 
 describe("formatDuration", () => {
-  it("should return NA for a missing value", () => {
+  it("should return NA for missing or non-finite values", () => {
     expect(formatDuration(null)).toBe("NA");
     expect(formatDuration(undefined)).toBe("NA");
     expect(formatDuration(NaN)).toBe("NA");
@@ -57,6 +57,12 @@ describe("formatDuration", () => {
     expect(formatDuration(3615300, false)).toBe("1h 15.3s");
     expect(formatDuration(7201800, false)).toBe("2h 1.8s");
     expect(formatDuration(86400500, false)).toBe("1d 0.5s");
+  });
+
+  it("should not leak float error after a week, month or year", () => {
+    expect(formatDuration(604800300, false)).toBe("1w 0.3s");
+    expect(formatDuration(2592000300, false)).toBe("1mth 0.3s");
+    expect(formatDuration(31536000300, false)).toBe("1y 0.3s");
   });
 
   it("should keep the minute breakdown intact", () => {
