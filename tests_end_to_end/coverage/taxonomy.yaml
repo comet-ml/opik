@@ -266,7 +266,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage. one, and both clamps" }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage. one, and both clamps; also a non-token price key (mistral/voxtral-mini-tts-latest, priced per input character) billed from usage.input_characters, against an identical span carrying the same token counts and no character count as the negative control" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
@@ -339,7 +339,7 @@ areas:
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
-      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics" }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }

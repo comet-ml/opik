@@ -14,7 +14,7 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * too eagerly reads as some other model's price. Both render as a perfectly
  * ordinary number on a page people read to decide what their LLM spend is.
  *
- * The fixture logs ten LLM spans with `usage` and **no** `total_cost`:
+ * The fixture logs twelve LLM spans with `usage` and **no** `total_cost`:
  *
  *  - Five for id normalisation. Three exercise a step each (provider-prefix
  *    strip, dot-normalising, compact-date strip, and an alias); two are controls
@@ -22,6 +22,11 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *    another model's row.
  *  - Five for reasoning tokens, all on one model, differing only in the
  *    reasoning count and the usage key it arrives under.
+ *  - Two for a model priced per input character rather than per token
+ *    (OPIK-7791), differing only in whether the character count is there. A
+ *    price key the backend does not read is the same silent failure as a model
+ *    id it cannot resolve: no cost chip on the span, and a trace total that
+ *    still looks like a number.
  *
  * The expected amounts are the shipped price table's own numbers — see the
  * fixture. They are asserted at both surfaces because that is where the two can
@@ -134,11 +139,11 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
       }
     });
 
-    await test.step('The two undated look-alikes are billed nothing', async () => {
+    await test.step('Every control is billed nothing', async () => {
       for (const seed of controls(modelCostSpans.spans)) {
         expect(
           attributedCost(byName.get(seed.name)!),
-          `${seed.model} has no price in the table; a cost here means the date strip ran on a build number and billed another model's rate`,
+          `${seed.key} (${seed.model}): ${seed.zeroCostReason ?? 'this vector must not be billed'}`,
         ).toBe(0);
       }
     });
@@ -230,6 +235,44 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
         cost('reasoning-negative'),
         'a negative reasoning count must floor at 0, pricing identically to the absent-key control',
       ).toBeCloseTo(cost('reasoning-absent'), 6);
+    });
+  });
+
+  test('A model priced per input character bills from its character count, not from its tokens', { tag: ['@cap:traces.span-model-cost-tokens'] }, async ({
+    modelCostSpans,
+    project,
+    backendClient,
+  }) => {
+    // No page, for the same reason as the reasoning-token test above: the
+    // subject is which usage key the backend multiplies a price by. The
+    // panel's rendering of the priced one is covered by the UI test below.
+
+    const byName = await test.step('Read the seeded spans back once all of them are queryable', async () =>
+      readSeededSpans(backendClient, project.id, modelCostSpans));
+
+    await test.step('The character-priced span is billed at the table rate', async () => {
+      // mistral/voxtral-mini-tts-latest publishes input_cost_per_character and
+      // no token rate at all: 1M characters x $1.6e-05 -> $16.00. A model whose
+      // price key ModelCostData does not declare resolves to nothing instead,
+      // and nothing is what this assertion exists to tell apart from $16.
+      expect(
+        costOf(byName, modelCostSpans, 'characters-priced'),
+        'characters-priced: 1.0M input_characters x $1.6e-05/character',
+      ).toBeCloseTo(16, 6);
+    });
+
+    await test.step('The same model without a character count is billed nothing', async () => {
+      // The discriminating half. Both vectors carry the identical 1M prompt +
+      // 1M completion tokens and differ only in `input_characters`, so a cost
+      // that had come from the token counts would price them the same.
+      const control = modelCostSpans.spans.find((s) => s.key === 'characters-absent');
+      expect(control, "the fixture must seed a 'characters-absent' vector").toBeDefined();
+      const span = byName.get(control!.name);
+      expect(span, `span ${control!.name} was seeded`).toBeDefined();
+      expect(
+        attributedCost(span!),
+        `characters-absent: ${control!.zeroCostReason}`,
+      ).toBe(0);
     });
   });
 
