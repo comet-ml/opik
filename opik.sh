@@ -53,6 +53,58 @@ set_containers_for_profile() {
 
 }
 
+# Minimum Docker Compose version. `up --wait --wait-timeout` needs v2.17.0, but the `!override` tag
+# used by the port-mapping and local-development overlays arrived with compose-go/v2 in v2.24.x, so
+# the higher floor is the binding one for anything that loads those files.
+COMPOSE_MIN_VERSION="2.24.4"
+
+# Upper bound for OPIK_STARTUP_TIMEOUT (24h). Compose parses --wait-timeout as an int64 and rejects
+# anything larger, so the value is range-checked here rather than by a failed flag parse later.
+STARTUP_TIMEOUT_MAX=86400
+
+compose_version() {
+  docker compose version --short 2>/dev/null
+}
+
+# True when the first argument is a version greater than or equal to the second. Compares the
+# numeric major/minor/patch components in bash rather than with `sort -V`, which is a GNU/BSD
+# extension and absent on busybox hosts — where a missing comparison would reject a valid version.
+version_at_least() {
+  local have="${1#v}" want="$2" i have_part want_part
+  # Trailing qualifiers such as -desktop.1 or -rc.2 are not part of the precedence we care about.
+  have="${have%%-*}"
+  local -a have_parts want_parts
+  IFS=. read -r -a have_parts <<< "$have"
+  IFS=. read -r -a want_parts <<< "$want"
+  for i in 0 1 2; do
+    have_part="${have_parts[i]:-0}"
+    want_part="${want_parts[i]:-0}"
+    # Any non-numeric component makes the comparison meaningless; treat the version as unusable.
+    [[ "$have_part" =~ ^[0-9]+$ ]] || return 1
+    (( 10#$have_part > 10#$want_part )) && return 0
+    (( 10#$have_part < 10#$want_part )) && return 1
+  done
+  return 0
+}
+
+compose_supports_wait() {
+  local version
+  version=$(compose_version)
+  [[ -z "$version" ]] && return 1
+  version_at_least "$version" "$COMPOSE_MIN_VERSION"
+}
+
+# The compose service names to wait on, derived from the profile's container list so the two can't
+# drift. Run-once jobs are absent from that list by design and so are never waited on.
+wait_services() {
+  local container
+  for container in "${CONTAINERS[@]}"; do
+    # "<project>-<service>-1" -> "<service>"
+    container="${container#"${COMPOSE_PROJECT_NAME}"-}"
+    echo "${container%-1}"
+  done
+}
+
 get_verify_cmd() {
   local cmd="./opik.sh"
   if [[ "$INFRA" == "true" ]]; then
@@ -105,7 +157,9 @@ generate_uuid() {
 }
 
 debugLog() {
+  # The trailing `true` keeps a no-op debug line from becoming the caller's non-zero return value.
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
+  true
 }
 
 # Log worktree configuration (called after DEBUG_MODE is set)
@@ -230,18 +284,22 @@ create_opik_config_if_missing() {
   
   if [[ -f "$config_file" ]]; then
     debugLog "[DEBUG] .opik.config file already exists, skipping creation"
-    return
+    return 0
   fi
   
   debugLog "[DEBUG] Creating .opik.config file at $config_file"
   
   local ui_url=$(get_ui_url)
   
-  cat > "$config_file" << EOF
+  if ! cat > "$config_file" << EOF
 [opik]
 url_override = ${ui_url}/api/
 workspace = default
 EOF
+  then
+    echo "❌ Failed to write $config_file"
+    return 1
+  fi
   debugLog "[DEBUG] .opik.config file created successfully with URL: ${ui_url}/api/"
 }
 
@@ -348,7 +406,6 @@ start_missing_containers() {
   debugLog "OPIK_ANONYMOUS_ID=$uuid"
 
   debugLog "🔍 Checking required containers..."
-  all_running=true
 
   local containers=("${CONTAINERS[@]}")
   for container in "${containers[@]}"; do
@@ -356,7 +413,6 @@ start_missing_containers() {
 
     if [[ "$status" != "running" ]]; then
       debugLog "🔴 $container is not running (status: ${status:-not found})"
-      all_running=false
     else
       debugLog "✅ $container is already running"
     fi
@@ -368,50 +424,60 @@ start_missing_containers() {
 
   local cmd
   cmd=$(get_docker_compose_cmd)
-  $cmd up -d ${BUILD_MODE:+--build}
 
-  echo "⏳ Waiting for all containers to be running and healthy..."
-  max_retries=60
-  interval=1
-  all_running=true
-
-  for container in "${containers[@]}"; do
-    retries=0
-    debugLog "⏳ Waiting for $container..."
-
-    while true; do
-      status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
-      health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
-
-      if [[ "$status" != "running" ]]; then
-        echo "❌ $container failed to start (status: $status)"
-        break
-      fi
-
-      if [[ "$health" == "healthy" ]]; then
-        debugLog "✅ $container is now running and healthy!"
-        break
-      elif [[ "$health" == "starting" ]]; then
-        debugLog "⏳ $container is starting... retrying (${retries}s)"
-        sleep "$interval"
-        retries=$((retries + 1))
-        if [[ $retries -ge $max_retries ]]; then
-          echo "⚠️  $container is still not healthy after ${max_retries}s"
-          all_running=false
-          break
-        fi
-      else
-        echo "❌ $container health state is '$health'"
-        all_running=false
-        break
-      fi
-    done
-  done
-
-  if $all_running; then
-    send_install_report "$uuid" "true" "$start_time"
-    create_opik_config_if_missing
+  local startup_timeout="${OPIK_STARTUP_TIMEOUT:-300}"
+  # Range-checked here because compose only rejects an out-of-range --wait-timeout once it parses
+  # the flag, which is after the stack would already have been started below. The digit-count bound
+  # keeps an absurdly long value out of the arithmetic comparison, and `10#` forces base 10 so a
+  # zero-padded value is neither read as octal (0100000 -> 32768, under the bound) nor fatal to the
+  # arithmetic (08 -> "value too great for base"). Zero is excluded: compose reads --wait-timeout 0
+  # as "no timeout", which would silently remove the deadline instead of setting one.
+  if ! [[ "$startup_timeout" =~ ^[0-9]{1,7}$ ]] \
+    || (( 10#$startup_timeout < 1 )) \
+    || (( 10#$startup_timeout > STARTUP_TIMEOUT_MAX )); then
+    echo "❌ OPIK_STARTUP_TIMEOUT must be an integer between 1 and ${STARTUP_TIMEOUT_MAX} seconds, got '$startup_timeout'"
+    return 1
   fi
+  # Normalized so the value handed to compose matches the one that was validated.
+  startup_timeout=$(( 10#$startup_timeout ))
+
+  if ! compose_supports_wait; then
+    echo "❌ Docker Compose $(compose_version) is too old: starting Opik requires v${COMPOSE_MIN_VERSION}+"
+    echo "   (the startup readiness check relies on 'compose up --wait --wait-timeout')."
+    echo "   Please upgrade Docker Compose and retry."
+    return 1
+  fi
+
+  echo "⏳ Starting containers and waiting for them to be healthy (timeout: ${startup_timeout}s)..."
+
+  local start_failed=false
+
+  # Start and wait in one call, scoped to the long-running services: --wait treats any service exit
+  # as a failure, even a successful exit 0, so the run-once jobs must be left out of it. Carrying
+  # the deadline here bounds pulls, builds and container creation as well as readiness, and --wait
+  # is concurrent across services, so a slow one is never starved by the services ahead of it.
+  if ! $cmd up -d ${BUILD_MODE:+--build} --wait --wait-timeout "$startup_timeout" $(wait_services); then
+    start_failed=true
+  # The scoped call above starts only those services and their dependencies, so the run-once jobs
+  # (mc, demo-data-generator) that nothing depends on need a second, unwaited call to launch.
+  elif ! $cmd up -d ${BUILD_MODE:+--build}; then
+    start_failed=true
+  fi
+
+  if [[ "$start_failed" == "true" ]]; then
+    echo "❌ Containers did not start and become healthy within ${startup_timeout}s"
+    echo "   Set OPIK_STARTUP_TIMEOUT to allow more time, e.g. OPIK_STARTUP_TIMEOUT=600 $(get_start_cmd)"
+    echo ""
+    echo "📋 Container status:"
+    $cmd ps
+    echo ""
+    echo "📜 Recent container logs:"
+    $cmd logs --tail=200
+    return 1
+  fi
+
+  send_install_report "$uuid" "true" "$start_time"
+  create_opik_config_if_missing
 }
 
 stop_containers() {
@@ -778,15 +844,11 @@ case "$1" in
     ;;
   "")
     echo "🔍 Checking container status and starting missing ones..."
-    start_missing_containers
-    sleep 2
-    echo "🔄 Re-checking container status..."
-    if check_containers_status; then
-      print_banner
-    else
+    if ! start_missing_containers; then
       echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
       exit 1
     fi
+    print_banner
     ;;
   *)
     echo "❌ Unknown option: $1"
