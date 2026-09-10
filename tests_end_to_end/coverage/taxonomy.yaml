@@ -638,6 +638,9 @@ areas:
     # 7-day window spanning the merge reports a false gap.
     tag_aliases: [annotation-queue]
     specs:
+      - annotation-queues/annotation-queue-automation-column.spec.ts
+      - annotation-queues/annotation-queue-automation-edit.spec.ts
+      - annotation-queues/annotation-queue-automation-routing.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
       - annotation-queues/annotation-queue-scoring.spec.ts
     capabilities:

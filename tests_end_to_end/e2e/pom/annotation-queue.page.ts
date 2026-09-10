@@ -103,16 +103,6 @@ export class AnnotationQueuesPage {
     return this.page.getByRole('columnheader', { name: 'Automation' });
   }
 
-  /** Open the create form from the list's own "Create queue" button. */
-  async openCreateQueueForm(): Promise<AnnotationQueueFormSheet> {
-    return test.step('Open the create annotation queue form', async () => {
-      await this.page.getByRole('button', { name: 'Create queue' }).first().click();
-      const sheet = AnnotationQueueFormSheet.create(this.page);
-      await sheet.waitForReady();
-      return sheet;
-    });
-  }
-
   /**
    * Open a queue's edit form through the row's kebab menu.
    *

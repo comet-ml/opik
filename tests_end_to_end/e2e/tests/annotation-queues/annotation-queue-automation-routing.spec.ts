@@ -69,8 +69,9 @@ test.describe(
           const found = await backendClient.listAnnotationQueuesWithPrefix(queueName);
           expect(found, `exactly one queue should be named ${queueName}`).toHaveLength(1);
           // Registered the moment the id exists: everything below can fail, and
-          // a queue cascades with neither the project fixture nor the run-prefix
-          // sweep, so without this a mid-test failure orphans it permanently.
+          // a queue does not cascade with the project fixture. The run-prefix
+          // sweep in global-teardown would collect it, but only once the whole
+          // run is over — until then it is a stray queue every later test sees.
           registerAnnotationQueueCleanup(found[0].id);
           return found[0].id;
         });

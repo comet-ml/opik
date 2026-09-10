@@ -16,7 +16,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:annotation-queues'] },
   () => {
     test(
-      'The Automation column reads each queue own automation state',
+      "The Automation column reads each queue's own automation state",
       { tag: ['@cap:annotation-queues.list-queues'] },
       async ({ automationQueuePair, page }) => {
         const { enabledQueue, disabledQueue } = automationQueuePair;

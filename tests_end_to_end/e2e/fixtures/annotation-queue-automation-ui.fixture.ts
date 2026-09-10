@@ -69,12 +69,20 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
    * Teardown for queues whose id does not exist until the test has run.
    *
    * A queue created through the create form cannot be seeded upfront, so a
-   * plain fixture has nothing to delete. The test registers the id as soon as
+   * plain fixture has nothing to delete. The caller registers the id as soon as
    * the API hands it over and this drains the registry afterwards — which still
    * runs when the test fails partway, unlike a trailing cleanup step.
    *
-   * Annotation queues cascade with neither the project fixture nor the
-   * run-prefix sweep in global-teardown, so without this they orphan.
+   * A queue does not cascade with the project fixture, so without this it
+   * survives the test. `global-teardown` does sweep queues by run prefix
+   * (global-teardown.ts:53), so a leak is eventually collected — but only at
+   * the end of the whole run, which leaves the queue visible to every later
+   * test in it. Deleting per-test is what keeps list assertions honest.
+   *
+   * The seeding fixtures below register through this rather than deleting in
+   * their own teardown: a fixture that creates two queues and validates them
+   * before `use()` would otherwise leak the first if the second failed, since
+   * post-`use()` teardown never runs for a setup that threw.
    */
   registerAnnotationQueueCleanup: async ({ backendClient }, use, testInfo) => {
     const queueIds: string[] = [];
@@ -105,7 +113,7 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
    * apart.
    */
   automationQueuePair: async (
-    { backendClient, project, feedbackDefinition, testNamespace },
+    { backendClient, project, feedbackDefinition, testNamespace, registerAnnotationQueueCleanup },
     use,
     testInfo,
   ) => {
@@ -119,22 +127,34 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
     const enabledName = `${testNamespace}-automation-on`;
     const disabledName = `${testNamespace}-automation-off`;
 
+    // Registered the moment each id exists rather than deleted after `use()`:
+    // the readback below can throw, and a post-`use()` teardown does not run
+    // for a setup that failed — which would leak whichever queue was already
+    // created.
     const enabledId = await backendClient.createAnnotationQueueWithAutomation({
       projectId: project.id,
       name: enabledName,
       feedbackDefinitionNames: [feedbackDefinition.name],
       automation: { enabled: true, groups },
     });
+    registerAnnotationQueueCleanup(enabledId);
     const disabledId = await backendClient.createAnnotationQueueWithAutomation({
       projectId: project.id,
       name: disabledName,
       feedbackDefinitionNames: [feedbackDefinition.name],
       automation: { enabled: false, groups },
     });
+    registerAnnotationQueueCleanup(disabledId);
 
     // Prove the seed actually holds before any browser opens. A UI assertion
     // over a fixture that silently failed to set the two states apart is a test
     // that cannot fail — it would read as coverage forever.
+    //
+    // `groups` is checked as well as `enabled`, and that is the load-bearing
+    // half: the Off queue's job is to carry a complete condition, so that a
+    // cell rendering "is anything configured?" reads On for it and fails. A
+    // disabled queue that silently lost its groups would still read Off, and
+    // the test would pass while proving nothing.
     for (const [id, name, expected] of [
       [enabledId, enabledName, true],
       [disabledId, disabledName, false],
@@ -144,6 +164,13 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
         throw new Error(
           `[automationQueuePair] '${name}' was seeded with automation.enabled=${expected} but the API ` +
             `returned ${JSON.stringify(stored?.automation)} — the fixture cannot discriminate On from Off`,
+        );
+      }
+      if (JSON.stringify(stored?.automation?.groups) !== JSON.stringify(groups)) {
+        throw new Error(
+          `[automationQueuePair] '${name}' was seeded with groups ${JSON.stringify(groups)} but the API ` +
+            `returned ${JSON.stringify(stored?.automation?.groups)} — the pair no longer differs in ` +
+            `automation.enabled alone, so the Automation column assertion is not falsifiable`,
         );
       }
     }
@@ -162,16 +189,6 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
     });
 
     await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      for (const id of [enabledId, disabledId]) {
-        try {
-          await backendClient.deleteAnnotationQueue(id);
-        } catch (err) {
-          console.warn(`[automationQueuePair] delete warning for ${id}:`, err);
-        }
-      }
-    }
   },
 
   /**
@@ -183,7 +200,7 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
    * with nothing on screen to show it happened.
    */
   automationEditQueue: async (
-    { backendClient, project, feedbackDefinition, testNamespace },
+    { backendClient, project, feedbackDefinition, testNamespace, registerAnnotationQueueCleanup },
     use,
     testInfo,
   ) => {
@@ -201,6 +218,8 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
       feedbackDefinitionNames: [feedbackDefinition.name],
       automation: { enabled: true, groups: [{ conditions: [condition] }] },
     });
+    // Registered before the readback, for the reason given on the pair above.
+    registerAnnotationQueueCleanup(id);
 
     // Same discrimination check as the pair: if the seed did not persist
     // comments_enabled=false, the "edit did not re-enable comments" assertion
@@ -228,14 +247,6 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
     });
 
     await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteAnnotationQueue(id);
-      } catch (err) {
-        console.warn(`[automationEditQueue] delete warning for ${id}:`, err);
-      }
-    }
   },
 
   /**
