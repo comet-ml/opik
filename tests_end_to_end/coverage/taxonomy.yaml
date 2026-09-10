@@ -673,6 +673,7 @@ areas:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
+      - online-evaluation/online-evaluation-failed-scoring-not-stored.spec.ts
       - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
       - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts

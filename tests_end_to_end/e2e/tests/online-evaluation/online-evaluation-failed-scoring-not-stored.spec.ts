@@ -182,8 +182,17 @@ test.describe('Online Evaluation — a failed scoring is dropped, not stored as 
         (id) => backendClient.getAutomationRuleLogs(id),
         rules.mixed,
         `${testNamespace}-rule-mixed`,
-        (l) => l.some((line) => line.level === 'WARN'),
-        'warned about the score it dropped',
+        // Both lines, not just the WARN: the drop and the store are written
+        // separately, so stopping at the first WARN can snapshot the stream
+        // before the "stored successfully" line lands and report the usable
+        // score as missing from a batch that had simply not finished logging.
+        // Matched by line CLASS rather than by the exact text the assertions
+        // below check, so a wrong name or trace id still fails on a diff of
+        // the real message instead of on a bare poll timeout.
+        (l) =>
+          l.some((line) => line.level === 'WARN' && line.message.startsWith('Skipped ')) &&
+          l.some((line) => line.level === 'INFO' && line.message.includes('stored successfully')),
+        'both warned about the score it dropped and reported the one it stored',
       );
 
       // The full line, not a fragment: the point of the fix is that the user is
@@ -219,7 +228,7 @@ test.describe('Online Evaluation — a failed scoring is dropped, not stored as 
         (id) => backendClient.getAutomationRuleLogs(id),
         rules.unnamed,
         `${testNamespace}-rule-unnamed`,
-        (l) => l.some((line) => line.level === 'WARN'),
+        (l) => l.some((line) => line.level === 'WARN' && line.message.startsWith('Skipped ')),
         'warned about its unnamed dropped score',
       );
       expect(
