@@ -140,7 +140,7 @@ databaseAnalyticsDataModel:
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
 uuidValidation:
-  #  Default: true for tests
+  #  Default: true
   #  Description: Operational kill-switch. When false, ids are not checked against the window (the
   #   window is still validated to be a sane value).
   enabled: true

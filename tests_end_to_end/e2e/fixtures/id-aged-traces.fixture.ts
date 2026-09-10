@@ -76,11 +76,12 @@ const READABLE_POLL_MS = 500;
  *
  * `UuidV7TimestampValidator` bounds an ingested id's embedded timestamp to
  * `[now - window, now + window]` and answers 400 when `uuidValidation.enabled=true`
- * and `auditOnly=false`. It ships disabled, so the default install seeds fine —
- * but the mode is not readable from the client, so it is detected from the
- * rejection rather than checked up front. Without this the whole spec fails as
- * an opaque 400 from a seed helper, which reads as a product bug instead of an
- * environment the spec cannot run in.
+ * and `auditOnly=false`. The backend default is now enabled, but the bundled
+ * chart and Compose file still pass an explicit `false`, so the default install
+ * seeds fine — the mode is not readable from the client, though, so it is
+ * detected from the rejection rather than checked up front. Without this the
+ * whole spec fails as an opaque 400 from a seed helper, which reads as a product
+ * bug instead of an environment the spec cannot run in.
  *
  * Matched on the `message` field, not the `too_old` / `too_far_future` reason:
  * the reason lives in the response's `details`, which `rawFetch` drops when it
