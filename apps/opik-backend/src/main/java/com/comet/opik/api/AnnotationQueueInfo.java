@@ -8,5 +8,6 @@ import java.util.UUID;
 public record AnnotationQueueInfo(
         UUID id,
         UUID projectId,
+        AnnotationQueue.AnnotationScope scope,
         int annotatorsPerItem) {
 }

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -44,6 +45,8 @@ public record AnnotationQueue(
                 AnnotationQueue.View.Write.class}) @Nullable @Min(1) @Max(1000) Integer annotatorsPerItem,
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable @Min(1) @Max(3600) Integer lockTimeoutSeconds,
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable @Valid AnnotationQueueAutomation automation,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
         @JsonView({
