@@ -1,4 +1,4 @@
-export { test, expect } from './summarised-datasets.fixture';
+export { test, expect } from './annotation-queue-routing.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -126,4 +126,9 @@ export type {
   SummarisedDatasetsFixtures,
 } from './summarised-datasets.fixture';
 export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
+export type {
+  RoutingQueueRef,
+  CreateRoutingQueueArgs,
+  AnnotationQueueRoutingFixtures,
+} from './annotation-queue-routing.fixture';
 export type { ProjectRef } from '../core/backend';

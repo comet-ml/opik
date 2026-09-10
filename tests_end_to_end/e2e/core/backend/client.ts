@@ -11,6 +11,10 @@ import {
   type WaitForScoresSettledOpts,
 } from './wait-for-scores-settled';
 import {
+  waitForQueueItemsSettled,
+  type WaitForQueueItemsSettledOpts,
+} from './wait-for-queue-items-settled';
+import {
   pollOptimizationStatus,
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
@@ -474,6 +478,37 @@ export interface AnnotationQueueDetail {
 }
 
 /**
+ * How an item got into a queue: a person added it, or an automation routed it.
+ * Distinct from a trace's own `source`, which says where the trace came from.
+ */
+export type AnnotationQueueItemSource = 'manual' | 'automated';
+
+/** One row of `POST /annotation-queues/{id}/items/search` — queue membership for one entity. */
+export interface AnnotationQueueItemRef {
+  id: string;
+  source: AnnotationQueueItemSource;
+}
+
+/** One threshold on a named feedback score, as `AnnotationQueueAutomation.ScoreCondition` accepts it. */
+export interface ScoreConditionSeed {
+  score: string;
+  operator: '<' | '>' | '=';
+  value: number;
+}
+
+/**
+ * A queue's automation config. `groups` is a disjunction of conjunctions: an
+ * entity routes when ANY group matches, and a group matches only when ALL of
+ * its conditions do — the shape behind the "Add AND condition" / "Add OR group"
+ * controls.
+ */
+export interface AnnotationAutomationSeed {
+  enabled: boolean;
+  groups: ScoreConditionSeed[][];
+  maxItemsInQueue?: number;
+}
+
+/**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
  * is carried through, because the aggregates are the part no page shows as an
@@ -866,6 +901,50 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * Queue membership for the given entity ids. A lookup, not a listing: ids
+   * that are not in the queue are simply absent from the response, so the
+   * caller has to ask about every entity whose membership it wants to assert —
+   * including the ones it expects NOT to be there.
+   *
+   * Hoisted for the same reason as `localGetTrace`: `waitForQueueItemsSettled`
+   * is a free function and cannot reach the not-yet-constructed return object.
+   */
+  const localFindAnnotationQueueItems = async (
+    queueId: string,
+    itemIds: string[],
+  ): Promise<AnnotationQueueItemRef[]> => {
+    const { status, message, json } = await rawFetch(
+      'POST',
+      `/v1/private/annotation-queues/${queueId}/items/search`,
+      { body: { ids: itemIds } },
+    );
+    if (status !== 200) {
+      throw new Error(
+        `findAnnotationQueueItems on queue ${queueId}: expected 200, got ${status}: ${message}`,
+      );
+    }
+    const content = (json as { content?: Array<{ id?: unknown; source?: unknown }> } | null)
+      ?.content;
+    if (!Array.isArray(content)) {
+      throw new Error(
+        `findAnnotationQueueItems on queue ${queueId}: 200 body carried no 'content' array`,
+      );
+    }
+    return content.map((item) => {
+      // Narrowed rather than cast: `source` is the whole point of this read, and
+      // an unrecognised value must fail here naming the item instead of flowing
+      // into a toBe('automated') that reports a mismatch with no clue what the
+      // server actually said.
+      if (item.source !== 'manual' && item.source !== 'automated') {
+        throw new Error(
+          `findAnnotationQueueItems on queue ${queueId}: item ${String(item.id)} carried unknown source ${JSON.stringify(item.source)}`,
+        );
+      }
+      return { id: String(item.id), source: item.source };
+    });
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -3091,6 +3170,86 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Create a queue carrying an `automation` block, returning its id.
+     *
+     * Through `rawFetch` rather than the pinned SDK for two reasons: the SDK's
+     * `AnnotationQueue` write type has no `automation` field at all (the field
+     * is newer than the pin, so the block would be dropped client-side and the
+     * queue created with no automation — silently, which reads as "routing is
+     * broken" rather than "the request was wrong"), and `createAnnotationQueue`
+     * returns 201 with the id only in `Location`, which the SDK's `void` return
+     * discards.
+     *
+     * No id is sent: `AnnotationQueueServiceImpl.prepareAnnotationQueue` mints
+     * one when the payload omits it, and `Location` is then the single source
+     * of truth for what was created.
+     */
+    async createAnnotationQueueWithAutomation(args: {
+      projectId: string;
+      name: string;
+      automation: AnnotationAutomationSeed;
+      /** Defaults to `trace`; `thread` routes whole conversations instead. */
+      scope?: 'trace' | 'thread';
+      feedbackDefinitionNames?: string[];
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/annotation-queues', {
+        body: {
+          project_id: args.projectId,
+          name: args.name,
+          scope: args.scope ?? 'trace',
+          ...(args.feedbackDefinitionNames
+            ? { feedback_definition_names: args.feedbackDefinitionNames }
+            : {}),
+          automation: {
+            enabled: args.automation.enabled,
+            conditions: {
+              groups: args.automation.groups.map((conditions) => ({ conditions })),
+            },
+            ...(args.automation.maxItemsInQueue === undefined
+              ? {}
+              : { max_items_in_queue: args.automation.maxItemsInQueue }),
+          },
+        },
+      });
+      if (status !== 201) {
+        throw new Error(
+          `createAnnotationQueueWithAutomation '${args.name}': expected 201, got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createAnnotationQueueWithAutomation '${args.name}': 201 carried no usable Location header (got ${location ?? '<none>'})`,
+        );
+      }
+      return id;
+    },
+
+    findAnnotationQueueItems: localFindAnnotationQueueItems,
+
+    /** Remove items from a queue — the reviewer's "dismiss this item" action. */
+    async removeAnnotationQueueItems(queueId: string, itemIds: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/delete`,
+        { body: { ids: itemIds } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `removeAnnotationQueueItems on queue ${queueId}: expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    async waitForQueueItemsSettled(
+      queueId: string,
+      itemIds: string[],
+      opts: WaitForQueueItemsSettledOpts = {},
+    ): Promise<AnnotationQueueItemRef[]> {
+      return waitForQueueItemsSettled(localFindAnnotationQueueItems, queueId, itemIds, opts);
     },
 
     /**

@@ -42,6 +42,10 @@ export {
   type TraceJsonSection,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
+  type AnnotationQueueItemRef,
+  type AnnotationQueueItemSource,
+  type ScoreConditionSeed,
+  type AnnotationAutomationSeed,
   type ThreadRowRef,
   type ThreadDetail,
   type StatPercentiles,
@@ -58,3 +62,4 @@ export {
   sumDatasetVersionField,
 } from './dataset-item-batches';
 export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
+export { type WaitForQueueItemsSettledOpts } from './wait-for-queue-items-settled';

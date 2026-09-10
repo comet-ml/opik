@@ -147,6 +147,45 @@ export class AnnotationQueuePage {
   }
 
   /**
+   * Wait until the Queue items tab has resolved to either rows or its empty
+   * state.
+   *
+   * Races the two for the same reason `AnnotationQueuesPage.waitForReady` does:
+   * the table unmounts entirely when the queue holds nothing, so waiting on a
+   * row alone hangs forever on an empty queue — which is a legitimate expected
+   * outcome for a routing test, not a failure.
+   */
+  async waitForItemsReady(): Promise<void> {
+    return test.step('Wait for queue items tab ready', async () => {
+      await this.waitForReady();
+      await Promise.race([
+        this.itemRows.first().waitFor({ state: 'visible' }),
+        this.emptyItemsState.waitFor({ state: 'visible' }),
+      ]);
+    });
+  }
+
+  /** Every row of the queue's items table, for asserting the total. */
+  get itemRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /**
+   * A queue item's row, scoped by the entity id. The items table is a shared
+   * `DataTable` with `getRowId = row.id`, so `data-row-id` carries the trace's
+   * (or thread's) own id — an identity handle that survives the column
+   * reordering this table allows, unlike any positional selector.
+   */
+  itemRow(entityId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${entityId}"]`);
+  }
+
+  /** The items table's empty state, from `TraceQueueItemsTab`'s `noData` slot. */
+  get emptyItemsState(): Locator {
+    return this.page.getByText('No items to review');
+  }
+
+  /**
    * Open a queue item's trace panel by navigating directly with a `trace` query
    * param — the same pattern LogsPage uses. Avoids depending on table row
    * selectors for a table whose row set changes as items are scored.

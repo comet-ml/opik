@@ -653,7 +653,12 @@ areas:
       # Fixing that bug turns the run red until the annotation is removed.
       delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
       queue-configuration-tab: { covered: false }
-      add-traces-to-queue:     { covered: false }
+      # Covered for the AUTOMATION path only (OPIK-6303): a queue whose score
+      # conditions pull traces in by itself, asserted on membership + source
+      # 'automated' and on the reviewer's items table. The reviewer-driven
+      # AddToQueueDialog is a separate surface and is tracked under
+      # traces.add-trace-to-queue, still uncovered.
+      add-traces-to-queue:     { covered: true,  tier: t2-cuj, note: "automation routing only; manual add-to-queue dialog still uncovered (traces.add-trace-to-queue)" }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 
