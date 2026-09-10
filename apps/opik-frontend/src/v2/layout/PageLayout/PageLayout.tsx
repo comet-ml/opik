@@ -20,6 +20,7 @@ import {
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
+import McpAnnouncementBanner from "@/v2/layout/McpAnnouncementBanner/McpAnnouncementBanner";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -30,7 +31,9 @@ const PageLayout = () => {
   const [smallScreenExpanded, setSmallScreenExpanded] = useState(false);
   const [retentionBannerHeight, setRetentionBannerHeight] = useState(0);
   const [demoBannerHeight, setDemoBannerHeight] = useState(0);
-  const bannerHeight = retentionBannerHeight + demoBannerHeight;
+  const [mcpBannerHeight, setMcpBannerHeight] = useState(0);
+  const bannerHeight =
+    retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
   const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
     isAssistantSidebarOpen()
@@ -128,6 +131,7 @@ const PageLayout = () => {
             {RetentionBanner ? (
               <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
             ) : null}
+            <McpAnnouncementBanner onChangeHeight={setMcpBannerHeight} />
             <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
 
             <SideBar
