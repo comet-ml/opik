@@ -869,6 +869,19 @@ public class SpanDAO {
      * first under {@code ORDER BY id DESC}, so page two's cursor can be one. The <em>upper</em> bound is the damaging
      * direction: every ordinary row has a later week, fails {@code <=}, and the page comes back empty.
      * <p>
+     * <b>The column side is only honest on the partitioned successor, which leaves one accepted residual</b> — the
+     * same one traces carries (see {@code TraceDAO.SELECT_BY_PROJECT_ID}). On the pre-cutover table {@code id_at} has
+     * already truncated a far-future timestamp into a plausible year, and no read predicate can recover the honest
+     * week from it, so a far-future <em>lower</em> bound admits nothing there. {@code toMonday} passed that case only
+     * incidentally, both sides having wrapped into agreement.
+     * <p>
+     * It is accepted rather than fixed. Reaching it needs a caller supplying a {@code startTime} beyond 2106, which
+     * the UI cannot produce, and it is not the cursor shape — a cursor is an upper bound, where this form is the
+     * better one. It changes only whether far-future rows are visible, never ordinary ones, and it resolves at the
+     * cutover, when {@code id_at} becomes honest. Deriving each bound as a union over both {@code id_at} widths
+     * instead — what {@code WeeklyPartitions} does for mutations — was rejected as disproportionate: it would touch
+     * every predicate here to buy a case no real client reaches.
+     * <p>
      * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
      * {@code shouldPageKeyAggregates}), the feedback-score and comment CTEs are keyed on
      * {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))} instead of
