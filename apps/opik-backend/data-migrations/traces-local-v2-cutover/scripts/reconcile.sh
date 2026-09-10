@@ -58,8 +58,10 @@
 #                             than total query time. Trade-off and shared rationale: ../README.md.
 #   --gap-start TS            what to COPY: the lower bound of the gap window, matched on created_at OR last_updated_at.
 #                             FORWARD it is REQUIRED and is the start of the last delta pass — the `RECORD delta_start=`
-#                             line delta_replay.sh prints. REVERSE it defaults to --cutover-start and rarely needs
-#                             passing. Must carry an explicit ' UTC' marker, as the drivers print it.
+#                             line delta_replay.sh prints. REVERSE it defaults to --cutover-start, rarely needs passing,
+#                             and may only WIDEN — a later value is REFUSED, because narrowing this bound hides
+#                             exactly what it skips.
+#                             Must carry an explicit ' UTC' marker, as the drivers print it.
 #                             WIDENING IT IS FREE: the sweep is mask-honored and idempotent, so `backfill_start` is
 #                             always a valid fallback and a lost delta_start never forces an escalation.
 #   --cutover-start TS        REVERSE only, and required there: the `RECORD cutover_start=` value exchange_and_wrap.sh
@@ -849,8 +851,22 @@ else
         echo "       Estimating it loses data in either direction — if it was lost, stop and escalate (see the runbook)." >&2
         exit 2
     }
-    # cutover_start is the reverse gap anchor by definition; --gap-start only ever widens it.
+    # cutover_start is the reverse gap anchor by definition, and --gap-start may only WIDEN it. Narrowing is the
+    # silent-later-anchor hazard the runbook already names for the backfill anchor, in its sharpest form: here the
+    # sweep and its postcondition share the bound, so a later value shrinks the work and the check together and the
+    # gate cannot see what it skipped. Only the replay keeps its own bound, so it still masks deletes for keys the
+    # sweep never re-imported — a clean gate over a restored original that is short of writes, which finalize.sh then
+    # recycles the only copy of. Lexical comparison is chronological because both anchors passed the fixed-width shape
+    # check above, as verify.sh's --window-from/--window-to ordering check relies on.
     [[ -n "$GAP_START" ]] || GAP_START="$CUTOVER_START"
+    [[ ! "$GAP_START" > "$CUTOVER_START" ]] || {
+        echo "ERROR: --gap-start '$GAP_START' is LATER than --cutover-start '$CUTOVER_START'. In the reverse direction" >&2
+        echo "       cutover_start IS the anchor — everything the promote made non-live was written at or after it —" >&2
+        echo "       so a later value narrows the sweep and its postcondition together, and the gate would report clean" >&2
+        echo "       over writes it never re-imported. Widening is free: pass an EARLIER value, or omit the flag to use" >&2
+        echo "       cutover_start." >&2
+        exit 2
+    }
     if [[ "$REPORT_ONLY" != "1" && "$CONFIRM_REIMPORT" != "1" ]]; then
         echo "ERROR: the reverse direction requires --confirm-reimport-successor-writes. The sweep re-imports exactly the" >&2
         echo "       post-cutover writes --accept-post-cutover-write-loss acknowledged discarding, so this asserts you now" >&2

@@ -2036,6 +2036,8 @@ an argument:
 - **failing loudly** rather than reporting progress when the gate is still non-zero after `--max-passes`;
 - the **schema proof on the live table**, which requires `end_time` to be present before testing its shape — an
   absent column is not the same as a non-Nullable one, and a bare test waves the first through;
+- the **widen-only rule on the reverse `--gap-start`**: a later value is refused, since the reverse sweep and its
+  postcondition share that bound and narrowing it would hide exactly what it skipped;
 - the **shard-scope guard**: a multi-shard estate refused without `--confirm-single-shard` (and refused outright in the
   reverse direction, whose postcondition spans shards its replay cannot reach), an unreadable shard count failing
   closed, and the `RECONCILED` line carrying its `SCOPE:` qualifier when the scope was asserted rather than proven.
