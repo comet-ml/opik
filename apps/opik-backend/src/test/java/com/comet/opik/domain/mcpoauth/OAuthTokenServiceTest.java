@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -53,21 +54,27 @@ class OAuthTokenServiceTest {
             .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
             .build();
 
+    private final CodeExchange exchanged = CodeExchange.builder()
+            .tokens(minted)
+            .userName(RandomStringUtils.secure().nextAlphanumeric(10))
+            .firstConnection(true)
+            .build();
+
+    private final McpOAuthClient validClient = McpOAuthClient.builder()
+            .id(clientId)
+            .name(RandomStringUtils.secure().nextAlphanumeric(5))
+            .redirectUris(Set.of(redirectUri))
+            .build();
+
     @Mock
     private OAuthClientService clientService;
     @Mock
     private McpOAuthService mcpOAuthService;
+    @Mock
+    private AnalyticsService analyticsService;
 
     @InjectMocks
     private OAuthTokenService service;
-
-    private McpOAuthClient validClient() {
-        return McpOAuthClient.builder()
-                .id(clientId)
-                .name(RandomStringUtils.secure().nextAlphanumeric(5))
-                .redirectUris(Set.of(redirectUri))
-                .build();
-    }
 
     private void assertOAuthError(Runnable call, String expectedCode) {
         assertThatThrownBy(call::run)
@@ -78,8 +85,8 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("authorization_code: valid request returns the exchanged tokens")
     void issueToken_authCodeGrant_returnsTokens() {
-        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
-        when(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, clientId)).thenReturn(minted);
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient));
+        when(mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, validClient)).thenReturn(exchanged);
 
         TokenResponse response = service.issueToken(GRANT_AUTHORIZATION_CODE, code, redirectUri, clientId,
                 codeVerifier, null);
@@ -128,7 +135,7 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("authorization_code: exchange failure is translated to invalid_grant")
     void issueToken_authCodeGrant_exchangeFails_invalidGrant() {
-        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient));
         when(mcpOAuthService.exchangeCode(any(), any(), any(), any()))
                 .thenThrow(new BadRequestException(ERROR_INVALID_GRANT));
 
@@ -139,7 +146,7 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("refresh_token: valid request returns the rotated tokens")
     void issueToken_refreshGrant_returnsTokens() {
-        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient));
         when(mcpOAuthService.refresh(refreshToken, clientId)).thenReturn(minted);
 
         TokenResponse response = service.issueToken(GRANT_REFRESH_TOKEN, null, null, clientId, null, refreshToken);
@@ -182,7 +189,7 @@ class OAuthTokenServiceTest {
     @Test
     @DisplayName("refresh_token: refresh failure is translated to invalid_grant")
     void issueToken_refreshGrant_refreshFails_invalidGrant() {
-        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient()));
+        when(clientService.resolve(clientId)).thenReturn(Optional.of(validClient));
         when(mcpOAuthService.refresh(any(), any())).thenThrow(new BadRequestException(ERROR_INVALID_GRANT));
 
         assertOAuthError(() -> service.issueToken(GRANT_REFRESH_TOKEN, null, null, clientId, null, refreshToken),

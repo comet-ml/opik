@@ -30,6 +30,24 @@ interface McpOAuthTokenDAO {
     @SqlQuery("SELECT * FROM mcp_oauth_tokens WHERE token_hash = :tokenHash")
     McpOAuthToken findByHash(@Bind("tokenHash") String tokenHash);
 
+    /**
+     * Whether any unrevoked, unexpired token still exists for this client_id of this user in this workspace.
+     * One client_id can hold several grants at once (a host re-authorizing while its previous grant is live
+     * starts a new family), so revoking one family does not by itself mean the client is disconnected.
+     */
+    @SqlQuery("""
+            SELECT EXISTS (
+                SELECT 1 FROM mcp_oauth_tokens
+                WHERE user_name = :userName
+                  AND workspace_id = :workspaceId
+                  AND client_id = :clientId
+                  AND revoked_at IS NULL
+                  AND expires_at > NOW(6)
+            )
+            """)
+    boolean existsLiveToken(@Bind("userName") String userName, @Bind("workspaceId") String workspaceId,
+            @Bind("clientId") String clientId);
+
     @UseStringTemplateEngine
     @SqlUpdate("""
             UPDATE mcp_oauth_tokens SET revoked_at = NOW(6), revoked_reason = :reason
