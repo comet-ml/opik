@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -9,6 +9,7 @@ import { Span, Trace } from "@/types/traces";
 import { Button } from "@/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -28,6 +29,51 @@ import { Textarea } from "@/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { useToast } from "@/ui/use-toast";
 
+const BOOLEAN_TRUE_ID = "__boolean_true__";
+const BOOLEAN_FALSE_ID = "__boolean_false__";
+const BULK_ANNOTATE_CONCURRENCY = 5;
+
+type CategoryChoice = {
+  id: string;
+  label: string;
+  value: number;
+};
+
+const mapWithConcurrency = async <T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> => {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) {
+        return;
+      }
+
+      try {
+        const value = await mapper(items[index]);
+        results[index] = { status: "fulfilled", value };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+
+  return results;
+};
+
 type AnnotateTracesDialogProps = {
   rows: Array<Trace | Span>;
   type: TRACE_DATA_TYPE;
@@ -43,7 +89,7 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
 }) => {
   const [definitionId, setDefinitionId] = useState("");
   const [value, setValue] = useState("");
-  const [categoryName, setCategoryName] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [reason, setReason] = useState("");
   const [isApplying, setIsApplying] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -53,24 +99,47 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
   );
   const { mutateAsync } = useTraceFeedbackScoreSetMutation();
   const { toast } = useToast();
-  const definition = data?.content.find((item) => item.id === definitionId);
-  const categories =
-    definition?.type === FEEDBACK_DEFINITION_TYPE.categorical
-      ? Object.entries(definition.details.categories).sort(
-          (a, b) => a[1] - b[1],
-        )
-      : definition?.type === FEEDBACK_DEFINITION_TYPE.boolean
-        ? ([
-            [definition.details.true_label, 1],
-            [definition.details.false_label, 0],
-          ] as Array<[string, number]>)
-        : [];
+  const definition = useMemo(
+    () => data?.content.find((item) => item.id === definitionId),
+    [data?.content, definitionId],
+  );
+  const categories = useMemo<CategoryChoice[]>(() => {
+    if (definition?.type === FEEDBACK_DEFINITION_TYPE.categorical) {
+      return Object.entries(definition.details.categories)
+        .sort((a, b) => a[1] - b[1])
+        .map(([name, categoryValue]) => ({
+          id: name,
+          label: name,
+          value: categoryValue,
+        }));
+    }
+
+    if (definition?.type === FEEDBACK_DEFINITION_TYPE.boolean) {
+      return [
+        {
+          id: BOOLEAN_TRUE_ID,
+          label: definition.details.true_label,
+          value: 1,
+        },
+        {
+          id: BOOLEAN_FALSE_ID,
+          label: definition.details.false_label,
+          value: 0,
+        },
+      ];
+    }
+
+    return [];
+  }, [definition]);
+  const selectedCategory = categories.find(
+    (category) => category.id === categoryId,
+  );
   const score =
     definition?.type === FEEDBACK_DEFINITION_TYPE.numerical
       ? value.trim() === ""
         ? undefined
         : Number(value)
-      : categories.find(([name]) => name === categoryName)?.[1];
+      : selectedCategory?.value;
   const valid =
     !!definition &&
     score !== undefined &&
@@ -82,7 +151,7 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
     if (isApplying) return;
     setDefinitionId("");
     setValue("");
-    setCategoryName("");
+    setCategoryId("");
     setReason("");
     setOpen(false);
   };
@@ -99,8 +168,10 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
     setIsApplying(true);
     try {
       // Wait for every request, including after a partial failure.
-      const results = await Promise.allSettled(
-        rows.map((row) =>
+      const results = await mapWithConcurrency(
+        rows,
+        BULK_ANNOTATE_CONCURRENCY,
+        (row) =>
           mutateAsync({
             name: definition.name,
             value: score,
@@ -108,12 +179,11 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
             categoryName:
               definition.type === FEEDBACK_DEFINITION_TYPE.numerical
                 ? undefined
-                : categoryName,
+                : selectedCategory?.label,
             traceId:
               type === TRACE_DATA_TYPE.spans ? (row as Span).trace_id : row.id,
             ...(type === TRACE_DATA_TYPE.spans && { spanId: row.id }),
           }),
-        ),
       );
       if (results.every((result) => result.status === "fulfilled")) {
         toast({ title: "Annotations applied" });
@@ -127,7 +197,7 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
             <span>
@@ -140,100 +210,102 @@ const AnnotateTracesDialog: React.FC<AnnotateTracesDialogProps> = ({
             <span>{rows.length} selected</span>
           </DialogDescription>
         </DialogHeader>
-        <fieldset disabled={isApplying} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="bulk-feedback-definition">
-              Feedback definition
-            </Label>
-            <Select
-              value={definitionId}
-              onValueChange={(id) => {
-                setDefinitionId(id);
-                setValue("");
-                setCategoryName("");
-              }}
-              disabled={isApplying || isPending || isError}
-            >
-              <SelectTrigger
-                id="bulk-feedback-definition"
-                data-testid="annotate-bulk-score-select"
-              >
-                <SelectValue placeholder="Select a feedback definition" />
-              </SelectTrigger>
-              <SelectContent>
-                {data?.content.map((item) => (
-                  <SelectItem
-                    key={item.id}
-                    value={item.id}
-                    data-testid={`annotate-bulk-score-select-option-${item.name}`}
-                  >
-                    <span>{item.name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {isError && (
-              <p role="alert">Unable to load feedback definitions.</p>
-            )}
-            {!isPending && !isError && !data?.content.length && (
-              <p>No feedback definitions available.</p>
-            )}
-          </div>
-          {definition?.type === FEEDBACK_DEFINITION_TYPE.numerical && (
+        <DialogAutoScrollBody>
+          <fieldset disabled={isApplying} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="bulk-feedback-value">
-                <span>
-                  Score ({definition.details.min}–{definition.details.max})
-                </span>
+              <Label htmlFor="bulk-feedback-definition">
+                Feedback definition
               </Label>
-              <Input
-                id="bulk-feedback-value"
-                type="number"
-                step="any"
-                min={definition.details.min}
-                max={definition.details.max}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                data-testid="annotate-bulk-score-input"
+              <Select
+                value={definitionId}
+                onValueChange={(id) => {
+                  setDefinitionId(id);
+                  setValue("");
+                  setCategoryId("");
+                }}
+                disabled={isApplying || isPending || isError}
+              >
+                <SelectTrigger
+                  id="bulk-feedback-definition"
+                  data-testid="annotate-bulk-score-select"
+                >
+                  <SelectValue placeholder="Select a feedback definition" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data?.content.map((item) => (
+                    <SelectItem
+                      key={item.id}
+                      value={item.id}
+                      data-testid={`annotate-bulk-score-select-option-${item.name}`}
+                    >
+                      <span>{item.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isError && (
+                <p role="alert">Unable to load feedback definitions.</p>
+              )}
+              {!isPending && !isError && !data?.content.length && (
+                <p>No feedback definitions available.</p>
+              )}
+            </div>
+            {definition?.type === FEEDBACK_DEFINITION_TYPE.numerical && (
+              <div className="space-y-2">
+                <Label htmlFor="bulk-feedback-value">
+                  <span>
+                    Score ({definition.details.min}–{definition.details.max})
+                  </span>
+                </Label>
+                <Input
+                  id="bulk-feedback-value"
+                  type="number"
+                  step="any"
+                  min={definition.details.min}
+                  max={definition.details.max}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  data-testid="annotate-bulk-score-input"
+                />
+              </div>
+            )}
+            {categories.length > 0 && (
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                value={categoryId}
+                onValueChange={setCategoryId}
+                disabled={isApplying}
+                className="flex-wrap justify-start"
+                aria-label="Score"
+              >
+                {categories.map((category) => (
+                  <ToggleGroupItem
+                    key={category.id}
+                    value={category.id}
+                    data-testid={`annotate-bulk-category-toggle-${category.id}`}
+                  >
+                    <span>
+                      {definition?.type === FEEDBACK_DEFINITION_TYPE.boolean
+                        ? category.label
+                        : `${category.label} (${category.value})`}
+                    </span>
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="bulk-feedback-reason">Reason (optional)</Label>
+              <Textarea
+                id="bulk-feedback-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Add a reason..."
+                data-testid="annotate-bulk-reason-input"
               />
             </div>
-          )}
-          {categories.length > 0 && (
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={categoryName}
-              onValueChange={setCategoryName}
-              disabled={isApplying}
-              className="flex-wrap justify-start"
-              aria-label="Score"
-            >
-              {categories.map(([name, categoryValue]) => (
-                <ToggleGroupItem
-                  key={name}
-                  value={name}
-                  data-testid={`annotate-bulk-category-toggle-${name}`}
-                >
-                  <span>
-                    {definition?.type === FEEDBACK_DEFINITION_TYPE.boolean
-                      ? name
-                      : `${name} (${categoryValue})`}
-                  </span>
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="bulk-feedback-reason">Reason (optional)</Label>
-            <Textarea
-              id="bulk-feedback-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Add a reason..."
-              data-testid="annotate-bulk-reason-input"
-            />
-          </div>
-        </fieldset>
+          </fieldset>
+        </DialogAutoScrollBody>
         <DialogFooter>
           <Button variant="outline" disabled={isApplying} onClick={handleClose}>
             Cancel

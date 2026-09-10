@@ -33,6 +33,12 @@ const { mutateAsync, toast, setOpen, definitions } = vi.hoisted(() => ({
       type: "boolean",
       details: { true_label: "Yes", false_label: "No" },
     },
+    {
+      id: "colliding",
+      name: "Colliding",
+      type: "boolean",
+      details: { true_label: "Same", false_label: "Same" },
+    },
   ],
 }));
 
@@ -145,18 +151,33 @@ describe("AnnotateTracesDialog", () => {
   });
 
   it.each([
-    ["Yes", 1],
-    ["No", 0],
-  ])("uses boolean label %s and value %s", async (label, value) => {
+    ["Yes", 1, "__boolean_true__"],
+    ["No", 0, "__boolean_false__"],
+  ])("uses boolean label %s and value %s", async (label, value, id) => {
     renderDialog();
     await selectDefinition("Correct");
-    fireEvent.click(
-      screen.getByTestId(`annotate-bulk-category-toggle-${label}`),
-    );
+    fireEvent.click(screen.getByTestId(`annotate-bulk-category-toggle-${id}`));
     fireEvent.click(apply());
     await waitFor(() => expect(setOpen).toHaveBeenCalledWith(false));
     expect(mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Correct", value, categoryName: label }),
+    );
+  });
+
+  it("submits false as 0 when boolean labels are identical", async () => {
+    renderDialog();
+    await selectDefinition("Colliding");
+    fireEvent.click(
+      screen.getByTestId("annotate-bulk-category-toggle-__boolean_false__"),
+    );
+    fireEvent.click(apply());
+    await waitFor(() => expect(setOpen).toHaveBeenCalledWith(false));
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Colliding",
+        value: 0,
+        categoryName: "Same",
+      }),
     );
   });
 

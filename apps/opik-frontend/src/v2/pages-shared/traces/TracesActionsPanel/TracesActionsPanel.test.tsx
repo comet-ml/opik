@@ -5,7 +5,11 @@ import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { Trace } from "@/types/traces";
 
 const { permissions } = vi.hoisted(() => ({
-  permissions: { canDeleteTraces: false, canLogTraceSpanThread: true },
+  permissions: {
+    canDeleteTraces: false,
+    canLogTraceSpanThread: true,
+    canAnnotateTraceSpanThread: true,
+  },
 }));
 vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({ permissions }),
@@ -79,14 +83,18 @@ const renderPanel = (
 describe("TracesActionsPanel bulk annotation", () => {
   beforeEach(() => {
     permissions.canLogTraceSpanThread = true;
+    permissions.canAnnotateTraceSpanThread = true;
   });
 
   it("hides annotation without permission", () => {
-    permissions.canLogTraceSpanThread = false;
+    permissions.canAnnotateTraceSpanThread = false;
     renderPanel();
     expect(
       screen.queryByRole("button", { name: "Annotate" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Manage tags" }),
+    ).toBeInTheDocument();
   });
 
   it("disables annotation with no selection", () => {

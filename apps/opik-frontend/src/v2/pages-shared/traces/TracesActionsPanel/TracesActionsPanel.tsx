@@ -71,7 +71,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces, canLogTraceSpanThread },
+    permissions: {
+      canDeleteTraces,
+      canLogTraceSpanThread,
+      canAnnotateTraceSpanThread,
+    },
   } = usePermissions();
 
   const showEvaluate =
@@ -132,7 +136,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           type={type}
         />
       )}
-      {canLogTraceSpanThread && (
+      {canAnnotateTraceSpanThread && (
         <AnnotateTracesDialog
           key={`annotate-${resetKeyRef.current}`}
           rows={selectedRows}
@@ -177,7 +181,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           </Button>
         </TooltipWrapper>
       )}
-      {canLogTraceSpanThread && (
+      {canAnnotateTraceSpanThread && (
         <Button
           variant={buttonVariant}
           size={buttonSize}
