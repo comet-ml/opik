@@ -13,6 +13,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,13 @@ public class AnnotationQueueRoutingBufferService {
 
     private static final String MEMBER_SEPARATOR = ":";
 
+    /**
+     * How long a pending entity's score-name set outlives its last write. Generous on purpose: it is a
+     * backstop against leaked keys, not a functional deadline, and expiring one that is still pending
+     * would quietly cost the freshness check its input.
+     */
+    private static final Duration SCORE_NAMES_TTL = Duration.ofHours(6);
+
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull AnnotationQueueRoutingConfig config;
     private final @NonNull AnnotationQueueRoutingPublisher publisher;
@@ -117,7 +125,7 @@ public class AnnotationQueueRoutingBufferService {
                             .then(userName == null ? Mono.empty() : authors.fastPut(member, userName))
                             .then(scoreNames.isEmpty()
                                     ? Mono.empty()
-                                    : redisClient.<String>getSet(scoreNamesKey(member)).addAll(scoreNames));
+                                    : recordScoreNames(member, scoreNames));
                 })
                 .then()
                 .doOnSuccess(__ -> log.debug(
@@ -180,6 +188,15 @@ public class AnnotationQueueRoutingBufferService {
                 });
     }
 
+    /**
+     * Takes out exactly what was published, and no more.
+     *
+     * <p>The score names are removed by value rather than by deleting the key. A score can arrive between
+     * {@link #readDue} and here — it finds the member still pending, so it adds only its name — and deleting
+     * the key would erase that name while the message that went out knows nothing about it, leaving the
+     * freshness check blind to the very score it exists to catch. Removing only the names this flush read
+     * leaves the newcomer behind, where the entity's next scoring picks it up again.
+     */
     private Mono<Void> removePending(MessageGroup group) {
         var pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
         var authors = redisClient.<String, String>getMap(PENDING_AUTHORS_KEY);
@@ -190,8 +207,17 @@ public class AnnotationQueueRoutingBufferService {
 
         return pending.removeAll(members)
                 .then(authors.fastRemove(members.toArray(String[]::new)))
-                .then(Flux.fromIterable(members)
-                        .flatMap(member -> redisClient.getSet(scoreNamesKey(member)).delete())
+                .then(Flux.fromIterable(group.entityIds())
+                        .flatMap(entityId -> {
+                            Set<String> published = group.scoreNamesByEntity()
+                                    .getOrDefault(entityId, Set.of());
+                            if (published.isEmpty()) {
+                                return Mono.empty();
+                            }
+                            return redisClient.<String>getSet(
+                                    scoreNamesKey(member(group.workspaceId(), group.scope(), entityId)))
+                                    .removeAll(published);
+                        })
                         .then())
                 .then();
     }
@@ -238,6 +264,21 @@ public class AnnotationQueueRoutingBufferService {
 
     private String scoreNamesKey(String member) {
         return PENDING_SCORE_NAMES_PREFIX + member;
+    }
+
+    /**
+     * Adds the names and refreshes the key's expiry.
+     *
+     * <p>The expiry is what stops these keys accumulating. Every other removal path can fail — a swallowed
+     * error, a replica dying mid-flush — and a set whose member has already left the pending list would
+     * otherwise sit in Redis with nothing to ever look at it again. The window is far longer than any
+     * plausible backlog, so it never expires a set that is still wanted.
+     */
+    private Mono<Void> recordScoreNames(String member, Set<String> scoreNames) {
+        var set = redisClient.<String>getSet(scoreNamesKey(member));
+        return set.addAll(scoreNames)
+                .then(set.expire(SCORE_NAMES_TTL))
+                .then();
     }
 
     /**

@@ -20,6 +20,7 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,8 +56,9 @@ class AnnotationQueueRoutingBufferServiceTest {
     private RScoredSortedSetReactive<Object> pending;
     @Mock
     private RMapReactive<String, String> authors;
-    @Mock
-    private RSetReactive<String> scoreNames;
+    // One mock per key rather than one for all of them: sharing a single mock would let a wrong
+    // scoreNamesKey(), or one entity's names landing on another's key, pass unnoticed.
+    private final Map<String, RSetReactive<String>> nameSets = new HashMap<>();
     @Mock
     private AnnotationQueueRoutingPublisher publisher;
 
@@ -71,15 +73,13 @@ class AnnotationQueueRoutingBufferServiceTest {
                 .thenReturn(pending);
         when(redisClient.<String, String>getMap(AnnotationQueueRoutingBufferService.PENDING_AUTHORS_KEY))
                 .thenReturn(authors);
-        when(redisClient.<String>getSet(anyString())).thenReturn(scoreNames);
+        when(redisClient.<String>getSet(anyString())).thenAnswer(inv -> nameSet(inv.getArgument(0)));
 
         when(pending.addIfAbsent(anyDouble(), any())).thenReturn(Mono.just(true));
         when(pending.removeAll(any())).thenReturn(Mono.just(true));
         when(authors.fastPut(anyString(), anyString())).thenReturn(Mono.just(true));
         when(authors.fastRemove(any(String[].class))).thenReturn(Mono.just(1L));
-        when(scoreNames.addAll(anyCollection())).thenReturn(Mono.just(true));
-        when(scoreNames.readAll()).thenReturn(Mono.just(Set.of()));
-        when(scoreNames.delete()).thenReturn(Mono.just(true));
+        nameSets.clear();
 
         service = new AnnotationQueueRoutingBufferService(redisClient, config, publisher);
     }
@@ -97,7 +97,7 @@ class AnnotationQueueRoutingBufferServiceTest {
             String expectedMember = "%s:trace:%s".formatted(WORKSPACE_ID, traceId);
             verify(pending).addIfAbsent(anyDouble(), eq(expectedMember));
             verify(authors).fastPut(expectedMember, USER_NAME);
-            verify(scoreNames).addAll((Collection<String>) Set.of("relevance"));
+            verify(nameSet(scoreNamesKey(expectedMember))).addAll((Collection<String>) Set.of("relevance"));
         }
 
         /**
@@ -119,7 +119,7 @@ class AnnotationQueueRoutingBufferServiceTest {
         void writesNoScoreNamesWhenTheEmitterDidNotSay() {
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(UUID.randomUUID()), Set.of()).block();
 
-            verify(scoreNames, never()).addAll(anyCollection());
+            assertThat(nameSets).isEmpty();
         }
 
         /**
@@ -134,8 +134,10 @@ class AnnotationQueueRoutingBufferServiceTest {
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("relevance")).block();
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("hallucination")).block();
 
-            verify(scoreNames).addAll((Collection<String>) Set.of("relevance"));
-            verify(scoreNames).addAll((Collection<String>) Set.of("hallucination"));
+            String key = scoreNamesKey(member(traceId));
+            verify(nameSet(key)).addAll((Collection<String>) Set.of("relevance"));
+            verify(nameSet(key)).addAll((Collection<String>) Set.of("hallucination"));
+            assertThat(nameSets).hasSize(1); // both went to the one key for that entity
         }
 
         @Test
@@ -193,7 +195,7 @@ class AnnotationQueueRoutingBufferServiceTest {
 
             verify(pending, never()).removeAll(any());
             verify(authors, never()).fastRemove(any(String[].class));
-            verify(scoreNames, never()).delete();
+            nameSets.values().forEach(m -> verify(m, never()).removeAll(anyCollection()));
         }
 
         @Test
@@ -235,7 +237,8 @@ class AnnotationQueueRoutingBufferServiceTest {
             UUID traceId = UUID.randomUUID();
             givenDue(List.of(member(traceId)));
             givenAuthors(Map.of(member(traceId), USER_NAME));
-            when(scoreNames.readAll()).thenReturn(Mono.just(Set.of("relevance", "safety")));
+            when(nameSet(scoreNamesKey(member(traceId))).readAll())
+                    .thenReturn(Mono.just(Set.of("relevance", "safety")));
             when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
 
             service.flush().block();
@@ -247,13 +250,15 @@ class AnnotationQueueRoutingBufferServiceTest {
         }
 
         /**
-         * When more is due than one drain can take, the excess stays put. The read is bounded by
-         * jobBatchSize and ZRANGEBYSCORE returns ascending by score - and the score is the due
-         * timestamp - so each tick takes the oldest deadlines and the backlog cannot starve a member
-         * that keeps being overtaken by newer ones.
+         * Two things, and deliberately not a third. It asserts that the read is bounded by jobBatchSize,
+         * and that only the members actually published are removed - so whatever Redis left behind stays
+         * pending. It does not assert that the backlog is drained oldest-first: that follows from
+         * ZRANGEBYSCORE returning ascending by score, where the score is the due timestamp, and Redis
+         * honouring LIMIT. Neither is this class's to verify with a mocked client, and pretending
+         * otherwise is how a test ends up named for a guarantee it never exercises.
          */
         @Test
-        void takesAtMostOneBatchAndLeavesTheRestPending() {
+        void boundsTheReadToOneBatchAndRemovesOnlyWhatItPublished() {
             config.setJobBatchSize(3);
             List<UUID> ids = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
             List<String> firstPage = ids.stream().map(id -> member(id)).toList();
@@ -275,6 +280,41 @@ class AnnotationQueueRoutingBufferServiceTest {
             assertThat(removed.getValue()).hasSize(3).containsExactlyInAnyOrderElementsOf(firstPage);
         }
 
+        /** Each entity's names go to its own key, so one entity cannot see another's. */
+        @Test
+        void keepsEachEntitysScoreNamesOnItsOwnKey() {
+            UUID first = UUID.randomUUID();
+            UUID second = UUID.randomUUID();
+
+            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(first), Set.of("relevance")).block();
+            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(second), Set.of("safety")).block();
+
+            assertThat(nameSets.keySet()).containsExactlyInAnyOrder(
+                    scoreNamesKey(member(first)), scoreNamesKey(member(second)));
+            verify(nameSet(scoreNamesKey(member(first)))).addAll((Collection<String>) Set.of("relevance"));
+            verify(nameSet(scoreNamesKey(member(second)))).addAll((Collection<String>) Set.of("safety"));
+        }
+
+        /**
+         * A score arriving between the read and the removal must survive. Deleting the key would erase a
+         * name the published message knows nothing about, leaving the freshness check blind to exactly the
+         * score it exists to catch - so removal is by value.
+         */
+        @Test
+        void removesOnlyTheNamesItPublishedRatherThanTheWholeKey() {
+            UUID traceId = UUID.randomUUID();
+            String key = scoreNamesKey(member(traceId));
+            givenDue(List.of(member(traceId)));
+            givenAuthors(Map.of(member(traceId), USER_NAME));
+            when(nameSet(key).readAll()).thenReturn(Mono.just(Set.of("relevance")));
+            when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
+
+            service.flush().block();
+
+            verify(nameSet(key)).removeAll((Collection<String>) Set.of("relevance"));
+            verify(nameSet(key), never()).delete();
+        }
+
         @Test
         void publishesNothingWhenDisabled() {
             config.setEnabled(false);
@@ -283,6 +323,23 @@ class AnnotationQueueRoutingBufferServiceTest {
             verify(pending, never()).valueRange(anyDouble(), any(Boolean.class), anyDouble(),
                     any(Boolean.class), anyInt(), anyInt());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private RSetReactive<String> nameSet(String key) {
+        return nameSets.computeIfAbsent(key, k -> {
+            RSetReactive<String> m = org.mockito.Mockito.mock(RSetReactive.class);
+            when(m.addAll(anyCollection())).thenReturn(Mono.just(true));
+            when(m.removeAll(anyCollection())).thenReturn(Mono.just(true));
+            when(m.readAll()).thenReturn(Mono.just(Set.of()));
+            when(m.delete()).thenReturn(Mono.just(true));
+            when(m.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
+            return m;
+        });
+    }
+
+    private String scoreNamesKey(String member) {
+        return "annotation-queue:routing:pending-score-names:" + member;
     }
 
     private String member(UUID entityId) {

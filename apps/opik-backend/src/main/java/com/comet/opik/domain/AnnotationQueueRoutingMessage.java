@@ -6,10 +6,10 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Builder;
 import lombok.NonNull;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * A batch of entities whose feedback scores just changed, handed to the routing consumer.
@@ -45,11 +45,20 @@ public record AnnotationQueueRoutingMessage(
      * in a map built by {@code Collectors.toMap} - mutable, and reachable from the caller.
      */
     public AnnotationQueueRoutingMessage {
-        scoreNamesByEntity = scoreNamesByEntity == null
-                ? Map.of()
-                : scoreNamesByEntity.entrySet().stream()
-                        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
-                                entry -> Set.copyOf(entry.getValue())));
+        // Null-tolerant at both levels. The publisher never produces nulls, but this record is also
+        // rebuilt by the stream codec from JSON, where an absent nested value deserializes to null - and
+        // Set.copyOf would throw, failing the message instead of the freshness check it feeds.
+        if (scoreNamesByEntity == null) {
+            scoreNamesByEntity = Map.of();
+        } else {
+            var copy = new HashMap<UUID, Set<String>>(scoreNamesByEntity.size());
+            scoreNamesByEntity.forEach((entityId, names) -> {
+                if (entityId != null) {
+                    copy.put(entityId, names == null ? Set.of() : Set.copyOf(names));
+                }
+            });
+            scoreNamesByEntity = Map.copyOf(copy);
+        }
     }
 
     public Set<String> expectedScoreNames(UUID entityId) {
