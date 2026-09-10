@@ -7,11 +7,13 @@ import McpAnnouncementBanner from "./McpAnnouncementBanner";
 import {
   MCP_BANNER_CAMPAIGN_ID,
   MCP_BANNER_COPY,
+  MCP_BANNER_COPY_SHORT,
   MCP_BANNER_SHOWN_SESSION_KEY,
 } from "./constants";
 
 // ── mutable state the mock factories read ──────────────────────────────────
 const storage: Record<string, unknown> = {};
+let mockIsPhonePortrait = false;
 // ───────────────────────────────────────────────────────────────────────────
 
 vi.mock("use-local-storage-state", async () => {
@@ -56,6 +58,14 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => undefined,
 }));
 
+vi.mock("@/hooks/useIsPhone", () => ({
+  useIsPhone: () => ({
+    isPhone: mockIsPhonePortrait,
+    isPhonePortrait: mockIsPhonePortrait,
+    isPhoneLandscape: false,
+  }),
+}));
+
 // The height wiring belongs to the layout, not to this seam.
 vi.mock("@/hooks/useObserveResizeNode", () => ({
   useObserveResizeNode: () => ({ ref: vi.fn(), node: undefined }),
@@ -74,6 +84,7 @@ const renderBanner = () =>
 beforeEach(() => {
   for (const key of Object.keys(storage)) delete storage[key];
   window.sessionStorage.clear();
+  mockIsPhonePortrait = false;
   vi.mocked(trackEvent).mockClear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date("2026-10-01T09:00:00Z"));
@@ -160,5 +171,30 @@ describe("McpAnnouncementBanner", () => {
     renderBanner();
 
     expect(screen.getByRole("region", { name: /opik mcp/i })).toBeVisible();
+  });
+
+  describe("on a phone", () => {
+    it("shows a message that fits, and says so in the events", () => {
+      mockIsPhonePortrait = true;
+
+      renderBanner();
+
+      expect(screen.getByText(MCP_BANNER_COPY_SHORT)).toBeInTheDocument();
+      expect(screen.queryByText(MCP_BANNER_COPY)).not.toBeInTheDocument();
+      expect(trackEvent).toHaveBeenCalledWith(OpikEvent.MCP_BANNER_SHOWN, {
+        workspace_name: "my-workspace",
+        campaign_id: MCP_BANNER_CAMPAIGN_ID,
+        copy_variant: "short",
+      });
+    });
+
+    it("keeps both controls reachable next to the shortened message", () => {
+      mockIsPhonePortrait = true;
+
+      renderBanner();
+
+      expect(screen.getByRole("link", { name: /learn more/i })).toBeVisible();
+      expect(screen.getByRole("button", { name: /dismiss/i })).toBeVisible();
+    });
   });
 });

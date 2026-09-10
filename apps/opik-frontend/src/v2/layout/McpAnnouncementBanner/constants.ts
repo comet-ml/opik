@@ -34,6 +34,14 @@ export const MCP_BANNER_DOCS_PATH = "/mcp-server";
 export const MCP_BANNER_COPY =
   "Opik MCP: debug traces and fix failing evals from Claude Code, Codex, Cursor or VS Code.";
 
+/**
+ * The phone line. The full copy is 88 characters and roughly 45 fit at 400px
+ * once the icon, the CTA and the dismiss control have taken their space, so a
+ * phone would read a fragment. The client list goes rather than being
+ * abbreviated, and the framing stays on the agent doing the work.
+ */
+export const MCP_BANNER_COPY_SHORT = "Opik MCP: debug traces with your agent.";
+
 export const MCP_BANNER_COPY_VARIANT = {
   FULL: "full",
   SHORT: "short",

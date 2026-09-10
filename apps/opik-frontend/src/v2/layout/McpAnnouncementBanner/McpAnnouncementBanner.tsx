@@ -3,12 +3,14 @@ import { ArrowUpRight, Plug, X } from "lucide-react";
 
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { Button } from "@/ui/button";
 import {
   MCP_BANNER_CAMPAIGN_ID,
   MCP_BANNER_COPY,
+  MCP_BANNER_COPY_SHORT,
   MCP_BANNER_COPY_VARIANT,
   MCP_BANNER_DOCS_PATH,
   MCP_BANNER_SHOWN_SESSION_KEY,
@@ -49,6 +51,12 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   const { visible, dismiss } = useMcpAnnouncementBanner({
     retentionBannerVisible,
   });
+  const { isPhonePortrait } = useIsPhone();
+
+  const copy = isPhonePortrait ? MCP_BANNER_COPY_SHORT : MCP_BANNER_COPY;
+  const copyVariant = isPhonePortrait
+    ? MCP_BANNER_COPY_VARIANT.SHORT
+    : MCP_BANNER_COPY_VARIANT.FULL;
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
@@ -58,7 +66,7 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   const eventProperties = {
     workspace_name: workspaceName,
     campaign_id: MCP_BANNER_CAMPAIGN_ID,
-    copy_variant: MCP_BANNER_COPY_VARIANT.FULL,
+    copy_variant: copyVariant,
   };
 
   useEffect(() => {
@@ -77,13 +85,13 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   const handleCtaClick = useCallback(() => {
     trackEvent(OpikEvent.MCP_BANNER_CTA_CLICKED, eventProperties);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceName]);
+  }, [workspaceName, copyVariant]);
 
   const handleDismiss = useCallback(() => {
     trackEvent(OpikEvent.MCP_BANNER_DISMISSED, eventProperties);
     dismiss();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dismiss, workspaceName]);
+  }, [dismiss, workspaceName, copyVariant]);
 
   if (!visible) {
     return null;
@@ -99,7 +107,7 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
       <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
         <Plug className="size-3.5 shrink-0 text-white" />
         <span className="comet-body-xs min-w-0 truncate text-white">
-          {MCP_BANNER_COPY}
+          {copy}
         </span>
         <Button
           variant="link"
