@@ -2938,6 +2938,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the backend materialises a thread model from the traces that share a
        * `thread_id`, which is also when it decides which thread-scope rules
        * sample it — so a rule has to exist before the first trace is written.
+       *
+       * Traces sharing one are the turns a thread-scope rule is handed when the
+       * thread closes; turn order comes from `start_time`, so a multi-turn seed
+       * must space them.
        */
       threadId?: string;
       startTime?: Date;
@@ -2948,12 +2952,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * scored — and a scoring spec built on it would assert nothing.
        */
       endTime?: Date;
-      /**
-       * Groups this trace into a conversation thread. Traces sharing one are the
-       * turns a thread-scope rule is handed when the thread closes; turn order
-       * comes from `start_time`, so a multi-turn seed must space them.
-       */
-      threadId?: string;
     }): Promise<string> {
       await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
         id: args.id,
@@ -2963,7 +2961,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
-        ...(args.threadId ? { thread_id: args.threadId } : {}),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
         ...(args.metadata ? { metadata: args.metadata } : {}),
