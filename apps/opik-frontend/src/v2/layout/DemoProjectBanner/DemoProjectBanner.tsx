@@ -1,19 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
-import useLocalStorageState from "use-local-storage-state";
-import { useFeatureFlagVariantKey } from "posthog-js/react";
 
-import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import useProjectById from "@/api/projects/useProjectById";
-import { DEMO_PROJECT_NAME } from "@/constants/shared";
-import {
-  AGENT_ONBOARDING_KEY,
-  AGENT_ONBOARDING_STEPS,
-  AgentOnboardingState,
-  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
-  DEFAULT_ONBOARDING_FLOW,
-} from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { AGENT_ONBOARDING_STEPS } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { useDemoProjectBannerVisibility } from "./useDemoProjectBannerVisibility";
 import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
 interface DemoProjectBannerProps {
@@ -24,40 +15,28 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   onChangeHeight,
 }) => {
   const heightRef = useRef(0);
-  const activeProjectId = useActiveProjectId();
   const workspaceName = useActiveWorkspaceName();
 
-  const { data: project } = useProjectById(
-    { projectId: activeProjectId! },
-    { enabled: !!activeProjectId },
-  );
-
-  const [onboardingState, setOnboardingState] =
-    useLocalStorageState<AgentOnboardingState>(
-      `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
-    );
+  const {
+    isDemoProject,
+    isOnboardingActive,
+    isManualFlow,
+    isBannerVisible,
+    onboardingState,
+    setOnboardingState,
+  } = useDemoProjectBannerVisibility();
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
     onChangeHeight(node.clientHeight);
   });
 
-  const variant =
-    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
-    DEFAULT_ONBOARDING_FLOW;
-  const isManualFlow = variant === "manual";
-
-  const isDemoProject = project?.name === DEMO_PROJECT_NAME;
-  const isOnboardingActive =
-    !!onboardingState?.step &&
-    onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
-
   useAutoCompleteAgentOnboarding({
     agentName: onboardingState?.agentName,
     enabled: isDemoProject && isOnboardingActive,
   });
 
-  const hideBanner = !isDemoProject || (!isOnboardingActive && !isManualFlow);
+  const hideBanner = !isBannerVisible;
 
   useEffect(() => {
     onChangeHeight(!hideBanner ? heightRef.current : 0);
