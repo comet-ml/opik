@@ -1,4 +1,5 @@
 import React from "react";
+import { useParams } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 
@@ -19,7 +20,7 @@ export type DemoProjectVerdict = {
    * Whether the answer above is the real one yet. It comes from a query, so
    * "not a demo project" and "we do not know yet" are the same `false` — a
    * distinction that matters to anything counting impressions, which must not
-   * count a user it is about to hide the banner from.
+   * count a user it is about to hide a banner from.
    */
   isSettled: boolean;
 };
@@ -47,12 +48,20 @@ export const useIsDemoProjectById = (
 };
 
 export type DemoProjectBannerVisibility = {
-  isDemoProject: boolean;
-  /** Whether the demo verdict has resolved; see DemoProjectVerdict. */
+  /** Whether the demo-project banner belongs on screen right now. */
+  isBannerVisible: boolean;
+  /** Whether the page being viewed belongs to a seeded demo project. */
+  isOnDemoProjectPage: boolean;
+  /** Whether the page's demo verdict has resolved; see DemoProjectVerdict. */
   isSettled: boolean;
+  /**
+   * Whether the *sticky* active project is a demo project. This outlives the
+   * page it was opened from, so it answers "which project is this user working
+   * in", not "what is on screen". Onboarding auto-completion needs the former.
+   */
+  isDemoProjectActive: boolean;
   isOnboardingActive: boolean;
   isManualFlow: boolean;
-  isBannerVisible: boolean;
   onboardingState?: AgentOnboardingState;
   setOnboardingState: React.Dispatch<
     React.SetStateAction<AgentOnboardingState | undefined>
@@ -66,17 +75,27 @@ export type DemoProjectBannerVisibility = {
  * announcement banner, which must stand aside for it. Deriving it in both
  * places is how they drift into showing together or hiding together.
  *
- * Note the reach of this verdict: the active project is sticky (persisted per
- * workspace, only cleared on deletion), so it describes "the project you are
- * working in", not "the project on screen" — the demo banner is app-wide while
- * a demo project is active, and so is any suppression keyed on it.
+ * Visibility follows the page, which is what OPIK-6027 asked for ("while
+ * browsing the demo project") and what OPIK-6192 extended to the manual
+ * "skip and explore" flow. It deliberately does not follow the active project:
+ * that id is persisted per workspace and cleared only on deletion, so keying
+ * the bar to it kept the bar on screen across the whole app long after the
+ * user had left the demo project.
  */
 export const useDemoProjectBannerVisibility =
   (): DemoProjectBannerVisibility => {
     const activeProjectId = useActiveProjectId();
     const workspaceName = useActiveWorkspaceName();
 
-    const { isDemoProject, isSettled } = useIsDemoProjectById(activeProjectId);
+    const routeProjectId = useParams({
+      strict: false,
+      select: (params: Record<string, string | undefined>) => params.projectId,
+    });
+
+    const { isDemoProject: isOnDemoProjectPage, isSettled } =
+      useIsDemoProjectById(routeProjectId);
+    const { isDemoProject: isDemoProjectActive } =
+      useIsDemoProjectById(activeProjectId);
 
     const [onboardingState, setOnboardingState] =
       useLocalStorageState<AgentOnboardingState>(
@@ -95,11 +114,13 @@ export const useDemoProjectBannerVisibility =
       onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
 
     return {
-      isDemoProject,
+      isBannerVisible:
+        isOnDemoProjectPage && (isOnboardingActive || isManualFlow),
+      isOnDemoProjectPage,
       isSettled,
+      isDemoProjectActive,
       isOnboardingActive,
       isManualFlow,
-      isBannerVisible: isDemoProject && (isOnboardingActive || isManualFlow),
       onboardingState,
       setOnboardingState,
     };

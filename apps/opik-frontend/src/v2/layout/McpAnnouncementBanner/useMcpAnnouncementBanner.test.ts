@@ -4,39 +4,21 @@ import { renderHook, act } from "@testing-library/react";
 import { useMcpAnnouncementBanner } from "./useMcpAnnouncementBanner";
 
 // ── mutable state the mock factories read ──────────────────────────────────
-const storage: Record<string, unknown> = {};
+// Hoisted, because vi.mock factories are lifted above ordinary declarations.
+const { storage } = vi.hoisted(() => ({
+  storage: {} as Record<string, unknown>,
+}));
 let mockKillSwitch: boolean | undefined;
 let mockDemoBannerVisible = false;
+let mockOnDemoProjectPage = false;
 let mockDemoSettled = true;
-let mockRouteProjectId: string | undefined;
 // ───────────────────────────────────────────────────────────────────────────
 
-const DEMO_PROJECT_ID = "demo-project-id";
-
-// A working in-memory stand-in, so "dismissal survives a remount" is a real
-// assertion rather than a mock echoing itself.
-vi.mock("use-local-storage-state", async () => {
-  const { useCallback, useState } = await import("react");
-  return {
-    default: function useLocalStorageStateMock(
-      key: string,
-      options?: { defaultValue?: unknown },
-    ) {
-      const [value, setValue] = useState(() =>
-        key in storage ? storage[key] : options?.defaultValue,
-      );
-      const set = useCallback(
-        (next: unknown) => {
-          const resolved = typeof next === "function" ? next(value) : next;
-          storage[key] = resolved;
-          setValue(resolved);
-        },
-        [key, value],
-      );
-      return [value, set];
-    },
-  };
-});
+vi.mock("use-local-storage-state", async () => ({
+  default: (
+    await import("@/testing/localStorageStateMock")
+  ).createLocalStorageStateMock(storage),
+}));
 
 vi.mock("posthog-js/react", () => ({
   useFeatureFlagEnabled: () => mockKillSwitch,
@@ -46,29 +28,26 @@ vi.mock("posthog-js/react", () => ({
 vi.mock("@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility", () => ({
   useDemoProjectBannerVisibility: () => ({
     isBannerVisible: mockDemoBannerVisible,
+    isOnDemoProjectPage: mockOnDemoProjectPage,
     isSettled: mockDemoSettled,
   }),
-  useIsDemoProjectById: (projectId?: string | null) => ({
-    isDemoProject: projectId === DEMO_PROJECT_ID,
-    isSettled: mockDemoSettled,
-  }),
-}));
-
-vi.mock("@tanstack/react-router", () => ({
-  useParams: ({ select }: { select: (p: Record<string, string>) => unknown }) =>
-    select({ projectId: mockRouteProjectId } as Record<string, string>),
 }));
 
 const INSIDE_WINDOW = "2026-10-01T09:00:00Z";
 const LAST_DAY_OF_CAMPAIGN = "2026-11-15T23:30:00Z";
 const AFTER_WINDOW = "2026-11-16T00:30:00Z";
 
+const SETTLED_AND_CLEAR = {
+  retentionBannerVisible: false,
+  retentionBannerSettled: true,
+};
+
 beforeEach(() => {
   for (const key of Object.keys(storage)) delete storage[key];
   mockKillSwitch = undefined;
   mockDemoBannerVisible = false;
+  mockOnDemoProjectPage = false;
   mockDemoSettled = true;
-  mockRouteProjectId = undefined;
   vi.useFakeTimers();
   vi.setSystemTime(new Date(INSIDE_WINDOW));
 });
@@ -77,7 +56,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const banner = () => renderHook(() => useMcpAnnouncementBanner()).result;
+const banner = (params = SETTLED_AND_CLEAR) =>
+  renderHook(() => useMcpAnnouncementBanner(params)).result;
 
 describe("useMcpAnnouncementBanner", () => {
   describe("campaign window", () => {
@@ -116,11 +96,10 @@ describe("useMcpAnnouncementBanner", () => {
 
   describe("standing aside", () => {
     it("is hidden while the quota banner holds the slot", () => {
-      const { result } = renderHook(() =>
-        useMcpAnnouncementBanner({ retentionBannerVisible: true }),
-      );
-
-      expect(result.current.visible).toBe(false);
+      expect(
+        banner({ retentionBannerVisible: true, retentionBannerSettled: true })
+          .current.visible,
+      ).toBe(false);
     });
 
     it("is hidden while the demo-project banner is on screen", () => {
@@ -131,16 +110,14 @@ describe("useMcpAnnouncementBanner", () => {
 
     // The demo banner takes itself off screen once onboarding is done, so the
     // page itself has to be checked too — otherwise the announcement turns up
-    // on seeded demo data and into the funnel with it.
+    // on seeded demo data, and into the funnel with it.
     it("is hidden on a demo project's own page even with no demo banner", () => {
-      mockRouteProjectId = DEMO_PROJECT_ID;
+      mockOnDemoProjectPage = true;
 
       expect(banner().current.visible).toBe(false);
     });
 
-    it("is visible on the user's own project page", () => {
-      mockRouteProjectId = "own-project-id";
-
+    it("is visible on a workspace page while the demo project is merely active", () => {
       expect(banner().current.visible).toBe(true);
     });
   });
@@ -160,7 +137,7 @@ describe("useMcpAnnouncementBanner", () => {
 
     // Unresolved is the normal first-render state on cloud and the permanent
     // state in OSS, where PostHog never initialises. Treating it as "hide"
-    // would delay the first paint on cloud and blank OSS entirely.
+    // would delay the first paint and blank OSS entirely.
     it("is visible while the switch is unresolved", () => {
       mockKillSwitch = undefined;
 
@@ -173,13 +150,25 @@ describe("useMcpAnnouncementBanner", () => {
       expect(banner().current.countable).toBe(true);
     });
 
-    // The banner is painted optimistically while the demo verdicts are in
-    // flight. Counting it then would put a user we are about to hide it from
-    // into the funnel, and burn the session's one impression doing it.
-    it("is not countable while a demo verdict is still in flight", () => {
+    // The banner is painted optimistically while the verdicts are in flight.
+    // Counting it then would put a user we are about to hide it from into the
+    // funnel, and burn the session's one impression doing it.
+    it("is not countable while the demo verdict is in flight", () => {
       mockDemoSettled = false;
 
       const { current } = banner();
+
+      expect(current.visible).toBe(true);
+      expect(current.countable).toBe(false);
+    });
+
+    // The quota banner's own visibility arrives from a query too, so "no quota
+    // banner yet" is not the same answer as "no quota banner".
+    it("is not countable while the quota verdict is in flight", () => {
+      const { current } = banner({
+        retentionBannerVisible: false,
+        retentionBannerSettled: false,
+      });
 
       expect(current.visible).toBe(true);
       expect(current.countable).toBe(false);

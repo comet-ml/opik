@@ -1,12 +1,8 @@
 import { useCallback } from "react";
-import { useParams } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import { useFeatureFlagEnabled } from "posthog-js/react";
 
-import {
-  useDemoProjectBannerVisibility,
-  useIsDemoProjectById,
-} from "@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility";
+import { useDemoProjectBannerVisibility } from "@/v2/layout/DemoProjectBanner/useDemoProjectBannerVisibility";
 import {
   MCP_BANNER_CAMPAIGN_END,
   MCP_BANNER_DISMISSED_KEY,
@@ -23,11 +19,13 @@ const isWithinCampaign = () =>
 
 type UseMcpAnnouncementBannerParams = {
   /**
-   * Whether the quota/retention banner holds the slot. Passed in rather than
-   * derived so this stays unaware of quota concepts — and because only the
-   * layout, which mounts both, can answer it.
+   * Whether the quota banner holds the slot, and whether that answer is final.
+   * Both come from the layout, which mounts both banners: this stays unaware
+   * of quota concepts, and the quota banner's own visibility arrives from a
+   * query, so "not up yet" and "not up" are different answers.
    */
-  retentionBannerVisible?: boolean;
+  retentionBannerVisible: boolean;
+  retentionBannerSettled: boolean;
 };
 
 type UseMcpAnnouncementBannerResult = {
@@ -35,8 +33,8 @@ type UseMcpAnnouncementBannerResult = {
   visible: boolean;
   /**
    * Whether this render may be counted as an impression. Stricter than
-   * `visible`: the demo verdicts arrive from queries, so a banner can be
-   * painted and then withdrawn. Counting on `visible` would put suppressed
+   * `visible`: the demo and quota verdicts arrive from queries, so a banner can
+   * be painted and then withdrawn. Counting on `visible` would put suppressed
    * users into the funnel and burn the session's one impression on them.
    */
   countable: boolean;
@@ -57,14 +55,15 @@ type UseMcpAnnouncementBannerResult = {
  *   runtime config — and the permanent state in OSS, where it never initialises
  *   at all. A truthiness check here would blank the banner on first paint and
  *   reveal it a tick later, and would hide it from OSS entirely.
- * - The demo and quota banners outrank an announcement. Both verdicts arrive
- *   from queries, so they can remove a painted banner; the demo case costs no
- *   movement because both bars are the same height, and the quota case moves
- *   the page once, only for users who are over their limit.
+ * - The demo banner and the quota banner outrank an announcement. Both verdicts
+ *   arrive from queries, so they can remove a painted banner; the demo case
+ *   costs no movement because both bars are the same height, and the quota case
+ *   moves the page once, only for users who are over their limit.
  */
 export const useMcpAnnouncementBanner = ({
-  retentionBannerVisible = false,
-}: UseMcpAnnouncementBannerParams = {}): UseMcpAnnouncementBannerResult => {
+  retentionBannerVisible,
+  retentionBannerSettled,
+}: UseMcpAnnouncementBannerParams): UseMcpAnnouncementBannerResult => {
   const [dismissed, setDismissed] = useLocalStorageState<boolean>(
     MCP_BANNER_DISMISSED_KEY,
     { defaultValue: false },
@@ -72,17 +71,11 @@ export const useMcpAnnouncementBanner = ({
 
   const killed = useFeatureFlagEnabled(MCP_BANNER_FEATURE_FLAG_KEY) === false;
 
-  const { isBannerVisible: demoBannerVisible, isSettled: demoSettled } =
-    useDemoProjectBannerVisibility();
-
-  // The route's own project, not the sticky active one: the question is which
-  // project is on screen, and the active project outlives the page you opened it on.
-  const routeProjectId = useParams({
-    strict: false,
-    select: (params) => (params as { projectId?: string }).projectId,
-  });
-  const { isDemoProject: onDemoProjectPage, isSettled: routeSettled } =
-    useIsDemoProjectById(routeProjectId);
+  const {
+    isBannerVisible: demoBannerVisible,
+    isOnDemoProjectPage,
+    isSettled: demoSettled,
+  } = useDemoProjectBannerVisibility();
 
   const dismiss = useCallback(() => setDismissed(true), [setDismissed]);
 
@@ -92,11 +85,11 @@ export const useMcpAnnouncementBanner = ({
     !killed &&
     !retentionBannerVisible &&
     !demoBannerVisible &&
-    !onDemoProjectPage;
+    !isOnDemoProjectPage;
 
   return {
     visible,
-    countable: visible && demoSettled && routeSettled,
+    countable: visible && demoSettled && retentionBannerSettled,
     dismiss,
   };
 };

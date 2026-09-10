@@ -9,10 +9,14 @@ import {
 } from "./useDemoProjectBannerVisibility";
 
 // ── mutable state the mock factories read ──────────────────────────────────
-let mockActiveProjectId: string | null = "project-1";
+// Hoisted, because vi.mock factories are lifted above ordinary declarations.
+const { storage } = vi.hoisted(() => ({
+  storage: {} as Record<string, unknown>,
+}));
+let mockActiveProjectId: string | null = null;
+let mockRouteProjectId: string | undefined;
 let mockProjectsById: Record<string, { name: string }> = {};
 let mockProjectPending = false;
-let mockOnboardingState: { step: string | null; agentName: string } | undefined;
 let mockVariant: string | null | undefined;
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -21,10 +25,18 @@ vi.mock("@/store/AppStore", () => ({
   useActiveWorkspaceName: () => "my-workspace",
 }));
 
+vi.mock("@tanstack/react-router", () => ({
+  useParams: ({
+    select,
+  }: {
+    select: (p: Record<string, unknown>) => unknown;
+  }) => select({ projectId: mockRouteProjectId }),
+}));
+
 vi.mock("@/api/projects/useProjectById", () => ({
   default: ({ projectId }: { projectId?: string }) => ({
-    // A pending query has no data yet, which is the whole reason "not a demo
-    // project" and "not known yet" have to be told apart.
+    // A pending query has no data yet, which is why "not a demo project" and
+    // "not known yet" have to be told apart.
     data:
       projectId && !mockProjectPending
         ? mockProjectsById[projectId]
@@ -33,8 +45,10 @@ vi.mock("@/api/projects/useProjectById", () => ({
   }),
 }));
 
-vi.mock("use-local-storage-state", () => ({
-  default: () => [mockOnboardingState, vi.fn()],
+vi.mock("use-local-storage-state", async () => ({
+  default: (
+    await import("@/testing/localStorageStateMock")
+  ).createLocalStorageStateMock(storage),
 }));
 
 vi.mock("posthog-js/react", () => ({
@@ -43,86 +57,109 @@ vi.mock("posthog-js/react", () => ({
 
 const DEMO_ID = "demo-project-id";
 const OWN_ID = "own-project-id";
+const ONBOARDING_KEY = "agent-onboarding-my-workspace";
 
 beforeEach(() => {
+  for (const key of Object.keys(storage)) delete storage[key];
   mockActiveProjectId = OWN_ID;
+  mockRouteProjectId = undefined;
   mockProjectsById = {
     [DEMO_ID]: { name: DEMO_PROJECT_NAME },
     [OWN_ID]: { name: "my-agent" },
   };
   mockProjectPending = false;
-  mockOnboardingState = undefined;
   // The onboarding flow variant resolves to "manual" by default, so tests that
-  // care about the non-manual branch have to opt into it explicitly.
+  // care about the non-manual branch opt into it explicitly.
   mockVariant = undefined;
 });
 
 const visibility = () =>
   renderHook(() => useDemoProjectBannerVisibility()).result.current;
 
+const onboardingAt = (step: string) => {
+  storage[ONBOARDING_KEY] = { step, agentName: "my-agent" };
+};
+
 describe("useDemoProjectBannerVisibility", () => {
-  describe("isDemoProject", () => {
-    it("is true when the active project is the seeded demo project", () => {
+  describe("isBannerVisible", () => {
+    // OPIK-6027 asked for the banner "while browsing the demo project", so the
+    // page decides, not the sticky active project.
+    it("is true on a demo project's page while onboarding is running", () => {
+      mockRouteProjectId = DEMO_ID;
+      mockVariant = "ai-assisted";
+      onboardingAt(AGENT_ONBOARDING_STEPS.CONNECT_AGENT);
+
+      expect(visibility().isBannerVisible).toBe(true);
+    });
+
+    it("is true on a demo project's page under the manual flow", () => {
+      mockRouteProjectId = DEMO_ID;
+      mockVariant = "manual";
+      onboardingAt(AGENT_ONBOARDING_STEPS.DONE);
+
+      expect(visibility().isBannerVisible).toBe(true);
+    });
+
+    it("is false on a demo project's page once onboarding is done outside the manual flow", () => {
+      mockRouteProjectId = DEMO_ID;
+      mockVariant = "ai-assisted";
+      onboardingAt(AGENT_ONBOARDING_STEPS.DONE);
+
+      expect(visibility().isBannerVisible).toBe(false);
+    });
+
+    // The behaviour this branch changes: the demo project stays the active one
+    // long after you leave it, and the bar used to follow it everywhere.
+    it("is false on a workspace-level page even while the demo project is active", () => {
       mockActiveProjectId = DEMO_ID;
-      expect(visibility().isDemoProject).toBe(true);
+      mockRouteProjectId = undefined;
+      onboardingAt(AGENT_ONBOARDING_STEPS.CONNECT_AGENT);
+
+      expect(visibility().isBannerVisible).toBe(false);
     });
 
-    it("is false when the active project is the user's own", () => {
-      expect(visibility().isDemoProject).toBe(false);
-    });
+    it("is false on another project's page while the demo project is active", () => {
+      mockActiveProjectId = DEMO_ID;
+      mockRouteProjectId = OWN_ID;
+      onboardingAt(AGENT_ONBOARDING_STEPS.CONNECT_AGENT);
 
-    it("is false while no project is active", () => {
-      mockActiveProjectId = null;
-      expect(visibility().isDemoProject).toBe(false);
-    });
-
-    it("is false while the active project has not loaded yet", () => {
-      mockActiveProjectId = "not-in-cache";
-      expect(visibility().isDemoProject).toBe(false);
+      expect(visibility().isBannerVisible).toBe(false);
     });
   });
 
-  describe("isBannerVisible", () => {
-    it("is true on the demo project while onboarding is still running", () => {
+  describe("isDemoProjectActive", () => {
+    // Onboarding auto-completion keys off this: it watches the user's own
+    // project for traces and must keep working wherever the user navigated to.
+    it("follows the sticky active project, not the page", () => {
       mockActiveProjectId = DEMO_ID;
-      mockVariant = "ai-assisted";
-      mockOnboardingState = {
-        step: AGENT_ONBOARDING_STEPS.CONNECT_AGENT,
-        agentName: "my-agent",
-      };
-      expect(visibility().isBannerVisible).toBe(true);
+      mockRouteProjectId = OWN_ID;
+
+      expect(visibility().isDemoProjectActive).toBe(true);
     });
 
-    it("is true on the demo project under the manual flow, onboarding aside", () => {
-      mockActiveProjectId = DEMO_ID;
-      mockVariant = "manual";
-      mockOnboardingState = {
-        step: AGENT_ONBOARDING_STEPS.DONE,
-        agentName: "my-agent",
-      };
-      expect(visibility().isBannerVisible).toBe(true);
+    it("is false when the active project is the user's own", () => {
+      mockActiveProjectId = OWN_ID;
+
+      expect(visibility().isDemoProjectActive).toBe(false);
+    });
+  });
+
+  describe("isSettled", () => {
+    it("is settled on a page with no project to resolve", () => {
+      mockRouteProjectId = undefined;
+      mockProjectPending = true;
+
+      expect(visibility().isSettled).toBe(true);
     });
 
-    // The case that decides whether the MCP announcement may appear on a demo
-    // project: onboarding finished and the flow is not manual, so the demo
-    // banner takes itself off screen.
-    it("is false on the demo project once onboarding is done outside the manual flow", () => {
-      mockActiveProjectId = DEMO_ID;
-      mockVariant = "ai-assisted";
-      mockOnboardingState = {
-        step: AGENT_ONBOARDING_STEPS.DONE,
-        agentName: "my-agent",
-      };
-      expect(visibility().isBannerVisible).toBe(false);
-    });
+    it("is unsettled while the page's project is still loading", () => {
+      mockRouteProjectId = DEMO_ID;
+      mockProjectPending = true;
 
-    it("is false on the user's own project even mid-onboarding", () => {
-      mockVariant = "manual";
-      mockOnboardingState = {
-        step: AGENT_ONBOARDING_STEPS.CONNECT_AGENT,
-        agentName: "my-agent",
-      };
-      expect(visibility().isBannerVisible).toBe(false);
+      const { isSettled, isOnDemoProjectPage } = visibility();
+
+      expect(isSettled).toBe(false);
+      expect(isOnDemoProjectPage).toBe(false);
     });
   });
 });
@@ -139,23 +176,11 @@ describe("useIsDemoProjectById", () => {
     expect(verdict(OWN_ID)).toEqual({ isDemoProject: false, isSettled: true });
   });
 
-  // A disabled query stays "pending" forever, so having nothing to resolve has
-  // to count as settled or nothing downstream ever gets an answer.
   it("counts having no project as settled", () => {
     mockProjectPending = true;
     expect(verdict(undefined)).toEqual({
       isDemoProject: false,
       isSettled: true,
-    });
-  });
-
-  // The distinction anything counting impressions depends on: not-a-demo and
-  // not-known-yet are the same `false`.
-  it("is unsettled while the project is still loading", () => {
-    mockProjectPending = true;
-    expect(verdict(DEMO_ID)).toEqual({
-      isDemoProject: false,
-      isSettled: false,
     });
   });
 });

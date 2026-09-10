@@ -18,10 +18,10 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   const workspaceName = useActiveWorkspaceName();
 
   const {
-    isDemoProject,
+    isBannerVisible,
+    isDemoProjectActive,
     isOnboardingActive,
     isManualFlow,
-    isBannerVisible,
     onboardingState,
     setOnboardingState,
   } = useDemoProjectBannerVisibility();
@@ -31,18 +31,19 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     onChangeHeight(node.clientHeight);
   });
 
+  // Keyed to the sticky active project, not the page: this watches the user's
+  // own project for its first trace and has to keep doing that wherever they
+  // navigate, including away from the demo project that started the flow.
   useAutoCompleteAgentOnboarding({
     agentName: onboardingState?.agentName,
-    enabled: isDemoProject && isOnboardingActive,
+    enabled: isDemoProjectActive && isOnboardingActive,
   });
 
-  const hideBanner = !isBannerVisible;
-
   useEffect(() => {
-    onChangeHeight(!hideBanner ? heightRef.current : 0);
-  }, [hideBanner, onChangeHeight]);
+    onChangeHeight(isBannerVisible ? heightRef.current : 0);
+  }, [isBannerVisible, onChangeHeight]);
 
-  if (hideBanner) {
+  if (!isBannerVisible) {
     return null;
   }
 
