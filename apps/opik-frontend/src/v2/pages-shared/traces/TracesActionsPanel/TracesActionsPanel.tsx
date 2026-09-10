@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { Tag, Trash, Pencil } from "lucide-react";
 import slugify from "slugify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonProps } from "@/ui/button";
@@ -11,6 +11,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
+import AnnotateTracesDialog from "@/v2/pages-shared/traces/AnnotateTracesDialog/AnnotateTracesDialog";
 import AddTagDialog from "@/v2/pages-shared/traces/AddTagDialog/AddTagDialog";
 import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
@@ -131,6 +132,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           type={type}
         />
       )}
+      {canLogTraceSpanThread && (
+        <AnnotateTracesDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 5}
+          setOpen={setOpen}
+          type={type}
+        />
+      )}
       {enableEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -166,6 +176,20 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             <span>Manage tags</span>
           </Button>
         </TooltipWrapper>
+      )}
+      {canLogTraceSpanThread && (
+        <Button
+          variant={buttonVariant}
+          size={buttonSize}
+          disabled={disabled}
+          onClick={() => {
+            setOpen(5);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+        >
+          <Pencil className={leadIconClassName} />
+          <span>Annotate</span>
+        </Button>
       )}
       {enableEvaluate && (
         <EvaluateButton
