@@ -1150,5 +1150,38 @@ class CostServiceTest {
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
+
+    /**
+     * Covers registering {@code novita} and {@code databricks} as canonical providers so their
+     * entries in {@code model_prices_and_context_window.json} are no longer silently dropped at
+     * load time. Novita models that publish cache rates use
+     * {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; models without cache prices
+     * and all Databricks models route through {@link SpanCostCalculator#textGenerationCost}.
+     * Novita is wired into the cache calculator as future-proofing: several Novita models do
+     * carry {@code cache_read_input_token_cost} in the price file already.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideNovitaAndDatabricksCases")
+    void calculateCostHandlesNovitaAndDatabricksModels(String description, String model,
+            String provider, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideNovitaAndDatabricksCases() {
+        return Stream.of(
+                // novita/deepseek/deepseek-r1-distill-llama-70b: input 8e-7, output 8e-7
+                // 1000 * 8e-7 + 200 * 8e-7 = 0.0008 + 0.00016 = 0.00096
+                Arguments.of("novita - text-generation without cache",
+                        "novita/deepseek/deepseek-r1-distill-llama-70b", "novita",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200),
+                        "0.00096"),
+                // databricks/databricks-gpt-oss-120b: input 1.5000999999999998e-07, output 5.9997e-07
+                // 1000 * 1.5000999999999998e-07 + 200 * 5.9997e-07 = 0.00027000399999999998
+                Arguments.of("databricks - text-generation without cache",
+                        "databricks/databricks-gpt-oss-120b", "databricks",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200),
+                        "0.00027000399999999998"));
     }
 }
