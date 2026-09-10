@@ -60,6 +60,12 @@ export async function createProviderKey(payload: {
   provider: string;
   provider_name: string;
   base_url: string;
+  /**
+   * Static bearer, for providers that are not in OAuth2 token-auth mode. The
+   * endpoint requires one whenever `auth_config` is absent, so a static-auth
+   * provider cannot be created without it.
+   */
+  api_key?: string;
   configuration?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
 }): Promise<void> {
