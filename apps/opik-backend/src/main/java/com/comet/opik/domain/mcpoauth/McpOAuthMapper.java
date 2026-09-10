@@ -42,6 +42,8 @@ interface McpOAuthMapper {
     @Mapping(target = "id", source = "id")
     @Mapping(target = "clientId", source = "client.id")
     @Mapping(target = "clientName", source = "client.name")
+    @Mapping(target = "softwareId", source = "client.softwareId")
+    @Mapping(target = "softwareVersion", source = "client.softwareVersion")
     @Mapping(target = "logoUri", source = "client.logoUri")
     @Mapping(target = "firstConnectedAt", ignore = true)
     @Mapping(target = "lastConnectedAt", ignore = true)
