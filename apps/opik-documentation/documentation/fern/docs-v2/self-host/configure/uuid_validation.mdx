@@ -43,14 +43,21 @@ Two separate checks run on a client-supplied `id`.
 - **Both bounds** — when a trace or span is created with a caller-chosen `id`. An embedded timestamp
   further than the window into either the past (`too_old`) or the future (`too_far_future`) is
   rejected.
-- **The future bound only** — wherever an existing id is referenced: updating a trace or span, a
-  span's `traceId` and `parentSpanId`, and ids referenced by dataset items, feedback scores,
-  comments, attachments and guardrails. Old ids are legitimate on those paths — a late span on a
-  month-old trace is normal — so only future-dating is rejected.
+- **The future bound only** — when a single trace or span is updated by id, and wherever an existing
+  id is referenced: a span's `traceId` and `parentSpanId`, and ids referenced by dataset items,
+  feedback scores, comments, attachments and guardrails. Old ids are legitimate on those paths — a
+  late span on a month-old trace is normal — so only future-dating is rejected.
 
-The checks live in the backend's service layer, so they cover every ingestion path alike: the REST
-API, the batch endpoints, and the OpenTelemetry endpoint. Ids that Opik generates itself are always
-in window; only client-supplied ids can fail.
+### Where the ids come from
+
+The checks live in the backend's service layer, so the creation paths are covered alike: the REST
+API, the batch ingestion endpoints, and the OpenTelemetry endpoint.
+
+Worth knowing if you only send OTel: the OpenTelemetry endpoint does not carry Opik ids, so the
+backend derives them — but it derives them from **your spans' start timestamps**, not from the
+current time, so that a trace and its spans share one reference point. An exporter replaying spans
+whose start times are outside the window is therefore rejected too, even though it never set an `id`
+itself. Backfilling historical traces over OTel needs a window wide enough to cover them.
 
 ## Before you turn it on
 
@@ -135,8 +142,9 @@ Each detection is logged at `INFO` with a fixed, searchable prefix:
 UUIDv7 audit: would-reject id, embedded timestamp '...' outside window '...', reason '...', resource '...', workspace '...'
 ```
 
-Once the count has settled at zero for the clients you care about, set `uuidV7ValidationAuditOnly`
-back to `false` to start enforcing.
+Once no new detections are arriving for the clients you care about, set
+`uuidV7ValidationAuditOnly` back to `false` to start enforcing. Query the counter's **rate**, not
+its value, when deciding that — see below.
 
 ## Monitoring
 
@@ -151,8 +159,13 @@ rollout:
 | `workspace_id` | Audit path only. `unknown` on the paths that do not carry the request workspace. |
 | `http_route` | Reject path only. The matched route, for example `/v1/private/traces/batch`. |
 
-Watch this counter for a full traffic cycle before switching from audit to reject, not just the
-first hours: a client that only runs nightly will not show up in a one-hour sample.
+`opik.ingestion.uuid_v7.rejected` is a **cumulative, monotonic counter**: it only ever increases, so
+its value never returns to zero once a single id has failed. Gate the rollout on an interval delta
+or rate — `increase(...[1h])` or `rate(...[5m])` in PromQL, with the labels you care about — rather
+than on the raw total.
+
+Watch it for a full traffic cycle before switching from audit to reject, not just the first hours: a
+client that only runs nightly will not show up in a one-hour sample.
 
 ## Turning it back off
 
