@@ -221,8 +221,8 @@ class OpenTelemetryResourceTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"receiveProtobufTraces", "receiveJsonTraces"})
-        @DisplayName("declare the request body non-null on both endpoints")
-        void testOtelEndpointsDeclareTheirBodyNonNull(String method) throws NoSuchMethodException {
+        @DisplayName("declare the request body non-null and valid on both endpoints")
+        void testOtelEndpointsDeclareTheirBodyNonNullAndValid(String method) throws NoSuchMethodException {
             // Production sends a request with no entity, which arrives as a null argument and used to raise
             // an NPE inside the service. The validation layer rejects it now, but this harness never
             // produces that null — Jersey hands the resource an empty message instead — so what is asserted
