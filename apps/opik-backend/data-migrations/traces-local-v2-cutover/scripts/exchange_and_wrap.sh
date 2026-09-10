@@ -259,6 +259,16 @@ extract() {
 #
 # RETURN, not exit: `render` calls this inside a command substitution, where an exit would end only that subshell and
 # hand the caller partial SQL. Every caller assigns first and adds `|| exit 2`, so a refusal still stops the run.
+ # KEEP IN STEP WITH reconcile.sh's require_rendered. The two copies are the SAME validation contract, and a
+# gap between them is SILENT: drop the out-of-order check and a reordered END captures to end of file past every
+# remaining guard, which is then read as a verdict. All four checks, and their ORDER, must
+# stay identical — exactly one BEGIN and one END, the END after its BEGIN, executable SQL after comments are stripped,
+# the caller's identity token present, and no surviving ${...} placeholder. The marker grammar they parse is shared
+# too, so a change to one is a change to both.
+#
+# The ONLY difference that is allowed is how failure propagates: this copy RETURNS 2, which render() propagates to callers that then exit. The
+# duplication is deliberate: this directory has no sourced helpers, and ch(), extract() and the settle gate are
+# duplicated the same way.
 require_rendered() {
     local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends begin_line end_line
     # Both structural checks read the FILE, not the extraction, because the content checks below cannot see a run-on
@@ -413,7 +423,7 @@ assert_pre_wrap_topology() {
 # SEVEN NUMERIC FIELDS ON ONE ROW before any arithmetic reads it, the polling bound (iteration cap AND deadline), and
 # the two verdicts (mutations unconditional, queue on stuck-ness). Only the table scope and the operator messages may
 # legitimately differ, being specific to what each side is about to do. The driver rehearsal exercises BOTH copies, so a
-# behavioural drift fails there rather than waiting for a reviewer.
+# behavioural drift fails there rather than going unnoticed.
 assert_replication_settled() {
     local cluster deadline polls poll row
     local sample_sql queue_detail_sql mutation_detail_sql

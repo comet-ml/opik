@@ -318,23 +318,32 @@ resolve_live_table() {
 # Direction from the live topology, the same signals finalize.sh classifies on: which backup is parked, plus the
 # end_time nullability that says which schema each table carries. Presence of a name is convention; the schema is proof.
 detect_direction() {
-    local pre_cutover post_rollback_end_time live_end_time
-    pre_cutover="$(traces_engine traces_pre_cutover_backup)"
-    post_rollback_end_time="$(traces_endtime_type traces_post_rollback_backup)"
-    live_end_time="$(traces_endtime_type "$LIVE_TABLE")"
+    local pre_cutover_engine post_rollback_end_time_type live_end_time_type
+    pre_cutover_engine="$(traces_engine traces_pre_cutover_backup)"
+    post_rollback_end_time_type="$(traces_endtime_type traces_post_rollback_backup)"
+    live_end_time_type="$(traces_endtime_type "$LIVE_TABLE")"
 
-    if [[ -n "$pre_cutover" && -n "$post_rollback_end_time" ]]; then
+    if [[ -n "$pre_cutover_engine" && -n "$post_rollback_end_time_type" ]]; then
         echo "ERROR: both 'traces_pre_cutover_backup' and 'traces_post_rollback_backup' exist, so the direction is" >&2
         echo "       ambiguous — a clean estate never holds both. Refusing rather than guessing which way to sweep;" >&2
         echo "       resolve the estate by hand (finalize.sh refuses the same state, for the same reason)." >&2
         exit 1
     fi
 
-    if [[ -n "$pre_cutover" ]]; then
+    if [[ -n "$pre_cutover_engine" ]]; then
         DIRECTION="forward"
         PARKED_TABLE="traces_pre_cutover_backup"
         MUTATING_BLOCKS=(forward-sweep forward-deletion-replay)
-        [[ "$live_end_time" != Nullable* ]] || {
+        # Require the column to EXIST before testing its shape, the same way rollback.sh's --unwrap-only check does
+        # and for the same reason: traces_endtime_type returns an empty string for a missing column, and "" is not
+        # Nullable*, so a bare non-Nullable test waves through a table that has no end_time at all. Only this branch
+        # needs it — the reverse branch below tests `== Nullable*`, which an empty string already fails.
+        [[ -n "$live_end_time_type" ]] || {
+            echo "ERROR: the live '$LIVE_TABLE' has no 'end_time' column, so it is not the traces table this driver can" >&2
+            echo "       reconcile — the sweep and the replay would target the wrong object. Resolve the estate by hand." >&2
+            exit 1
+        }
+        [[ "$live_end_time_type" != Nullable* ]] || {
             echo "ERROR: 'traces_pre_cutover_backup' is parked, but the live '$LIVE_TABLE' still has a Nullable end_time —" >&2
             echo "       i.e. it is the ORIGINAL schema, so the EXCHANGE has not run (or has been rolled back) while a" >&2
             echo "       pre-cutover backup name survives. There is no forward gap to sweep from that state. Resolve the" >&2
@@ -344,8 +353,8 @@ detect_direction() {
         return 0
     fi
 
-    if [[ -n "$post_rollback_end_time" ]]; then
-        [[ "$post_rollback_end_time" != Nullable* ]] || {
+    if [[ -n "$post_rollback_end_time_type" ]]; then
+        [[ "$post_rollback_end_time_type" != Nullable* ]] || {
             echo "ERROR: 'traces_post_rollback_backup' exists but carries the ORIGINAL schema (Nullable end_time), so it is" >&2
             echo "       not the successor a rollback parks there. The name is convention; the schema is the proof, and it" >&2
             echo "       disagrees. Refusing — resolve by hand." >&2
@@ -354,9 +363,9 @@ detect_direction() {
         DIRECTION="reverse"
         PARKED_TABLE="traces_post_rollback_backup"
         MUTATING_BLOCKS=(reverse-sweep)
-        [[ "$live_end_time" == Nullable* ]] || {
+        [[ "$live_end_time_type" == Nullable* ]] || {
             echo "ERROR: the successor is parked as 'traces_post_rollback_backup', but the live '$LIVE_TABLE' is not the" >&2
-            echo "       restored ORIGINAL (its end_time is '${live_end_time:-<absent>}', not Nullable). A promote leaves" >&2
+            echo "       restored ORIGINAL (its end_time is '${live_end_time_type:-<absent>}', not Nullable). A promote leaves" >&2
             echo "       the original live; this estate does not match, so the reverse sweep has no valid target." >&2
             exit 1
         }
@@ -366,7 +375,7 @@ detect_direction() {
     # Neither parked name exists. Before refusing, name the one state that is recoverable in one command: the forward
     # EXCHANGE committed but its post-swap RENAME did not, so the parked original is still sitting under traces_local_v2.
     # exchange_and_wrap.sh and rollback.sh print the same remediation.
-    if [[ "$live_end_time" != Nullable* && -n "$(traces_engine traces_local_v2)" ]]; then
+    if [[ -n "$live_end_time_type" && "$live_end_time_type" != Nullable* && -n "$(traces_engine traces_local_v2)" ]]; then
         echo "ERROR: the EXCHANGE ran (the live '$LIVE_TABLE' holds the successor schema) but 'traces_local_v2' still" >&2
         echo "       exists — the post-swap RENAME did not complete, so the parked original is under the wrong name and" >&2
         echo "       there is nothing this driver can sweep from. Finish that RENAME, then re-run this command:" >&2
@@ -398,12 +407,23 @@ detect_direction() {
 #     traffic and push the operator to --force. Nor is it a hazard: a live-table delete still applying leaves the row
 #     visible, which the postcondition reads as present — never as missing — and bridged deletes are re-applied by the
 #     replay, which carries lightweight_deletes_sync = 2 of its own.
-#   * the replication QUEUE: scoped to BOTH tables, because either one short of a part on this replica skews the
-#     postcondition's join, and judged on STUCK-NESS rather than depth for the same reason the pre-swap gate does —
+#   * the replication QUEUE: scoped to both tables AND to deletion_events_local, judged on STUCK-NESS rather than
+#     depth for the same reason the pre-swap gate does —
 #     under live ingestion a GET_PART entry exists for every part not yet fetched, so an instantaneous zero is not a
 #     healthy-cluster property. It passes the moment the queue drains; failing that, an entry aged past
 #     SETTLE_STUCK_AGE_SECONDS, more retries than SETTLE_STUCK_NUM_TRIES, or any last_exception is a genuinely lagging
 #     replica and fails the gate naming the offending entries.
+#
+#     THE BRIDGE IS IN THAT SCOPE FOR A REASON OF ITS OWN. deletion_events_local is a ReplicatedMergeTree (migration
+#     000096), and EVERY read this driver makes of it resolves on the one replica it is connected to: the sweep's "do
+#     not resurrect" exclusion, the replay's bridge match and resurrection guard, the postcondition's exclusion arm and
+#     the leak-check advisory. So a bridge part this replica has not fetched is invisible to all of them at once — the
+#     sweep re-inserts the key, the replay does not mask it, the postcondition does not expect it missing, and the
+#     advisory does not report it. A genuinely deleted trace comes back while the gate reports clean, and no other
+#     signal in this driver sees it.
+#     The limit: the queue verdict is stuck-ness, not depth, so a bridge queue that is BUSY but not stuck is still
+#     accepted once the timeout expires. That narrows the window to the drain time rather than closing it; quiescing
+#     user DELETEs across the swap is what empties it.
  # KEEP IN STEP WITH exchange_and_wrap.sh's assert_replication_settled. The two drivers run the SAME GATE on opposite
 # sides of the swap, and the half that decides a verdict — the three settle-* blocks — is already shared, from
 # 000003_exchange_and_wrap.sql, each driver rendering its own table scope. What is duplicated is the control flow around
@@ -411,7 +431,7 @@ detect_direction() {
 # SEVEN NUMERIC FIELDS ON ONE ROW before any arithmetic reads it, the polling bound (iteration cap AND deadline), and
 # the two verdicts (mutations unconditional, queue on stuck-ness). Only the table scope and the operator messages may
 # legitimately differ, being specific to what each side is about to do. The driver rehearsal exercises BOTH copies, so a
-# behavioural drift fails there rather than waiting for a reviewer.
+# behavioural drift fails there rather than going unnoticed.
 assert_replication_settled() {
     local cluster deadline polls poll row
     local sample_sql queue_detail_sql mutation_detail_sql
@@ -583,6 +603,16 @@ extract() {
 # Refuse rendered SQL that is not what the caller asked for. A marker renamed, moved, indented or split yields text that
 # is empty or only the block's own comments, and clickhouse-client exits 0 on either, so `set -e` never fires and the
 # step prints its success line having done nothing. Same guard, same reasoning, as exchange_and_wrap.sh's.
+ # KEEP IN STEP WITH exchange_and_wrap.sh's require_rendered. The two copies are the SAME validation contract, and a
+# gap between them is SILENT: drop the out-of-order check and a reordered END captures to end of file past every
+# remaining guard, which is then read as a verdict. All four checks, and their ORDER, must
+# stay identical — exactly one BEGIN and one END, the END after its BEGIN, executable SQL after comments are stripped,
+# the caller's identity token present, and no surviving ${...} placeholder. The marker grammar they parse is shared
+# too, so a change to one is a change to both.
+#
+# The ONLY difference that is allowed is how failure propagates: this copy EXITS, because its callers run it inside command substitutions where a return would be swallowed. The
+# duplication is deliberate: this directory has no sourced helpers, and ch(), extract() and the settle gate are
+# duplicated the same way.
 require_rendered() {
     local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends begin_line end_line
     # Exactly one pair, checked on the FILE rather than the extraction: the awk stops at the first END and otherwise runs
@@ -633,7 +663,7 @@ render_settle() {
     local sql queue_tables mutation_tables
     # Built as variables, not inlined: the replacement half of ${x//pat/repl} does not honor nested quoting, so a
     # literal "'$A', '$B'" there would substitute the double quotes into the SQL as well.
-    queue_tables="'$LIVE_TABLE', '$PARKED_TABLE'"
+    queue_tables="'$LIVE_TABLE', '$PARKED_TABLE', 'deletion_events_local'"
     mutation_tables="'$PARKED_TABLE'"
     sql="$(extract "$SETTLE_SQL" "$1")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"

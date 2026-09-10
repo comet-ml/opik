@@ -478,7 +478,7 @@ would return a copy of each side per replica and multiply both). What the swap c
 |---|---|---|
 | unfinished **mutations** | the **parked backup** only | **Unconditional.** That table is frozen, so anything still applying to it is a user delete that fired before the swap and has not landed on this replica yet — and the mask-honored sweep would read the row as live and copy a deleted trace back. It drains rather than recurring, so demanding zero is reachable. |
 | unfinished **mutations** | the **live** table — **deliberately not gated** | After the swap the live table takes user deletes continuously, each an ordinary asynchronous mutation, so requiring zero would abort on healthy traffic. Nor is it a hazard: a delete still applying leaves the row visible, which the postcondition reads as *present*, never as missing; and deletes bridged across the swap are re-applied by the sweep's own replay, which carries `lightweight_deletes_sync = 2`. |
-| the **replication queue** | **both** tables | **Stuck-ness, not depth** — same thresholds, same reasoning as above. Either table short of a part on this replica skews the postcondition's join. |
+| the **replication queue** | both tables **and `deletion_events_local`** | **Stuck-ness, not depth** — same thresholds, same reasoning as above. Either trace table short of a part on this replica skews the postcondition's join. The **bridge** is in scope for a reason of its own: it is a `ReplicatedMergeTree`, and every read the reconciler makes of it resolves on the one replica it is connected to — the sweep's exclusion, the replay's bridge match and resurrection guard, the postcondition's exclusion and the leak-check advisory. A bridge part this replica has not fetched is invisible to all of them at once, so a genuinely deleted trace is swept back while the gate reports clean. Stuck-ness is still the verdict, so a busy-but-not-stuck bridge queue is accepted once the timeout expires: that narrows the window to the drain time rather than closing it. |
 
 The wait costs no cutover tail here, since the swap has already committed — but every second of it is a second the
 gap-window traces are still absent from live reads, so it is not free either. And it is spent **per gate**: once before
@@ -2025,7 +2025,7 @@ and a wrong verdict from a fidelity gate is the failure this whole procedure exi
   `--weeks-stride`, that an empty or inverted range is refused rather than passed vacuously, and that the `PASSED` line
   states the window it covered.
 
-`reconcile.sh` adds five of the same kind, and they decide whether the estate is reconciled rather than merely rejecting
+`reconcile.sh` adds six of the same kind, and they decide whether the estate is reconciled rather than merely rejecting
 an argument:
 
 - **direction detection** — forward on `traces_pre_cutover_backup`, reverse on a `traces_post_rollback_backup` that
@@ -2034,6 +2034,8 @@ an argument:
 - **`--report-only`** issuing no mutation in either direction, and exiting non-zero when it finds a gap;
 - the **idempotent no-op**: a second run on a reconciled estate reads the postcondition, issues nothing and exits 0;
 - **failing loudly** rather than reporting progress when the gate is still non-zero after `--max-passes`;
+- the **schema proof on the live table**, which requires `end_time` to be present before testing its shape — an
+  absent column is not the same as a non-Nullable one, and a bare test waves the first through;
 - the **shard-scope guard**: a multi-shard estate refused without `--confirm-single-shard` (and refused outright in the
   reverse direction, whose postcondition spans shards its replay cannot reach), an unreadable shard count failing
   closed, and the `RECONCILED` line carrying its `SCOPE:` qualifier when the scope was asserted rather than proven.
