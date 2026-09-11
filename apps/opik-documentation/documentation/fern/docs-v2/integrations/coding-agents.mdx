@@ -26,7 +26,7 @@ that does most of the work; the linked page has the full setup, endpoint modes a
 | [Claude Code](/integrations/claude-code) | Opik plugin (recommended), or native OTel export (beta) | `/plugin install opik` inside Claude Code | Plugin: yes. OTel: redacted unless enabled | Supported |
 | [GitHub Copilot](/integrations/github-copilot) (VS Code, CLI) | Native OTel export | `github.copilot.chat.otel.enabled: true` plus the Opik endpoint | Off unless `captureContent` is enabled | Ask your account team |
 | [Cursor](/integrations/cursor) | Opik Cursor extension | Install the `Opik` extension and paste your API key | Yes | Supported |
-| [OpenAI Codex](/integrations/openai-codex) | Native OTel export | `trace_exporter = "otlp-http"` in `~/.codex/config.toml` | Off unless `log_user_prompt = true` | Supported |
+| [OpenAI Codex](/integrations/openai-codex) | Native OTel export (internal spans and `codex.*` events only) | An `[otel.trace_exporter.otlp-http]` table in `~/.codex/config.toml` | No. Prompt text and tokens go to the logs signal, which Opik does not ingest | Supported |
 | Other agents (opencode, Gemini CLI, ...) | Native OTel export if the agent emits `gen_ai.*` spans | Point the agent's OTLP exporter at the [Opik OTel endpoint](/integrations/opentelemetry) | Depends on the agent | Not yet |
 
 <CardGroup cols={2}>
@@ -40,7 +40,7 @@ that does most of the work; the linked page has the full setup, endpoint modes a
     Opik Cursor extension logs every conversation, with token usage and cost from your Cursor account.
   </Card>
   <Card title="OpenAI Codex" href="/integrations/openai-codex" icon="fa-regular fa-code">
-    Native OpenTelemetry export configured in `config.toml`.
+    Native OpenTelemetry export configured in `config.toml`. Operational spans and events only; no prompt text, tokens or cost on the trace signal.
   </Card>
 </CardGroup>
 
