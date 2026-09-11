@@ -45,31 +45,60 @@ public class AnnotationQueueAutomationService {
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AnnotationQueueAutomationDAO.class);
-            var existing = dao.findByQueueId(workspaceId, queueId);
+            var resolved = resolve(dao, workspaceId, queueId, automation);
 
-            // A null conditions payload means "leave the stored conditions alone" — the toggle-only
-            // request. There is nothing to leave alone on a first save, so require them there.
-            String conditions = automation.conditions() != null
-                    ? JsonUtils.writeValueAsString(automation.conditions())
-                    : existing.map(AnnotationQueueAutomationModel::conditions)
-                            .orElseThrow(() -> new BadRequestException(
-                                    "Annotation queue automation requires conditions"));
-
-            if (enabled && !hasAnyCondition(conditions)) {
-                throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
-            }
-
-            // Same "null means leave it alone" rule as conditions, so a toggle-only request cannot drop
-            // the ceiling as a side effect.
-            Integer maxItemsInQueue = automation.maxItemsInQueue() != null
-                    ? automation.maxItemsInQueue()
-                    : existing.map(AnnotationQueueAutomationModel::maxItemsInQueue).orElse(null);
-
-            dao.save(workspaceId, queueId, projectId, scope.getValue(), enabled, conditions, maxItemsInQueue, userName);
+            dao.save(workspaceId, queueId, projectId, scope.getValue(), enabled, resolved.conditions(),
+                    resolved.maxItemsInQueue(), userName);
             return null;
         });
 
         log.info("Saved annotation queue automation for queue '{}', enabled '{}'", queueId, enabled);
+    }
+
+    /**
+     * Rejects an automation the same way {@link #save} would, without writing anything.
+     *
+     * <p>Exists so a caller can check the payload before it commits the queue itself. Queue storage and
+     * this configuration are in different databases with no shared transaction, so a rejection discovered
+     * during the save would otherwise leave a queue behind that the caller believes was never created.
+     */
+    public void validate(@NonNull String workspaceId, @NonNull UUID queueId,
+            @NonNull AnnotationQueueAutomation automation) {
+        transactionTemplate.inTransaction(READ_ONLY, handle -> resolve(
+                handle.attach(AnnotationQueueAutomationDAO.class), workspaceId, queueId, automation));
+    }
+
+    /**
+     * The stored form of an automation payload: what is kept from the request and what is carried over
+     * from the existing row. Shared by {@link #save} and {@link #validate} so the rules cannot drift apart.
+     */
+    private ResolvedAutomation resolve(AnnotationQueueAutomationDAO dao, String workspaceId, UUID queueId,
+            AnnotationQueueAutomation automation) {
+
+        var existing = dao.findByQueueId(workspaceId, queueId);
+
+        // A null conditions payload means "leave the stored conditions alone" — the toggle-only
+        // request. There is nothing to leave alone on a first save, so require them there.
+        String conditions = automation.conditions() != null
+                ? JsonUtils.writeValueAsString(automation.conditions())
+                : existing.map(AnnotationQueueAutomationModel::conditions)
+                        .orElseThrow(() -> new BadRequestException(
+                                "Annotation queue automation requires conditions"));
+
+        if (Boolean.TRUE.equals(automation.enabled()) && !hasAnyCondition(conditions)) {
+            throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
+        }
+
+        // Same "null means leave it alone" rule as conditions, so a toggle-only request cannot drop
+        // the ceiling as a side effect.
+        Integer maxItemsInQueue = automation.maxItemsInQueue() != null
+                ? automation.maxItemsInQueue()
+                : existing.map(AnnotationQueueAutomationModel::maxItemsInQueue).orElse(null);
+
+        return new ResolvedAutomation(conditions, maxItemsInQueue);
+    }
+
+    private record ResolvedAutomation(String conditions, Integer maxItemsInQueue) {
     }
 
     private boolean hasAnyCondition(String conditionsJson) {

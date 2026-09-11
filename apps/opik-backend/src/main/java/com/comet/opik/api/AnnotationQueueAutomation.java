@@ -62,7 +62,7 @@ public record AnnotationQueueAutomation(
             @JsonView({
                     AnnotationQueue.View.Public.class,
                     AnnotationQueue.View.Write.class}) @NotEmpty @Size(max = MAX_GROUPS, message = "cannot exceed "
-                            + MAX_GROUPS + " groups") @Valid List<ConditionGroup> groups) {
+                            + MAX_GROUPS + " groups") @Valid List<@NotNull ConditionGroup> groups) {
     }
 
     @Builder(toBuilder = true)
@@ -73,7 +73,7 @@ public record AnnotationQueueAutomation(
                     AnnotationQueue.View.Public.class,
                     AnnotationQueue.View.Write.class}) @NotEmpty @Size(max = MAX_CONDITIONS_PER_GROUP, message = "cannot exceed "
                             + MAX_CONDITIONS_PER_GROUP
-                            + " conditions") @Valid List<ScoreCondition> conditions) {
+                            + " conditions") @Valid List<@NotNull ScoreCondition> conditions) {
     }
 
     /**

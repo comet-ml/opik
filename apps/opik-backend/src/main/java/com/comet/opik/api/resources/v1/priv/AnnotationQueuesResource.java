@@ -266,7 +266,7 @@ public class AnnotationQueuesResource {
     // Source column. Gating it on ANNOTATE would 403 a view-only user who is allowed to open the page at
     // all - GET /{id} is VIEW - and leave them a blank column with an error in the console.
     @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_VIEW)
-    @Operation(operationId = "searchAnnotationQueueItems", summary = "Search annotation queue items", description = "Returns queue membership metadata — how each item got into the queue, and when — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.", responses = {
+    @Operation(operationId = "searchAnnotationQueueItems", summary = "Search annotation queue items", description = "Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.", responses = {
             @ApiResponse(responseCode = "200", description = "Annotation queue items", content = @Content(schema = @Schema(implementation = AnnotationQueueItem.AnnotationQueueItems.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })

@@ -59,6 +59,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -663,10 +664,45 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
-        @DisplayName("should reject an enabled automation that has never been given conditions")
+        @DisplayName("should reject an enabled automation that has never been given conditions, and create no queue")
         void enabledWithoutConditionsIsRejected() {
-            createQueue(AnnotationQueueAutomation.builder().enabled(true).build(),
+            var queue = createQueue(AnnotationQueueAutomation.builder().enabled(true).build(),
                     HttpStatus.SC_BAD_REQUEST);
+
+            // The rejection must happen before the queue is written, or the caller is left with a queue it
+            // was told it did not create.
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    queue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should reject a null condition group rather than failing on it")
+        void nullConditionGroupIsRejected() {
+            var conditions = AnnotationQueueAutomation.Conditions.builder()
+                    .groups(Collections.<AnnotationQueueAutomation.ConditionGroup>singletonList(null))
+                    .build();
+
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditions)
+                    .build(),
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should reject a null score condition rather than failing on it")
+        void nullScoreConditionIsRejected() {
+            var conditions = AnnotationQueueAutomation.Conditions.builder()
+                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
+                            .conditions(Collections.<AnnotationQueueAutomation.ScoreCondition>singletonList(null))
+                            .build()))
+                    .build();
+
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditions)
+                    .build(),
+                    SC_UNPROCESSABLE_ENTITY);
         }
 
         private Stream<Arguments> invalidCeilings() {

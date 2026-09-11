@@ -3,13 +3,19 @@ package com.comet.opik.domain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Annotation Queue Automation Item Ceiling")
 class AnnotationQueueMaxItemsTest {
@@ -26,78 +32,70 @@ class AnnotationQueueMaxItemsTest {
 
     @Nested
     @DisplayName("Below the ceiling")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BelowCeiling {
 
-        @Test
-        @DisplayName("everything is added when the batch fits")
-        void everythingFits() {
-            var eligible = ids(3);
-
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, 10, 2))
-                    .isEqualTo(eligible);
+        private Stream<Arguments> fittingBatches() {
+            return Stream.of(
+                    arguments(3, 10, 2L, "room to spare"),
+                    arguments(3, 10, 7L, "batch exactly consumes the remaining room"),
+                    arguments(5, 5, 0L, "empty queue, batch the size of the ceiling"),
+                    arguments(1, 1, 0L, "ceiling of one, empty queue"));
         }
 
-        @Test
-        @DisplayName("a batch that exactly consumes the remaining room is added whole")
-        void exactlyFills() {
-            var eligible = ids(3);
+        @ParameterizedTest(name = "{3}")
+        @MethodSource("fittingBatches")
+        @DisplayName("adds the whole batch when it fits:")
+        void addsWholeBatch(int batchSize, int maxItemsInQueue, long held, String label) {
+            var eligible = ids(batchSize);
 
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, 10, 7))
-                    .isEqualTo(eligible);
-        }
-
-        @Test
-        @DisplayName("an empty queue with the ceiling as the batch size is added whole")
-        void emptyQueue() {
-            var eligible = ids(5);
-
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, 5, 0))
+            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, maxItemsInQueue, held))
                     .isEqualTo(eligible);
         }
     }
 
     @Nested
     @DisplayName("At or over the ceiling")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AtOrOverCeiling {
 
-        @Test
-        @DisplayName("nothing is added once the queue holds exactly the ceiling")
-        void exactlyAtCeiling() {
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, ids(3), 10, 10))
-                    .isEmpty();
+        private Stream<Arguments> fullQueues() {
+            return Stream.of(
+                    arguments(3, 10, 10L, "exactly at the ceiling"),
+                    arguments(3, 10, 25L, "already over the ceiling"),
+                    arguments(4, 1, 1L, "ceiling of one, already taken"));
         }
 
-        @Test
-        @DisplayName("nothing is added when the queue is already over the ceiling")
-        void overCeiling() {
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, ids(3), 10, 25))
-                    .isEmpty();
-        }
-
-        @Test
-        @DisplayName("a ceiling of one keeps a second item out")
-        void ceilingOfOne() {
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, ids(4), 1, 1))
+        @ParameterizedTest(name = "{3}")
+        @MethodSource("fullQueues")
+        @DisplayName("adds nothing:")
+        void addsNothing(int batchSize, int maxItemsInQueue, long held, String label) {
+            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, ids(batchSize), maxItemsInQueue, held))
                     .isEmpty();
         }
     }
 
     @Nested
     @DisplayName("Partial fill")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class PartialFill {
 
-        @Test
-        @DisplayName("only the remaining room is filled, not the whole batch")
-        void fillsRemainingRoom() {
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, ids(10), 10, 7))
-                    .hasSize(3);
+        private Stream<Arguments> partialBatches() {
+            return Stream.of(
+                    arguments(10, 10, 7L, 3, "room for three of ten"),
+                    arguments(500, 10, 9L, 1, "room for one of a full batch"),
+                    arguments(10, 6, 3L, 3, "room for three of ten, lower ceiling"));
         }
 
-        @Test
-        @DisplayName("room for one takes one")
-        void roomForOne() {
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, ids(500), 10, 9))
-                    .hasSize(1);
+        @ParameterizedTest(name = "{4}")
+        @MethodSource("partialBatches")
+        @DisplayName("fills only the remaining room:")
+        void fillsRemainingRoom(int batchSize, int maxItemsInQueue, long held, int expected, String label) {
+            var eligible = ids(batchSize);
+
+            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, maxItemsInQueue, held))
+                    .hasSize(expected)
+                    .isSubsetOf(eligible);
         }
 
         @Test
@@ -111,16 +109,6 @@ class AnnotationQueueMaxItemsTest {
             assertThat(retained).containsExactlyElementsOf(expected);
             assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, 4, 0))
                     .containsExactlyElementsOf(retained);
-        }
-
-        @Test
-        @DisplayName("retained items are a subset of what was offered")
-        void retainsOnlyOfferedItems() {
-            var eligible = ids(10);
-
-            assertThat(AnnotationQueueServiceImpl.fillToMaxItems(QUEUE_ID, eligible, 6, 3))
-                    .hasSize(3)
-                    .isSubsetOf(eligible);
         }
     }
 }

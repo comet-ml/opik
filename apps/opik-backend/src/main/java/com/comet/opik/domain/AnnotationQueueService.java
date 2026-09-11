@@ -10,6 +10,7 @@ import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.LockResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -58,8 +59,11 @@ public interface AnnotationQueueService {
 @Slf4j
 class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
+    private static final String AUTOMATED_FILL_LOCK = "AnnotationQueueAutomatedFill";
+
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
     private final @NonNull AnnotationQueueItemLockService lockService;
+    private final @NonNull LockService distributedLockService;
     private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
@@ -68,7 +72,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
     public Mono<UUID> create(AnnotationQueue annotationQueue) {
         AnnotationQueue queue = prepareAnnotationQueue(annotationQueue);
 
-        return annotationQueueDAO.createBatch(List.of(queue))
+        return validateAutomations(List.of(queue))
+                .then(annotationQueueDAO.createBatch(List.of(queue)))
                 .then(saveAutomations(List.of(queue)))
                 .thenReturn(queue.id())
                 .subscribeOn(Schedulers.boundedElastic());
@@ -84,10 +89,35 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .map(this::prepareAnnotationQueue)
                 .toList();
 
-        return annotationQueueDAO.createBatch(processedQueues)
+        return validateAutomations(processedQueues)
+                .then(annotationQueueDAO.createBatch(processedQueues))
                 .then(saveAutomations(processedQueues))
                 .thenReturn(processedQueues.size())
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Rejects invalid automation payloads before any queue is written.
+     *
+     * <p>The two stores share no transaction, so without this a bad payload would surface only once the
+     * queue row already existed: the caller would see a 400 and a queue it did not think it had created,
+     * and a retry would create a second one.
+     */
+    private Mono<Void> validateAutomations(List<AnnotationQueue> queues) {
+        List<AnnotationQueue> withAutomation = queues.stream()
+                .filter(queue -> queue.automation() != null)
+                .toList();
+
+        if (withAutomation.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromRunnable(() -> withAutomation.forEach(
+                    queue -> automationService.validate(workspaceId, queue.id(), queue.automation())));
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     /**
@@ -156,12 +186,19 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                 Mono<Void> updateMono = annotationQueueDAO.update(id, updateRequest);
 
                                 if (updateRequest.automation() != null) {
-                                    updateMono = updateMono.then(Mono.fromRunnable(
-                                            () -> automationService.save(workspaceId, userName, id,
-                                                    queueInfo.projectId(), queueInfo.scope(),
+                                    // Same reason as on create: reject the payload before the queue row is
+                                    // rewritten, so a 400 never leaves a half-applied update behind.
+                                    updateMono = Mono.fromRunnable(
+                                            () -> automationService.validate(workspaceId, id,
                                                     updateRequest.automation()))
                                             .subscribeOn(Schedulers.boundedElastic())
-                                            .then());
+                                            .then(updateMono)
+                                            .then(Mono.fromRunnable(
+                                                    () -> automationService.save(workspaceId, userName, id,
+                                                            queueInfo.projectId(), queueInfo.scope(),
+                                                            updateRequest.automation()))
+                                                    .subscribeOn(Schedulers.boundedElastic())
+                                                    .then());
                                 }
 
                                 if (updateRequest.annotatorsPerItem() == null) {
@@ -203,13 +240,31 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
-                .flatMap(queue -> eligibleItems(queueId, queue.projectId(), itemIds, source)
-                        .flatMap(eligible -> eligible.isEmpty()
-                                ? Mono.just(0L)
-                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source)))
+                .flatMap(queue -> addEligibleItems(queueId, queue.projectId(), itemIds, source))
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
                         addedCount, queueId))
                 .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
+    }
+
+    /**
+     * Automated fills of one queue run one at a time; manual adds are not serialised.
+     *
+     * <p>The ceiling is checked by reading the queue's size and then inserting, which is not atomic: two
+     * consumers draining different batches for the same queue would otherwise both read the same size and
+     * each fill the same headroom, taking the queue past its ceiling. The lock is scoped to the automated
+     * path because that is the only one the ceiling applies to, so a person adding items never waits on it.
+     */
+    private Mono<Long> addEligibleItems(UUID queueId, UUID projectId, Set<UUID> itemIds,
+            AnnotationQueueItemSource source) {
+
+        Mono<Long> add = Mono.defer(() -> eligibleItems(queueId, projectId, itemIds, source)
+                .flatMap(eligible -> eligible.isEmpty()
+                        ? Mono.just(0L)
+                        : annotationQueueDAO.addItems(queueId, eligible, projectId, source)));
+
+        return source == AnnotationQueueItemSource.AUTOMATED
+                ? distributedLockService.executeWithLock(new LockService.Lock(queueId, AUTOMATED_FILL_LOCK), add)
+                : add;
     }
 
     /**
@@ -270,7 +325,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         long headroom = maxItemsInQueue - held;
 
         if (headroom <= 0) {
-            log.info("Annotation queue '{}' holds '{}' items and its automation ceiling is '{}'; "
+            log.debug("Annotation queue '{}' holds '{}' items and its automation ceiling is '{}'; "
                     + "skipping '{}' items", queueId, held, maxItemsInQueue, eligible.size());
             return Set.of();
         }
@@ -279,7 +334,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return eligible;
         }
 
-        log.info("Annotation queue '{}' has room for '{}' of '{}' items before its automation ceiling of '{}'",
+        log.debug("Annotation queue '{}' has room for '{}' of '{}' items before its automation ceiling of '{}'",
                 queueId, headroom, eligible.size(), maxItemsInQueue);
 
         // Sorted so which items land is deterministic rather than dependent on hash order.
@@ -330,13 +385,15 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         log.info("Deleting annotation queue batch with '{}' items", ids.size());
 
-        return annotationQueueDAO.deleteBatch(ids)
-                .flatMap(deletedCount -> Mono.deferContextual(ctx -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    return Mono.fromRunnable(
-                            () -> automationService.deleteByQueueIds(workspaceId, List.copyOf(ids)))
-                            .thenReturn(deletedCount);
-                }))
+        // Automation first, the mirror of the create ordering and for the same reason. Deleting the queue
+        // first would let a failure here leave an enabled automation pointing at a queue that no longer
+        // exists — which routing would still find, and then fail against for every matching score.
+        // Reversed, a failure leaves a queue whose automation is gone: visible, and fixable by editing.
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromRunnable(() -> automationService.deleteByQueueIds(workspaceId, List.copyOf(ids)));
+        })
+                .then(annotationQueueDAO.deleteBatch(ids))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
                 .doOnError(error -> log.info("Failed to delete annotation queue batch", error));
