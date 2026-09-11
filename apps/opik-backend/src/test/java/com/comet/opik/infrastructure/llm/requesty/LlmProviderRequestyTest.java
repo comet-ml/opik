@@ -34,7 +34,7 @@ class LlmProviderRequestyTest {
     void validateRequestRejectsPrefixOnlyModel(String model) {
         assertThatThrownBy(() -> provider.validateRequest(requestFor(model)))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("requesty/openai/gpt-4o");
+                .hasMessage(LlmProviderRequesty.ERROR_EMPTY_ROUTER_MODEL.formatted(model));
     }
 
     @ParameterizedTest
