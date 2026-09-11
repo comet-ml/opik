@@ -13,4 +13,5 @@ response = litellm.completion(
     model="groq/llama3-8b-8192",
     messages=[{"role": "user", "content": "Write a haiku about AI engineering."}],
 )
-print(response.choices[0].message.content)
+if getattr(response, "choices", None) and response.choices[0].message is not None:
+    print(response.choices[0].message.content)
