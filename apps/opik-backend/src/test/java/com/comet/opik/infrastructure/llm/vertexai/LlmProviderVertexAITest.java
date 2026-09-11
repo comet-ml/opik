@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.google.cloud.vertexai.VertexAI;
+import com.google.genai.Client;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -30,10 +30,10 @@ class LlmProviderVertexAITest {
 
     private static final String MODEL = "vertex_ai/gemini-2.5-flash";
 
-    private LlmProviderVertexAI providerStreaming(StreamingChatModel delegate, VertexAI vertexAI) {
+    private LlmProviderVertexAI providerStreaming(StreamingChatModel delegate, Client client) {
         var generator = mock(VertexAIClientGenerator.class);
         when(generator.newVertexAIStreamingClient(any(), any()))
-                .thenReturn(new CloseableVertexAiStreamingChatModel(delegate, vertexAI));
+                .thenReturn(new CloseableVertexAiStreamingChatModel(delegate, client));
         return new LlmProviderVertexAI(generator,
                 LlmProviderClientApiConfig.builder().apiKey("key").configuration(Map.of()).build());
     }
@@ -63,7 +63,7 @@ class LlmProviderVertexAITest {
     @Test
     @DisplayName("a synchronous chat failure delivers one error then closes the client")
     void streamingSynchronousFailureDeliversErrorThenClose() throws Exception {
-        var vertexAI = mock(VertexAI.class);
+        var client = mock(Client.class);
         var errors = new AtomicInteger();
         var closes = new AtomicInteger();
         var terminals = new CountDownLatch(2);
@@ -72,7 +72,7 @@ class LlmProviderVertexAITest {
             public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
                 throw new RuntimeException("boom before any terminal");
             }
-        }, vertexAI);
+        }, client);
 
         provider.generateStream(ChatCompletionRequest.builder().model(MODEL).build(), "workspace",
                 message -> {
@@ -89,30 +89,30 @@ class LlmProviderVertexAITest {
         assertThat(terminals.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(errors.get()).isEqualTo(1);
         assertThat(closes.get()).isEqualTo(1);
-        verify(vertexAI, timeout(2_000)).close();
+        verify(client, timeout(2_000)).close();
     }
 
     @Test
-    @DisplayName("closing the streaming wrapper closes the VertexAI and the delegate")
+    @DisplayName("closing the streaming wrapper closes the client and the delegate")
     void streamingWrapperCloseClosesBoth() throws Exception {
-        var vertexAI = mock(VertexAI.class);
+        var client = mock(Client.class);
         var delegate = mock(StreamingChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
 
-        new CloseableVertexAiStreamingChatModel(delegate, vertexAI).close();
+        new CloseableVertexAiStreamingChatModel(delegate, client).close();
 
-        verify(vertexAI).close();
+        verify(client).close();
         verify((AutoCloseable) delegate).close();
     }
 
     @Test
-    @DisplayName("closing the chat wrapper closes the VertexAI and the delegate")
+    @DisplayName("closing the chat wrapper closes the client and the delegate")
     void chatWrapperCloseClosesBoth() throws Exception {
-        var vertexAI = mock(VertexAI.class);
+        var client = mock(Client.class);
         var delegate = mock(ChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
 
-        new CloseableVertexAiChatModel(delegate, vertexAI).close();
+        new CloseableVertexAiChatModel(delegate, client).close();
 
-        verify(vertexAI).close();
+        verify(client).close();
         verify((AutoCloseable) delegate).close();
     }
 }

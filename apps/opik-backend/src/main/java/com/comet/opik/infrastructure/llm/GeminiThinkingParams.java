@@ -13,14 +13,10 @@ import java.util.regex.Pattern;
  * Gemini thinking configuration decoded from {@code custom_parameters.thinking}, shared by the Google AI Studio and
  * Vertex AI providers.
  * <p>
- * A level reaches the wire as a level only on AI Studio with Gemini 3 or later. Everything else takes the budget it
- * translates to, which is what {@link #budgetForLevel()} is for:
- * <ul>
- * <li>Vertex, at any version — its {@code GenerationConfig.ThinkingConfig} protobuf carries only
- * {@code thinking_budget} and {@code include_thoughts}, with no level field at all.</li>
- * <li>Gemini 2.5 on either provider — {@code thinking_level} is Gemini 3+ only and earlier models reject it
- * outright, so 2.5 is level-driven in the UI but budget-driven on the wire.</li>
- * </ul>
+ * Whether a level reaches the wire as a level depends only on the model, not on the provider: {@code thinking_level} is
+ * Gemini 3+ only, and earlier models reject it outright, so Gemini 2.5 is level-driven in the UI but budget-driven on
+ * the wire. {@link #wireLevelFor(String)} and {@link #wireBudgetFor(String)} make that choice; exactly one of them ever
+ * returns a value, because the two fields are mutually exclusive upstream.
  */
 public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean includeThoughts) {
 
@@ -92,13 +88,41 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
     }
 
     /**
-     * The budget to send to Vertex: an explicit budget wins over the level it would otherwise be derived from.
+     * The budget a level maps to: an explicit budget wins over the level it would otherwise be derived from.
      */
     public Integer budgetForLevel() {
         if (budgetTokens != null) {
             return budgetTokens;
         }
         return level == null ? null : level.budgetTokens;
+    }
+
+    /**
+     * The level to put on the wire. There is no {@code off} level to send, and an explicit budget takes the caller at
+     * their word, so both fall through to a budget instead.
+     */
+    public Optional<String> wireLevelFor(String model) {
+        if (level == null || level == Level.OFF || budgetTokens != null || !modelAcceptsLevel(model)) {
+            return Optional.empty();
+        }
+        return Optional.of(level.wireValue());
+    }
+
+    /**
+     * The budget to put on the wire, for everything {@link #wireLevelFor(String)} does not cover — empty when a level
+     * is going instead, so a caller reading both cannot set two fields the API rejects together.
+     * <p>
+     * Also empty for an {@code off} level on Gemini 3+: those models cannot disable thinking, so a zero budget would
+     * claim something they will not honour. An explicit budget is still honoured; only the unusable level is dropped.
+     */
+    public Optional<Integer> wireBudgetFor(String model) {
+        if (wireLevelFor(model).isPresent()) {
+            return Optional.empty();
+        }
+        if (level == Level.OFF && budgetTokens == null && modelAcceptsLevel(model)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(budgetForLevel());
     }
 
     /**
