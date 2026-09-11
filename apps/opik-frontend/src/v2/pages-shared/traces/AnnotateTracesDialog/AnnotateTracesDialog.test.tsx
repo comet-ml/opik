@@ -8,31 +8,11 @@ import { FEEDBACK_DEFINITION_TYPE } from "@/types/feedback-definitions";
 const mockSetFeedbackScore = vi.fn();
 const mockToast = vi.fn();
 const mockSetOpen = vi.fn();
+const mockRefetchDefinitions = vi.fn();
+const mockUseFeedbackDefinitionsList = vi.fn();
 
 vi.mock("@/api/feedback-definitions/useFeedbackDefinitionsList", () => ({
-  default: vi.fn(() => ({
-    data: {
-      content: [
-        {
-          name: "helpfulness",
-          type: FEEDBACK_DEFINITION_TYPE.numerical,
-          details: { min: 0, max: 10 },
-        },
-        {
-          name: "satisfaction",
-          type: FEEDBACK_DEFINITION_TYPE.categorical,
-          details: { categories: { good: 1, bad: 0 } },
-        },
-        {
-          name: "thumbs",
-          type: FEEDBACK_DEFINITION_TYPE.boolean,
-          details: { true_label: "up", false_label: "down" },
-        },
-      ],
-      total: 3,
-    },
-    isPending: false,
-  })),
+  default: (...args: unknown[]) => mockUseFeedbackDefinitionsList(...args),
 }));
 
 vi.mock("@/api/traces/useTraceFeedbackScoreSetMutation", () => ({
@@ -115,6 +95,31 @@ const selectNumericalScore = async () => {
 describe("AnnotateTracesDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseFeedbackDefinitionsList.mockReturnValue({
+      data: {
+        content: [
+          {
+            name: "helpfulness",
+            type: FEEDBACK_DEFINITION_TYPE.numerical,
+            details: { min: 0, max: 10 },
+          },
+          {
+            name: "satisfaction",
+            type: FEEDBACK_DEFINITION_TYPE.categorical,
+            details: { categories: { good: 1, bad: 0 } },
+          },
+          {
+            name: "thumbs",
+            type: FEEDBACK_DEFINITION_TYPE.boolean,
+            details: { true_label: "up", false_label: "down" },
+          },
+        ],
+        total: 3,
+      },
+      isLoading: false,
+      isError: false,
+      refetch: mockRefetchDefinitions,
+    });
   });
 
   it("renders the dialog with selection count and disabled apply button", () => {
@@ -311,5 +316,81 @@ describe("AnnotateTracesDialog", () => {
         description: "1 of 2 traces annotated successfully.",
       }),
     );
+  });
+
+  it("renders loading state when feedback definitions are loading", () => {
+    mockUseFeedbackDefinitionsList.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      refetch: mockRefetchDefinitions,
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText("Loading feedback definitions…"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders error state and retries on button click when definitions query fails", () => {
+    mockUseFeedbackDefinitionsList.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: mockRefetchDefinitions,
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(/Failed to load feedback definitions/),
+    ).toBeInTheDocument();
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+    fireEvent.click(retryButton);
+    expect(mockRefetchDefinitions).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows destructive toast and closes dialog when rows exceed 500", () => {
+    const manyRows: Trace[] = Array.from({ length: 501 }, (_, i) => ({
+      id: `trace-${i}`,
+    })) as Trace[];
+    renderDialog(manyRows);
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Error",
+        description:
+          "You can only annotate up to 500 traces at a time. Please select fewer items.",
+        variant: "destructive",
+      }),
+    );
+    expect(mockSetOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("enforces bounded concurrency with up to 5 concurrent mutations", async () => {
+    let running = 0;
+    let maxRunning = 0;
+    mockSetFeedbackScore.mockImplementation(async () => {
+      running++;
+      maxRunning = Math.max(maxRunning, running);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      running--;
+      return {};
+    });
+
+    const eightRows: Trace[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `trace-${i}`,
+    })) as Trace[];
+
+    renderDialog(eightRows);
+    await selectNumericalScore();
+
+    fireEvent.click(screen.getByTestId("annotate-bulk-apply-button"));
+
+    await waitFor(() => {
+      expect(mockSetFeedbackScore).toHaveBeenCalledTimes(8);
+    });
+
+    expect(maxRunning).toBeLessThanOrEqual(5);
+    expect(maxRunning).toBeGreaterThan(1);
   });
 });

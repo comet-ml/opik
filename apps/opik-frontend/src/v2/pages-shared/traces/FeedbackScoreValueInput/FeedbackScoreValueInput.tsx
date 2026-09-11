@@ -12,7 +12,39 @@ import { SelectItem } from "@/ui/select";
 import { DropdownOption } from "@/types/shared";
 import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
 
-export const SET_VALUE_DEBOUNCE_DELAY = 500;
+export const getCollisionFreeEmptyCategorySentinel = (
+  categories: Record<string, number>,
+): string => {
+  let sentinel = "__EMPTY_CATEGORY_SENTINEL__";
+  while (Object.prototype.hasOwnProperty.call(categories, sentinel)) {
+    sentinel = `_${sentinel}_`;
+  }
+  return sentinel;
+};
+
+export const encodeCategoryOptionValue = (
+  name: string,
+  categories: Record<string, number>,
+): string => {
+  if (name === "") {
+    return getCollisionFreeEmptyCategorySentinel(categories);
+  }
+  return name;
+};
+
+export const decodeCategoryOptionValue = (
+  value: string | undefined,
+  categories: Record<string, number>,
+): string | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const sentinel = getCollisionFreeEmptyCategorySentinel(categories);
+  if (value === sentinel) {
+    return "";
+  }
+  return value;
+};
 
 export type FeedbackScoreValue = {
   value?: number;
@@ -31,6 +63,7 @@ type FeedbackScoreValueInputProps = {
   categoryName?: string;
   onChange: (update: FeedbackScoreValue) => void;
   testIdPrefix?: string;
+  disabled?: boolean;
 };
 
 /**
@@ -40,7 +73,14 @@ type FeedbackScoreValueInputProps = {
  */
 const FeedbackScoreValueInput: React.FunctionComponent<
   FeedbackScoreValueInputProps
-> = ({ feedbackDefinition, value, categoryName, onChange, testIdPrefix }) => {
+> = ({
+  feedbackDefinition,
+  value,
+  categoryName,
+  onChange,
+  testIdPrefix,
+  disabled = false,
+}) => {
   const prefix = testIdPrefix ?? "feedback-score-value";
 
   const handleNumericChange = useCallback(
@@ -81,6 +121,7 @@ const FeedbackScoreValueInput: React.FunctionComponent<
         value={value}
         aria-label={feedbackDefinition.name}
         data-testid={`${prefix}-score-input`}
+        disabled={disabled}
       />
     );
   }
@@ -105,6 +146,7 @@ const FeedbackScoreValueInput: React.FunctionComponent<
         type="single"
         size="md"
         value={categoryName}
+        disabled={disabled}
       >
         <ToggleGroupItem
           className="w-full"
@@ -171,22 +213,37 @@ const FeedbackScoreValueInput: React.FunctionComponent<
     });
     const hasMultipleOptions = categoricalOptionList.length > 2;
 
+    const categoriesMap = feedbackDefinition.details.categories || {};
+    const encodedSelectedValue =
+      categoryName !== undefined
+        ? encodeCategoryOptionValue(categoryName, categoriesMap)
+        : "";
+
     if (hasLongNames || hasMultipleOptions) {
       const categoricalSelectOptionList = categoricalOptionList.map((item) => ({
-        label: item.name,
-        value: item.name,
+        label: item.name === "" ? '""' : item.name,
+        value: encodeCategoryOptionValue(item.name, categoriesMap),
         description: String(item.value),
       }));
+
+      const handleSelectChange = (encodedVal?: string) => {
+        const decoded = decodeCategoryOptionValue(encodedVal, categoriesMap);
+        onCategoricalValueChange(decoded);
+      };
+
       return (
         <SelectBox
-          value={categoryName || ""}
+          value={encodedSelectedValue}
           options={categoricalSelectOptionList}
-          onChange={onCategoricalValueChange}
+          onChange={handleSelectChange}
           className="my-0.5 h-7 min-w-[100px] py-1"
           testId={`${prefix}-category-select`}
+          disabled={disabled}
           renderTrigger={(val) => {
+            const actualName =
+              decodeCategoryOptionValue(val, categoriesMap) ?? "";
             const selectedOption = categoricalOptionList.find(
-              (item) => item.name.trim() === (val || "").trim(),
+              (item) => item.name === actualName,
             );
 
             if (!selectedOption) {
@@ -195,35 +252,53 @@ const FeedbackScoreValueInput: React.FunctionComponent<
 
             return (
               <span className="text-nowrap">
-                {categoryOptionLabelRenderer(val, selectedOption.value)}
+                {categoryOptionLabelRenderer(
+                  selectedOption.name,
+                  selectedOption.value,
+                )}
               </span>
             );
           }}
-          renderOption={(option: DropdownOption<string>) => (
-            <SelectItem key={option.value} value={option.value}>
-              {categoryOptionLabelRenderer(option.value, option.description)}
-            </SelectItem>
-          )}
+          renderOption={(option: DropdownOption<string>) => {
+            const actualName =
+              decodeCategoryOptionValue(option.value, categoriesMap) ?? "";
+            return (
+              <SelectItem key={option.value} value={option.value}>
+                {categoryOptionLabelRenderer(actualName, option.description)}
+              </SelectItem>
+            );
+          }}
         />
       );
     }
 
+    const toggleValue =
+      categoryName !== undefined
+        ? encodeCategoryOptionValue(categoryName, categoriesMap)
+        : undefined;
+
     return (
       <ToggleGroup
         className="min-w-fit p-0.5"
-        onValueChange={onCategoricalValueChange}
+        onValueChange={(val) => {
+          onCategoricalValueChange(
+            decodeCategoryOptionValue(val, categoriesMap),
+          );
+        }}
         variant="outline"
         type="single"
         size="md"
-        value={String(categoryName)}
+        value={toggleValue}
+        disabled={disabled}
       >
         {categoricalOptionList.map(({ name, value: categoryValue }) => {
+          const itemVal = encodeCategoryOptionValue(name, categoriesMap);
           return (
             <ToggleGroupItem
               className="w-full"
-              key={name}
-              value={name}
-              data-testid={`${prefix}-category-toggle-${name}`}
+              key={itemVal}
+              value={itemVal}
+              data-testid={`${prefix}-category-toggle-${name || "empty"}`}
             >
               <div className="text-nowrap">
                 {categoryOptionLabelRenderer(name, categoryValue)}

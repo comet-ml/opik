@@ -14,6 +14,7 @@ import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   FEEDBACK_DEFINITION_TYPE,
   FeedbackDefinition,
@@ -46,6 +47,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
   AnnotateTracesDialogProps
 > = ({ rows, open, setOpen, type }) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const {
     data: feedbackDefinitionsData,
@@ -80,7 +82,11 @@ const AnnotateTracesDialog: React.FunctionComponent<
   );
 
   const isValueValid = useMemo(() => {
-    if (!selectedDefinition || draft.value === undefined) {
+    if (
+      !selectedDefinition ||
+      draft.value === undefined ||
+      draft.value === null
+    ) {
       return false;
     }
     if (selectedDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
@@ -89,8 +95,27 @@ const AnnotateTracesDialog: React.FunctionComponent<
         draft.value,
       );
     }
-    return true;
-  }, [selectedDefinition, draft.value]);
+    if (selectedDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
+      const categories = selectedDefinition.details?.categories || {};
+      return (
+        draft.categoryName !== undefined &&
+        draft.categoryName !== null &&
+        Object.prototype.hasOwnProperty.call(categories, draft.categoryName) &&
+        categories[draft.categoryName] !== null &&
+        categories[draft.categoryName] !== undefined &&
+        categories[draft.categoryName] === draft.value
+      );
+    }
+    if (selectedDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
+      return (
+        (draft.categoryName === selectedDefinition.details.true_label &&
+          draft.value === 1) ||
+        (draft.categoryName === selectedDefinition.details.false_label &&
+          draft.value === 0)
+      );
+    }
+    return false;
+  }, [selectedDefinition, draft.value, draft.categoryName]);
 
   useEffect(() => {
     if (open && rows.length > MAX_ANNOTATE_ROWS) {
@@ -120,7 +145,6 @@ const AnnotateTracesDialog: React.FunctionComponent<
     setIsSubmitting(true);
 
     const results: Array<PromiseSettledResult<void>> = [];
-    const queue = [...rows];
     const submitOne = async (row: Trace | Span) => {
       try {
         await setFeedbackScore({
@@ -130,6 +154,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
           reason: draft.reason || undefined,
           traceId: isSpanType ? (row as Span).trace_id : (row as Trace).id,
           spanId: isSpanType ? (row as Span).id : undefined,
+          silent: true,
         });
         results.push({ status: "fulfilled", value: undefined });
       } catch (error) {
@@ -137,24 +162,30 @@ const AnnotateTracesDialog: React.FunctionComponent<
       }
     };
 
+    let cursor = 0;
+    const workerCount = Math.min(MAX_CONCURRENT_ANNOTATIONS, rows.length);
     await Promise.all(
-      Array.from(
-        { length: Math.min(MAX_CONCURRENT_ANNOTATIONS, queue.length) },
-        async () => {
-          while (queue.length > 0) {
-            const row = queue.shift();
-            if (!row) {
-              break;
-            }
-            await submitOne(row);
+      Array.from({ length: workerCount }, async () => {
+        while (cursor < rows.length) {
+          const index = cursor++;
+          if (index >= rows.length) {
+            break;
           }
-        },
-      ),
+          const row = rows[index];
+          await submitOne(row);
+        }
+      }),
     );
 
     const failed = results.filter(
       (result) => result.status === "rejected",
     ).length;
+
+    if (results.some((result) => result.status === "fulfilled")) {
+      await queryClient.invalidateQueries({
+        queryKey: [isSpanType ? "spans" : "traces"],
+      });
+    }
 
     setIsSubmitting(false);
 
@@ -189,6 +220,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
     isSpanType,
     entityCopy,
     setFeedbackScore,
+    queryClient,
     setOpen,
     toast,
   ]);
@@ -234,6 +266,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
                   onChange={handleScoreNameChange}
                   className="h-8 min-w-[200px] py-1"
                   testId="annotate-bulk-score-select"
+                  disabled={isSubmitting}
                   renderTrigger={(value) => {
                     if (!value) {
                       return <div className="truncate">Select a score</div>;
@@ -254,6 +287,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
                     feedbackDefinition={selectedDefinition}
                     value={draft.value ?? ""}
                     categoryName={draft.categoryName}
+                    disabled={isSubmitting}
                     onChange={({
                       value: newValue,
                       categoryName: newCategory,
@@ -281,6 +315,7 @@ const AnnotateTracesDialog: React.FunctionComponent<
                     }
                     className="min-h-8 resize-none py-1"
                     data-testid="annotate-bulk-reason-input"
+                    disabled={isSubmitting}
                   />
                 </div>
               )}

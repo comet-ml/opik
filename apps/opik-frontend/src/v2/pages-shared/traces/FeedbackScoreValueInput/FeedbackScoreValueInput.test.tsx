@@ -211,4 +211,25 @@ describe("FeedbackScoreValueInput", () => {
       status: "valid",
     });
   });
+
+  it("selects empty category via dropdown option with sentinel encoding", () => {
+    const onChange = vi.fn();
+    const emptyKeyDef = {
+      name: "satisfaction",
+      type: FEEDBACK_DEFINITION_TYPE.categorical,
+      details: { categories: { "": 0, good: 1, great: 2 } },
+    };
+    renderInput(emptyKeyDef as unknown as FeedbackDefinition, onChange);
+
+    const optionBtn = screen.getByTestId(
+      "fsvi-category-select-option-__EMPTY_CATEGORY_SENTINEL__",
+    );
+    fireEvent.click(optionBtn);
+
+    expect(onChange).toHaveBeenCalledWith({
+      value: 0,
+      categoryName: "",
+      status: "valid",
+    });
+  });
 });
