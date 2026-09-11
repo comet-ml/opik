@@ -4,6 +4,7 @@ import base64
 import datetime
 import json
 import tracemalloc
+import uuid
 from unittest.mock import Mock
 
 import pytest
@@ -57,7 +58,9 @@ def test_update__list__still_accepted():
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
 
-    dataset.update([{"id": "a", "input": {"key": "v"}}])
+    dataset.update(
+        [{"id": "0192f1a0-0000-7000-8000-00000000000a", "input": {"key": "v"}}]
+    )
 
     assert len(capture.items) == 1
 
@@ -186,7 +189,9 @@ def test_update__item_without_id__raises_with_the_index():
     dataset = make_dataset(Dataset, Mock(), capture)
 
     with pytest.raises(exceptions.DatasetItemUpdateOperationRequiresItemId) as exc_info:
-        dataset.update([{"id": "a", "input": 1}, {"input": 2}])
+        dataset.update(
+            [{"id": "0192f1a0-0000-7000-8000-00000000000a", "input": 1}, {"input": 2}]
+        )
 
     message = str(exc_info.value)
     assert "index 1" in message, "The failing item's position must be named"
@@ -449,30 +454,54 @@ def test_insert__oversized_item__gets_its_own_request_in_input_order(monkeypatch
 # --------------------------------------------------------------------------- #
 # identifiers on the wire
 # --------------------------------------------------------------------------- #
-def test_insert__numeric_item_id__sent_as_a_string():
-    """`DatasetItem` skips validating its id, so a number reaches the writer unchecked."""
-    capture = UploadCapture()
-    streaming = make_dataset(Dataset, Mock(), capture)
-    streaming.insert([{"id": 123, "input": {"k": "v"}}])
+def test_insert__numeric_item_id__refused_before_the_request():
+    """`id` is a UUID column server-side, so a number is not an identifier it can store.
 
-    assert capture.items[0]["id"] == "123", "A numeric id must not go out as a number"
-
-
-def test_insert_delete_reinsert__numeric_id__the_item_is_not_skipped():
-    """One identity per item: the dedup cache must key on what was actually sent.
-
-    A numeric id is sent as `"123"`, so deleting `"123"` -- the form the backend hands
-    back -- has to drop the hash cached for it, or the re-insert is silently deduplicated
-    away and the item never reaches the dataset again.
+    `DatasetItem` skips validating it and a prepared body never passes through the
+    generated model, so without this check the backend refuses the value instead -- with
+    an error naming neither the item nor the field.
     """
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
-    item = {"id": 123, "input": {"k": "v"}}
+
+    with pytest.raises(ValueError) as exc_info:
+        dataset.insert([{"input": {"k": "v"}}, {"id": 123, "input": {"k": "v"}}])
+
+    message = str(exc_info.value)
+    assert "index 1" in message, "The failing item's position must be named"
+    assert "id" in message and "123" in message
+    assert capture.request_count == 0, "Nothing should have been sent"
+
+
+def test_insert__uuid_object_as_id__sent_in_its_string_form():
+    """A `uuid.UUID` is an identifier the backend can store; it just is not a string yet."""
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+    item_id = uuid.UUID("0192f1a0-0000-7000-8000-00000000000b")
+
+    dataset.insert([{"id": item_id, "input": {"k": "v"}}])
+
+    assert capture.items[0]["id"] == str(item_id)
+
+
+def test_insert_delete_reinsert__uuid_object_id__the_item_is_not_skipped():
+    """One identity per item: the dedup cache must key on what was actually sent.
+
+    A `uuid.UUID` id is sent in its string form, so deleting by that string -- the form
+    the backend hands back -- has to drop the hash cached for it, or the re-insert is
+    silently deduplicated away and the item never reaches the dataset again.
+    """
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+    item = {
+        "id": uuid.UUID("0192f1a0-0000-7000-8000-00000000000b"),
+        "input": {"k": "v"},
+    }
 
     dataset.insert([item])
     assert len(capture.items) == 1
 
-    dataset.delete(["123"])
+    dataset.delete(["0192f1a0-0000-7000-8000-00000000000b"])
     dataset.insert([item], deduplication=True)
 
     assert len(capture.items) == 2, (
@@ -614,4 +643,36 @@ def test_insert__standalone_rest_client__sends_its_auth_and_workspace_headers():
     assert sent.get("Comet-Workspace") == "my-workspace", "The upload had no workspace"
     assert sent["Content-Type"] == "application/json;charset=utf-8", (
         "Identity headers must not displace the framing of the request"
+    )
+
+
+def test_insert__standalone_rest_client__honours_the_configured_compression(
+    monkeypatch,
+):
+    """A plain transport carries no setting of its own, so the config has to supply it.
+
+    A REST client built directly sends through a plain `httpx.Client`, which has no
+    `compress_json_requests` attribute. The level and the serialiser are already read from
+    the configuration on that path; the enable flag has to come from the same place, or a
+    caller who turned compression off would still get gzipped bodies.
+    """
+    from opik.rest_api.client import OpikApi
+
+    monkeypatch.setenv("OPIK_ENABLE_JSON_REQUEST_COMPRESSION", "false")
+    capture = UploadCapture()
+    rest_client = OpikApi(base_url=capture.base_url, api_key="k", workspace_name="w")
+    rest_client._client_wrapper.httpx_client.httpx_client = capture
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=rest_client,
+    )
+
+    dataset.insert(_items(1), num_threads=1)
+
+    body = capture.bodies[0]
+    assert json.loads(body)["items"], "The body should be readable as plain JSON"
+    assert "Content-Encoding" not in capture.request_headers[0], (
+        "An uncompressed body must not be labelled gzip"
     )

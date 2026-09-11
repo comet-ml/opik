@@ -761,6 +761,12 @@ class Dataset(DatasetExportOperations):
 
     def _item_payload(self, item: dataset_item.DatasetItem) -> Dict[str, Any]:
         """Wire form of one dataset item, without building an intermediate model."""
+        for field, value in (
+            ("id", item.id),
+            ("trace_id", item.trace_id),
+            ("span_id", item.span_id),
+        ):
+            streaming_writer.validate_identifier(value, field)
         evaluators = None
         if item.evaluators:
             evaluators = [
@@ -950,9 +956,14 @@ class Dataset(DatasetExportOperations):
                 max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
                 flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
                 # The enable flag gates the level: a client built with compression off
-                # must not be handed gzipped bodies, whatever level is configured.
+                # must not be handed gzipped bodies, whatever level is configured. A
+                # transport that carries no setting of its own -- a REST client built
+                # directly sends through a plain httpx client -- takes the configured one,
+                # the same config this reads the level and the serialiser from.
                 gzip_level=opik_config.dataset_upload_compression_level
-                if httpx_client.compresses_json_requests(transport[0])
+                if httpx_client.compresses_json_requests(
+                    transport[0], default=opik_config.enable_json_request_compression
+                )
                 else None,
                 use_orjson=opik_config.enable_orjson_serialization,
             )
@@ -1042,6 +1053,15 @@ class Dataset(DatasetExportOperations):
                         f"Dataset item at index {index} must be a dict or a DatasetItem, "
                         f"got {type(item).__name__}"
                     )
+                # Named with its position while we still have one; the same check runs
+                # per item further down, where a generator gives no index to report.
+                for field in ("id", "trace_id", "span_id"):
+                    supplied = (
+                        item.get(field)
+                        if isinstance(item, dict)
+                        else getattr(item, field, None)
+                    )
+                    streaming_writer.validate_identifier(supplied, field, index)
 
         # A generator rather than a list: converting lazily is what lets a generator
         # argument stay un-materialised all the way to the wire. Whether it was one is

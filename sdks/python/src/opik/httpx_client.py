@@ -26,6 +26,9 @@ POOL_TIMEOUT_SECONDS = 20
 # times the CPU for well under 1% fewer bytes on Opik payloads.
 DEFAULT_COMPRESSION_LEVEL = 6
 
+# A gzip stream starts with these two bytes; JSON never does.
+_GZIP_MAGIC = b"\x1f\x8b"
+
 
 def get(
     workspace: Optional[str],
@@ -93,15 +96,17 @@ def _prepare_headers(
     return result
 
 
-def compresses_json_requests(client: httpx.Client) -> bool:
+def compresses_json_requests(client: httpx.Client, default: bool = True) -> bool:
     """Whether bodies sent through `client` are expected to be gzipped.
 
     One reading of the setting for both the code that produces a prepared body and the
     code that labels it, so the `Content-Encoding` header cannot disagree with the bytes.
-    A plain `httpx.Client` carries no such setting and is taken to compress, which is how
-    every Opik client is built unless the user turns it off.
+
+    A plain `httpx.Client` carries no such setting -- which is what a REST client built
+    directly rather than by `Opik` sends through -- so the caller supplies the default it
+    would otherwise have had, rather than this assuming one.
     """
-    compress: bool = getattr(client, "compress_json_requests", True)
+    compress: bool = getattr(client, "compress_json_requests", default)
     return compress
 
 
@@ -136,8 +141,9 @@ def send_prepared_json(
     Exists so a caller that has produced the request body itself can send it without a
     second serialisation pass. Auth and workspace headers ride on `client`, which is the
     same client the generated REST client sends through, so this does not depend on the
-    generated client's internals. The body is declared gzipped only when `client` is
-    configured to compress, which is the same flag its producer read.
+    generated client's internals. The body is declared gzipped when it is gzipped -- read
+    off the bytes rather than from a setting, so the header cannot disagree with what it
+    describes however the producer was configured.
     """
     url = urllib.parse.urljoin(
         base_url if base_url.endswith("/") else base_url + "/", path
@@ -147,7 +153,7 @@ def send_prepared_json(
         **(headers or {}),
         "Content-Type": "application/json;charset=utf-8",
     }
-    if compresses_json_requests(client):
+    if body.startswith(_GZIP_MAGIC):
         request_headers["Content-Encoding"] = "gzip"
 
     return client.request("PUT", url, content=body, headers=request_headers)

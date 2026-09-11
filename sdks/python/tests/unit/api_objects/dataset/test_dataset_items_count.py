@@ -117,7 +117,7 @@ def test_update__invalidates_cached_count():
     assert dataset.dataset_items_count == 5
 
     updated_item = {
-        "id": "item1",
+        "id": "0192f1a0-0000-7000-8000-00000000000a",
         "input": {"key": "updated_value"},
         "expected_output": {"key": "updated_output"},
     }
