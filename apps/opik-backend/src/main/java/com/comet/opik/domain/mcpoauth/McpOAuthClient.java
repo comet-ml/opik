@@ -11,5 +11,8 @@ public record McpOAuthClient(
         @NonNull String name,
         @NonNull Set<String> redirectUris,
         String logoUri,
+        String softwareId,
+        String softwareVersion,
+        String clientUri,
         String ownerUserName) {
 }

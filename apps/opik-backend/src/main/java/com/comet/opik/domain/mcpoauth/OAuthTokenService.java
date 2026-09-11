@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_CLIENT;
@@ -80,16 +81,25 @@ public class OAuthTokenService {
             log.info("MCP OAuth authorization_code exchanged '{}'", clientId);
 
             if (exchange.firstConnection()) {
-                // This endpoint is unauthenticated, so RequestContext carries no user and the 2-arg overload
-                // would silently fall back to the installation anonymous ID. Pass the resource owner
-                // explicitly: the warehouse joins this event on the user_name the frontend identifies on.
-                analyticsService.trackEvent("opik_mcp_connected", Map.of(
+                Map<String, String> props = new HashMap<>(Map.of(
                         "user_name", exchange.userName(),
                         "workspace_id", exchange.tokens().workspaceId(),
                         "workspace_name", exchange.tokens().workspaceName(),
                         "client_id", clientId,
-                        "client_name", client.name()),
-                        exchange.userName());
+                        "client_name", client.name()));
+                // client_id is minted per registration, so a reinstalled host counts again. software_id is
+                // stable across installs of the same product (RFC 7591 2), which is what lets the warehouse
+                // collapse those back to one adoption. Optional, hence the guards — Map.of rejects nulls.
+                if (client.softwareId() != null) {
+                    props.put("software_id", client.softwareId());
+                }
+                if (client.softwareVersion() != null) {
+                    props.put("software_version", client.softwareVersion());
+                }
+                // This endpoint is unauthenticated, so RequestContext carries no user and the 2-arg overload
+                // would silently fall back to the installation anonymous ID. Pass the resource owner
+                // explicitly: the warehouse joins this event on the user_name the frontend identifies on.
+                analyticsService.trackEvent("opik_mcp_connected", props, exchange.userName());
             }
 
             return exchange.tokens();
