@@ -306,9 +306,15 @@ Every client below asks for this URL:
 https://www.comet.com/opik/api/v1/mcp
 ```
 
-On a self-hosted deployment it is your own Opik API base plus `/v1/mcp`. The
-server connects over HTTP and signs in through the browser on first use, so your
-client stores no API key.
+The server connects over HTTP and signs in through the browser on first use, so
+your client stores no API key.
+
+On a self-hosted deployment the URL is your own Opik API base plus `/v1/mcp`, and
+the deployment has to run the MCP OAuth authorization server. It is off by
+default: turn on `mcpOAuth.enabled` in the Helm chart, or set
+`MCP_OAUTH_ENABLED=true` with a public `OPIK_BASE_URL`. Where it is off, the
+endpoint has no sign-in routes, so use the [local server](#local-server-uvx)
+instead.
 
 <Tabs>
     <Tab title="Claude Code">
@@ -400,11 +406,10 @@ client stores no API key.
     tools. The rest appear afterwards.
 
     <Note>
-    Claude reaches the server from Anthropic's cloud, not from your machine, so
-    this works with Opik Cloud and with any self-hosted deployment that is
-    reachable on the public internet. A deployment behind a VPN or on `localhost`
-    is out of reach. Use the [local server](#local-server-uvx) with a desktop
-    client instead.
+    Claude reaches the server from Anthropic's cloud, not from your machine, so a
+    self-hosted deployment also has to be reachable from the public internet. One
+    on `localhost` or behind a VPN is out of reach, so use the
+    [local server](#local-server-uvx) with a desktop client instead.
     </Note>
 
     </Tab>
