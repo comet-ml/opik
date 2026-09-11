@@ -178,7 +178,12 @@ For the full variable reference, endpoint modes and validation steps, see
 
 1. Run a short Claude Code turn that uses a tool, for example "list the files in this directory".
 2. Open the target project in Opik (`claude-code` for the plugin, your `projectName` for OTel).
-3. Confirm the trace has the prompt as input, the answer as output, and one span per tool call.
+3. Confirm the trace carries content:
+   - **Plugin:** the trace input is your prompt and the trace output is the assistant's answer.
+   - **Native OTel:** the trace is named `claude_code.interaction`, its input is your prompt, and
+     the model's response is on the `claude_code.llm_request` spans (with model, tokens and cost).
+     The trace-level output stays empty on this path. Tool calls appear as `claude_code.tool` spans
+     with their input and result.
 
 ## Source references
 

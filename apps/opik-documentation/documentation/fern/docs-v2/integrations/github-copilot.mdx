@@ -248,9 +248,9 @@ inheriting the environment variable.
   is harmless and does not affect trace ingestion.
 - Keep content capture off unless your policy explicitly allows prompt and response export.
   Metadata, timing and token counts are still logged without it.
-- Cost on `chat` spans is calculated when the `gen_ai.request.model` value matches a model in
-  Opik's price table. Copilot-hosted model names may not match; if you see `$0` cost, check the
-  `model` field on the span and reach out so we can add the alias.
+- Cost on `chat` spans is calculated from `gen_ai.usage.*` when the `gen_ai.request.model` or
+  `gen_ai.response.model` value matches a model in Opik's price table (for example `gpt-4.1`).
+  If a span shows no cost, check its `model` field and reach out so we can add the alias.
 
 ## Source references
 
