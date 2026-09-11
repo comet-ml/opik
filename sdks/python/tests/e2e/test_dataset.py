@@ -203,15 +203,16 @@ def test_insert_parallel__same_data_regardless_of_thread_count(
 
     # Shared batch_group_id => a single version, no matter the thread count.
     # (Unique-per-chunk grouping would create one version per batch.)
-    # Skipped when versioning is disabled on the backend (get_version_info
-    # returns None); the count + content checks above already prove correctness.
     stored_dataset = opik_client.get_dataset(name=name, project_name=PROJECT_NAME)
     version_info = stored_dataset.get_version_info()
-    if version_info is not None:
-        assert version_info.version_name == "v1", (
-            "Parallel insert must fold all batches into one version regardless of thread count"
-        )
-        assert version_info.items_total == N_ITEMS
+    if version_info is None:
+        # As above: a supported backend configuration, skipped loudly rather than passed
+        # over in silence. The count and content checks above have already run.
+        pytest.skip("dataset versioning is disabled on this backend")
+    assert version_info.version_name == "v1", (
+        "Parallel insert must fold all batches into one version regardless of thread count"
+    )
+    assert version_info.items_total == N_ITEMS
 
 
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
@@ -697,7 +698,11 @@ def test_insert__generator_source__every_item_lands_in_a_single_version(
     version_info = opik_client.get_dataset(
         name=name, project_name=PROJECT_NAME
     ).get_version_info()
-    assert version_info is not None, "A dataset that was just written must have a version"
+    if version_info is None:
+        # Versioning is a backend toggle (TOGGLE_DATASET_VERSIONING_ENABLED), so None is a
+        # supported deployment rather than a failure -- but skipping loudly, because the
+        # assertions below are the point of this test and must not pass by not running.
+        pytest.skip("dataset versioning is disabled on this backend")
     assert version_info.version_name == "v1"
     assert version_info.items_total == item_count
 
@@ -740,7 +745,9 @@ def test_insert__dataset_built_from_a_rest_client__stores_identical_items(
     streaming_dataset.insert(items)
 
     opik_client.create_dataset(
-        fallback_name, description="E2E rest-client-only path", project_name=PROJECT_NAME
+        fallback_name,
+        description="E2E rest-client-only path",
+        project_name=PROJECT_NAME,
     )
     # Deliberately without `client=`: the transport has to come from the REST
     # client's own wrapper for this to upload at all.
