@@ -246,9 +246,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     against 67.9 MiB. Paying 14.2% more bytes for 2.33x the throughput only pays off at
     that size, which is why ordinary requests keep the higher level.
 
-    Applies to the streaming upload path. A `Dataset` built from a REST client alone
-    uploads through the shared HTTP client, which compresses everything it sends at
-    `request_compression_level`; that client has no per-request level to set.
+    Applies to every dataset upload: a `Dataset` prepares its own request bodies whichever
+    client it was built from, so this level is the one they are compressed at. Ordinary
+    requests still go through the shared HTTP client at `request_compression_level`.
     """
 
     enable_orjson_serialization: bool = True

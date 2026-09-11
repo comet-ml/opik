@@ -599,16 +599,17 @@ def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound():
             "The failure must surface on the submit that waits at the bound, not at close"
         )
 
-        # Reported once, not twice: the failed future was collected by that wait, so a
-        # second close finds nothing left to raise. `Dataset.insert` depends on that when
-        # it closes the pool in its `except` branch, which
+        # Reported once, not twice, because the wait above took the failed future out of
+        # the pending set -- so this close has only successful ones left to collect.
+        # `Dataset.insert` leans on that when it closes the pool in its `except` branch;
         # `test_insert__producer_error_with_a_worker_error_pending__producer_error_wins`
-        # covers at the insert level -- this test does not reach `insert` at all.
+        # covers that at the insert level, this test does not reach `insert` at all.
         pool.close()
     finally:
         # Release anything still waiting and shut the executor down even if an assertion
         # above failed, so a broken assertion here cannot leak threads into the rest of
-        # the file. Closing twice is safe: the second finds no pending futures.
+        # the file. `close` keeps its pending set, and a failure still in it re-raises on
+        # every call, so this one suppresses rather than assuming it is a no-op.
         failed.set()
         with contextlib.suppress(Exception):
             pool.close()

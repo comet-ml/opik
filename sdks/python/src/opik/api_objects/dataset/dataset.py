@@ -1033,8 +1033,10 @@ class Dataset(DatasetExportOperations):
                 sequential one.
 
         Raises:
-            ValueError: If ``num_threads`` is not a positive integer, or
-                ``deduplication`` is not a bool.
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``deduplication`` is not a bool, if an item in a list is neither a dict
+                nor a ``DatasetItem``, or if an item's ``id``, ``trace_id`` or
+                ``span_id`` is not a UUID.
         """
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
@@ -1171,8 +1173,8 @@ class Dataset(DatasetExportOperations):
 
         Args:
             items_ids: List of item ids to delete. Ids are normalised the way
-                :meth:`insert` normalises them, so an item inserted with a numeric id can
-                be deleted by either its numeric or its string form.
+                :meth:`insert` normalises them, so an item inserted with a ``uuid.UUID``
+                object can be deleted by that object or by its string form.
 
         Raises:
             ValueError: If an id is ``None`` or empty. The item's position in the input

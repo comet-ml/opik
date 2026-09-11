@@ -188,10 +188,10 @@ class StreamingBatchWriter:
         payload = self._serialize(item)
 
         # Close the batch before an item that would take it past the cap rather than
-        # after, so an item at or over the cap on its own ends up in a request of its own
-        # -- where the batching splitter puts it. A request rejected for its size then
-        # fails that one row instead of every row that shared its batch. The comparison is
-        # the splitter's own, strictness included, so both paths group an input alike.
+        # after, so an item at or over the cap ends up in a request of its own: a request
+        # rejected for its size then fails that one row instead of every row that shared
+        # its batch. The comparison is `sequence_splitter`'s, strictness included, so an
+        # input is grouped the way the splitter would have grouped it.
         # The `+ 1` is the comma that would join this item to the batch; the check only
         # runs when there is already an item for it to follow.
         if self._items > 0 and self._logical_bytes + 1 + len(payload) > (

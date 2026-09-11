@@ -737,34 +737,36 @@ def test_insert__dataset_built_from_a_rest_client__stores_identical_items(
 
     items = [{"input": data, "expected_output": {"output": "Paris"}}]
 
-    streaming_name = f"{dataset_name}-owning-client-{payload_kind}"
-    fallback_name = f"{dataset_name}-rest-client-only-{payload_kind}"
+    owning_client_name = f"{dataset_name}-owning-client-{payload_kind}"
+    rest_client_only_name = f"{dataset_name}-rest-client-only-{payload_kind}"
 
-    streaming_dataset = opik_client.create_dataset(
-        streaming_name, description="E2E streaming path", project_name=PROJECT_NAME
+    owning_client_dataset = opik_client.create_dataset(
+        owning_client_name,
+        description="E2E owning-client path",
+        project_name=PROJECT_NAME,
     )
-    streaming_dataset.insert(items)
+    owning_client_dataset.insert(items)
 
     opik_client.create_dataset(
-        fallback_name,
+        rest_client_only_name,
         description="E2E rest-client-only path",
         project_name=PROJECT_NAME,
     )
     # Deliberately without `client=`: the transport has to come from the REST
     # client's own wrapper for this to upload at all.
-    fallback_dataset = dataset.Dataset(
-        name=fallback_name,
-        description="E2E rest-client path",
+    rest_client_only_dataset = dataset.Dataset(
+        name=rest_client_only_name,
+        description="E2E rest-client-only path",
         project_name=PROJECT_NAME,
         rest_client=opik_client.rest_client,
     )
-    fallback_dataset.insert(items)
+    rest_client_only_dataset.insert(items)
 
-    _wait_for_item_count(streaming_dataset, 1)
-    _wait_for_item_count(fallback_dataset, 1)
+    _wait_for_item_count(owning_client_dataset, 1)
+    _wait_for_item_count(rest_client_only_dataset, 1)
 
-    assert _streamed_content(streaming_dataset) == _streamed_content(
-        fallback_dataset
+    assert _streamed_content(owning_client_dataset) == _streamed_content(
+        rest_client_only_dataset
     ), "A Dataset built from a REST client alone must store the same item"
 
 

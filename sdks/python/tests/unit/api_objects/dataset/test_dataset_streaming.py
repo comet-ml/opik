@@ -233,11 +233,10 @@ def test_insert__dataset_built_without_an_owning_client__still_uploads():
 
 
 # --------------------------------------------------------------------------- #
-# transport-sensitive behaviour, asserted on the streaming path
+# transport-sensitive behaviour
 #
-# The pre-existing dataset tests construct a Dataset from a REST client alone, which is a
-# supported shape that takes the fallback path, so they keep covering that path unchanged.
-# These cover the same behaviours where the streaming path implements them differently.
+# These pin behaviours the upload used to get from the generated client -- the parallel
+# gate, 429 retries, error surfacing -- now that it prepares and sends bodies itself.
 # --------------------------------------------------------------------------- #
 def test_insert__streaming__worker_count_gated_by_backend_version(monkeypatch):
     """The parallel-upload gate must apply to the streaming pool too."""
