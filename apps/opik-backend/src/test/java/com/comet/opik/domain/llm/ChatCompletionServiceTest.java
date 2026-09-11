@@ -4,8 +4,6 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
-import com.google.api.gax.rpc.ApiException;
-import com.google.api.gax.rpc.StatusCode;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.AuthenticationException;
@@ -954,96 +952,6 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * VertexAI is one of two providers whose client raises no {@code HttpException} — the OpenAI Responses
-         * SDK is the other, covered below. The Google Cloud SDK throws GAX {@code ApiException}, which
-         * langchain4j also does not model as {@code NonRetriableException}, so a permanent Vertex failure was
-         * retried in-process AND redelivered by the subscriber. The status now comes from GAX's own
-         * transport-neutral translation, so it classifies like any other provider.
-         */
-        @ParameterizedTest(name = "GAX {0} -> HTTP {1}, non-retryable")
-        @CsvSource({
-                "INVALID_ARGUMENT, 400",
-                "FAILED_PRECONDITION, 400",
-                "OUT_OF_RANGE, 400",
-                "UNAUTHENTICATED, 401",
-                "PERMISSION_DENIED, 403",
-                "NOT_FOUND, 404",
-        })
-        @DisplayName("A permanent VertexAI GAX failure is retired on the first delivery")
-        void scoreTrace__whenPermanentGaxStatus__thenNonRetryable(StatusCode.Code code, int expectedStatus) {
-            // Wrapped in RuntimeException because that is the shape VertexAiGeminiChatModel actually throws.
-            var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, false)), Optional.empty());
-
-            assertNonRetryable(thrown, expectedStatus);
-        }
-
-        @ParameterizedTest(name = "GAX {0} stays retryable as HTTP {1}")
-        @CsvSource({
-                "RESOURCE_EXHAUSTED, 429",
-                "DEADLINE_EXCEEDED, 504",
-                "UNAVAILABLE, 503",
-                "INTERNAL, 500",
-                "UNKNOWN, 500",
-        })
-        @DisplayName("A transient VertexAI GAX failure still honours maxRetries")
-        void scoreTrace__whenTransientGaxStatus__thenRetryable(StatusCode.Code code, int expectedStatus) {
-            var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, false)), Optional.empty());
-
-            assertRetryable(thrown, expectedStatus);
-        }
-
-        /**
-         * The safety valve. GAX's own {@code isRetryable()} can only ever prevent a drop, never cause one, so a code
-         * that would otherwise map to a permanent status stays retryable when GAX says it is worth retrying. Guards
-         * the cases where the gRPC-to-HTTP translation disagrees with retry semantics (ABORTED, CANCELLED).
-         */
-        @ParameterizedTest(name = "GAX {0} marked retryable stays retryable despite a permanent status")
-        @CsvSource({"INVALID_ARGUMENT", "PERMISSION_DENIED", "ABORTED", "CANCELLED"})
-        @DisplayName("GAX's own retryable verdict is never overridden into a drop")
-        void scoreTrace__whenGaxSaysRetryable__thenRetryable(StatusCode.Code code) {
-            var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, true)), Optional.empty());
-
-            assertRetryable(thrown);
-        }
-
-        /**
-         * Precedence is unchanged by the GAX addition: a real {@code HttpException} anywhere in the chain still wins
-         * over anything a typed exception implies. A 503 on the wire must not be collapsed into GAX's permanent 400.
-         */
-        @Test
-        @DisplayName("A wire HttpException still outranks a GAX status in the same chain")
-        void scoreTrace__whenHttpExceptionAndGaxInSameChain__thenHttpExceptionWins() {
-            var chain = new RuntimeException(
-                    gaxException(StatusCode.Code.INVALID_ARGUMENT, false, new HttpException(503, "upstream 503")));
-
-            var thrown = whenScoreTraceFails(chain, Optional.empty());
-
-            assertRetryable(thrown);
-        }
-
-        @Test
-        @DisplayName("A permanent GAX failure does not consume the in-process retry budget")
-        void scoreTrace__whenPermanentGaxStatus__thenNotRetriedInProcess() {
-            var thrown = scoreTraceWithBudget(2,
-                    new RuntimeException(gaxException(StatusCode.Code.INVALID_ARGUMENT, false)));
-
-            // GAX ApiException is not a NonRetriableException, so without failFastOnPermanentFailure
-            // langchain4j's RetryPolicy would replay a call that can never succeed.
-            assertNonRetryable(thrown, 400);
-            verify(chatModel, times(1)).chat(any(ChatRequest.class));
-        }
-
-        @Test
-        @DisplayName("A transient GAX failure is still retried in-process")
-        void scoreTrace__whenTransientGaxStatus__thenStillRetriedInProcess() {
-            var thrown = scoreTraceWithBudget(2,
-                    new RuntimeException(gaxException(StatusCode.Code.UNAVAILABLE, false)));
-
-            assertRetryable(thrown);
-            verify(chatModel, times(3)).chat(any(ChatRequest.class));
-        }
-
-        /**
          * Review finding, and my earlier refutation of it was wrong. I checked
          * {@code OpenAILlmServiceProvider.getLanguageModel} — which unconditionally calls
          * {@code newOpenAiChatLanguageModel} — and concluded the Responses SDK was unreachable from
@@ -1078,24 +986,6 @@ class ChatCompletionServiceTest {
          * Responses SDK that fallback is the only source of status, so a permanent 400 silently became a
          * retryable 500 and was replayed to exhaustion. The filter now runs at each stage.
          */
-        @ParameterizedTest(name = "GAX {0} survives a non-error HttpException at {1} in the chain")
-        @CsvSource({
-                "INVALID_ARGUMENT, 302, 400",
-                "PERMISSION_DENIED, 302, 403",
-                "INVALID_ARGUMENT, 0, 400",
-        })
-        @DisplayName("A non-error status in the chain must not mask the real provider status")
-        void scoreTrace__whenNonErrorHttpExceptionPrecedesGaxStatus__thenRealStatusWins(
-                StatusCode.Code code, int noiseStatus, int expectedStatus) {
-            // The GAX exception carries the stray HttpException as its cause, so the chain is
-            // [ApiException, HttpException(noise)] -- the noise is found first by the HttpException pass.
-            var providerFailure = gaxException(code, false, new HttpException(noiseStatus, "not an error"));
-
-            var thrown = whenScoreTraceFails(new RuntimeException(providerFailure), Optional.empty());
-
-            assertNonRetryable(thrown, expectedStatus);
-        }
-
         @Test
         @DisplayName("A non-error status in the chain must not mask an OpenAI Responses status")
         void scoreTrace__whenNonErrorHttpExceptionPrecedesResponsesStatus__thenRealStatusWins() {
@@ -1143,25 +1033,6 @@ class ChatCompletionServiceTest {
                     return Optional.empty();
                 }
             };
-        }
-
-        private static ApiException gaxException(StatusCode.Code code, boolean retryable) {
-            return gaxException(code, retryable, new RuntimeException("vertex transport failure"));
-        }
-
-        /** A transport-free {@link StatusCode}: gRPC and HTTP-JSON both reduce to the same neutral {@code Code}. */
-        private static ApiException gaxException(StatusCode.Code code, boolean retryable, Throwable cause) {
-            return new ApiException(cause, new StatusCode() {
-                @Override
-                public Code getCode() {
-                    return code;
-                }
-
-                @Override
-                public Object getTransportCode() {
-                    return null;
-                }
-            }, retryable);
         }
 
         /** Drives scoreTrace to failure and returns what it threw. */

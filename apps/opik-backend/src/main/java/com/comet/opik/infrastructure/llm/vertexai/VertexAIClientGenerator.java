@@ -161,8 +161,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             location.flatMap(this::apiEndpointFor).ifPresent(httpOptions::baseUrl);
 
             // The SDK disables its HTTP client's timeouts, so without this a request can hang indefinitely.
+            // The SDK takes milliseconds as an int, and the configuration is only bounded below, so clamp rather
+            // than let a value over ~24.8 days wrap into a negative timeout.
             Optional.ofNullable(clientConfig.getCallTimeout())
-                    .ifPresent(timeout -> httpOptions.timeout((int) timeout.toMilliseconds()));
+                    .map(timeout -> (int) Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE))
+                    .ifPresent(httpOptions::timeout);
 
             return builder.httpOptions(httpOptions.build()).build();
         } catch (IOException e) {

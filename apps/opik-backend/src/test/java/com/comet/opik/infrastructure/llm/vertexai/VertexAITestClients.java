@@ -19,21 +19,31 @@ class VertexAITestClients {
 
     /**
      * The endpoint the client will actually call. The SDK resolves it at construction from the location, a configured
-     * base URL, or its own defaults, and exposes it only on the internal {@code ApiClient} — hence the reflection. It is
-     * worth the reach: asserting on the location alone would not catch a configured endpoint being applied to a
-     * single-region location, which is a silent misroute rather than a failure.
+     * base URL, or its own defaults. Worth asserting on rather than the location alone, which would not catch a
+     * configured endpoint being applied to a single-region location — a silent misroute rather than a failure.
      */
     static String apiEndpointOf(ChatModel model) {
+        return httpOptionsOf(model).baseUrl()
+                .orElseThrow(() -> new AssertionError("Client settled on no base URL"));
+    }
+
+    /** The request timeout the client settled on, in milliseconds. */
+    static int timeoutOf(ChatModel model) {
+        return httpOptionsOf(model).timeout()
+                .orElseThrow(() -> new AssertionError("Client settled on no timeout"));
+    }
+
+    // The SDK settles these at construction and exposes them only on the internal ApiClient, hence the reflection.
+    private static HttpOptions httpOptionsOf(ChatModel model) {
         try {
             var apiClientField = Client.class.getDeclaredField("apiClient");
             apiClientField.setAccessible(true);
             var apiClient = (ApiClient) apiClientField.get(clientOf(model));
 
-            return ((HttpOptions) ApiClient.class.getMethod("httpOptions").invoke(apiClient))
-                    .baseUrl()
-                    .orElseThrow(() -> new AssertionError("Client settled on no base URL"));
+            return (HttpOptions) ApiClient.class.getMethod("httpOptions").invoke(apiClient);
         } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Could not read the client's endpoint; the SDK's internals may have changed", e);
+            throw new AssertionError("Could not read the client's HTTP options; the SDK's internals may have changed",
+                    e);
         }
     }
 }

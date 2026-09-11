@@ -9,6 +9,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -265,6 +266,40 @@ class VertexAIClientGeneratorTest {
 
             try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
                 return VertexAITestClients.apiEndpointOf(client);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Call timeout")
+    class CallTimeout {
+
+        @Test
+        @DisplayName("is passed through to the client")
+        void isPassedThroughToTheClient() {
+            assertThat(timeoutOfClientWith(Duration.seconds(60))).isEqualTo(60_000);
+        }
+
+        /** The SDK takes an int, and the configuration is only bounded below, so an oversized value must not wrap. */
+        @Test
+        @DisplayName("is clamped instead of overflowing into a negative")
+        void isClampedInsteadOfOverflowing() {
+            assertThat(timeoutOfClientWith(Duration.days(365))).isEqualTo(Integer.MAX_VALUE);
+        }
+
+        private int timeoutOfClientWith(Duration callTimeout) {
+            var config = clientConfig();
+            config.setCallTimeout(callTimeout);
+
+            var apiConfig = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var request = ChatCompletionRequest.builder().model(MODEL).build();
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(config)
+                    .generate(apiConfig, request)) {
+                return VertexAITestClients.timeoutOf(client);
             }
         }
     }

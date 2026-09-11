@@ -4,8 +4,6 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
-import com.google.api.gax.rpc.ApiException;
-import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.exception.AuthenticationException;
@@ -171,7 +169,7 @@ public class ChatCompletionService {
             }
             throw new ServerErrorException(detail, status, runtimeException);
         } finally {
-            // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
+            // Close the Vertex client (reused across retries) to release its HTTP threads; other providers self-reclaim.
             if (languageModelClient instanceof AutoCloseable closeable) {
                 try {
                     closeable.close();
@@ -211,9 +209,8 @@ public class ChatCompletionService {
      * treated as permanent is acked and dropped on its first delivery instead of being redelivered.
      *
      * <p>Only scoreTrace fails fast on a permanent status: {@code create()} answers an HTTP caller, and narrowing
-     * its retry behaviour is not this change's business. The permanent check is mainly reached for VertexAI, whose
-     * GAX exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail
-     * fast on their own. The cause is preserved either way, so the catch block still classifies from the same status.
+     * its retry behaviour is not this change's business. The cause is preserved either way, so the catch block still
+     * classifies from the same status.
      */
     private <T> T failFastOnNonRetriableFailure(Callable<T> action) throws Exception {
         return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
@@ -364,32 +361,6 @@ public class ChatCompletionService {
     }
 
     /**
-     * VertexAI is one of two providers whose client raises no {@link HttpException}: the Google Cloud SDK throws GAX
-     * {@code ApiException}, which is also not a {@code NonRetriableException}, so without this a permanent Vertex
-     * failure consumed the whole retry budget. The status is GAX's own transport-neutral translation, identical for
-     * the gRPC and HTTP-JSON transports, rather than a table of our own.
-     *
-     * <p>An exception GAX marks retryable yields no status, so <em>within this method</em> the mapping can only
-     * prevent a drop, never cause one. That costs reporting fidelity — such a failure is reported as a flat 500
-     * rather than, say, the 503 GAX translated — and it is kept deliberately: returning the status regardless would
-     * let a GAX-retryable client-error code that {@link HttpStatusRetryability} does not carve out (ABORTED maps to
-     * 409, for instance) be classified permanent, and both this fail-fast and {@code BaseRedisSubscriber} would then
-     * drop an evaluation GAX itself says is worth retrying. Trading a precise status for that is not worth it. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
-     * {@code HttpException} in the chain first, and a wire status legitimately outranks GAX's {@code isRetryable},
-     * which is a configured judgment rather than something the server said. Not reachable for VertexAI in any case —
-     * {@code VertexAiGeminiChatModel} goes through the Google Cloud SDK and never produces a langchain4j
-     * {@code HttpException} — but that is the intended precedence if it ever were.
-     */
-    private static Optional<Integer> gaxHttpStatus(ApiException apiException) {
-        if (apiException.isRetryable()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(apiException.getStatusCode())
-                .map(StatusCode::getCode)
-                .map(StatusCode.Code::getHttpStatusCode);
-    }
-
-    /**
      * The status langchain4j's own exception types stand for, used for providers whose clients raise them without an
      * {@link HttpException} in the chain. {@code ContentFilteredException} is covered by its
      * {@link InvalidRequestException} supertype.
@@ -402,7 +373,6 @@ public class ChatCompletionService {
             case TimeoutException ignored -> Optional.of(Response.Status.REQUEST_TIMEOUT.getStatusCode());
             case RateLimitException ignored -> Optional.of(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
             case InternalServerException ignored -> Optional.of(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
-            case ApiException apiException -> gaxHttpStatus(apiException);
             case OpenAIServiceException responsesException -> Optional.of(responsesException.statusCode());
             default -> Optional.empty();
         };
