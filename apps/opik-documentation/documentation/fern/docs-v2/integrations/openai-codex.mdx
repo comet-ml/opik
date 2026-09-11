@@ -13,6 +13,18 @@ title: Observability for OpenAI Codex with Opik
 
 Use this guide if you run Codex (CLI/IDE/app) and want its OTEL trace exporter to send telemetry to Opik.
 
+<Warning>
+  **Know what Codex's trace exporter sends before you rely on it.** Codex exports its internal
+  tracing spans (`session_loop`, `handle_responses`, `append_items`, `auth`, ...), not LLM-call
+  spans. Conversation facts arrive as span **events** (`codex.user_prompt`, `codex.api_request`,
+  `codex.tool_result`, `codex.turn_ttft`) that Opik stores under `opentelemetry.events` in span
+  metadata, carrying the model name, tool names, durations and prompt *length*. The trace signal
+  never includes the prompt text, the response text, token counts or cost, even with
+  `log_user_prompt = true`; Codex sends those to its **logs** exporter (`otel.exporter`), which
+  Opik does not ingest. Use this integration for Codex operational telemetry. For per-user token
+  and cost attribution across Codex sessions, use [Cost Intelligence](/cost-intelligence/overview).
+</Warning>
+
 <Callout type="info">
   This guide covers telemetry flowing **from Codex to Opik**. For the other direction — letting Codex
   read your traces, score outputs and run evaluations — register the
@@ -55,8 +67,6 @@ For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/integrations
     <Tab value="Opik Cloud" title="Opik Cloud">
         ```toml
         [otel]
-        # Optional environment label in Codex telemetry
-        trace_exporter = "otlp-http"
         environment = "prod"
         log_user_prompt = false
 
@@ -76,7 +86,6 @@ For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/integrations
     <Tab value="Enterprise deployment" title="Enterprise deployment">
         ```toml
         [otel]
-        trace_exporter = "otlp-http"
         environment = "prod"
         log_user_prompt = false
 
@@ -96,7 +105,6 @@ For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/integrations
     <Tab value="Self-hosted instance" title="Self-hosted instance">
         ```toml
         [otel]
-        trace_exporter = "otlp-http"
         environment = "prod"
         log_user_prompt = false
 
@@ -124,8 +132,9 @@ Applies when:
 You have enabled Codex OTEL export and selected OTLP/HTTP exporter in config.
 
 Required fields:
-- `trace_exporter = "otlp-http"` under `[otel]`
-- `otel.trace_exporter` exporter block (`otlp-http`)
+- an `[otel.trace_exporter.otlp-http]` table. The table itself selects the exporter; do **not**
+  also write `trace_exporter = "otlp-http"` as a string under `[otel]`, Codex rejects the file
+  with `cannot extend value of type string with a dotted key`.
 - `endpoint`
 - `protocol` (`binary` or `json`, binary recommended)
 
@@ -138,7 +147,6 @@ Minimal valid config:
 
 ```toml
 [otel]
-trace_exporter = "otlp-http"
 log_user_prompt = false
 
 [otel.trace_exporter.otlp-http]
@@ -151,11 +159,15 @@ headers = { "Authorization" = "<your-api-key>", "Comet-Workspace" = "<your-works
 
 1. Run a Codex session after updating `config.toml`.
 2. Confirm OTLP HTTP requests are sent to `/otel/v1/traces`.
-3. Verify traces appear in the expected Opik workspace/project.
+3. Verify traces appear in the expected Opik workspace/project. Expect many short internal
+   traces per session (`auth`, `turn/start`, `codex.exec`, ...); open a `session_loop` or
+   `dispatch_tool_call_with_terminal_outcome` span and look under **Metadata →
+   opentelemetry.events** for the `codex.*` events.
 
 ## Notes
 
 - Codex telemetry export is opt-in.
+- Prompt text and token usage are only available on the logs signal (`otel.exporter`), which Opik does not receive.
 - Keep `log_user_prompt = false` unless your policy explicitly allows prompt text export.
 - If your Codex build uses a different exporter key path, align with your installed version's config reference.
 
