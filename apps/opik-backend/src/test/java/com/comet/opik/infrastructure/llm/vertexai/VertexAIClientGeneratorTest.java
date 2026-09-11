@@ -245,6 +245,21 @@ class VertexAIClientGeneratorTest {
         }
 
         /**
+         * The configuration accepted bare hosts before the SDK swap and operators may still have them, so one has to
+         * keep reaching the same endpoint rather than landing in the URL's path.
+         */
+        @Test
+        @DisplayName("a bare host keeps its scheme defaulted to https")
+        void bareHostsAreGivenAScheme() {
+            var config = clientConfig();
+            config.setVertexAIClient(config.getVertexAIClient().toBuilder()
+                    .multiRegionApiEndpoints(Map.of("global", "aiplatform.googleapis.com"))
+                    .build());
+
+            assertThat(resolvedEndpoint(config, "global")).isEqualTo("https://aiplatform.googleapis.com");
+        }
+
+        /**
          * A blank location is not rejected at the API boundary and the SDK rejects an empty one outright, so it has to
          * be treated as unset. Were it canonicalised into {@code ""}, building the client would fail instead of
          * defaulting like an absent value.
@@ -257,7 +272,11 @@ class VertexAIClientGeneratorTest {
 
         /** A blank location that reached the builder would surface here as an exception instead of an endpoint. */
         private String resolvedEndpoint(String location) {
-            var generator = new VertexAIClientGenerator(clientConfig());
+            return resolvedEndpoint(clientConfig(), location);
+        }
+
+        private String resolvedEndpoint(LlmProviderClientConfig clientConfig, String location) {
+            var generator = new VertexAIClientGenerator(clientConfig);
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)

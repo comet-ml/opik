@@ -1347,7 +1347,7 @@ llmProviderClient:
     # from the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
     # multi-region locations need their endpoint set explicitly. Single-region locations are not listed and keep the SDK
     # default. Required: these endpoints exist only here, the application defines no fallback for them.
-    # Values must be absolute URLs, scheme included: the SDK treats a bare host as a path segment.
+    # Values may be a bare host or an absolute URL; https:// is assumed when no scheme is given.
     multiRegionApiEndpoints:
       global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
       eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}

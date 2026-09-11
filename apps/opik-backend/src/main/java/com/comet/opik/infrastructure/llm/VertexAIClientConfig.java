@@ -16,14 +16,14 @@ import java.util.Map;
  * Keys must already be in the canonical lower-case form locations are looked up by, so a configured {@code Global:}
  * is rejected at startup rather than silently never matching.
  * <p>
- * Values must be absolute URLs, scheme included: the SDK concatenates the value into a URL and re-parses it, so a bare
- * host lands in the path and the request goes somewhere else entirely, while {@code localhost:8443} parses
- * {@code localhost} as the scheme. Requiring the scheme turns both into a startup failure. A port and trailing slash
- * are accepted, which is what lets the tests point a location at a local stub.
+ * Values may be a bare host or an absolute URL. The SDK concatenates the value into a URL and re-parses it, so a
+ * scheme-less value would land in the path and misroute the request silently; the generator prepends {@code https://}
+ * when one is missing rather than rejecting the older bare-host form, which operators may already have configured.
+ * A port and trailing slash are accepted, which is what lets the tests point a location at a local stub.
  */
 @Builder(toBuilder = true)
 public record VertexAIClientConfig(
         @NotBlank String scope,
         @NotEmpty Map<@Pattern(regexp = "[a-z0-9-]+", message = "must be a lower-case location such as 'global'") String, //
-                @NotBlank @Pattern(regexp = "https?://[A-Za-z0-9.-]+(:\\d+)?/?", message = "must be an absolute URL such as 'https://aiplatform.googleapis.com', scheme included") String> multiRegionApiEndpoints) {
+                @NotBlank @Pattern(regexp = "(https?://)?[A-Za-z0-9.-]+(:\\d+)?/?", message = "must be a host or absolute URL such as 'https://aiplatform.googleapis.com'") String> multiRegionApiEndpoints) {
 }

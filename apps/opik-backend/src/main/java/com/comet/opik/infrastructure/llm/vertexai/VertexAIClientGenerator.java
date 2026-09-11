@@ -136,7 +136,16 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {
-        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation));
+        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation))
+                .map(VertexAIClientGenerator::withScheme);
+    }
+
+    /**
+     * The SDK concatenates the endpoint into a URL and re-parses it, so a bare host would land in the path and
+     * misroute the request silently. The configuration still accepts one, so default the scheme here instead.
+     */
+    private static String withScheme(String endpoint) {
+        return endpoint.startsWith("http://") || endpoint.startsWith("https://") ? endpoint : "https://" + endpoint;
     }
 
     private Client buildClient(LlmProviderClientApiConfig config) {
