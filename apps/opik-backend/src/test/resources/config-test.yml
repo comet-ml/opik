@@ -137,6 +137,13 @@ databaseAnalyticsDataModel:
   tracesDistributedWrapEnabled: false
   #  Default: false
 
+bulkInsert:
+  # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
+  # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
+  # cells, so this is safe to flip either way on a running install. Default false so an upgrade does not
+  # silently change the write path.
+  v2ClientEnabled: false
+
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
 uuidValidation:

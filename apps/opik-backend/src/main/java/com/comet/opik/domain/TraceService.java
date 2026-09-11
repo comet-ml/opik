@@ -220,8 +220,7 @@ class TraceServiceImpl implements TraceService {
                             .collectList();
 
                     return resolveProjects
-                            .flatMap(traces -> template
-                                    .nonTransaction(connection -> dao.batchInsert(traces, connection))
+                            .flatMap(traces -> dao.batchInsert(traces)
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName,
                                                 workspaceName, cipxDeviceId));
