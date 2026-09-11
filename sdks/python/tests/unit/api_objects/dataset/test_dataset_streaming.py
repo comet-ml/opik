@@ -594,3 +594,18 @@ def test_insert_delete_reinsert__numeric_id__the_item_is_not_skipped():
     assert len(capture.items) == 2, (
         "The re-inserted item was dropped as a duplicate of one that no longer exists"
     )
+
+
+@pytest.mark.parametrize("bad_id", [None, ""], ids=["none", "empty-string"])
+def test_delete__id_that_identifies_nothing__raises_before_anything_is_sent(bad_id):
+    """Both reach `delete_dataset_items` as a request to delete nothing in particular."""
+    mock_rest_client = Mock()
+    dataset = _fallback_dataset(mock_rest_client)
+
+    with pytest.raises(ValueError) as exc_info:
+        dataset.delete(["real-id", bad_id])
+
+    assert "index 1" in str(exc_info.value), "The failing id's position must be named"
+    assert mock_rest_client.datasets.delete_dataset_items.call_count == 0, (
+        "The valid id before it must not have been deleted"
+    )

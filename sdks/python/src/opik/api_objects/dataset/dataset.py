@@ -1059,12 +1059,14 @@ class Dataset(DatasetExportOperations):
         Args:
             items: Dicts (or ``DatasetItem`` objects) to add to the dataset. Any
                 iterable is accepted, including a generator, and it is consumed lazily, so
-                no item is retained once its request has been sent. Deduplication still
-                keeps one content digest per item for the life of the ``Dataset`` -- pass
-                ``deduplication=False`` for an upload that retains nothing at all. A
-                list keeps working as before, and is checked before the first request goes
-                out; from a generator an invalid item can only be found once earlier items
-                have been sent, and those stay persisted.
+                no item is retained once its request has been sent and the request bodies
+                in flight are capped. That is the bounded part; deduplication is not, and
+                keeps a content digest and an id per item for the life of the ``Dataset``
+                however the items arrived -- pass ``deduplication=False`` for an upload
+                that retains nothing at all. A list keeps working as before, and is
+                checked before the first request goes out; from a generator an invalid
+                item can only be found once earlier items have been sent, and those stay
+                persisted.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -1199,16 +1201,22 @@ class Dataset(DatasetExportOperations):
                 be deleted by either its numeric or its string form.
 
         Raises:
-            ValueError: If an id is ``None``. The item's position in the input is
-                included in the message.
+            ValueError: If an id is ``None`` or empty. The item's position in the input
+                is included in the message.
         """
         # Through the same canonicalisation the upload used, so an id given here in a
         # different form than it was inserted in still matches the cached hash.
         canonical_ids = []
         for index, id_ in enumerate(items_ids):
-            if id_ is None:
-                raise ValueError(f"Dataset item id at index {index} is None")
-            canonical_ids.append(streaming_writer.canonical_id(id_))
+            canonical = streaming_writer.canonical_id(id_)
+            # Neither identifies an item, and both reach the backend as a request to
+            # delete nothing in particular rather than as an error.
+            if not canonical:
+                raise ValueError(
+                    f"Dataset item id at index {index} must be a non-empty value, "
+                    f"got {id_!r}"
+                )
+            canonical_ids.append(canonical)
         batches = sequence_splitter.split_into_batches(
             canonical_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
