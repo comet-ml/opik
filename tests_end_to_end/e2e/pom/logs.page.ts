@@ -31,6 +31,235 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Spans tab active, optionally at a chosen page size and
+   * date range.
+   *
+   * `size` and `timeRange` are the table's own URL query params (`size` and
+   * `time_range`, see TracesSpansTab and MetricDateRangeSelect). Both are also
+   * persisted in localStorage, so a spec that depends on either must state it
+   * rather than inherit whatever the profile last stored.
+   *
+   * There is deliberately no `page` option. The table reads `page` from the URL
+   * too, but `DataTablePagination` resets it to 1 whenever
+   * `(page - 1) * size > total` — and `total` is 0 until the count query lands,
+   * so a deep link to page 2 always bounces back to page 1. Paging is done by
+   * clicking, through `goToNextPage()`.
+   */
+  async gotoSpans(
+    projectId: string,
+    opts: { size?: number; timeRange?: string } = {},
+  ): Promise<void> {
+    return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      const params = new URLSearchParams({ logsType: 'spans' });
+      if (opts.size !== undefined) params.set('size', String(opts.size));
+      if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+      );
+    });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Spans". */
+  get spansTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /**
+   * Switch the entity toggle from whatever is active to Spans, and wait until
+   * the toggle itself reports the change.
+   *
+   * Gated on `aria-checked` rather than on a row appearing: the two views share
+   * the same table, so "some row is visible" is satisfied by the view the test
+   * just navigated away from.
+   */
+  async switchToSpans(): Promise<void> {
+    return test.step('Switch the Logs entity toggle to Spans', async () => {
+      await this.spansTab.click();
+      await expect(this.spansTab, 'the Spans toggle is selected').toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+  }
+
+  /**
+   * A span row in the Spans view, keyed by span id. Same `data-row-id`
+   * contract the traces view uses — the shared DataTable stamps it from the
+   * row model — and named separately because a span id and a trace id are
+   * different things to assert on.
+   */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  /**
+   * The ids rendered on the current page of the table, in table order.
+   *
+   * A span row's `data-row-id` is the span id, the same contract the traces
+   * view uses for trace ids.
+   */
+  async readRowIdsOnPage(): Promise<string[]> {
+    return test.step('Read the row ids on the current page', async () => {
+      await this.traceRows.first().waitFor({ state: 'visible' });
+      const ids = await this.traceRows.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute('data-row-id') ?? ''),
+      );
+      if (ids.some((id) => id === '')) {
+        throw new Error('LogsPage.readRowIdsOnPage: a rendered row carried no data-row-id');
+      }
+      return ids;
+    });
+  }
+
+  /** The pagination footer's "Showing 1-25 of 130" label. */
+  private get paginationSummary(): Locator {
+    return this.page.getByText(/^Showing [\d,]+-[\d,]+ of [\d,]+$/);
+  }
+
+  /**
+   * The population the table's footer reports, or `null` while it reports none.
+   *
+   * `DataTablePagination` renders nothing at all when `total` is 0, so an
+   * absent footer is not a missing element — it is the table saying it has no
+   * rows, which is also what a caller sees while the list request is still in
+   * flight. Returned rather than waited on, so a caller polls for the number it
+   * expects instead of racing the fetch and reading whichever view answered
+   * first.
+   */
+  async readPaginationTotal(): Promise<number | null> {
+    const summary = this.paginationSummary;
+    if ((await summary.count()) === 0) return null;
+    const text = ((await summary.textContent()) ?? '').trim();
+    const match = /of ([\d,]+)$/.exec(text);
+    return match ? Number(match[1].replace(/,/g, '')) : null;
+  }
+
+  /**
+   * The pagination footer's "Showing 1-25 of 130", parsed.
+   *
+   * `total` is what the table tells the user the population is, and it comes
+   * from the listing's own envelope rather than from the rows on screen — so a
+   * read that lost rows shows up here as a `total` the collected ids cannot
+   * account for. Rendered with `toLocaleString()`, hence the comma strip.
+   */
+  async readPaginationSummary(): Promise<{ from: number; to: number; total: number }> {
+    return test.step('Read the table pagination summary', async () => {
+      const summary = this.paginationSummary;
+      await summary.waitFor({ state: 'visible' });
+      const text = ((await summary.textContent()) ?? '').trim();
+      const match = /^Showing ([\d,]+)-([\d,]+) of ([\d,]+)$/.exec(text);
+      if (!match) {
+        throw new Error(`LogsPage.readPaginationSummary: could not parse "${text}"`);
+      }
+      const toNumber = (value: string) => Number(value.replace(/,/g, ''));
+      return {
+        from: toNumber(match[1]),
+        to: toNumber(match[2]),
+        total: toNumber(match[3]),
+      };
+    });
+  }
+
+  /**
+   * The shared pagination control's "next page" button.
+   *
+   * The four nav buttons in `DataTablePagination` are icon-only: no text, no
+   * accessible name, no `data-testid`, and identical class lists — so the icon
+   * is the only thing that tells them apart. They are addressed here by the
+   * lucide class the icon carries (`lucide-chevron-right`), scoped to the
+   * element holding the "Showing …" label so a chevron elsewhere on the page
+   * cannot match. **A `data-testid` belongs on these buttons**; it is not added
+   * in this change because these specs are verified against a deployed
+   * environment, which a front-end change in the same PR would not reach — so
+   * the spec could not be run before review.
+   */
+  private get nextPageButton(): Locator {
+    return this.paginationSummary
+      .locator('xpath=..')
+      .locator('button:has(svg.lucide-chevron-right)');
+  }
+
+  /**
+   * Advance the table one page, and wait until the rows on screen are actually
+   * the next page's.
+   *
+   * Both conditions are needed, and the second is the one that matters. The
+   * footer's "Showing 51-100" is derived from the page counter, so it flips the
+   * instant the click lands — while the table keeps rendering the previous
+   * page's rows until the new fetch resolves (`isPlaceholderData`, which is
+   * also what the loading overlay is driven from). Waiting on the footer alone
+   * reads the page you just left, so a caller collecting ids across pages
+   * counts it twice and never sees the page it missed. Observed as a ~1-in-4
+   * flake before this gate was added.
+   *
+   * The first row's id is the discriminator: two pages of a uniform table look
+   * alike, but no id appears on both.
+   */
+  async goToNextPage(): Promise<void> {
+    return test.step('Advance to the next page of the table', async () => {
+      const from = (await this.readPaginationSummary()).from;
+      const firstRowId = await this.traceRows.first().getAttribute('data-row-id');
+      const button = this.nextPageButton;
+      await expect(button, 'exactly one next-page control').toHaveCount(1);
+      await button.click();
+
+      await expect
+        .poll(
+          async () => {
+            const summary = await this.readPaginationSummary();
+            const firstRowNow = await this.traceRows.first().getAttribute('data-row-id');
+            return summary.from > from && firstRowNow !== firstRowId;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The value a metrics card renders, e.g. "0.5s" for Avg duration.
+   *
+   * `type` is the KPI metric key the card is keyed on — `count`, `errors`,
+   * `avg_duration`, `total_cost` (see MetricsSummary).
+   */
+  metricsCardValue(type: string): Locator {
+    return this.page.getByTestId(`metrics-card-${type}-value`);
+  }
+
+  /**
+   * The period-over-period delta a metrics card renders next to its value,
+   * e.g. "125%" or "25pp".
+   *
+   * The delta carries no test id of its own — it is the card's trailing text
+   * after the label and the value — so it is read by subtracting those two from
+   * the card's own text rather than by a structural child selector. Returns the
+   * bare magnitude+unit; the arrow direction is an icon, not text.
+   *
+   * Only rendered when each card is at least 240px wide (`getCardMode`), so a
+   * caller asserting on it must widen the viewport.
+   */
+  async readMetricsCardDelta(type: string): Promise<string> {
+    return test.step(`Read the "${type}" metrics card delta`, async () => {
+      const card = this.page.getByTestId(`metrics-card-${type}`);
+      await card.waitFor({ state: 'visible' });
+      const value = this.metricsCardValue(type);
+      await value.waitFor({ state: 'visible' });
+      const cardText = ((await card.innerText()) ?? '').replace(/\s+/g, ' ').trim();
+      const valueText = ((await value.innerText()) ?? '').trim();
+      const index = cardText.lastIndexOf(valueText);
+      if (index < 0) {
+        throw new Error(
+          `LogsPage.readMetricsCardDelta: card "${type}" text "${cardText}" ` +
+            `does not contain its own value "${valueText}"`,
+        );
+      }
+      return cardText.slice(index + valueText.length).trim();
+    });
+  }
+
   /** Open Logs with the Threads tab active for the given project. */
   async gotoThreads(projectId: string): Promise<void> {
     return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {

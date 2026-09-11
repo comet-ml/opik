@@ -86,12 +86,12 @@ const READABLE_POLL_MS = 500;
  * the reason lives in the response's `details`, which `rawFetch` drops when it
  * narrows the body to `message`. Verified against a reject-mode backend.
  */
-function isUuidWindowRejection(err: unknown): boolean {
+export function isUuidWindowRejection(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return message.includes('Invalid UUID for id');
 }
 
-const UUID_VALIDATION_SKIP_REASON =
+export const UUID_VALIDATION_SKIP_REASON =
   'this env runs UUID timestamp validation in reject mode (UUID_VALIDATION_ENABLED=true, ' +
   'auditOnly=false), which refuses the out-of-window ids these specs seed — set auditOnly=true ' +
   'or disable validation to run them';
