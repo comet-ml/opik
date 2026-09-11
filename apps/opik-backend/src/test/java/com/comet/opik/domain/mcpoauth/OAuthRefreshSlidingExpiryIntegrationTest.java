@@ -12,9 +12,6 @@ import com.comet.opik.api.resources.utils.resources.OAuthResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.Form;
-import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,11 +30,6 @@ import java.time.Instant;
 import java.util.List;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_GRANT_TYPE;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REFRESH_TOKEN;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
@@ -55,12 +47,12 @@ class OAuthRefreshSlidingExpiryIntegrationTest {
     private static final String REDIRECT_URI = "http://localhost:1234/callback";
     private static final String RESOURCE_URI = "http://localhost:8080/api/v1/mcp";
     private static final Duration IDLE_TTL = Duration.ofMinutes(2);
-    // The cap only bites once more than (ABSOLUTE - IDLE) has elapsed since authorization: 3s here, so the first
-    // rotation (after ~1s) is still sliding and the second (after ~5s) is capped, each with a ~2s margin.
-    private static final Duration ABSOLUTE_TTL = IDLE_TTL.plusSeconds(3);
-    private static final Duration FIRST_PAUSE = Duration.ofSeconds(1);
-    private static final Duration SECOND_PAUSE = Duration.ofSeconds(4);
-    private static final Duration TOLERANCE = Duration.ofSeconds(1);
+    // The cap only bites once more than (ABSOLUTE - IDLE) has elapsed since authorization: 6s here, so the first
+    // rotation (after ~2s) is still sliding and the second (after ~10s) is capped, each with a ~4s margin.
+    private static final Duration ABSOLUTE_TTL = IDLE_TTL.plusSeconds(6);
+    private static final Duration FIRST_PAUSE = Duration.ofSeconds(2);
+    private static final Duration SECOND_PAUSE = Duration.ofSeconds(8);
+    private static final Duration TOLERANCE = Duration.ofSeconds(2);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -113,35 +105,29 @@ class OAuthRefreshSlidingExpiryIntegrationTest {
 
         McpOAuthToken original = fetchRefreshRow(minted.tokens().refreshToken());
         Instant familyStart = original.issuedAt();
+        Instant absoluteExpiry = original.absoluteExpiresAt();
+        assertThat(absoluteExpiry).as("the authorization fixes the family's absolute expiry")
+                .isCloseTo(familyStart.plus(ABSOLUTE_TTL), within(TOLERANCE));
         assertThat(original.expiresAt()).isCloseTo(familyStart.plus(IDLE_TTL), within(TOLERANCE));
 
         Thread.sleep(FIRST_PAUSE.toMillis());
-        TokenResponse first = refresh(clientId, minted.tokens().refreshToken());
+        TokenResponse first = oauthClient.refreshOk(clientId, minted.tokens().refreshToken());
         McpOAuthToken afterFirst = fetchRefreshRow(first.refreshToken());
+        assertThat(afterFirst.absoluteExpiresAt()).as("rotation carries the family's absolute expiry forward")
+                .isEqualTo(absoluteExpiry);
         assertThat(afterFirst.expiresAt())
                 .as("the rotated refresh token lives a full idle TTL from the rotation, not from the authorization")
                 .isAfter(original.expiresAt())
                 .isCloseTo(afterFirst.issuedAt().plus(IDLE_TTL), within(TOLERANCE));
 
         Thread.sleep(SECOND_PAUSE.toMillis());
-        TokenResponse second = refresh(clientId, first.refreshToken());
+        TokenResponse second = oauthClient.refreshOk(clientId, first.refreshToken());
         McpOAuthToken afterSecond = fetchRefreshRow(second.refreshToken());
+        assertThat(afterSecond.absoluteExpiresAt()).isEqualTo(absoluteExpiry);
         assertThat(afterSecond.expiresAt())
                 .as("once idle TTL from now would pass the family's absolute lifetime, the cap wins")
-                .isCloseTo(familyStart.plus(ABSOLUTE_TTL), within(TOLERANCE))
+                .isEqualTo(absoluteExpiry)
                 .isBefore(afterSecond.issuedAt().plus(IDLE_TTL).minusSeconds(1));
-    }
-
-    private TokenResponse refresh(String clientId, String refreshToken) {
-        var form = new Form()
-                .param(PARAM_GRANT_TYPE, GRANT_REFRESH_TOKEN)
-                .param(PARAM_CLIENT_ID, clientId)
-                .param(PARAM_REFRESH_TOKEN, refreshToken);
-
-        try (Response response = client.target(baseURI + TOKEN_PATH).request().post(Entity.form(form))) {
-            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-            return response.readEntity(TokenResponse.class);
-        }
     }
 
     private McpOAuthToken fetchRefreshRow(String refreshToken) {

@@ -293,20 +293,23 @@ mcpOAuth:
   # Description: Access token lifetime
   accessTokenTtl: PT1H
   # Default: P7D
-  # Description: Refresh token idle lifetime; sliding, renewed on every rotation
+  # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize
   refreshTokenTtl: P7D
   # Default: P30D
-  # Description: Absolute lifetime of a token family from the authorization that created it; caps the sliding lifetime
+  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed
   refreshTokenAbsoluteTtl: P30D
   # Default: PT60S
   # Description: Authorization code lifetime
   codeTtl: PT60S
   # Default: PT2M
-  # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair; after it, re-presentation is treated as reuse and revokes the whole token family
+  # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair (MCP hosts refresh from several parallel tool calls at once); after it, re-presentation is treated as reuse and revokes the whole token family
   refreshRotationGrace: PT2M
   # Default: 10
-  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window; one more re-presentation is treated as reuse and revokes the family
+  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window (one per parallel host request that lost the rotation race). One more re-presentation than this is treated as reuse and revokes the whole token family
   refreshRotationMaxRetries: 10
+  # Default: PT10S
+  # Description: Lease of the per-family Redis lock under which refresh-token rotation, in-grace retries and revocation run. Must outlast the MySQL transaction that rotates a token; if it lapses mid-rotation a concurrent refresh with the same token may be refused instead of served
+  refreshLockLease: PT10S
   # Default: PT5M
   # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
   scrubLockTimeout: PT5M

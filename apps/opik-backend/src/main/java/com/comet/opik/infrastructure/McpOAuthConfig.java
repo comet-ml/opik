@@ -36,8 +36,10 @@ public class McpOAuthConfig {
     @Valid @JsonProperty
     @NotNull private Duration refreshTokenTtl;
 
+    // Java-side defaults on the settings added after the first release, so an externally supplied mcpOAuth block
+    // that predates them still validates.
     @Valid @JsonProperty
-    @NotNull private Duration refreshTokenAbsoluteTtl;
+    @NotNull private Duration refreshTokenAbsoluteTtl = Duration.ofDays(30);
 
     @Valid @JsonProperty
     @NotNull private Duration codeTtl;
@@ -46,7 +48,10 @@ public class McpOAuthConfig {
     @NotNull private Duration refreshRotationGrace;
 
     @Valid @JsonProperty
-    @Positive private int refreshRotationMaxRetries;
+    @Positive private int refreshRotationMaxRetries = 10;
+
+    @Valid @JsonProperty
+    @NotNull private Duration refreshLockLease = Duration.ofSeconds(10);
 
     @Valid @JsonProperty
     @NotNull private Duration scrubLockTimeout;
@@ -60,6 +65,20 @@ public class McpOAuthConfig {
 
     public String getMcpResourceUri() {
         return StringUtils.isNotBlank(mcpResourceUri) ? mcpResourceUri : getIssuer() + "/api/v1/mcp";
+    }
+
+    /**
+     * A refresh token's absolute lifetime must be at least its idle lifetime, otherwise the cap would shorten
+     * every token from the first authorization on, and both must be positive.
+     */
+    @AssertTrue(message = "mcpOAuth.refreshTokenAbsoluteTtl must be positive and not shorter than mcpOAuth.refreshTokenTtl") public boolean isRefreshTokenAbsoluteTtlValid() {
+        return refreshTokenTtl != null && refreshTokenAbsoluteTtl != null
+                && !refreshTokenTtl.isNegative() && !refreshTokenTtl.isZero()
+                && refreshTokenAbsoluteTtl.compareTo(refreshTokenTtl) >= 0;
+    }
+
+    @AssertTrue(message = "mcpOAuth.refreshLockLease must be positive") public boolean isRefreshLockLeasePositive() {
+        return refreshLockLease != null && !refreshLockLease.isNegative() && !refreshLockLease.isZero();
     }
 
     /**

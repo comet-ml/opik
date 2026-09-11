@@ -19,11 +19,9 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -47,7 +45,6 @@ public class McpOAuthService {
     // the minting of a descendant pair. A row lock cannot do this without gap locks: a FOR UPDATE over the family
     // followed by an INSERT into the same range deadlocks against a second refresh doing the same.
     private static final String FAMILY_LOCK = "McpOAuthFamily";
-    private static final Duration FAMILY_LOCK_LEASE = Duration.ofSeconds(2);
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull OpikConfiguration opikConfig;
@@ -99,14 +96,17 @@ public class McpOAuthService {
         String accessToken = McpOAuthTokenUtils.generateAccessToken();
         String refreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
+        // The authorization fixes the family's absolute lifetime; every rotation carries it forward.
+        Instant absoluteExpiresAt = now.plus(config().getRefreshTokenAbsoluteTtl());
+
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
             tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
-                    familyId, now.plus(config().getAccessTokenTtl())));
+                    familyId, now.plus(config().getAccessTokenTtl()), absoluteExpiresAt));
             tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_REFRESH,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(refreshToken),
-                    familyId, now.plus(config().getRefreshTokenTtl())));
+                    familyId, refreshExpiry(now, absoluteExpiresAt), absoluteExpiresAt));
 
             return buildTokenResponse(accessToken, refreshToken, row.workspaceId(), row.workspaceName());
         });
@@ -114,7 +114,8 @@ public class McpOAuthService {
 
     /**
      * Rotates a refresh token: the presented token is revoked and a new access + refresh pair is issued in the
-     * same family, with the same absolute refresh expiry.
+     * same family. The new refresh token lives {@code refreshTokenTtl} from now, capped at the family's absolute
+     * expiry, so an active connector stays connected and an idle one lapses (see {@link #refreshExpiry}).
      * <p>
      * MCP hosts run several tool calls in parallel, and when the access token expires each of them answers the
      * 401 by refreshing with the same stored refresh token. Only one of those requests can be the rotation; the
@@ -161,14 +162,24 @@ public class McpOAuthService {
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
-            List<McpOAuthToken> family = tokenDao.findFamily(row.familyId());
+            List<McpOAuthToken> family = tokenDao.findFamily(row.familyId(), row.workspaceId());
             McpOAuthToken current = family.stream()
                     .filter(token -> token.id().equals(row.id()))
                     .findFirst()
-                    .orElseThrow(() -> new BadRequestException("refresh token vanished during rotation"));
+                    .orElse(null);
+            if (current == null) {
+                // The presented token existed a moment ago and is gone: only the scrub job deletes rows, and it
+                // deletes expired or revoked ones. Fail closed for whatever is left of the family.
+                tokenDao.revokeFamily(row.familyId(), RevokedReason.REUSE);
+                return Optional.empty();
+            }
 
             if (isFamilyRevoked(family)) {
                 throw new BadRequestException("refresh token family already revoked");
+            }
+            // Re-checked under the lock: the pre-lock check may have waited behind another rotation.
+            if (!current.expiresAt().isAfter(Instant.now())) {
+                throw new BadRequestException("refresh token expired at '%s'".formatted(current.expiresAt()));
             }
 
             boolean retry = current.revokedAt() != null;
@@ -182,12 +193,16 @@ public class McpOAuthService {
                 return Optional.empty();
             }
 
+            // Rows minted before the column existed carry no absolute expiry; their cap starts counting now.
+            Instant absoluteExpiresAt = Optional.ofNullable(current.absoluteExpiresAt())
+                    .orElseGet(() -> now.plus(config().getRefreshTokenAbsoluteTtl()));
+
             tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
-                    now.plus(config().getAccessTokenTtl())));
+                    now.plus(config().getAccessTokenTtl()), absoluteExpiresAt));
             tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_REFRESH,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(newRefreshToken),
-                    slidingRefreshExpiry(family, now)));
+                    refreshExpiry(now, absoluteExpiresAt), absoluteExpiresAt));
 
             return Optional.of(buildTokenResponse(accessToken, newRefreshToken, current.workspaceId(),
                     current.workspaceName()));
@@ -223,7 +238,7 @@ public class McpOAuthService {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(familyId, FAMILY_LOCK),
                 Mono.fromSupplier(action).subscribeOn(Schedulers.boundedElastic()),
-                FAMILY_LOCK_LEASE)
+                config().getRefreshLockLease())
                 .blockOptional()
                 .orElseGet(Optional::empty);
     }
@@ -295,20 +310,13 @@ public class McpOAuthService {
     }
 
     /**
-     * The expiry of a refresh token issued by rotation: {@code refreshTokenTtl} from now, so a connector that keeps
-     * refreshing stays connected (OAuth 2.1 §4.3.3 ties refresh expiry to inactivity), capped at
-     * {@code refreshTokenAbsoluteTtl} from the authorization that created the family. The family's oldest token
-     * carries that authorization time.
+     * When a refresh token minted now expires: {@code refreshTokenTtl} from now (OAuth 2.1 §4.3.3 ties refresh
+     * expiry to inactivity, so an active connector stays connected), never past the family's absolute expiry, which
+     * the authorization fixed at {@code refreshTokenAbsoluteTtl} and every rotation carries forward.
      */
-    private Instant slidingRefreshExpiry(List<McpOAuthToken> family, Instant now) {
-        Instant familyStart = family.stream()
-                .map(McpOAuthToken::issuedAt)
-                .filter(Objects::nonNull)
-                .min(Instant::compareTo)
-                .orElse(now);
+    private Instant refreshExpiry(Instant now, Instant absoluteExpiresAt) {
         Instant sliding = now.plus(config().getRefreshTokenTtl());
-        Instant absolute = familyStart.plus(config().getRefreshTokenAbsoluteTtl());
-        return sliding.isBefore(absolute) ? sliding : absolute;
+        return sliding.isBefore(absoluteExpiresAt) ? sliding : absoluteExpiresAt;
     }
 
     /**

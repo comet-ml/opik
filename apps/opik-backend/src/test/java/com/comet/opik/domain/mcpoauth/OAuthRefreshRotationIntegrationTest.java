@@ -1,6 +1,5 @@
 package com.comet.opik.domain.mcpoauth;
 
-import com.comet.opik.api.resources.oauth.OAuthError;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -13,8 +12,6 @@ import com.comet.opik.api.resources.utils.resources.OAuthResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.Form;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -28,19 +25,13 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_GRANT_TYPE;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REFRESH_TOKEN;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_TOKEN;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.REVOKE_PATH;
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -112,8 +103,8 @@ class OAuthRefreshRotationIntegrationTest {
         String clientId = minted.clientId();
         String refreshToken = minted.tokens().refreshToken();
 
-        List<RefreshOutcome> outcomes = IntStream.range(0, PARALLEL_REFRESHES)
-                .mapToObj(i -> CompletableFuture.supplyAsync(() -> refresh(clientId, refreshToken)))
+        List<OAuthResourceClient.RefreshOutcome> outcomes = IntStream.range(0, PARALLEL_REFRESHES)
+                .mapToObj(i -> CompletableFuture.supplyAsync(() -> oauthClient.refresh(clientId, refreshToken)))
                 .toList()
                 .stream()
                 .map(CompletableFuture::join)
@@ -132,8 +123,8 @@ class OAuthRefreshRotationIntegrationTest {
 
         // Whichever copy of the credentials the host keeps must keep working: every refresh token handed out by
         // the burst rotates on its own.
-        for (RefreshOutcome outcome : outcomes) {
-            RefreshOutcome next = refresh(clientId, outcome.tokens().refreshToken());
+        for (OAuthResourceClient.RefreshOutcome outcome : outcomes) {
+            OAuthResourceClient.RefreshOutcome next = oauthClient.refresh(clientId, outcome.tokens().refreshToken());
             assertThat(next.status())
                     .as("a refresh token handed out during the burst rotates normally afterwards")
                     .isEqualTo(Response.Status.OK.getStatusCode());
@@ -147,22 +138,27 @@ class OAuthRefreshRotationIntegrationTest {
         String clientId = minted.clientId();
         String original = minted.tokens().refreshToken();
 
-        RefreshOutcome rotation = refresh(clientId, original);
+        OAuthResourceClient.RefreshOutcome rotation = oauthClient.refresh(clientId, original);
         assertThat(rotation.status()).isEqualTo(Response.Status.OK.getStatusCode());
 
         String latest = rotation.tokens().refreshToken();
+        List<String> issued = new ArrayList<>(List.of(rotation.tokens().refreshToken()));
         for (int retry = 1; retry <= MAX_RETRIES; retry++) {
-            RefreshOutcome allowed = refresh(clientId, original);
+            OAuthResourceClient.RefreshOutcome allowed = oauthClient.refresh(clientId, original);
             assertThat(allowed.status()).as("retry %d of %d is still served", retry, MAX_RETRIES)
                     .isEqualTo(Response.Status.OK.getStatusCode());
+            assertThat(allowed.tokens().accessToken()).isNotBlank();
+            assertThat(allowed.tokens().refreshToken()).isNotBlank();
+            issued.add(allowed.tokens().refreshToken());
             latest = allowed.tokens().refreshToken();
         }
+        assertThat(issued).as("every served retry carries its own refresh token").doesNotHaveDuplicates();
 
-        RefreshOutcome overCap = refresh(clientId, original);
+        OAuthResourceClient.RefreshOutcome overCap = oauthClient.refresh(clientId, original);
         assertThat(overCap.status()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
         assertThat(overCap.error().error()).isEqualTo(ERROR_INVALID_GRANT);
 
-        RefreshOutcome afterKill = refresh(clientId, latest);
+        OAuthResourceClient.RefreshOutcome afterKill = oauthClient.refresh(clientId, latest);
         assertThat(afterKill.status()).as("the family is gone, including the pairs handed out before the cap")
                 .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
         assertThat(afterKill.error().error()).isEqualTo(ERROR_INVALID_GRANT);
@@ -175,36 +171,14 @@ class OAuthRefreshRotationIntegrationTest {
         String clientId = minted.clientId();
         String original = minted.tokens().refreshToken();
 
-        RefreshOutcome rotation = refresh(clientId, original);
+        OAuthResourceClient.RefreshOutcome rotation = oauthClient.refresh(clientId, original);
         assertThat(rotation.status()).isEqualTo(Response.Status.OK.getStatusCode());
 
-        var revoke = new Form()
-                .param(PARAM_TOKEN, rotation.tokens().refreshToken())
-                .param(PARAM_CLIENT_ID, clientId);
-        try (Response response = client.target(baseURI + REVOKE_PATH).request().post(Entity.form(revoke))) {
-            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-        }
+        oauthClient.revoke(clientId, rotation.tokens().refreshToken());
 
-        RefreshOutcome retry = refresh(clientId, original);
+        OAuthResourceClient.RefreshOutcome retry = oauthClient.refresh(clientId, original);
         assertThat(retry.status()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
         assertThat(retry.error().error()).isEqualTo(ERROR_INVALID_GRANT);
     }
 
-    private RefreshOutcome refresh(String clientId, String refreshToken) {
-        var form = new Form()
-                .param(PARAM_GRANT_TYPE, GRANT_REFRESH_TOKEN)
-                .param(PARAM_CLIENT_ID, clientId)
-                .param(PARAM_REFRESH_TOKEN, refreshToken);
-
-        try (Response response = client.target(baseURI + TOKEN_PATH).request().post(Entity.form(form))) {
-            int status = response.getStatus();
-            if (status == Response.Status.OK.getStatusCode()) {
-                return new RefreshOutcome(status, response.readEntity(TokenResponse.class), null);
-            }
-            return new RefreshOutcome(status, null, response.readEntity(OAuthError.class));
-        }
-    }
-
-    private record RefreshOutcome(int status, TokenResponse tokens, OAuthError error) {
-    }
 }
