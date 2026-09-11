@@ -72,6 +72,8 @@ const useExperimentItemsData = ({
       },
     );
 
+  const total = data?.total ?? 0;
+
   const { refetch: refetchExportData } = useCompareExperimentsList(
     {
       workspaceName,
@@ -83,6 +85,23 @@ const useExperimentItemsData = ({
       truncate: false,
       page,
       size,
+    },
+    {
+      enabled: false,
+    },
+  );
+
+  const { refetch: refetchAllItemsForExport } = useCompareExperimentsList(
+    {
+      workspaceName,
+      datasetId,
+      experimentsIds,
+      filters,
+      sorting,
+      search,
+      truncate: false,
+      page: 1,
+      size: total || 1,
     },
     {
       enabled: false,
@@ -130,7 +149,6 @@ const useExperimentItemsData = ({
   );
 
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
-  const total = data?.total ?? 0;
 
   const columnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
@@ -202,6 +220,7 @@ const useExperimentItemsData = ({
     isFetching,
     isPlaceholderData,
     refetchExportData,
+    refetchAllItemsForExport,
   };
 };
 

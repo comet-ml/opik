@@ -94,15 +94,13 @@ const processNestedExportColumn = (
 
 type CompareExperimentsActionsPanelProps = {
   getDataForExport?: () => Promise<ExperimentsCompare[]>;
-  selectedRows?: ExperimentsCompare[];
   columnsToExport?: string[];
   experiments?: Experiment[];
 };
 
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
-> = ({ getDataForExport, selectedRows = [], columnsToExport, experiments }) => {
-  const disabled = !selectedRows?.length;
+> = ({ getDataForExport, columnsToExport, experiments }) => {
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const singleExperiment =
@@ -196,9 +194,7 @@ const CompareExperimentsActionsPanel: React.FC<
       {columnsToExport && (
         <ExportToButton
           buttonSize="icon-2xs"
-          disabled={
-            disabled || columnsToExport.length === 0 || !isExportEnabled
-          }
+          disabled={columnsToExport.length === 0 || !isExportEnabled}
           getData={mapRowData}
           generateFileName={generateFileName}
           tooltipContent={
