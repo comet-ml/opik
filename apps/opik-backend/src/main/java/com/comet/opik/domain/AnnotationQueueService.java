@@ -112,11 +112,13 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return Mono.empty();
         }
 
+        Map<UUID, AnnotationQueueAutomation> automations = withAutomation.stream()
+                .collect(Collectors.toMap(AnnotationQueue::id, AnnotationQueue::automation));
+
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromRunnable(() -> withAutomation.forEach(
-                    queue -> automationService.validate(workspaceId, queue.id(), queue.automation())));
+            return Mono.fromRunnable(() -> automationService.validate(workspaceId, automations));
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
@@ -189,8 +191,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                     // Same reason as on create: reject the payload before the queue row is
                                     // rewritten, so a 400 never leaves a half-applied update behind.
                                     updateMono = Mono.fromRunnable(
-                                            () -> automationService.validate(workspaceId, id,
-                                                    updateRequest.automation()))
+                                            () -> automationService.validate(workspaceId,
+                                                    Map.of(id, updateRequest.automation())))
                                             .subscribeOn(Schedulers.boundedElastic())
                                             .then(updateMono)
                                             .then(Mono.fromRunnable(
@@ -238,9 +240,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         // policy is uniform. Past allowed — queues commonly collect older traces/threads.
         itemIds.forEach(itemId -> idGenerator.validateIdNotInFuture(itemId, "AnnotationQueue item"));
 
-        return annotationQueueDAO.findQueueInfoById(queueId)
-                .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
-                .flatMap(queue -> addEligibleItems(queueId, queue.projectId(), itemIds, source))
+        return addEligibleItems(queueId, itemIds, source)
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
                         addedCount, queueId))
                 .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
@@ -253,14 +253,18 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
      * consumers draining different batches for the same queue would otherwise both read the same size and
      * each fill the same headroom, taking the queue past its ceiling. The lock is scoped to the automated
      * path because that is the only one the ceiling applies to, so a person adding items never waits on it.
+     *
+     * <p>The queue lookup is inside the lock, not before it, so a queue deleted while a fill was waiting
+     * is seen as gone rather than written to.
      */
-    private Mono<Long> addEligibleItems(UUID queueId, UUID projectId, Set<UUID> itemIds,
-            AnnotationQueueItemSource source) {
+    private Mono<Long> addEligibleItems(UUID queueId, Set<UUID> itemIds, AnnotationQueueItemSource source) {
 
-        Mono<Long> add = Mono.defer(() -> eligibleItems(queueId, projectId, itemIds, source)
-                .flatMap(eligible -> eligible.isEmpty()
-                        ? Mono.just(0L)
-                        : annotationQueueDAO.addItems(queueId, eligible, projectId, source)));
+        Mono<Long> add = Mono.defer(() -> annotationQueueDAO.findQueueInfoById(queueId)
+                .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
+                .flatMap(queue -> eligibleItems(queueId, queue.projectId(), itemIds, source)
+                        .flatMap(eligible -> eligible.isEmpty()
+                                ? Mono.just(0L)
+                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source))));
 
         return source == AnnotationQueueItemSource.AUTOMATED
                 ? distributedLockService.executeWithLock(new LockService.Lock(queueId, AUTOMATED_FILL_LOCK), add)

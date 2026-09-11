@@ -45,7 +45,7 @@ public class AnnotationQueueAutomationService {
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AnnotationQueueAutomationDAO.class);
-            var resolved = resolve(dao, workspaceId, queueId, automation);
+            var resolved = resolve(dao.findByQueueId(workspaceId, queueId), automation);
 
             dao.save(workspaceId, queueId, projectId, scope.getValue(), enabled, resolved.conditions(),
                     resolved.maxItemsInQueue(), userName);
@@ -62,20 +62,32 @@ public class AnnotationQueueAutomationService {
      * this configuration are in different databases with no shared transaction, so a rejection discovered
      * during the save would otherwise leave a queue behind that the caller believes was never created.
      */
-    public void validate(@NonNull String workspaceId, @NonNull UUID queueId,
-            @NonNull AnnotationQueueAutomation automation) {
-        transactionTemplate.inTransaction(READ_ONLY, handle -> resolve(
-                handle.attach(AnnotationQueueAutomationDAO.class), workspaceId, queueId, automation));
+    public void validate(@NonNull String workspaceId, @NonNull Map<UUID, AnnotationQueueAutomation> automations) {
+        if (automations.isEmpty()) {
+            return;
+        }
+
+        transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            // One lookup for the whole batch: a bulk import validates every queue it is about to create,
+            // and a lookup per queue would make that cost scale with the batch.
+            Map<UUID, AnnotationQueueAutomationModel> existing = handle
+                    .attach(AnnotationQueueAutomationDAO.class)
+                    .findByQueueIds(workspaceId, List.copyOf(automations.keySet()))
+                    .stream()
+                    .collect(Collectors.toMap(AnnotationQueueAutomationModel::queueId, model -> model));
+
+            automations.forEach(
+                    (queueId, automation) -> resolve(Optional.ofNullable(existing.get(queueId)), automation));
+            return null;
+        });
     }
 
     /**
      * The stored form of an automation payload: what is kept from the request and what is carried over
      * from the existing row. Shared by {@link #save} and {@link #validate} so the rules cannot drift apart.
      */
-    private ResolvedAutomation resolve(AnnotationQueueAutomationDAO dao, String workspaceId, UUID queueId,
+    private ResolvedAutomation resolve(Optional<AnnotationQueueAutomationModel> existing,
             AnnotationQueueAutomation automation) {
-
-        var existing = dao.findByQueueId(workspaceId, queueId);
 
         // A null conditions payload means "leave the stored conditions alone" — the toggle-only
         // request. There is nothing to leave alone on a first save, so require them there.

@@ -583,9 +583,7 @@ class AnnotationQueuesResourceTest {
 
             var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
 
-            assertThat(readBack(queue.id()).automation())
-                    .usingRecursiveComparison()
-                    .isEqualTo(automation);
+            assertThat(readBack(queue.id()).automation()).isEqualTo(automation);
         }
 
         @Test
@@ -631,9 +629,7 @@ class AnnotationQueuesResourceTest {
             var stored = readBack(queue.id()).automation();
             assertThat(stored.enabled()).isFalse();
             assertThat(stored.maxItemsInQueue()).isEqualTo(25);
-            assertThat(stored.conditions())
-                    .usingRecursiveComparison()
-                    .isEqualTo(automation.conditions());
+            assertThat(stored.conditions()).isEqualTo(automation.conditions());
         }
 
         @Test
@@ -658,9 +654,7 @@ class AnnotationQueuesResourceTest {
 
             var stored = readBack(queue.id()).automation();
             assertThat(stored.maxItemsInQueue()).isEqualTo(4);
-            assertThat(stored.conditions())
-                    .usingRecursiveComparison()
-                    .isEqualTo(automation.conditions());
+            assertThat(stored.conditions()).isEqualTo(automation.conditions());
         }
 
         @Test
@@ -786,6 +780,51 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should keep item history after the items are removed from the queue")
+        void historyOutlivesItemRemoval() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var itemIds = Set.of(idGenerator.generateId(), idGenerator.generateId());
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // History is what stops automation re-adding an item a reviewer deliberately removed, so it
+            // has to survive the removal that makes it matter.
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isZero();
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+        }
+
+        @Test
+        @DisplayName("should clear item history when the queue is deleted")
+        void deletingQueueClearsHistory() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var itemIds = Set.of(idGenerator.generateId(), idGenerator.generateId());
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    Set.of(annotationQueue.id()), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isZero();
         }
 
         @Test
@@ -2302,6 +2341,19 @@ class AnnotationQueuesResourceTest {
                         ? updateRequest.automation()
                         : existingQueue.automation())
                 .build();
+    }
+
+    private int getItemHistoryCount(String workspaceId, UUID queueId) {
+        String historyCountQuery = "SELECT count(*) as cnt FROM annotation_queue_item_history WHERE workspace_id=:workspace_id AND queue_id=:queue_id";
+
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(historyCountQuery)
+                    .bind("workspace_id", workspaceId)
+                    .bind("queue_id", queueId.toString());
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("cnt", Integer.class)))
+                    .singleOrEmpty();
+        }).block();
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {
