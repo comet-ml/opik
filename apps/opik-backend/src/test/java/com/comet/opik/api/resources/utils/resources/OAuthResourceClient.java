@@ -50,7 +50,7 @@ public class OAuthResourceClient {
     private final String redirectUri;
     private final String resourceUri;
 
-    public record Minted(String code, TokenResponse tokens) {
+    public record Minted(String clientId, String code, TokenResponse tokens) {
     }
 
     /** Registers a client, walks consent + PKCE, and exchanges the code for the raw code and the token pair. */
@@ -58,7 +58,7 @@ public class OAuthResourceClient {
         String clientId = registerClient();
         String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
         String code = authorize(clientId, codeVerifier);
-        return new Minted(code, exchangeCode(clientId, code, codeVerifier));
+        return new Minted(clientId, code, exchangeCode(clientId, code, codeVerifier));
     }
 
     private String registerClient() {

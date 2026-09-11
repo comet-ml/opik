@@ -298,9 +298,9 @@ mcpOAuth:
   # Default: PT60S
   # Description: Authorization code lifetime
   codeTtl: PT60S
-  # Default: PT30S
-  # Description: Grace window during which a just-rotated refresh token is still accepted
-  refreshRotationGrace: PT30S
+  # Default: PT2M
+  # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair; after it, re-presentation is treated as reuse and revokes the whole token family
+  refreshRotationGrace: PT2M
   # Default: PT5M
   # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
   scrubLockTimeout: PT5M

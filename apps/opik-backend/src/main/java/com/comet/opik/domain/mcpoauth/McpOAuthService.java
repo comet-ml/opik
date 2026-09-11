@@ -112,28 +112,53 @@ public class McpOAuthService {
             if (!isBenignRotationRetry(row, now)) { // Reuse detected: kill the whole lineage
                 template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
                         .revokeFamily(row.familyId(), RevokedReason.REUSE));
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
-            throw new BadRequestException(ERROR_INVALID_GRANT);
+            // The host is re-presenting a token that was rotated moments ago: hand it its own pair (see
+            // mintRotatedPair) instead of an invalid_grant that would make it discard its credentials.
+            return mintRotatedPair(row, now, false);
         }
 
+        return mintRotatedPair(row, now, true);
+    }
+
+    /**
+     * Issues a new access + refresh pair descending from {@code source}, in the same family and with the same
+     * absolute refresh expiry.
+     * <p>
+     * MCP hosts run several tool calls in parallel, and when the access token expires each of them answers the
+     * 401 by refreshing with the same stored refresh token. Only one request can revoke the source token
+     * ({@code revokeSource}); the others land either after that rotation committed or inside the same race. Both
+     * are the legitimate client retrying, not a replay by a thief, as long as the rotation happened within
+     * {@code refreshRotationGrace}. Such a retry gets its own fresh pair off the same family rather than
+     * {@code invalid_grant}: a host that sees {@code invalid_grant} on refresh discards its tokens and forces the
+     * user to re-authorize (RFC 6819 §5.2.2.3 flags exactly this clustered-client hazard of rotation). After the
+     * grace window the re-presentation is treated as reuse and the family is revoked, per OAuth 2.1 §4.3.1.
+     */
+    private TokenResponse mintRotatedPair(McpOAuthToken source, Instant now, boolean revokeSource) {
         String accessToken = McpOAuthTokenUtils.generateAccessToken();
         String newRefreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
-            if (tokenDao.revoke(row.tokenHash(), RevokedReason.ROTATED) != 1) {
-                throw new BadRequestException(ERROR_INVALID_GRANT);
+            if (revokeSource && tokenDao.revoke(source.tokenHash(), RevokedReason.ROTATED) != 1) {
+                // Lost the revoke race to a concurrent refresh with the same token. Same rule as above: a
+                // rotation that just happened means this is the host's own retry and it still gets a pair.
+                McpOAuthToken current = tokenDao.findByHash(source.tokenHash());
+                if (current == null || !isBenignRotationRetry(current, Instant.now())) {
+                    throw new BadRequestException(ERROR_INVALID_GRANT);
+                }
             }
 
-            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(row, TYPE_ACCESS,
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(source, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
                     now.plus(config().getAccessTokenTtl())));
-            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(row, TYPE_REFRESH,
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(source, TYPE_REFRESH,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(newRefreshToken),
-                    row.expiresAt()));
+                    source.expiresAt()));
 
-            return buildTokenResponse(accessToken, newRefreshToken, row.workspaceId(), row.workspaceName());
+            return buildTokenResponse(accessToken, newRefreshToken, source.workspaceId(), source.workspaceName());
         });
     }
 
