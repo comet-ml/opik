@@ -30,15 +30,15 @@ export interface AnnotationQueueRoutingFixtures {
  * `registerPromptCleanup` uses, for the same reason — the id does not exist
  * until the test asks for the queue.
  *
- * Cleanup is not optional politeness here. Annotation queues cascade with
- * neither the `project` fixture nor the run-prefix sweep in
- * `global-teardown.ts`, so a queue this factory made and did not delete is
- * orphaned permanently. Queues are deleted in reverse order of creation, so a
- * failure part-way through a multi-queue test still tears down what it built.
+ * Queues are deleted in reverse order of creation, so a failure part-way
+ * through a multi-queue test still tears down what it built.
  *
- * The queue is named from `testNamespace`, so the name carries the run prefix
- * and a sweep can still find one that escaped (a hard-killed worker runs no
- * teardown at all).
+ * The queue is named from `testNamespace`, so the name carries the
+ * `cuj-<runId>-` prefix that `global-teardown.ts` already sweeps annotation
+ * queues by. That sweep is the backstop for every queue this fixture cannot
+ * delete itself: a hard-killed worker runs no teardown at all, and a create
+ * whose response is lost after the POST has already committed throws before
+ * `created` ever learns the id. Neither leaks past the end of the run.
  */
 export const test = baseTest.extend<AnnotationQueueRoutingFixtures>({
   createRoutingQueue: async ({ backendClient, testNamespace }, use, testInfo) => {

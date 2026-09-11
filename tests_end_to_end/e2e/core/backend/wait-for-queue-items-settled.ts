@@ -8,7 +8,7 @@ export interface WaitForQueueItemsSettledOpts {
 }
 
 /**
- * Poll a queue's membership for `itemIds` until it stops changing for
+ * Poll a queue's membership for `entityIds` until it stops changing for
  * `quietPeriodMs`, then return it.
  *
  * Annotation-queue routing is deliberately delayed: an entity's first feedback
@@ -36,9 +36,9 @@ export interface WaitForQueueItemsSettledOpts {
  * assert on.
  */
 export async function waitForQueueItemsSettled(
-  findItems: (queueId: string, itemIds: string[]) => Promise<AnnotationQueueItemRef[]>,
+  findItems: (queueId: string, entityIds: string[]) => Promise<AnnotationQueueItemRef[]>,
   queueId: string,
-  itemIds: string[],
+  entityIds: string[],
   opts: WaitForQueueItemsSettledOpts = {},
 ): Promise<AnnotationQueueItemRef[]> {
   const quietPeriodMs = opts.quietPeriodMs ?? 12_000;
@@ -51,7 +51,7 @@ export async function waitForQueueItemsSettled(
   let lastItems: AnnotationQueueItemRef[] = [];
 
   while (Date.now() - start < timeoutMs) {
-    lastItems = await findItems(queueId, itemIds);
+    lastItems = await findItems(queueId, entityIds);
 
     const fingerprint = lastItems
       .map((item) => `${item.id}:${item.source}`)

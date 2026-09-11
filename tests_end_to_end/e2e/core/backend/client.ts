@@ -914,12 +914,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    */
   const localFindAnnotationQueueItems = async (
     queueId: string,
-    itemIds: string[],
+    entityIds: string[],
   ): Promise<AnnotationQueueItemRef[]> => {
     const { status, message, json } = await rawFetch(
       'POST',
       `/v1/private/annotation-queues/${queueId}/items/search`,
-      { body: { ids: itemIds } },
+      { body: { ids: entityIds } },
     );
     if (status !== 200) {
       throw new Error(
@@ -3231,11 +3231,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     findAnnotationQueueItems: localFindAnnotationQueueItems,
 
     /** Remove items from a queue — the reviewer's "dismiss this item" action. */
-    async removeAnnotationQueueItems(queueId: string, itemIds: string[]): Promise<void> {
+    async removeAnnotationQueueItems(queueId: string, entityIds: string[]): Promise<void> {
       const { status, message } = await rawFetch(
         'POST',
         `/v1/private/annotation-queues/${queueId}/items/delete`,
-        { body: { ids: itemIds } },
+        { body: { ids: entityIds } },
       );
       if (status !== 204) {
         throw new Error(
@@ -3246,10 +3246,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
     async waitForQueueItemsSettled(
       queueId: string,
-      itemIds: string[],
+      entityIds: string[],
       opts: WaitForQueueItemsSettledOpts = {},
     ): Promise<AnnotationQueueItemRef[]> {
-      return waitForQueueItemsSettled(localFindAnnotationQueueItems, queueId, itemIds, opts);
+      return waitForQueueItemsSettled(localFindAnnotationQueueItems, queueId, entityIds, opts);
     },
 
     /**
