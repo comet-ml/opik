@@ -117,6 +117,23 @@ export class ProjectDashboardsPage {
     return this.viewSelectorPopover.getByText(viewName, { exact: true });
   }
 
+  /**
+   * Opens a view by choosing it from the selector — the path a user actually
+   * takes, as opposed to arriving on a `dashboardId` link.
+   *
+   * `currentViewName` is what the trigger displays now, since that is the only
+   * thing naming it while the popover is closed. Waits for the popover to close
+   * so a caller reading the URL afterwards sees the selection committed rather
+   * than the value it had mid-transition.
+   */
+  async selectView(currentViewName: string, viewName: string): Promise<void> {
+    await test.step(`Choose "${viewName}" from the view selector`, async () => {
+      await this.openViewSelector(currentViewName);
+      await this.viewOption(viewName).click();
+      await this.viewSelectorPopover.waitFor({ state: 'hidden' });
+    });
+  }
+
   /** The `dashboardId` the URL currently carries, decoded. */
   selectedDashboardId(): string | null {
     return new URL(this.page.url()).searchParams.get('dashboardId');

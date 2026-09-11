@@ -203,6 +203,21 @@ test.describe(
             dashboardsA.selectedDashboardId(),
             "A's own view opens under A",
           ).toBe(viewA.id);
+
+          // Every assertion above arrives by URL. This one opens a view the way
+          // a user does — through the selector — so the capability is earned on
+          // the interaction and not only on link resolution. The legacy view is
+          // the target because the page is currently on `viewA`, which makes
+          // the selection change observable without depending on what the
+          // selector's persisted state happened to be on load.
+          await dashboardsA.selectView(viewA.name, legacyView.name);
+          await dashboardsA.expectSelectedView(legacyView.name);
+          await expect
+            .poll(
+              () => dashboardsA.selectedDashboardId(),
+              { message: 'choosing a view from the selector opens it' },
+            )
+            .toBe(legacyView.id);
         });
       },
     );
