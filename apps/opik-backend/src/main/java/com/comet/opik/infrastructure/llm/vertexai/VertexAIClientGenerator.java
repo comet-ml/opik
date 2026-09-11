@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.base.Preconditions;
 import com.google.genai.Client;
-import com.google.genai.types.ClientOptions;
 import com.google.genai.types.HttpOptions;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
@@ -19,8 +18,8 @@ import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
@@ -33,22 +32,10 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 @Slf4j
+@RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     private final @NonNull LlmProviderClientConfig clientConfig;
-
-    // Only set by the tests, to trust the local stub's certificate: the SDK sends requests through OkHttp,
-    // which ignores the JVM-wide HttpsURLConnection defaults.
-    private final OkHttpClient httpClient;
-
-    public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig) {
-        this(clientConfig, null);
-    }
-
-    VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig, OkHttpClient httpClient) {
-        this.clientConfig = clientConfig;
-        this.httpClient = httpClient;
-    }
 
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
         return buildOwnedClient(apiKey, request, (client, model) -> {
@@ -111,7 +98,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
         var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
         Client client = buildClient(apiKey);
         try {
@@ -177,9 +164,6 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(clientConfig.getCallTimeout())
                     .ifPresent(timeout -> httpOptions.timeout((int) timeout.toMilliseconds()));
 
-            Optional.ofNullable(httpClient).ifPresent(
-                    client -> builder.clientOptions(ClientOptions.builder().customHttpClient(client).build()));
-
             return builder.httpOptions(httpOptions.build()).build();
         } catch (IOException e) {
             throw failWithError(e);
@@ -188,7 +172,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     @Override
     public ChatModel generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
-        Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got " + params.length);
+        Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got %s", params.length);
         ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
 

@@ -9,7 +9,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,14 +20,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-
 import java.security.KeyPairGenerator;
-import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.Map;
 
@@ -70,41 +62,6 @@ class VertexAIClientGeneratorTest {
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
 
     private String serviceAccountJson;
-    private OkHttpClient httpClient;
-
-    /**
-     * WireMock's self-signed certificate has to be trusted twice over: the SDK sends the request through OkHttp, while
-     * the OAuth token exchange goes through Google's auth library on {@code HttpsURLConnection}. Trusting only one
-     * fails at whichever step was missed.
-     */
-    @BeforeAll
-    void trustWireMockCertificate() throws Exception {
-        var trustAll = new X509TrustManager() {
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain, String authType) {
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain, String authType) {
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                return new X509Certificate[0];
-            }
-        };
-
-        var sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(null, new TrustManager[]{trustAll}, new SecureRandom());
-
-        httpClient = new OkHttpClient.Builder()
-                .sslSocketFactory(sslContext.getSocketFactory(), trustAll)
-                .hostnameVerifier((hostname, session) -> true)
-                .build();
-
-        HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
-        HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
-    }
 
     /**
      * {@code ServiceAccountCredentials.fromStream} parses and validates the private key, so the fixture needs a real
@@ -133,7 +90,7 @@ class VertexAIClientGeneratorTest {
                   "private_key": "%s",
                   "client_email": "test@%s.iam.gserviceaccount.com",
                   "client_id": "1234567890",
-                  "token_uri": "https://%s%s"
+                  "token_uri": "http://%s%s"
                 }
                 """.formatted(projectId, pem, projectId, wireMockHost(), TOKEN_PATH);
     }
@@ -156,8 +113,10 @@ class VertexAIClientGeneratorTest {
                         .withBody(TOKEN_RESPONSE)));
     }
 
+    // Plain HTTP: over TLS the stub's self-signed cert has to be trusted on both the SDK's OkHttp client and the
+    // auth library's HttpsURLConnection, and the former is only reachable by injecting a client into production code.
     private String wireMockHost() {
-        return "localhost:" + wireMock.server().httpsPort();
+        return "localhost:" + wireMock.server().port();
     }
 
     /**
@@ -165,7 +124,7 @@ class VertexAIClientGeneratorTest {
      * with, with every multi-region location remapped onto WireMock.
      */
     private LlmProviderClientConfig clientConfig() {
-        var endpoint = "https://" + wireMockHost() + "/";
+        var endpoint = "http://" + wireMockHost() + "/";
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
 
         config.setVertexAIClient(config.getVertexAIClient().toBuilder()
@@ -176,7 +135,7 @@ class VertexAIClientGeneratorTest {
     }
 
     private void completeVia(String configuredLocation) {
-        completeVia(new VertexAIClientGenerator(clientConfig(), httpClient), configuredLocation);
+        completeVia(new VertexAIClientGenerator(clientConfig()), configuredLocation);
     }
 
     private void completeVia(VertexAIClientGenerator generator, String configuredLocation) {
@@ -205,7 +164,7 @@ class VertexAIClientGeneratorTest {
                 .configuration(Map.of("location", "global"))
                 .build();
 
-        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), httpClient)
+        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
                 .generate(config, request)) {
             client.chat(UserMessage.from("hello"));
         }
@@ -281,7 +240,7 @@ class VertexAIClientGeneratorTest {
         @Test
         @DisplayName("a multi-region location takes its configured endpoint")
         void multiRegionLocationsTakeTheConfiguredEndpoint() {
-            assertThat(resolvedEndpoint("global")).isEqualTo("https://" + wireMockHost() + "/");
+            assertThat(resolvedEndpoint("global")).isEqualTo("http://" + wireMockHost() + "/");
         }
 
         /**
@@ -297,7 +256,7 @@ class VertexAIClientGeneratorTest {
 
         /** A blank location that reached the builder would surface here as an exception instead of an endpoint. */
         private String resolvedEndpoint(String location) {
-            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
+            var generator = new VertexAIClientGenerator(clientConfig());
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -321,7 +280,7 @@ class VertexAIClientGeneratorTest {
         @Test
         @DisplayName("closing the returned client is idempotent")
         void closingTheReturnedClientIsIdempotent() {
-            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
+            var generator = new VertexAIClientGenerator(clientConfig());
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -339,7 +298,7 @@ class VertexAIClientGeneratorTest {
         @Test
         @DisplayName("closing the returned streaming client is idempotent")
         void closingTheReturnedStreamingClientIsIdempotent() {
-            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
+            var generator = new VertexAIClientGenerator(clientConfig());
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -358,7 +317,7 @@ class VertexAIClientGeneratorTest {
         @Test
         @DisplayName("an unsupported model fails without leaving a client behind")
         void unsupportedModelFailsWithoutLeavingAClientBehind() {
-            var generator = new VertexAIClientGenerator(clientConfig(), httpClient);
+            var generator = new VertexAIClientGenerator(clientConfig());
             var request = ChatCompletionRequest.builder().model("vertex_ai/not-a-model").build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -433,7 +392,7 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), httpClient)
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
                     .generateChat(config, modelParameters)) {
                 client.chat(UserMessage.from("hello"));
             }
@@ -496,7 +455,7 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString(customParameters));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), httpClient)
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
                     .generateChat(config, modelParameters)) {
                 client.chat(UserMessage.from("hello"));
             }

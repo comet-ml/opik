@@ -7,22 +7,23 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
 // Owns the genai Client and closes it; the langchain4j model can't (it keeps the client private and is not closeable).
 @Slf4j
+@RequiredArgsConstructor
+@Accessors(fluent = true)
 class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
 
     private final @NonNull ChatModel delegate;
+    @Getter
     private final @NonNull Client client;
-
-    CloseableVertexAiChatModel(@NonNull ChatModel delegate, @NonNull Client client) {
-        this.delegate = delegate;
-        this.client = client;
-    }
 
     @Override
     public ChatResponse chat(ChatRequest chatRequest) {
@@ -60,9 +61,5 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
         } catch (Exception e) {
             log.warn("Failed to close the delegate Vertex AI model", e);
         }
-    }
-
-    Client client() {
-        return client;
     }
 }
