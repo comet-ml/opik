@@ -380,12 +380,13 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-insights-views.spec.ts
       - dashboards/project-span-metrics.spec.ts
       - dashboards/workspace-span-metrics.spec.ts
     capabilities:
-      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "two different lists, both covered: the workspace /dashboards table filtered by the Description column (other operators and columns uncovered), and — since OPIK-8322 — the project view selector over /insights-views, asserted to offer the project's own views plus the project-less legacy ones and no other project's, in the UI and over the API. Creating, renaming, duplicating and deleting a view through the selector's dialogs are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
-      open-dashboard:       { covered: false }
+      open-dashboard:       { covered: true,  tier: t2-cuj, note: "opening a project view two ways: by choosing it from the project's view selector, and by dashboardId deep link, where another project's view and an unknown id both fall back to the Project overview template while a project-less view and the project's own view are honoured. Scoped to the project Dashboards tab, and to *which* view the page resolves to — the seeded views carry no widgets, so nothing asserts a view's contents render. Opening a workspace dashboard from the /dashboards list is still uncovered" }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
       add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }

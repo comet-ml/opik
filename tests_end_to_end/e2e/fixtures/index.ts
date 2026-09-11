@@ -1,4 +1,4 @@
-export { test, expect } from './summarised-datasets.fixture';
+export { test, expect } from './project-insights-views.fixture';
 export type {
   OauthProviderSeed,
   ProviderKeysFixture,
@@ -125,4 +125,8 @@ export type {
   SummarisedDatasetsFixtures,
 } from './summarised-datasets.fixture';
 export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
+export type {
+  ProjectInsightsViewsRef,
+  ProjectInsightsViewsFixtures,
+} from './project-insights-views.fixture';
 export type { ProjectRef } from '../core/backend';
