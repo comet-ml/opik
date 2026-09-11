@@ -146,8 +146,9 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.OPEN_ROUTER;
         }
 
-        if (model.startsWith("requesty/")
-                || isModelBelongToProvider(model, RequestyModelName.class, RequestyModelName::toString)) {
+        // Requesty shares OpenRouter's bare vendor/model namespace, so only the explicit prefix can
+        // tell the two apart: a bare id is never treated as a Requesty model.
+        if (RequestyModelName.isRequestyModel(model)) {
             return LlmProvider.REQUESTY;
         }
 
@@ -250,6 +251,12 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return new ResolvedModelInfo(
                     freeModelConfig.getActualModel(),
                     freeModelConfig.getSpanProvider());
+        }
+
+        // The requesty/ prefix only exists to disambiguate from OpenRouter inside Opik; spans should
+        // record the model id the router actually served.
+        if (llmProvider == LlmProvider.REQUESTY) {
+            return new ResolvedModelInfo(RequestyModelName.stripPrefix(model), llmProvider.getValue());
         }
 
         // For other providers, return the original model and provider type

@@ -59,6 +59,8 @@ Requesty provides access to a wide variety of models from different providers, a
 
 You can find the complete list of available models in the [Requesty model list](https://app.requesty.ai/router/list).
 
+When selecting a Requesty model inside Opik itself (for example in the Playground or for an LLM as a Judge metric), prefix the router id with `requesty/`, so `openai/gpt-4o-mini` becomes `requesty/openai/gpt-4o-mini`. The prefix tells Opik to send the request through Requesty rather than OpenRouter, which uses the same `provider/model` ids, and Opik drops it again before calling the router.
+
 ## Supported Methods
 
 Requesty supports the following methods:
