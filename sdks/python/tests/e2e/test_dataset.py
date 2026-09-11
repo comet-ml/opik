@@ -649,7 +649,9 @@ def _wait_for_item_count(dataset, expected: int) -> None:
         lambda: len(_stream_all_items(dataset)) == expected,
         max_try_seconds=60,
     )
-    assert success, f"Only {len(_stream_all_items(dataset))} of {expected} items became readable"
+    assert success, (
+        f"Only {len(_stream_all_items(dataset))} of {expected} items became readable"
+    )
 
 
 @pytest.mark.parametrize("num_threads", [1, 4])
@@ -754,9 +756,9 @@ def test_insert__streaming_and_rest_client_paths__store_identical_items(
     _wait_for_item_count(streaming_dataset, 1)
     _wait_for_item_count(fallback_dataset, 1)
 
-    assert _streamed_content(streaming_dataset) == _streamed_content(fallback_dataset), (
-        "The streaming upload and the REST-client fallback must store the same item"
-    )
+    assert _streamed_content(streaming_dataset) == _streamed_content(
+        fallback_dataset
+    ), "The streaming upload and the REST-client fallback must store the same item"
 
 
 def test_insert__request_compression_disabled__items_are_still_stored(
@@ -784,7 +786,8 @@ def test_insert__request_compression_disabled__items_are_still_stored(
 
         _wait_for_item_count(uncompressed_dataset, len(items))
         assert {
-            item["input"]["question"] for item in _stream_all_items(uncompressed_dataset)
+            item["input"]["question"]
+            for item in _stream_all_items(uncompressed_dataset)
         } == {f"question {i}" for i in range(3)}
     finally:
         uncompressed_client.end(flush=False)

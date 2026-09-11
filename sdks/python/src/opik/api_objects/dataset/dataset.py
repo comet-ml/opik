@@ -999,53 +999,56 @@ class Dataset(DatasetExportOperations):
         if items_materialised is None:
             items_materialised = isinstance(items, collections.abc.Sequence)
 
-        transport = self._upload_transport()
-        if transport is None:
-            self._upload_via_rest_client(
-                (
-                    self._item_payload(item)
-                    for item in self._deduplicating(items, deduplication)
-                ),
-                batch_group_id,
-                num_threads,
-                # The caller already holds every item, so converting them all before the
-                # first request adds no copy of the data and keeps what this path
-                # guaranteed when it materialised the upload anyway: an invalid item
-                # raises with nothing persisted. A one-pass iterator cannot be checked
-                # that way, and its items are the ones that must not be retained.
-                validate_up_front=items_materialised,
-            )
-            self._dataset_items_count = None
-            return
-
-        pool = self._open_send_pool(num_threads)
-        writer = streaming_writer.StreamingBatchWriter(
-            envelope={
-                "dataset_name": self._name,
-                "project_name": self._project_name,
-                "batch_group_id": batch_group_id,
-            },
-            flush_callback=pool.submit,
-            max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
-            max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
-            flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
-            # The enable flag gates the level: a client built with compression off must
-            # not be handed gzipped bodies, whatever level is configured.
-            gzip_level=opik_config.dataset_upload_compression_level
-            if httpx_client.compresses_json_requests(transport[0])
-            else None,
-            use_orjson=opik_config.enable_orjson_serialization,
-        )
-
         try:
-            for item in self._deduplicating(items, deduplication):
-                writer.add(self._item_payload(item))
-            writer.flush()
-        finally:
-            pool.close()
+            transport = self._upload_transport()
+            if transport is None:
+                self._upload_via_rest_client(
+                    (
+                        self._item_payload(item)
+                        for item in self._deduplicating(items, deduplication)
+                    ),
+                    batch_group_id,
+                    num_threads,
+                    # The caller already holds every item, so converting them all before
+                    # the first request adds no copy of the data and keeps what this path
+                    # guaranteed when it materialised the upload anyway: an invalid item
+                    # raises with nothing persisted. A one-pass iterator cannot be checked
+                    # that way, and its items are the ones that must not be retained.
+                    validate_up_front=items_materialised,
+                )
+                return
 
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
+            pool = self._open_send_pool(num_threads)
+            writer = streaming_writer.StreamingBatchWriter(
+                envelope={
+                    "dataset_name": self._name,
+                    "project_name": self._project_name,
+                    "batch_group_id": batch_group_id,
+                },
+                flush_callback=pool.submit,
+                max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
+                max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+                flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
+                # The enable flag gates the level: a client built with compression off
+                # must not be handed gzipped bodies, whatever level is configured.
+                gzip_level=opik_config.dataset_upload_compression_level
+                if httpx_client.compresses_json_requests(transport[0])
+                else None,
+                use_orjson=opik_config.enable_orjson_serialization,
+            )
+
+            try:
+                for item in self._deduplicating(items, deduplication):
+                    writer.add(self._item_payload(item))
+                writer.flush()
+            finally:
+                pool.close()
+        finally:
+            # In a `finally`, and around both paths, because a partial insert still
+            # changed the dataset: an upload that fails after earlier bodies landed, or a
+            # source that raises part-way, leaves items on the backend that a cached count
+            # taken before the insert does not include.
+            self._dataset_items_count = None
 
     def insert(
         self,

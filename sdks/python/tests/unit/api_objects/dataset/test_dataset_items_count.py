@@ -1,4 +1,8 @@
 from unittest.mock import Mock
+
+import pytest
+
+import opik.config as config
 from opik.api_objects.dataset.dataset import Dataset
 
 from .upload_capture import UploadCapture
@@ -219,3 +223,68 @@ def test_from_public__response_without_id__falls_back_to_the_lookup():
 
     assert dataset.id == "looked-up"
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once()
+
+
+class _FailAfterFirstRequest(UploadCapture):
+    """Accepts the first request, then dies -- a partial upload."""
+
+    def request(self, method, url, **kwargs):
+        response = super().request(method, url, **kwargs)
+        if self.request_count >= 2:
+            raise RuntimeError("connection lost mid-upload")
+        return response
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_count(
+    streaming,
+):
+    """A partial insert has changed the dataset, so the cached count is stale too.
+
+    Nothing is rolled back when an upload fails part-way, so the items in the
+    requests that did succeed are on the backend. Leaving the count cached means
+    `dataset_items_count` keeps reporting the number from before an insert that
+    demonstrably added items -- and reports it indefinitely, since the cache is
+    only refilled once it has been cleared.
+
+    Both upload paths are covered: a `Dataset` with no HTTP client of its own
+    uploads through the generated REST client and has the same obligation.
+    """
+    mock_rest_client = Mock()
+    capture = _FailAfterFirstRequest()
+
+    if streaming:
+        transport = {
+            "rest_httpx_client": capture,
+            "url_override": capture.base_url,
+        }
+    else:
+        transport = {}
+        mock_rest_client.datasets.create_or_update_dataset_items.side_effect = [
+            None,
+            RuntimeError("connection lost mid-upload"),
+        ]
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=5,
+        **transport,
+    )
+    assert dataset.dataset_items_count == 5
+
+    original_max_batch_size_MB = config.MAX_BATCH_SIZE_MB
+    config.MAX_BATCH_SIZE_MB = 1e-9  # one item per request, so the failure is partial
+    try:
+        with pytest.raises(RuntimeError):
+            dataset.insert(
+                [{"input": {"key": f"value{i}"}} for i in range(4)], num_threads=1
+            )
+    finally:
+        config.MAX_BATCH_SIZE_MB = original_max_batch_size_MB
+
+    assert dataset._dataset_items_count is None, (
+        "A failed insert that persisted earlier items must clear the cached count"
+    )
