@@ -29,11 +29,11 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     public AuthService authService(
             @Config("authentication") AuthenticationConfig config,
             @NonNull Provider<RequestContext> requestContext,
-            @NonNull RedissonReactiveClient redissonClient,
             @NonNull Client client,
             @NonNull RetriableHttpClient retriableHttpClient,
             @NonNull RedactionService redactionService,
-            @NonNull WorkspacePermissionsService workspacePermissionsService) {
+            @NonNull WorkspacePermissionsService workspacePermissionsService,
+            @NonNull CacheService cacheService) {
 
         if (!config.isEnabled()) {
             if (redactionService.isEnabled()) {
@@ -55,10 +55,6 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         Preconditions.checkArgument(StringUtils.isNotBlank(config.getReactService().url()),
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
-        var cacheService = config.getApiKeyResolutionCacheTTLInSec() > 0
-                ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
-                : new NoopCacheService();
-
         // Asking RedactionService rather than the raw config so the request and the thing that acts on the
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
@@ -68,6 +64,21 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                 config.getRequestRetryMinBackoff().toJavaDuration(),
                 config.getRequestRetryMaxBackoff().toJavaDuration(),
                 workspacePermissionsService, redactionService.isEnabled());
+    }
+
+    /**
+     * Shared by API-key authentication and CIPX device-token validation, so both honour the same TTL and a
+     * deployment has one place to tune it.
+     */
+    @Provides
+    @Singleton
+    public CacheService cacheService(
+            @Config("authentication") AuthenticationConfig config,
+            @NonNull RedissonReactiveClient redissonClient) {
+
+        return config.getApiKeyResolutionCacheTTLInSec() > 0
+                ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
+                : new NoopCacheService();
     }
 
     @Provides

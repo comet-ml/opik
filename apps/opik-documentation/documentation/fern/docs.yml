@@ -24,6 +24,8 @@ favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
+  - path: ./mcp_prompt_copy.js
+    strategy: afterInteractive
 css: ./styles.css
 
 analytics:
@@ -1041,6 +1043,9 @@ navigation:
           - page: LLM model registry
             path: ./docs-v2/self-host/configure/llm-model-registry.mdx
             slug: llm-model-registry
+          - page: UUIDv7 ingestion validation
+            path: ./docs-v2/self-host/configure/uuid_validation.mdx
+            slug: uuid_validation
   - tab: reference
     layout:
       - page: Overview

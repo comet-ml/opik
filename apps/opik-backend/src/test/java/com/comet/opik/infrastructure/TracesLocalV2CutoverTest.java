@@ -41,7 +41,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * End-to-end validation of the buffered cutover that migrates {@code traces} to its partitioned, sharding-ready
+ * End-to-end validation of the cutover that migrates {@code traces} to its partitioned, sharding-ready
  * successor {@code traces_local_v2}. It rehearses the full sequence against a fresh ClickHouse in raw SQL — the same
  * steps an operator runs from the {@code data-migrations/traces-local-v2-cutover} runbook — and pins the properties
  * the cutover's correctness depends on.
@@ -53,6 +53,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * about the operator tools), and the shipped SQL itself is exercised end-to-end by running those drivers against a
  * full-volume prod clone in the QA gate (OPIK-7405). The inline statements here are kept aligned with the reference SQL
  * — identical functions, precision, and {@code 'UTC'} — so this gate and the shipped SQL stay in step.
+ *
+ * <p>Nothing here reads a reference file, deliberately. The statements below are copied, and drift between a copy and
+ * the file it mirrors is accepted: it is caught by the cutover rehearsal, which runs the drivers themselves. What this
+ * suite owns is the cutover's <i>logic</i>. The one thing it does pin to the live database is the column list
+ * ({@link #cutoverCopiesEveryBaseColumn()}), because a base column silently left uncopied is data loss rather than
+ * drift — and the reference files carry that same list, so a failure here is the prompt to update them too.
  *
  * <p><b>Deletions must survive the swap (the core property).</b> A lightweight DELETE flips a hidden row mask; it does
  * not bump {@code last_updated_at} (the {@code ReplacingMergeTree} version column), so the version-based delta-insert is
@@ -81,9 +87,24 @@ import static org.assertj.core.api.Assertions.assertThat;
  * covered: a normal upsert (new {@code last_updated_at}) and a row created during the window with a client-backdated
  * {@code last_updated_at} that only the {@code created_at} arm catches.
  *
+ * <p><b>Writes must survive the swap too (OPIK-8238).</b> Deletions were only half the problem. The last write-copying
+ * statement is the delta INSERT, and between it and the {@code EXCHANGE} the procedure interposes a deletion replay, the
+ * operator's go/no-go gap, the settle gate and a second replay — so every trace written to the old table in that window
+ * is orphaned when it is parked. Nothing holds writes across that window — the procedure takes no ingestion-path hold
+ * (OPIK-8239). Reconciliation is deliberately POST-swap, because a pre-swap sweep cannot converge against a live source
+ * while a post-swap one converges against a frozen table by construction.
+ * The suite covers both directions of it: the forward sweep with a negative control proving the step is load-bearing,
+ * the exclusion that stops a post-swap delete being resurrected, the newer-version-wins property that makes the sweep
+ * safe against live traffic, the delete-side residual the frozen resurrection guard now closes, the per-row staleness
+ * scope that stops that same frozen guard destroying a post-swap re-creation (with its own negative control), the
+ * residual that same scope leaves open when a client supplies a future {@code last_updated_at} — pinned with the
+ * advisory that reports it, so the trade-off behind the predicate cannot be flipped silently — the reverse re-import
+ * with sentinel&rarr;{@code NULL} denormalization and the sweep/replay ordering that keeps a re-created key deleted,
+ * and the four-count postcondition's classification.
+ *
  * <p>It also confirms {@code EXCHANGE TABLES ... ON CLUSTER} on the single-shard cluster, the sharding-ready
  * {@code Distributed} wrapper reading transparently on one shard, newest-version-wins for concurrent upserts, and it
- * measures the replay wall time so the runbook can size it against the ingestion buffer window. Finally it proves the
+ * measures the replay wall time, which the runbook counts toward the cutover tail. Finally it proves the
  * cutover is reversible: the post-wrap rollback drops the wrapper, promotes the parked old data back to {@code traces},
  * and reverse-replays so a post-cutover delete does not resurrect — and, separately, that the wrap alone can be
  * reversed ({@code --unwrap-only}) leaving the partitioned successor and its post-cutover writes live, with no parked
@@ -101,13 +122,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * bridge-capture helpers mirror the production write shapes ({@code TraceDAO}, {@code TraceService} delete,
  * {@code DeletionEventDAO}) and reproduce the two version-stamp regimes the delta relies on (fresh server
  * {@code created_at} vs client {@code last_updated_at}); the DAOs' own semantics are covered by their dedicated suites
- * (e.g. {@code TraceDeletionEventTest}).
+ * (e.g. {@code DeletionEventTest}).
  *
  * <p><b>Scope: this gate validates the cutover SQL logic, not the driver scripts.</b> The safety guards in the runbook's
- * bash drivers — {@code backfill.sh}'s reconciliation abort, {@code rollback.sh}'s wrong-stage topology assertions,
- * {@code exchange_and_wrap.sh}'s replication-settle gate, {@code finalize.sh}'s empty-live refusal — are exercised by the
- * OPIK-6901 staging dry-run, not by this test (which runs the SQL those scripts wrap, directly). This test asserts the
- * logic is correct when invoked; the staging rehearsal asserts the scripts invoke it safely.
+ * bash drivers — {@code backfill.sh}'s reconciliation abort, {@code rollback.sh}'s wrong-stage topology assertions, the
+ * replication-settle gate both {@code exchange_and_wrap.sh} and {@code reconcile.sh} run (each with its own table
+ * scope), {@code reconcile.sh}'s direction detection and pass loop, {@code finalize.sh}'s empty-live refusal — are
+ * exercised by the OPIK-6901 staging dry-run, not by this test (which runs the SQL those scripts wrap, directly). This
+ * test asserts the logic is correct when invoked; the staging rehearsal asserts the scripts invoke it safely. What this
+ * suite does cover of the reconciliation is every statement those drivers issue, and its postcondition's four counts.
  *
  * <p><b>On the {@code SETTINGS} these statements carry.</b> They hardcode {@code max_insert_block_size = 100000}
  * and {@code max_partitions_per_insert_block = 2000}, and omit {@code max_insert_threads} — while
@@ -339,7 +362,7 @@ class TracesLocalV2CutoverTest {
     }
 
     @Test
-    void bufferedCutoverPreservesEveryDeletionAcrossExchange() {
+    void cutoverPreservesEveryDeletionAcrossExchange() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         var otherProjectId = ID_GENERATOR.generateId();
@@ -425,8 +448,8 @@ class TracesLocalV2CutoverTest {
         // Deletion replay: read the bridge for the window and re-issue the deletes against the destination, matched on
         // the full key so a reused id in another project is untouched.
         // Measured and logged (not asserted): replay wall time is environment-sensitive (container startup, CI
-        // contention), so a hard bound here would be a flaky gate on a non-correctness property. The runbook sizes it
-        // against the buffer window during the cutover rehearsal; correctness is asserted below (the mask is applied).
+        // contention), so a hard bound here would be a flaky gate on a non-correctness property. The runbook counts it
+        // toward the cutover tail during the rehearsal; correctness is asserted below (the mask is applied).
         var replayMillis = replayDeletions(backfillStart);
         log.info("Deletion replay covered {} ids in {} ms", leakedIds.size() + 1, replayMillis);
 
@@ -1393,6 +1416,1062 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * The forward post-swap reconciliation (000006 {@code forward-sweep} + 000002's deletion replay aimed at the live
+     * table), and the negative control that proves it is load-bearing.
+     *
+     * <p>This is the defect OPIK-8238 exists for. The last write-copying statement is the delta INSERT; everything
+     * written to the old table after it is orphaned when that table is parked, and nothing holds those writes across
+     * the swap. The negative control here is the shape a real cutover hit: without the sweep, a trace written in the
+     * gap is simply gone from the live table while sitting intact in the backup.
+     *
+     * <p>The assertions run in the order an operator would trust them: the trace is back, the gate reports zero across
+     * all three of its gating buckets, and the whole workspace's normalized fingerprint matches the frozen backup —
+     * presence, version and payload, not just a row count.
+     */
+    @Test
+    void postSwapSweepRestoresTheGapAndWithoutItThoseWritesAreLost() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        // delta_start: the instant the LAST delta pass began reading. Everything written after it lands only on the old
+        // table, which is exactly what the post-swap sweep has to carry.
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+        replayDeletions(backfillStart);
+
+        // The gap: written to the OLD traces after that read, so neither the delta nor the final replay saw it.
+        var gapAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        var gapWritten = mintIdsAt(5, gapAt);
+        insertRows(gapWritten, workspaceId, projectId, "gap", _ -> gapAt);
+
+        // Also in the gap window, but DELETED on the old table before the freeze — and deliberately NOT bridged, since
+        // capture is best-effort and an unrecorded delete is reachable. That absence is what isolates the property:
+        // the replay cannot mask a key the bridge never recorded, so if this stays gone the only thing keeping it gone
+        // is the sweep honoring the delete mask on its read of the frozen backup. Masked rows never enter the parked
+        // set either (it reads FINAL), so the four counts below are unaffected.
+        var gapDeleted = mintIdsAt(2, gapAt);
+        insertRows(gapDeleted, workspaceId, projectId, "gap-deleted", _ -> gapAt);
+        lightweightDeleteScoped(idStrings(gapDeleted), workspaceId, projectId);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        assertThat(liveCount("traces", idStrings(gapWritten), workspaceId))
+                .as("negative control: with reconciliation skipped, every trace written in the gap is LOST from the live"
+                        + " table — the failure this whole step exists to repair")
+                .isZero();
+        assertThat(liveCount("traces_pre_cutover_backup", idStrings(gapWritten), workspaceId))
+                .as("...and is sitting intact in the frozen backup, which is why it is recoverable at all")
+                .isEqualTo(gapWritten.size());
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("the gate SEES the loss before anything is repaired: five keys live in the parked backup inside the"
+                        + " gap window are absent from the live table")
+                .isEqualTo(ReconciliationCounts.builder().missing(gapWritten.size()).stale(0).payloadMismatch(0)
+                        .newer(0).build());
+
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(liveCount("traces", idStrings(gapWritten), workspaceId))
+                .as("after the sweep every gap-window trace is live on the successor")
+                .isEqualTo(gapWritten.size());
+        assertThat(liveCount("traces", idStrings(gapDeleted), workspaceId))
+                .as("while a gap-window trace deleted before the freeze is NOT brought back — the sweep reads the"
+                        + " parked backup mask-honored, and with no bridge row nothing else could have masked it")
+                .isZero();
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("and the gate clears: nothing missing, nothing stale, no payload differing")
+                .isEqualTo(reconciled());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("the reconciled successor matches the frozen backup field-for-field, not merely key-for-key")
+                .isEqualTo(fingerprint("traces_pre_cutover_backup", Shape.OLD, workspaceId));
+
+        // A SECOND pass, because reconcile.sh runs one whenever the gate is still non-zero (up to --max-passes) and
+        // because the runbook promises a re-run on a reconciled estate is a no-op. Both make pass 2 a real code path,
+        // not a hypothetical: it re-inserts every swept row and re-runs the replay against an estate that is already
+        // correct. Same idempotence check, and same reason, as deleteThenResurrectSurvivesTheReplay's repeated replay.
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("a second pass changes nothing: the gate is still clean")
+                .isEqualTo(reconciled());
+        assertThat(fingerprint("traces", Shape.NEW, workspaceId))
+                .as("and no row moved — the re-inserted copies lose to the versions already there")
+                .isEqualTo(fingerprint("traces_pre_cutover_backup", Shape.OLD, workspaceId));
+    }
+
+    /**
+     * The sweep must not undo a delete that landed AFTER the swap. A trace that was live when the backup froze is still
+     * live in it, so a sweep with no exclusion would insert a fresh version and resurrect it — the mirror image of the
+     * bug it is fixing.
+     *
+     * <p>The realistic shape, and the one built here: a trace that existed before the backfill (so it IS on the
+     * successor) and was UPDATED inside the gap window, which is what puts it in the sweep's range. The user then
+     * deletes it on the live table after the swap. It has to stay deleted, and the postcondition must not count it as
+     * missing — a gate that did would be unreachable on any estate where users delete things.
+     */
+    @Test
+    void sweepDoesNotResurrectAGapWindowTraceDeletedAfterTheSwap() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        var target = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(survivors, workspaceId, projectId);
+        seedTraces(target, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+
+        // Updated on the OLD table inside the gap window: its created_at stays historical, so only the
+        // last_updated_at arm of the window predicate selects it — the arm a created_at-only sweep would miss.
+        var updatedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(target, workspaceId, projectId, "gap-updated", _ -> updatedAt);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        recordDeletionEvents(idStrings(target), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(idStrings(target), workspaceId);
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("baseline: the post-swap delete masked the stale copy the cutover had left live")
+                .isZero();
+
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("the sweep does not resurrect it: the exclusion arm drops every key bridged since swap_done")
+                .isZero();
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("and the gate still clears — a key deleted after the swap is legitimately absent, not missing")
+                .isEqualTo(reconciled());
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("every other survivor is untouched")
+                .isEqualTo(survivors.size());
+
+        // The pass reconcile.sh would run next if the gate had not cleared. A delete is the thing a repeated sweep
+        // could plausibly undo, so this is where idempotence matters most.
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("a second pass does not resurrect it either")
+                .isZero();
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("and the gate is still clean after it")
+                .isEqualTo(reconciled());
+    }
+
+    /**
+     * The counterweight to {@link #sweepDoesNotResurrectAGapWindowTraceDeletedAfterTheSwap()}, and the reason the
+     * sweep's exclusion is bounded at {@code swap_done} rather than at {@code gap_start}.
+     *
+     * <p>A trace deleted and then re-created BEFORE the swap is legitimately live in the frozen backup — the re-creation
+     * is what the backup froze — so it must be swept back, even though the bridge holds a delete event for it. Bounding
+     * the exclusion at {@code gap_start} would drop every such key instead: a silent write loss of exactly the kind this
+     * step exists to prevent, which no other test here would notice, because the postcondition excludes the same keys
+     * the sweep does and the estate would therefore look clean.
+     *
+     * <p>That makes this the test standing between the runbook and a plausible "hardening" — narrowing the bound to
+     * close the capture-before-delete residual documented in 000006 would trade a rare resurrection for a likelier loss.
+     */
+    @Test
+    void sweepRestoresAGapWindowTraceDeletedAndReCreatedBeforeTheSwap() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        var target = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(survivors, workspaceId, projectId);
+        seedTraces(target, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+
+        // Deleted and re-created inside the gap window, both BEFORE the swap: the bridge carries the delete, and the
+        // old table — and so the frozen backup — carries the re-created row as live.
+        recordDeletionEvents(idStrings(target), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(idStrings(target), workspaceId);
+        var reCreatedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(target, workspaceId, projectId, "re-created-before-swap", _ -> reCreatedAt);
+        // The final pre-swap replay, as exchange_and_wrap.sh runs it: its guard reads the LIVE source, where the key is
+        // live again, so it correctly leaves the successor's copy alone rather than masking it.
+        replayDeletions(backfillStart);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        assertThat(newestNames("traces_pre_cutover_backup", idStrings(target), workspaceId))
+                .as("precondition: the frozen backup holds the RE-CREATION as live, not the delete")
+                .containsOnly("re-created-before-swap");
+        assertThat(newestNames("traces", idStrings(target), workspaceId))
+                .as("and the swap left the successor on the pre-delete version the backfill copied — the re-creation"
+                        + " landed after the last delta, so it is in the gap like any other write")
+                .containsOnly("seed");
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("the gate sees that as a STALE key, the bucket for a live row older than the parked one — the shape"
+                        + " an incomplete cutover leaves behind when the key exists on both sides")
+                .isEqualTo(ReconciliationCounts.builder().missing(0).stale(1).payloadMismatch(0).newer(0).build());
+
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(newestNames("traces", idStrings(target), workspaceId))
+                .as("the re-creation is swept back: its delete was bridged BEFORE swap_done, so the exclusion arm does"
+                        + " not drop it, and the replay's guard spares it because the frozen backup shows it live")
+                .containsOnly("re-created-before-swap");
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("and the gate clears")
+                .isEqualTo(reconciled());
+    }
+
+    /**
+     * A gap-window trace that was written again AFTER the swap keeps the newer version. The sweep inserts the frozen
+     * one, which loses the {@code ReplacingMergeTree} version comparison — that is what makes the sweep safe to run
+     * against live traffic rather than a race with it.
+     *
+     * <p>It also pins the postcondition's one informational bucket: such a key is reported as {@code newer_keys}, which
+     * is expected to be non-zero on a busy estate, and the gate still passes. Gating on that count would fail every
+     * healthy reconciliation.
+     */
+    @Test
+    void sweepKeepsANewerPostSwapVersionAndTheGateStillPasses() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var target = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(target, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+
+        var updatedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(target, workspaceId, projectId, "gap-updated", _ -> updatedAt);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        // A post-swap write on the live successor, newer than anything the frozen backup holds.
+        var postSwapAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(target, workspaceId, projectId, "post-swap", _ -> postSwapAt);
+
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(newestNames("traces", idStrings(target), workspaceId))
+                .as("the sweep's re-insert loses to the post-swap version, so live traffic that ADVANCED the"
+                        + " version survives it")
+                .containsOnly("post-swap");
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("reported as newer_keys, which is informational: the three gating buckets are still 0")
+                .isEqualTo(ReconciliationCounts.builder().missing(0).stale(0).payloadMismatch(0).newer(1).build());
+    }
+
+    /**
+     * Reconciling a WRAPPED estate, which is the ordinary path and not an edge case: {@code exchange_and_wrap.sh
+     * --with-wrap} applies the wrap in the same run, so the CUTOVER INCOMPLETE banner is printed with {@code traces}
+     * already a {@code Distributed} wrapper and the reconciliation runs against that topology.
+     *
+     * <p>A {@code Distributed} table accepts {@code INSERT} but rejects mutations, so the replay after the sweep would
+     * fail against {@code traces} — which is why {@code reconcile.sh} resolves one name the way
+     * {@code tracesDistributedWrapEnabled} does and aims every statement at {@code traces_local}. Writing the shard
+     * directly is correct rather than a bypass of the sharding key: the parked backup is itself a per-shard table, so
+     * its rows already belong to this shard.
+     *
+     * <p>What this pins that the driver's own guard cannot: that the swept rows are then readable THROUGH the wrapper,
+     * and that the gate — which also reads the resolved name — agrees.
+     */
+    @Test
+    void reconciliationWorksOnAWrappedEstateThroughTracesLocal() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+
+        var gapAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        var gapWritten = mintIdsAt(3, gapAt);
+        insertRows(gapWritten, workspaceId, projectId, "gap", _ -> gapAt);
+        // A gap-window delete too, so the replay half runs against traces_local rather than being a no-op.
+        var gapDeleted = mintIds(2);
+        seedTraces(gapDeleted, workspaceId, projectId);
+        backfillWeek(0);
+        recordDeletionEvents(idStrings(gapDeleted), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(idStrings(gapDeleted), workspaceId);
+
+        exchangeTables();
+        wrapInDistributed();
+        var swapDone = nowMicros();
+
+        assertThat(isDistributed("traces"))
+                .as("precondition: --with-wrap leaves the estate wrapped before reconciliation runs")
+                .isTrue();
+
+        // Every statement aimed at the shard, exactly as the driver resolves it.
+        reconcileForward("traces_local", deltaStart, swapDone);
+
+        assertThat(liveCount("traces", idStrings(gapWritten), workspaceId))
+                .as("the swept rows are readable through the Distributed wrapper")
+                .isEqualTo(gapWritten.size());
+        assertThat(liveCount("traces", idStrings(gapDeleted), workspaceId))
+                .as("and the replay's mask applied to the shard is visible through it too")
+                .isZero();
+        assertThat(reconciliationCounts("traces_pre_cutover_backup", Shape.OLD, "traces_local", deltaStart, swapDone))
+                .as("the gate, read against the same resolved name, clears")
+                .isEqualTo(reconciled());
+    }
+
+    /**
+     * The delete-side residual the runbook previously accepted as inherent: a delete whose bridge row commits after the
+     * final pre-swap replay has read the bridge, but before the EXCHANGE. It is covered by neither the forward replay
+     * (already run) nor the rollback reverse-replay ({@code event_time >= cutover_start}), so it leaks live across the
+     * swap.
+     *
+     * <p>Post-swap it is closable, because the resurrection guard can read the FROZEN backup instead of a live source:
+     * there is no race left to lose. The test walks all three states so the sweep and the replay are not confused for
+     * one another — the leak is present after the swap, still present after the sweep alone (which is mask-honored and
+     * therefore cannot fix a delete), and gone after the replay.
+     */
+    @Test
+    void postSwapReplayMasksADeleteBridgedBetweenTheFinalReplayAndTheExchange() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        var leaked = mintIds(3);
+        seedTraces(survivors, workspaceId, projectId);
+        seedTraces(leaked, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+        replayDeletions(backfillStart); // the final pre-swap replay reads the bridge HERE
+
+        // ...and the bridge row lands after that read. Nothing pre-swap can mask it any more.
+        recordDeletionEvents(idStrings(leaked), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(idStrings(leaked), workspaceId);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        assertThat(liveCount("traces", idStrings(leaked), workspaceId))
+                .as("negative control: the delete leaked live across the swap")
+                .isEqualTo(leaked.size());
+
+        forwardSweep("traces", deltaStart, swapDone);
+        assertThat(liveCount("traces", idStrings(leaked), workspaceId))
+                .as("the sweep alone cannot fix a delete: these rows pre-date the gap window, so it never reads them"
+                        + " — only the replay can mask them")
+                .isEqualTo(leaked.size());
+
+        postSwapDeletionReplay("traces", deltaStart, swapDone);
+
+        assertThat(liveCount("traces", idStrings(leaked), workspaceId))
+                .as("the post-swap replay masks it: the frozen backup says it is still deleted, race-free")
+                .isZero();
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("and no survivor is dropped with it")
+                .isEqualTo(survivors.size());
+    }
+
+    /**
+     * The hazard the frozen resurrection guard introduces, and the scope that closes it. A frozen source cannot see a
+     * row written AFTER the swap, so a key deleted before the swap and then re-created or patched after it looks "still
+     * deleted" to the guard — and the replay would mask a live post-cutover write, turning the fix for write loss into a
+     * cause of it. It is not exotic: trace ids are client-supplied and {@code TraceDAO.UPDATE} re-inserts a version, so
+     * any in-flight patch to a just-deleted trace does exactly this.
+     *
+     * <p>The staleness scope is what prevents it, per ROW rather than per key: only rows whose own {@code created_at}
+     * AND {@code last_updated_at} both predate the swap may be masked. The re-creation here carries a historical
+     * {@code created_at} and a post-swap {@code last_updated_at}, so it is spared by the {@code last_updated_at} arm
+     * alone — the harder of the two, and the one a batch-ingest write would not exercise.
+     *
+     * <p>The negative control then runs the same replay with that scope omitted — 000002's pre-swap two-arm shape,
+     * aimed post-swap — and watches the write disappear, so the scope is proven load-bearing rather than merely present.
+     */
+    @Test
+    void postSwapReplayDoesNotMaskATraceReCreatedAfterTheSwap() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        var target = mintIdsAt(1, weekInstant(0, 1));
+        seedTraces(survivors, workspaceId, projectId);
+        seedTraces(target, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        var deltaStart = nowMicros();
+        deltaInsert(backfillStart);
+
+        // Deleted in the gap, bridged, and correctly masked on the successor by the final pre-swap replay.
+        recordDeletionEvents(idStrings(target), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(idStrings(target), workspaceId);
+        replayDeletions(backfillStart);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("baseline: the delete was honoured across the swap")
+                .isZero();
+
+        // After the swap a client re-sends the same id — the row is live again on the successor, and the frozen backup
+        // cannot know it.
+        var reCreatedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(target, workspaceId, projectId, "re-created", _ -> reCreatedAt);
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("baseline: the re-creation is live")
+                .isEqualTo(1L);
+
+        reconcileForward(deltaStart, swapDone);
+
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("the post-swap re-creation SURVIVES: the staleness scope spares any row written since the swap")
+                .isEqualTo(1L);
+        assertThat(forwardCounts(deltaStart, swapDone))
+                .as("and the gate clears — the key pre-dates the gap window, so it never enters the parked set the"
+                        + " four counts classify")
+                .isEqualTo(reconciled());
+
+        // NEGATIVE CONTROL: the same replay with the PRE-swap scope, which is inert, destroys the write.
+        postSwapDeletionReplayWithoutStalenessScope(deltaStart);
+        assertThat(liveCount("traces", idStrings(target), workspaceId))
+                .as("without the staleness scope the frozen guard masks a live post-cutover write — the regression the"
+                        + " scope exists to prevent")
+                .isZero();
+    }
+
+    /**
+     * The reverse direction (000006 {@code reverse-sweep}): re-import into the restored original the post-cutover writes
+     * a stage B/C promote made non-live. This is what turns {@code --accept-post-cutover-write-loss} from a verdict into
+     * a choice — right when the rollback was about latency, merge load or the wrap, and wrong when the successor's
+     * content is what is suspect.
+     *
+     * <p>The sentinel denormalization is the part that cannot be skipped, and it is asserted through {@code duration}
+     * rather than through {@code end_time} alone. The successor stores an unfinished trace's {@code end_time} as the
+     * epoch; the original's convention is {@code NULL} and its MATERIALIZED {@code duration} guards only
+     * {@code end_time IS NOT NULL}, so importing the sentinel verbatim would give every unfinished trace a duration of
+     * roughly -1.79e12 ms. Restoring {@code NULL} is what makes the recomputed duration {@code NULL}.
+     */
+    @Test
+    void reverseSweepReimportsPostCutoverWritesWithSentinelsDenormalizedToNull() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        deltaInsert(backfillStart);
+
+        var cutoverStart = nowMicros();
+        exchangeTables();
+
+        // Accepted by the successor after cutover_start: in-progress traces, so end_time and ttft take the successor's
+        // epoch / NaN DEFAULTs — the shape whose denormalization matters.
+        var postCutoverAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        var postCutover = mintIdsAt(3, postCutoverAt);
+        insertRows(postCutover, workspaceId, projectId, "post-cutover", _ -> postCutoverAt);
+
+        rollbackExchangeBack(cutoverStart);
+        var promoteDone = nowMicros();
+
+        assertThat(liveCount("traces", idStrings(postCutover), workspaceId))
+                .as("baseline: the promote made the post-cutover writes non-live on the restored original")
+                .isZero();
+        assertThat(reverseCounts(cutoverStart, cutoverStart))
+                .as("the gate sizes the loss: three keys the parked successor holds are absent from the live original")
+                .isEqualTo(ReconciliationCounts.builder().missing(postCutover.size()).stale(0).payloadMismatch(0)
+                        .newer(0).build());
+
+        reconcileReverse(cutoverStart, promoteDone);
+
+        assertThat(liveCount("traces", idStrings(postCutover), workspaceId))
+                .as("re-imported into the restored original")
+                .isEqualTo(postCutover.size());
+        assertThat(countMatching(workspaceId,
+                "name = 'post-cutover' AND end_time IS NULL AND ttft IS NULL AND duration IS NULL"))
+                .as("with the sentinels denormalized, so the recomputed duration is NULL — not the large NEGATIVE the"
+                        + " original's expression produces from an epoch end_time it does not recognise")
+                .isEqualTo(postCutover.size());
+        assertThat(countMatching(workspaceId,
+                "name = 'post-cutover' AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')"))
+                .as("negative control: no re-imported row kept the successor's epoch sentinel")
+                .isZero();
+        assertThat(reverseCounts(cutoverStart, cutoverStart))
+                .as("and the reverse gate clears")
+                .isEqualTo(reconciled());
+    }
+
+    /**
+     * Deletes still win over the re-imported writes. The reverse sweep runs BEFORE
+     * {@code 000004_rollback_reverse_replay.sql}, so a trace deleted on the successor after {@code cutover_start} is
+     * re-imported by the sweep and then masked again on the restored original by the replay — and that file's own
+     * postcondition still reports 0, which is the box the runbook's rollback checklist ticks.
+     *
+     * <p><b>The fixture has to be DELETED AND RE-CREATED, and finding that out is the point.</b> Two shapes of
+     * post-cutover delete reach the sweep completely differently:
+     * <ul>
+     *   <li>a plain delete — the mask is applied to the successor before the promote parks it, so the sweep's
+     *   mask-honored read never sees the key. It cannot resurrect what it cannot read, whatever the row's timestamps
+     *   are. A seeded survivor is doubly invisible: a lightweight delete bumps no version, and its back-dated
+     *   {@code created_at}/{@code last_updated_at} also sit outside the sweep's window. Asserting on either shape
+     *   passes without the sweep/replay ordering being exercised at all.</li>
+     *   <li>a delete FOLLOWED BY a re-creation under the same id — the key is live again in the parked successor, its
+     *   delete is still in the bridge, and the sweep genuinely re-imports it. Only the replay running afterwards keeps
+     *   it deleted, which is the ordering this test exists for and the behaviour
+     *   {@code 000006_post_swap_reconciliation.sql}'s {@code reverse-sweep} header specifies: the delete is honoured
+     *   and the re-creation is discarded with the rest of the post-cutover writes.</li>
+     * </ul>
+     * Both are asserted — the first as the reason the second is the only meaningful fixture, the second with a negative
+     * control showing the sweep alone brings the key back.
+     */
+    @Test
+    void reverseSweepReimportsThenTheReplayReDeletesARecreatedPostCutoverKey() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedTraces(survivors, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        deltaInsert(backfillStart);
+
+        var cutoverStart = nowMicros();
+        exchangeTables();
+
+        var postCutoverAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        var postCutover = mintIdsAt(3, postCutoverAt);
+        insertRows(postCutover, workspaceId, projectId, "post-cutover", _ -> postCutoverAt);
+
+        var recreated = postCutover.getFirst();
+        var plainlyDeleted = postCutover.get(1);
+        var untouched = Set.of(postCutover.get(2).id().toString());
+
+        // Shape 1: deleted and left deleted. The mask lands on the successor before the promote, so the parked copy
+        // carries it and the sweep's mask-honored read skips the key entirely.
+        recordDeletionEvents(Set.of(plainlyDeleted.id().toString()), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(Set.of(plainlyDeleted.id().toString()), workspaceId);
+
+        // Shape 2: deleted, then re-created under the same id at a newer version — so it is LIVE in the parked copy
+        // while its delete is still in the bridge. This is the one the sweep will bring back.
+        recordDeletionEvents(Set.of(recreated.id().toString()), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(Set.of(recreated.id().toString()), workspaceId);
+        var recreatedAt = postCutoverAt.plusSeconds(1);
+        insertRows(List.of(recreated), workspaceId, projectId, "re-created", _ -> recreatedAt);
+
+        rollbackExchangeBack(cutoverStart);
+        var promoteDone = nowMicros();
+
+        // Negative control: the sweep ALONE resurrects the re-created key, which is what makes the ordering
+        // load-bearing rather than incidental — and leaves the plainly-deleted one alone, which is why it is not a
+        // usable fixture. Asserted before the replay runs, on the same estate the full run then repairs.
+        reverseSweep(cutoverStart, promoteDone);
+        assertThat(liveCount("traces", Set.of(recreated.id().toString()), workspaceId))
+                .as("negative control: the sweep on its own re-imports the re-created key")
+                .isEqualTo(1L);
+        assertThat(liveCount("traces", Set.of(plainlyDeleted.id().toString()), workspaceId))
+                .as("while a plainly-deleted key is masked in the parked copy, so the sweep cannot see it at all")
+                .isZero();
+
+        reconcileReverse(cutoverStart, promoteDone);
+
+        assertThat(liveCount("traces", Set.of(recreated.id().toString()), workspaceId))
+                .as("after the replay the post-cutover delete wins over the re-creation the sweep brought back")
+                .isZero();
+        assertThat(verifyReplayPostcondition(cutoverStart))
+                .as("and 000004_rollback_verify_replay.sql still reports 0 after the re-import")
+                .isZero();
+        assertThat(liveCount("traces", untouched, workspaceId))
+                .as("while a post-cutover write that was never deleted is live again")
+                .isEqualTo(untouched.size());
+    }
+
+    /**
+     * The delete-side residual the post-swap replay's staleness scope cannot prevent, pinned so the trade-off behind it
+     * cannot be flipped by accident — and the advisory that makes it visible.
+     *
+     * <p>{@code last_updated_at} is CLIENT-SUPPLIED on the batch-ingest path: {@code TraceDAO} binds
+     * {@code Trace.lastUpdatedAt} verbatim and the API accepts any value before 2300. A genuinely pre-swap trace can
+     * therefore carry a future timestamp, fall outside the replay's
+     * {@code created_at < swap_done AND last_updated_at < swap_done} scope, and keep its captured delete unmasked.
+     *
+     * <p><b>This asserts the residual, not a bug to be fixed here.</b> Scoping on {@code created_at} alone would close
+     * it and open a worse one: the merge path preserves {@code created_at}, so a post-swap PATCH of a pre-existing
+     * trace would then be masked, destroying a write that lives only on the successor. Over-sparing leaves a deleted
+     * trace visible with its key still in the bridge, so it can be re-applied; over-masking is unrecoverable. The
+     * companion assertion is the one that matters operationally: {@code leak-check-forward} reports the key, so the
+     * residual is surfaced rather than silent. A control row deleted with an ordinary timestamp proves the replay is
+     * working normally on the same estate, so a green here is not just "the replay did nothing".
+     */
+    @Test
+    void postSwapReplaySparesAFutureDatedRowAndTheLeakCheckReportsIt() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = Instant.parse("2025-03-04T10:00:00Z");
+        var gapStart = "2025-03-04 09:00:00";
+
+        // Both written pre-swap, inside the gap window, and both deleted before the swap. They differ only in the
+        // client-supplied last_updated_at: one honest, one dated past any plausible swap_done.
+        var honest = ID_GENERATOR.generateId().toString();
+        var futureDated = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(honest, workspaceId, projectId, "gap", at, null, null, at, at);
+        insertShapedTrace(futureDated, workspaceId, projectId, "gap", at, null, null, at,
+                Instant.parse("2027-01-01T00:00:00Z"));
+
+        // The end state is CONSTRUCTED rather than played out, because the delta anchor cannot be placed before a
+        // back-dated created_at. It is the same state either way, and the state is all the replay reads: the successor
+        // holds each key as a copy carrying the source's version, the parked backup has each key MASKED, and the bridge
+        // holds both events. In production the copy comes from the backfill/delta and the mask from a delete that fired
+        // too late for the final pre-swap replay — the only window in which the post-swap replay is what has to mask it.
+        exchangeTables();
+        var swapDone = nowMicros();
+        forwardSweep("traces", gapStart, swapDone);
+
+        var deleted = Set.of(honest, futureDated);
+        recordDeletionEvents(deleted, workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteFrom("traces_pre_cutover_backup", deleted, workspaceId, projectId);
+
+        postSwapDeletionReplay("traces", gapStart, swapDone);
+
+        assertThat(liveCount("traces", Set.of(honest), workspaceId))
+                .as("control: an ordinarily-dated pre-swap row IS masked, so the replay is working on this estate")
+                .isZero();
+        assertThat(liveCount("traces", Set.of(futureDated), workspaceId))
+                .as("the residual: a client-supplied future last_updated_at puts the row outside the staleness scope,"
+                        + " so its captured delete is not re-applied")
+                .isEqualTo(1L);
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("and the four counts cannot see it — the key is not live in the frozen backup, so it never enters"
+                        + " the parked set the gate classifies")
+                .isEqualTo(reconciled());
+        assertThat(leakCheckForward(gapStart))
+                .as("which is why the advisory exists: it reports exactly the leaked key, by version rather than by"
+                        + " timestamp")
+                .isEqualTo(1L);
+    }
+
+    /**
+     * <b>Residual:</b> a post-swap write that REGRESSES {@code last_updated_at} is overwritten by the sweep, and the
+     * gate reports the estate clean.
+     *
+     * <p>The sweep is safe to re-run because its INSERT is meant to LOSE the {@code ReplacingMergeTree} version
+     * comparison against anything written after the swap. That rests on {@code last_updated_at} being monotonic, and
+     * it is not: the column is client-writable and bound verbatim on the batch-ingest path (see class Javadoc), so a
+     * post-swap write can carry a value below the parked row's. The parked payload then wins and the live write is
+     * gone, while the gate compares the parked payload against itself and returns zeros.
+     *
+     * <p><b>This asserts the residual, not a bug to be fixed here.</b> Neither alternative survives contact with the
+     * sweep's purpose: skipping keys already live would abandon exactly the stale and partial rows it exists to
+     * repair, and re-stamping the version would clobber legitimate newer writes. Clamping client timestamps at
+     * ingestion is the durable fix, as it is for the future-dated residual in
+     * {@link #postSwapReplaySparesAFutureDatedRowAndTheLeakCheckReportsIt()}.
+     *
+     * <p>The second key is the control, and it is what makes the first assertion mean anything: identical in every
+     * respect except that its post-swap version moves FORWARD, it keeps its live payload and lands in
+     * {@code newer_keys}. So the sweep is behaving normally on this estate and the loss is the regression's doing.
+     * Carrying it here rather than leaning on {@link #sweepKeepsANewerPostSwapVersionAndTheGateStillPasses()} is
+     * deliberate: on one estate, under one sweep, the version direction is the only variable between the two keys.
+     *
+     * @see #sweepKeepsANewerPostSwapVersionAndTheGateStillPasses() the same sweep where the version advances
+     */
+    @Test
+    void postSwapWriteRegressingTheVersionIsOverwrittenAndTheGateStillReportsReconciled() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = Instant.parse("2025-03-04T10:00:00Z");
+        var gapStart = "2025-03-04 09:00:00";
+
+        // Both written pre-swap inside the gap window, at the same version, carrying the payload the backup freezes.
+        var regressed = ID_GENERATOR.generateId().toString();
+        var honest = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(regressed, workspaceId, projectId, "regressed-parked", at, null, null, at, at);
+        insertShapedTrace(honest, workspaceId, projectId, "honest-parked", at, null, null, at, at);
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        // Post-swap traffic on both keys, differing ONLY in the client-supplied version each write carries.
+        insertShapedTrace(regressed, workspaceId, projectId, "regressed-live", at, Instant.EPOCH, Double.NaN, at,
+                at.minusSeconds(60));
+        insertShapedTrace(honest, workspaceId, projectId, "honest-live", at, Instant.EPOCH, Double.NaN, at,
+                at.plusSeconds(60));
+
+        reconcileForward(gapStart, swapDone);
+
+        assertThat(newestNames("traces", Set.of(regressed), workspaceId))
+                .as("the residual: the post-swap write carried a last_updated_at below the parked row's, so the"
+                        + " sweep's re-insert wins the version comparison and the parked payload is what is live")
+                .containsOnly("regressed-parked");
+        assertThat(newestNames("traces", Set.of(honest), workspaceId))
+                .as("control: the same pass on the same estate leaves a post-swap write alone when its version moves"
+                        + " forward, so the loss above is the regression and not the sweep")
+                .containsOnly("honest-live");
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("and the gate cannot see the loss: the live row IS the parked payload, so the key matches on both"
+                        + " version and fingerprint and enters no bucket — only the control shows, as newer_keys")
+                .isEqualTo(ReconciliationCounts.builder().missing(0).stale(0).payloadMismatch(0).newer(1).build());
+    }
+
+    /**
+     * <b>Residual:</b> a {@code --swap-done} EARLIER than the real swap silently drops a key that was deleted and
+     * RE-CREATED in between — from the sweep and from the gate alike.
+     *
+     * <p>The exclusion arm is what stops the sweep resurrecting a trace the user deleted after the swap, and
+     * {@code verify-forward} applies the identical arm so the gate cannot demand a key the sweep is right to skip.
+     * That sharing is also the hazard. With an anchor earlier than the swap, a delete that fired BEFORE the swap sits
+     * at or after the bound, so both arms drop the key — and the backup's live row for it is the RE-CREATED trace, a
+     * genuine gap-window write. It stays missing under a clean gate.
+     *
+     * <p>So the early direction is not the safe one it looks like, which is why the flag's help says so and why the
+     * runbook tells the operator to pass the RECORDED {@code exchange_done}: neither {@code EXCHANGE} nor
+     * {@code RENAME} leaves a server-side commit instant to validate an estimate against.
+     *
+     * <p>The same estate is then reconciled again with the recorded anchor. That is the control: the key comes back
+     * and the gate still reads clean, so the first result is attributable to the anchor and not to a broken fixture.
+     * {@link #sweepRestoresAGapWindowTraceDeletedAndReCreatedBeforeTheSwap()} covers that recovery from a full
+     * cutover; holding it here too is what isolates the anchor as the single variable.
+     *
+     * @see #sweepRestoresAGapWindowTraceDeletedAndReCreatedBeforeTheSwap() the same shape with a correct anchor
+     */
+    @Test
+    void earlySwapDoneDropsARecreatedKeyFromTheSweepAndTheGateAlike() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = Instant.parse("2025-03-04T10:00:00Z");
+        var gapStart = "2025-03-04 09:00:00";
+        // The bridge rows below carry the column's now64() default, so this sits before them and stands in for an
+        // operator estimate that predates the swap.
+        var earlyAnchor = "2025-03-04 09:30:00";
+
+        // Written, deleted and RE-CREATED inside the gap window, all before the swap: the backup freezes with the
+        // re-created row live, and the bridge holds the delete.
+        var id = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(id, workspaceId, projectId, "recreated-first", at, null, null, at, at);
+        recordDeletionEvents(Set.of(id), workspaceId, projectId.toString(), "user_request");
+        lightweightDeleteScoped(Set.of(id), workspaceId, projectId);
+        insertShapedTrace(id, workspaceId, projectId, "recreated-again", at, null, null, at, at.plusSeconds(60));
+
+        exchangeTables();
+        var swapDone = nowMicros();
+
+        reconcileForward(gapStart, earlyAnchor);
+
+        assertThat(liveCount("traces", Set.of(id), workspaceId))
+                .as("the residual: the bridged delete sits at or after the early anchor, so the exclusion arm fires"
+                        + " and the re-created trace is never copied")
+                .isZero();
+        assertThat(forwardCounts(gapStart, earlyAnchor))
+                .as("and the gate applies that same arm, so the key never enters the parked set and the estate reads"
+                        + " reconciled over a trace that is missing")
+                .isEqualTo(reconciled());
+
+        reconcileForward(gapStart, swapDone);
+
+        assertThat(newestNames("traces", Set.of(id), workspaceId))
+                .as("control: with the RECORDED anchor the delete falls below the bound, the sweep copies the key and"
+                        + " the replay's guard spares it, so the re-created version is what lands")
+                .containsOnly("recreated-again");
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("and the gate agrees on the same estate, so the fixture reconciles when the anchor is right")
+                .isEqualTo(reconciled());
+    }
+
+    /**
+     * The postcondition's classification, one key per bucket, on the FULL {@code (workspace_id, project_id, id)} key.
+     *
+     * <p>The baseline matters as much as the perturbations: a clean sweep must classify NOTHING, which is what makes a
+     * zero meaningful. Each cohort is then moved into exactly one bucket by editing the live side only — masking the
+     * swept row and re-inserting where a different version is needed, so every side holds one physical row and
+     * {@code FINAL} has no arbitrary choice to make. Building the "matching" row with the sweep itself, rather than by
+     * hand, is deliberate: it makes the baseline a statement about the real copy path rather than about whether two
+     * tables happen to share column DEFAULTs.
+     *
+     * <p>The reused id is the full-key case: the same id under two projects, matching in one and absent in the other,
+     * counts once as missing. A gate keyed on {@code id} alone would report zero there.
+     */
+    @Test
+    void reconciliationCountsClassifyEachKeyByItsVersionRelationOnTheFullKey() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var otherProjectId = ID_GENERATOR.generateId();
+        var at = Instant.parse("2025-03-04T10:00:00Z");
+        var gapStart = "2025-03-04 09:00:00";
+
+        var matching = ID_GENERATOR.generateId().toString();
+        var stale = ID_GENERATOR.generateId().toString();
+        var payload = ID_GENERATOR.generateId().toString();
+        var newer = ID_GENERATOR.generateId().toString();
+        var missing = ID_GENERATOR.generateId().toString();
+        var reused = ID_GENERATOR.generateId().toString();
+        for (var id : List.of(matching, stale, payload, newer, missing, reused)) {
+            insertShapedTrace(id, workspaceId, projectId, "cohort", at, null, null, at, at);
+        }
+        insertShapedTrace(reused, workspaceId, otherProjectId, "cohort", at, null, null, at, at);
+
+        // Park the seeded rows and start from an empty successor, so every live row below is one this test placed.
+        exchangeTables();
+        var swapDone = nowMicros();
+        forwardSweep("traces", gapStart, swapDone);
+
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("baseline: a clean sweep classifies nothing — which is what makes a zero in any bucket meaningful")
+                .isEqualTo(reconciled());
+
+        // MISSING: absent from the live table, with no bridge event, so the exclusion arm does not forgive it.
+        lightweightDeleteScoped(Set.of(missing), workspaceId, projectId);
+        // MISSING, full-key: present under one project and absent under the other; it must count once, not zero.
+        lightweightDeleteScoped(Set.of(reused), workspaceId, otherProjectId);
+        // STALE: the live row is at an OLDER version than the parked one.
+        lightweightDeleteScoped(Set.of(stale), workspaceId, projectId);
+        insertShapedTrace(stale, workspaceId, projectId, "cohort", at, Instant.EPOCH, Double.NaN, at,
+                at.minusSeconds(60));
+        // PAYLOAD MISMATCH: same version, differing content — the case a version comparison alone cannot see.
+        lightweightDeleteScoped(Set.of(payload), workspaceId, projectId);
+        insertShapedTrace(payload, workspaceId, projectId, "differs", at, Instant.EPOCH, Double.NaN, at, at);
+        // NEWER: post-swap traffic touched it; informational, and must not gate.
+        insertShapedTrace(newer, workspaceId, projectId, "cohort", at, Instant.EPOCH, Double.NaN, at,
+                at.plusSeconds(60));
+
+        assertThat(forwardCounts(gapStart, swapDone))
+                .as("each key lands in exactly one bucket, counted per full key: two missing (one of them the reused"
+                        + " id's other project), one stale, one payload mismatch, one newer")
+                .isEqualTo(ReconciliationCounts.builder().missing(2).stale(1).payloadMismatch(1).newer(1).build());
+    }
+
+    /**
+     * The backfill's window bounds. A {@code DateTime64} literal carrying no timezone is parsed in the session's
+     * timezone, while every column it meets is {@code DateTime64(n, 'UTC')}, so the session is set explicitly here: an
+     * unpinned literal only diverges where it is not UTC. The row is seeded an hour into the week, so a bound read in
+     * a westward zone starts the window after it and the copy silently skips it — a hole in the migration, in the week
+     * the driver reported as done.
+     *
+     * <p>The row carries no {@code ttft} either, so the projection's NaN sentinel is asserted with it: a window test
+     * that copied the wrong columns would otherwise pass. Its epoch {@code end_time} sentinel is deliberately NOT
+     * asserted — 000001 leaves that literal unpinned by design, so under this session the copy writes a shifted
+     * instant rather than 0, and requiring 0 would fail on correct code.
+     */
+    @Test
+    void backfillIsUnaffectedByTheSessionTimezone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        insertShapedTrace(workspaceId, projectId, "absent-both", weekInstant(0, 0), null, null);
+
+        backfillWeekWestwardSession(0);
+
+        var copied = copiedRow(workspaceId, "absent-both");
+        assertThat(copied.rows()).as("the week's window still selects the row").isEqualTo(1);
+        assertThat(copied.ttftIsNaN()).as("NaN ttft sentinel").isTrue();
+    }
+
+    /**
+     * The delta's own window bounds: it re-reads the source for everything touched at or after the anchor, on
+     * {@code created_at} OR {@code last_updated_at}. Both bounds parse the same value, so a westward session
+     * moves them together and the delta silently narrows to rows touched after the shifted instant. That loses exactly
+     * the updates the delta exists to carry — those made while the backfill ran — and, unlike a missed deletion, they
+     * are invisible to the fidelity compare once the successor holds a row for the key at all.
+     *
+     * <p>Driven end to end rather than by counting the predicate: an INSERT SELECT reads through the session, so the
+     * shift is observable in the copy itself, which the deletion replay's mutation cannot show.
+     *
+     * @see #deletionReplayWindowIsUnaffectedByTheSessionTimezone for the bound the session cannot reach
+     */
+    @Test
+    void deltaIsUnaffectedByTheSessionTimezone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        // The row the delta exists to carry: created before the anchor, so the backfill already copied it, then updated
+        // after it. Only the OR's last_updated_at arm can select it. Anchor and update come from the same clock, so
+        // their ordering is exact; the margin between them is minutes, orders of magnitude below any zone offset.
+        var anchor = Instant.now();
+        insertShapedTrace(ID_GENERATOR.generateId().toString(), workspaceId, projectId, "touched-during-backfill",
+                weekInstant(0, 0), null, null, weekInstant(0, 0), anchor.plusSeconds(60));
+
+        deltaInsertWestwardSession(ClickHouseDateTimeFormat.formatMicros(anchor));
+
+        assertThat(copiedRow(workspaceId, "touched-during-backfill").rows())
+                .as("the delta's window still selects the row")
+                .isEqualTo(1);
+    }
+
+    /**
+     * The {@code event_time} bound that decides which bridged deletions the replay applies. This is the
+     * highest-consequence datetime literal in the runbook: a lightweight DELETE does not bump the version column, so the
+     * delta cannot see it, and the replay is the only thing that stops the deletion leaking across the swap. A bound
+     * resolved in a westward zone lands AFTER the recorded event, the replay matches nothing, and the deleted row stays
+     * live on the successor — the exact leak the bridge exists to close, reported by a driver that exited 0.
+     *
+     * <p>Asserted on the bound's SELECTION rather than by driving the replay: {@code session_timezone} does not reach a
+     * mutation's literal parsing, so a {@code DELETE} cannot be made to exhibit the shift, while the predicate it
+     * filters on can. So the coverage splits: the deletion tests running under the container's own session cover the
+     * replay end to end, and this covers its window not moving with the session.
+     *
+     * <p>The reverse replay and its postcondition carry the same bound against {@code cutover_start}, so this pins the
+     * form all three share. The anchor is captured the way the drivers capture it — in UTC — so the pairing under test
+     * is the real one.
+     */
+    @Test
+    void deletionReplayWindowIsUnaffectedByTheSessionTimezone() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var id = ID_GENERATOR.generateId().toString();
+        var at = weekInstant(0, 0);
+        insertShapedTrace(id, workspaceId, projectId, "deleted-during-window", at, at, 1.0, at, at);
+
+        var backfillStart = nowMicros();
+        // Deleted after the anchor, with the bridge event the replay reads. event_time defaults to the server clock, so
+        // it sits just after the anchor — inside the window by a margin far smaller than any timezone offset.
+        lightweightDelete(Set.of(id), workspaceId);
+        recordDeletionEvents(Set.of(id), workspaceId, projectId.toString(), "user");
+
+        assertThat(bridgedDeletionsSinceWestwardSession(backfillStart))
+                .as("the replay's window still selects the bridged deletion")
+                .isEqualTo(1);
+    }
+
+    /**
+     * The sequence the runbook actually prescribes — backfill a week, then run the delta over the same anchor — must not
+     * read as a tie on the successor. The delta re-copies every row written during the backfill window, and an
+     * unmodified row keeps its {@code last_updated_at}, so the successor holds several physical rows at one version
+     * until a merge collapses them. verify.sh runs before the EXCHANGE, on exactly those recent partitions, so counting
+     * physical rows here would report a tie on a faithful copy and fail the cutover gate on the normal path.
+     *
+     * <p>Asserted only on what a merge cannot change. Whether the duplicates still exist when this reads is not
+     * observable deterministically — two same-partition parts this small are prime merge candidates — so the test pins
+     * the invariant that holds either way: one live row, and one distinct content at the newest version. {@code
+     * liveCount} rules out the vacuous case where nothing was copied at all.
+     */
+    @Test
+    void backfillThenDeltaSequenceIsNotATie() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = weekInstant(0, 0);
+        var id = ID_GENERATOR.generateId().toString();
+        insertShapedTrace(id, workspaceId, projectId, "copied-twice", at, at, 1.0, at, at);
+
+        // The anchor must precede the row, or the delta's created_at/last_updated_at bound selects nothing and the
+        // re-copy this test is about never happens. nowMicros() would sit after a seed in the anchor week.
+        var backfillStart = ClickHouseDateTimeFormat.formatMicros(ANCHOR_MONDAY.minusWeeks(1).atStartOfDay()
+                .toInstant(ZoneOffset.UTC));
+        backfillWeek(0);
+        deltaInsert(backfillStart);
+
+        assertThat(liveCount("traces_local_v2", Set.of(id), workspaceId))
+                .as("they dedup to one live row")
+                .isEqualTo(1);
+        assertThat(versionTies("traces_local_v2", Shape.NEW, workspaceId))
+                .as("identical re-copies at one version are not a tie")
+                .isZero();
+    }
+
+    /**
+     * The tie aggregate's POSITIVE branch: a key carrying more than one DISTINCT row at its newest version is counted, and one
+     * whose newest version is unique is not, however many older versions it has.
+     *
+     * <p>Evaluated over a literal relation rather than a table, which is the only way this branch can be reached
+     * deterministically. Holding two rows with an identical version needs a {@code ReplacingMergeTree} not to merge
+     * them, and nothing here can guarantee that: {@code traces} is unpartitioned, and the successor's partition key is
+     * {@code MATERIALIZED} from the row's own id, so two rows for one key always share a partition and stay merge
+     * candidates. The relation stands in for the per-version row counts the shipped block derives from the table; the
+     * scan that produces them, and its scoping, is covered against the real tables by
+     * {@link #versionTiesDoesNotCountAKeyWhoseNewestVersionIsUnique()}.
+     *
+     * <p>Four keys, separating ranking from totalling and content from row count. {@code tied} carries two DIFFERING
+     * contents at its newest version and is the only one that counts. {@code dup} carries two IDENTICAL ones, which is
+     * what the delta produces on a faithful copy. {@code deep} has more rows overall but a single content at its
+     * newest. {@code single} has one row. So summing, taking a plain maximum instead of {@code argMax} over the
+     * version, or counting rows instead of distinct contents each fail here.
+     */
+    @Test
+    void versionTieAggregateCountsOnlyASharedNewestVersion() {
+        // (key, version, content) triples standing in for the per-version row counts the shipped block derives.
+        var ties = scalar("""
+                SELECT count() AS c
+                FROM (
+                    SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                    FROM (
+                        SELECT key, version, uniqExact(content) AS distinct_at_version
+                        FROM VALUES('key String, version UInt32, content String',
+                                    ('tied', 2, 'a'), ('tied', 2, 'b'), ('tied', 1, 'a'),
+                                    ('dup', 2, 'a'), ('dup', 2, 'a'), ('dup', 1, 'b'),
+                                    ('deep', 2, 'a'), ('deep', 1, 'a'), ('deep', 1, 'b'),
+                                    ('single', 1, 'a'))
+                        GROUP BY key, version
+                    )
+                    GROUP BY key
+                )
+                WHERE distinct_at_newest > 1
+                """, statement -> {
+        });
+
+        assertThat(ties).as("only the key whose newest version carries DIFFERING content counts as tied").isEqualTo(1);
+    }
+
+    /**
+     * The {@code version-ties} block must not count a key merely because it has SEVERAL versions — only one whose NEWEST
+     * version carries more than one DISTINCT row. That distinction is the whole content of the aggregate: ranking by version
+     * rather than totalling rows. A key written twice with distinct {@code last_updated_at} exercises it, on both sides
+     * of the copy, and is the case that must report zero.
+     *
+     * <p>The opposite case — a key whose newest version IS shared — is deliberately not constructed. Holding two rows
+     * with an identical version in a {@code ReplacingMergeTree} means racing a background merge, so a test built on it
+     * would be timing-dependent rather than strict; the same reason {@code sentinelCounts} does not pin superseded
+     * versions either. The consequence is a known boundary: this pins that the aggregate ranks by version, and the
+     * absence of {@code FINAL} — which would collapse the very rows the count exists to see — is argued in the
+     * {@code version-ties} block itself rather than asserted here.
+     */
+    @Test
+    void versionTiesDoesNotCountAKeyWhoseNewestVersionIsUnique() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var at = weekInstant(0, 0);
+        var id = ID_GENERATOR.generateId().toString();
+
+        // Two versions of one key: whether or not a merge has collapsed them, the newest is unique either way.
+        insertShapedTrace(id, workspaceId, projectId, "older", at, at, 1.0, at, at);
+        insertShapedTrace(id, workspaceId, projectId, "newer", at, at, 2.0, at, at.plusSeconds(1));
+        backfillWeek(0);
+
+        // Preconditions: versionTies returns 0 for an empty candidate set exactly as it does for a correctly-ranked
+        // key, so without these every way the arrange step can silently fail leaves both assertions green — including
+        // the shifted-window copy failure the sibling test exists to prove is possible.
+        assertThat(liveCount("traces", Set.of(id), workspaceId)).as("fixture landed on the source").isEqualTo(1);
+        assertThat(liveCount("traces_local_v2", Set.of(id), workspaceId)).as("fixture was copied").isEqualTo(1);
+
+        assertThat(versionTies("traces", Shape.OLD, workspaceId))
+                .as("a multi-version key is not a tie on the source")
+                .isZero();
+        assertThat(versionTies("traces_local_v2", Shape.NEW, workspaceId))
+                .as("a multi-version key is not a tie on the successor")
+                .isZero();
+    }
+
+    /**
      * Schema-drift guard. The cutover copies a fixed column list, and the fidelity fingerprint also lists fixed
      * columns — so a base column added to {@code traces} by a future migration would be silently left uncopied, with no
      * existing check failing. This asserts the cutover's {@link #COPIED_COLUMNS} equals the live stored columns of
@@ -1482,6 +2561,32 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * {@link #backfillWeek(int)} with the session put WEST of UTC.
+     *
+     * <p>The direction is load-bearing. An unpinned literal read in a westward zone resolves LATER in absolute terms,
+     * so a bound moves past rows that belong inside it, which is the silent failure. An eastward zone moves bounds
+     * earlier and would let an unpinned literal pass, so it would not discriminate.
+     */
+    private void backfillWeekWestwardSession(int week) {
+        var weekLo = ClickHouseDateTimeFormat.formatMicros(weekInstant(week, 0));
+        var weekHi = ClickHouseDateTimeFormat.formatMicros(weekInstant(week + 1, 0));
+        execute("""
+                INSERT INTO traces_local_v2 (
+                %s
+                )
+                SELECT
+                %s
+                FROM traces
+                WHERE created_at >= toDateTime64(:week_lo, 9, 'UTC')
+                  AND created_at < toDateTime64(:week_hi, 9, 'UTC')
+                SETTINGS max_insert_block_size = 100000,
+                         max_partitions_per_insert_block = 2000,
+                         session_timezone = 'America/New_York'
+                """.formatted(COPIED_COLUMNS, COPIED_SELECT),
+                statement -> statement.bind("week_lo", weekLo).bind("week_hi", weekHi));
+    }
+
+    /**
      * The delta-insert: re-copy every row written during the backfill window. Anchored on
      * {@code created_at OR last_updated_at >= backfill_start} so it is complete regardless of the client-supplied
      * {@code last_updated_at} on the batch-ingest path (see class Javadoc).
@@ -1494,9 +2599,27 @@ class TracesLocalV2CutoverTest {
                 SELECT
                 %s
                 FROM traces
-                WHERE created_at >= toDateTime64(:backfill_start, 6)
-                   OR last_updated_at >= toDateTime64(:backfill_start, 6)
+                WHERE created_at >= toDateTime64(:backfill_start, 6, 'UTC')
+                   OR last_updated_at >= toDateTime64(:backfill_start, 6, 'UTC')
                 SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
+                """.formatted(COPIED_COLUMNS, COPIED_SELECT),
+                statement -> statement.bind("backfill_start", backfillStart));
+    }
+
+    /** {@link #deltaInsert(String)} with the session put WEST of UTC; see {@link #backfillWeekWestwardSession(int)}. */
+    private void deltaInsertWestwardSession(String backfillStart) {
+        execute("""
+                INSERT INTO traces_local_v2 (
+                %s
+                )
+                SELECT
+                %s
+                FROM traces
+                WHERE created_at >= toDateTime64(:backfill_start, 6, 'UTC')
+                   OR last_updated_at >= toDateTime64(:backfill_start, 6, 'UTC')
+                SETTINGS max_insert_block_size = 100000,
+                         max_partitions_per_insert_block = 2000,
+                         session_timezone = 'America/New_York'
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("backfill_start", backfillStart));
     }
@@ -1507,7 +2630,7 @@ class TracesLocalV2CutoverTest {
      * events match the full key {@code (workspace_id, project_id, id)} (exact; a reused id in another project is
      * untouched) — without this replay those deletions silently leak across the swap. The branch also requires the id is
      * NOT currently live on the source (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns
-     * the wall time so the runbook can size it against the buffer window.
+     * the wall time, which the runbook counts toward the cutover tail.
      */
     private long replayDeletions(String backfillStart) {
         var start = System.nanoTime();
@@ -1525,7 +2648,7 @@ class TracesLocalV2CutoverTest {
                             toFixedString(deleted_id, 36)
                         FROM deletion_events_local
                         WHERE source_table = 'traces'
-                          AND event_time >= toDateTime64(:backfill_start, 6)
+                          AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
                           AND project_id != ''
                           AND length(project_id) = 36
                           AND length(deleted_id) = 36
@@ -1540,7 +2663,7 @@ class TracesLocalV2CutoverTest {
                             SELECT toFixedString(deleted_id, 36)
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
-                              AND event_time >= toDateTime64(:backfill_start, 6)
+                              AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
                               AND length(deleted_id) = 36
                         )
                     )
@@ -1549,6 +2672,290 @@ class TracesLocalV2CutoverTest {
                          lightweight_deletes_sync = 2
                 """, statement -> statement.bind("backfill_start", backfillStart));
         return (System.nanoTime() - start) / 1_000_000L;
+    }
+
+    /**
+     * The POST-SWAP forward deletion replay (000006 {@code forward-deletion-replay}), run right after the sweep so
+     * bridged deletes win over what it re-inserted. A separate statement from {@link #replayDeletions(String)}, exactly
+     * as it is a separate block from 000002 in the shipped SQL: it masks rows on the LIVE table and reads its
+     * resurrection guard from the FROZEN backup, which is race-free where a live source cannot be — and is what closes
+     * the delete-side residual (a delete bridged after the final pre-swap replay read the bridge, but before the swap).
+     *
+     * <p>The third arm — the staleness scope on {@code swapDone} — has no counterpart pre-swap, because the shadow
+     * receives no writes except the copy. It is what stops the frozen guard destroying a post-cutover write: the guard
+     * cannot see a row written after the swap, so a key deleted before it and re-created after looks "still deleted".
+     * The scope is per ROW, so a leaked stale copy is masked while a newer version of the same key survives.
+     * {@link #postSwapDeletionReplayWithoutStalenessScope} is the negative control that proves it load-bearing.
+     */
+    private void postSwapDeletionReplay(String liveTable, String gapStart, String swapDone) {
+        execute("""
+                DELETE FROM %s
+                WHERE created_at      <  toDateTime64(:swap_done, 6, 'UTC')
+                  AND last_updated_at <  toDateTime64(:swap_done, 6, 'UTC')
+                  AND (workspace_id, project_id, id) IN (
+                      SELECT
+                          workspace_id,
+                          toFixedString(project_id, 36),
+                          toFixedString(deleted_id, 36)
+                      FROM deletion_events_local
+                      WHERE source_table = 'traces'
+                        AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                        AND project_id != ''
+                        AND length(project_id) = 36
+                        AND length(deleted_id) = 36
+                  )
+                  AND (workspace_id, project_id, id) NOT IN (
+                      SELECT
+                          workspace_id,
+                          project_id,
+                          id
+                      FROM traces_pre_cutover_backup
+                      WHERE id IN (
+                          SELECT toFixedString(deleted_id, 36)
+                          FROM deletion_events_local
+                          WHERE source_table = 'traces'
+                            AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                            AND length(deleted_id) = 36
+                      )
+                  )
+                SETTINGS allow_nondeterministic_mutations = 1,
+                         lightweight_deletes_sync = 2
+                """.formatted(liveTable),
+                statement -> statement.bind("gap_start", gapStart).bind("swap_done", swapDone));
+    }
+
+    /**
+     * NEGATIVE CONTROL for {@link #postSwapDeletionReplay}: the same statement with the staleness scope deliberately
+     * omitted, i.e. 000002's two-arm predicate aimed at the post-swap estate. It exists to be run once, on a trace
+     * re-created after the swap, and watched to destroy it — without which "the scope is load-bearing" is an assertion
+     * about code nobody has seen fail. Never a shape the runbook ships.
+     */
+    private void postSwapDeletionReplayWithoutStalenessScope(String gapStart) {
+        execute("""
+                DELETE FROM traces
+                WHERE (workspace_id, project_id, id) IN (
+                      SELECT
+                          workspace_id,
+                          toFixedString(project_id, 36),
+                          toFixedString(deleted_id, 36)
+                      FROM deletion_events_local
+                      WHERE source_table = 'traces'
+                        AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                        AND project_id != ''
+                        AND length(project_id) = 36
+                        AND length(deleted_id) = 36
+                  )
+                  AND (workspace_id, project_id, id) NOT IN (
+                      SELECT
+                          workspace_id,
+                          project_id,
+                          id
+                      FROM traces_pre_cutover_backup
+                      WHERE id IN (
+                          SELECT toFixedString(deleted_id, 36)
+                          FROM deletion_events_local
+                          WHERE source_table = 'traces'
+                            AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                            AND length(deleted_id) = 36
+                      )
+                  )
+                SETTINGS allow_nondeterministic_mutations = 1,
+                         lightweight_deletes_sync = 2
+                """, statement -> statement.bind("gap_start", gapStart));
+    }
+
+    /**
+     * One forward reconciliation pass, in the order {@code reconcile.sh} runs the two blocks: sweep, then replay, so
+     * bridged deletes win over anything the sweep re-inserted. Encoded once because that order is load-bearing — a test
+     * that reversed it would still pass on every case where nothing was deleted.
+     *
+     * <p>Callers that need to observe the two halves separately — proving the sweep alone cannot fix a delete, or that
+     * the replay without its staleness scope destroys a re-creation — call them individually instead.
+     */
+    private void reconcileForward(String gapStart, String swapDone) {
+        reconcileForward("traces", gapStart, swapDone);
+    }
+
+    /** As above against the live table {@code reconcile.sh} resolves: {@code traces_local} on a wrapped estate. */
+    private void reconcileForward(String liveTable, String gapStart, String swapDone) {
+        forwardSweep(liveTable, gapStart, swapDone);
+        postSwapDeletionReplay(liveTable, gapStart, swapDone);
+    }
+
+    /**
+     * One reverse reconciliation pass: the sweep, then {@code 000004_rollback_reverse_replay.sql} unchanged. Same
+     * ordering rule, same reason — the replay is what makes post-cutover deletes win over the re-imported writes.
+     */
+    private void reconcileReverse(String cutoverStart, String promoteDone) {
+        reverseSweep(cutoverStart, promoteDone);
+        reverseReplay(cutoverStart);
+    }
+
+    /**
+     * The POST-SWAP forward sweep (000006 {@code forward-sweep}): copy the gap window out of the FROZEN
+     * {@code traces_pre_cutover_backup} into the live successor. The source is the old original, so the projection is
+     * the backfill's: {@code end_time} and {@code ttft} are still Nullable and coalesce to the successor's sentinels.
+     * The live table is the statement's one parameter, mirroring the {@code ${LIVE_TABLE}} the shipped block carries.
+     *
+     * <p>Mask-honored ({@code apply_deleted_mask} stays at its default) and idempotent (the target is a
+     * {@code ReplacingMergeTree}, so a re-inserted row loses to anything newer). The {@code NOT IN} arm is what stops it
+     * resurrecting a gap-window trace deleted AFTER the swap; deletes bridged BEFORE the swap are handled instead by the
+     * deletion replay that runs after it, so a trace deleted and re-created before the freeze is still swept back.
+     */
+    private void forwardSweep(String liveTable, String gapStart, String swapDone) {
+        execute("""
+                INSERT INTO %s (
+                    id,
+                    workspace_id,
+                    project_id,
+                    name,
+                    start_time,
+                    end_time,
+                    input,
+                    output,
+                    metadata,
+                    tags,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    error_info,
+                    thread_id,
+                    visibility_mode,
+                    truncation_threshold,
+                    input_slim,
+                    output_slim,
+                    ttft,
+                    source,
+                    environment
+                )
+                SELECT
+                    id,
+                    workspace_id,
+                    project_id,
+                    name,
+                    start_time,
+                    coalesce(end_time, toDateTime64('1970-01-01 00:00:00', 6)) AS end_time,
+                    input,
+                    output,
+                    metadata,
+                    tags,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    error_info,
+                    thread_id,
+                    visibility_mode,
+                    truncation_threshold,
+                    input_slim,
+                    output_slim,
+                    coalesce(ttft, toFloat64('nan')) AS ttft,
+                    source,
+                    environment
+                FROM traces_pre_cutover_backup
+                WHERE (created_at >= toDateTime64(:gap_start, 6, 'UTC')
+                    OR last_updated_at >= toDateTime64(:gap_start, 6, 'UTC'))
+                  AND (workspace_id, project_id, id) NOT IN (
+                      SELECT
+                          workspace_id,
+                          toFixedString(project_id, 36),
+                          toFixedString(deleted_id, 36)
+                      FROM deletion_events_local
+                      WHERE source_table = 'traces'
+                        AND event_time >= toDateTime64(:swap_done, 6, 'UTC')
+                        AND project_id != ''
+                        AND length(project_id) = 36
+                        AND length(deleted_id) = 36
+                  )
+                SETTINGS max_partitions_per_insert_block = 2000
+                """.formatted(liveTable),
+                statement -> statement.bind("gap_start", gapStart).bind("swap_done", swapDone));
+    }
+
+    /**
+     * The REVERSE sweep (000006 {@code reverse-sweep}): re-import the post-cutover writes a promote made non-live, out
+     * of {@code traces_post_rollback_backup} and back into the restored original.
+     *
+     * <p>The projection is the inverse of the forward one, and it is what this statement is about: the successor's
+     * non-nullable epoch / NaN sentinels are denormalized back to the original's {@code NULL} convention. Without that,
+     * the original's MATERIALIZED {@code duration} — which guards {@code end_time IS NOT NULL} and knows nothing of the
+     * epoch — recomputes a large NEGATIVE value for every re-imported trace that had not ended.
+     *
+     * <p>The epoch literal pins {@code 'UTC'} here and deliberately does not in the forward direction: forward, the
+     * sentinel being WRITTEN has to agree with the successor's own unpinned DEFAULT and duration expression; reverse,
+     * the sentinel being READ was written by the backend as an absolute {@code Instant.EPOCH}. Same asymmetry, and the
+     * same reasoning, as 000004_rollback_sentinel_repair.sql.
+     */
+    private void reverseSweep(String gapStart, String swapDone) {
+        execute("""
+                INSERT INTO traces (
+                    id,
+                    workspace_id,
+                    project_id,
+                    name,
+                    start_time,
+                    end_time,
+                    input,
+                    output,
+                    metadata,
+                    tags,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    error_info,
+                    thread_id,
+                    visibility_mode,
+                    truncation_threshold,
+                    input_slim,
+                    output_slim,
+                    ttft,
+                    source,
+                    environment
+                )
+                SELECT
+                    id,
+                    workspace_id,
+                    project_id,
+                    name,
+                    start_time,
+                    nullIf(end_time, toDateTime64('1970-01-01 00:00:00', 6, 'UTC')) AS end_time,
+                    input,
+                    output,
+                    metadata,
+                    tags,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    error_info,
+                    thread_id,
+                    visibility_mode,
+                    truncation_threshold,
+                    input_slim,
+                    output_slim,
+                    if(isNaN(ttft), NULL, ttft) AS ttft,
+                    source,
+                    environment
+                FROM traces_post_rollback_backup
+                WHERE (created_at >= toDateTime64(:gap_start, 6, 'UTC')
+                    OR last_updated_at >= toDateTime64(:gap_start, 6, 'UTC'))
+                  AND (workspace_id, project_id, id) NOT IN (
+                      SELECT
+                          workspace_id,
+                          toFixedString(project_id, 36),
+                          toFixedString(deleted_id, 36)
+                      FROM deletion_events_local
+                      WHERE source_table = 'traces'
+                        AND event_time >= toDateTime64(:swap_done, 6, 'UTC')
+                        AND project_id != ''
+                        AND length(project_id) = 36
+                        AND length(deleted_id) = 36
+                  )
+                SETTINGS max_partitions_per_insert_block = 2000
+                """,
+                statement -> statement.bind("gap_start", gapStart).bind("swap_done", swapDone));
     }
 
     /**
@@ -1665,7 +3072,7 @@ class TracesLocalV2CutoverTest {
                         toFixedString(deleted_id, 36)
                     FROM deletion_events_local
                     WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND event_time >= toDateTime64(:cutover_start, 6, 'UTC')
                       AND project_id != ''
                       AND length(project_id) = 36
                       AND length(deleted_id) = 36
@@ -1874,12 +3281,20 @@ class TracesLocalV2CutoverTest {
     }
 
     private void lightweightDeleteScoped(Set<String> ids, String workspaceId, UUID projectId) {
+        lightweightDeleteFrom("traces", ids, workspaceId, projectId);
+    }
+
+    /**
+     * The same lightweight delete against a named table, so a test can put the PARKED backup into the state a delete
+     * that fired before the freeze would have left it in.
+     */
+    private void lightweightDeleteFrom(String table, Set<String> ids, String workspaceId, UUID projectId) {
         execute("""
-                DELETE FROM traces
+                DELETE FROM %s
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND id IN :ids
-                """,
+                """.formatted(table),
                 statement -> statement
                         .bind("workspace_id", workspaceId)
                         .bind("project_id", projectId)
@@ -1942,7 +3357,7 @@ class TracesLocalV2CutoverTest {
                         toFixedString(deleted_id, 36)
                     FROM %s.deletion_events_local
                     WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6)
+                      AND event_time >= toDateTime64(:cutover_start, 6, 'UTC')
                       AND project_id != ''
                       AND length(project_id) = 36
                       AND length(deleted_id) = 36
@@ -1955,6 +3370,170 @@ class TracesLocalV2CutoverTest {
                                 .execute())
                         .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("resurrected", Long.class)))))
                 .block();
+    }
+
+    /**
+     * The reconciliation postcondition (000006_verify_reconciliation), reimplemented inline like the rest of this class.
+     * For every key live in the PARKED table inside the gap window, the live table's version of that key is classified:
+     * absent -> {@code missing}; strictly older -> {@code stale}; same version with a differing normalized fingerprint
+     * -> {@code payloadMismatch}; newer -> {@code newer}. The gate is the first three at 0; {@code newer} is
+     * informational and expected to be non-zero on a busy estate, the same idiom
+     * {@code 000004_rollback_verify_sentinels.sql} uses for {@code negative_from_sentinel}.
+     *
+     * <p>The fingerprints come from {@link #rowHash}, so they are the exact normalization {@code verify.sh} and the
+     * fidelity assertions use, and they follow {@link #COPIED_COLUMNS} — which means a base column added by a future
+     * migration is covered here by construction, not by a second hand-maintained list. The VERSION is compared as a
+     * microsecond epoch for the same reason it is hashed as one: the copy truncates nanoseconds to microseconds, so
+     * comparing the raw columns would report every faithfully-copied row with a sub-microsecond {@code last_updated_at}
+     * as stale.
+     *
+     * <p>No {@code clusterAllReplicas}, unlike the replay and sentinel gates: a Replicated table returns one copy per
+     * replica through it, which would multiply both sides of the join. The driver runs the cluster-wide settle gate
+     * before reading this instead, which is what makes a single-replica read representative.
+     *
+     * @param exclusionFrom the bridge {@code event_time} floor for keys that are LEGITIMATELY absent from the live
+     *                      table: {@code swap_done} forward (only post-swap deletes are absent, the forward replay's
+     *                      resurrection guard sparing anything live in the parked table), {@code cutover_start} reverse
+     *                      (the guard-less reverse replay masks every key bridged since then).
+     */
+    private ReconciliationCounts reconciliationCounts(String parkedTable, Shape parkedShape, String liveTable,
+            String gapStart, String exclusionFrom) {
+        var parkedHash = rowHash(parkedShape == Shape.OLD ? OLD_HASH_OVERRIDES : NEW_HASH_OVERRIDES);
+        var liveHash = rowHash(parkedShape == Shape.OLD ? NEW_HASH_OVERRIDES : OLD_HASH_OVERRIDES);
+        var parkedVersion = parkedShape == Shape.OLD
+                ? "toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6))"
+                : "toUnixTimestamp64Micro(last_updated_at)";
+        var liveVersion = parkedShape == Shape.OLD
+                ? "toUnixTimestamp64Micro(last_updated_at)"
+                : "toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6))";
+        var sql = """
+                WITH
+                    parked AS (
+                        SELECT
+                            (workspace_id, project_id, id) AS key,
+                            %s AS parked_version,
+                            %s AS parked_fingerprint
+                        FROM %s FINAL
+                        WHERE (created_at >= toDateTime64(:gap_start, 6, 'UTC')
+                            OR last_updated_at >= toDateTime64(:gap_start, 6, 'UTC'))
+                          AND (workspace_id, project_id, id) NOT IN (
+                              SELECT
+                                  workspace_id,
+                                  toFixedString(project_id, 36),
+                                  toFixedString(deleted_id, 36)
+                              FROM deletion_events_local
+                              WHERE source_table = 'traces'
+                                AND event_time >= toDateTime64(:exclusion_from, 6, 'UTC')
+                                AND project_id != ''
+                                AND length(project_id) = 36
+                                AND length(deleted_id) = 36
+                          )
+                    ),
+                    live AS (
+                        SELECT
+                            (workspace_id, project_id, id) AS key,
+                            %s AS live_version,
+                            %s AS live_fingerprint
+                        FROM %s FINAL
+                        WHERE (workspace_id, project_id, id) IN (SELECT key FROM parked)
+                    )
+                SELECT
+                    countIf(live_version IS NULL) AS missing_keys,
+                    countIf(live_version IS NOT NULL AND live_version < parked_version) AS stale_keys,
+                    countIf(live_version IS NOT NULL AND live_version = parked_version
+                            AND live_fingerprint != parked_fingerprint) AS payload_mismatch_keys,
+                    countIf(live_version IS NOT NULL AND live_version > parked_version) AS newer_keys
+                FROM parked
+                LEFT JOIN live USING (key)
+                SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1
+                """.formatted(parkedVersion, parkedHash, parkedTable, liveVersion, liveHash, liveTable);
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("gap_start", gapStart)
+                                .bind("exclusion_from", exclusionFrom)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> ReconciliationCounts.builder()
+                                .missing(row.get("missing_keys", Long.class))
+                                .stale(row.get("stale_keys", Long.class))
+                                .payloadMismatch(row.get("payload_mismatch_keys", Long.class))
+                                .newer(row.get("newer_keys", Long.class))
+                                .build()))))
+                .block();
+    }
+
+    /** Forward direction: the parked pre-cutover backup (OLD shape) against the live successor. */
+    private ReconciliationCounts forwardCounts(String gapStart, String swapDone) {
+        return reconciliationCounts("traces_pre_cutover_backup", Shape.OLD, "traces", gapStart, swapDone);
+    }
+
+    /**
+     * 000006's {@code leak-check-forward}: captured deletes still live on the successor at a version the frozen backup
+     * itself held. {@code apply_deleted_mask = 0} is what lets the backup side see rows the mask hides, and
+     * {@code _row_exists = 1} restores mask-honoring on the live side by hand, since the setting is statement-wide.
+     */
+    private long leakCheckForward(String gapStart) {
+        var sql = """
+                WITH
+                    bridged AS (
+                        SELECT
+                            workspace_id,
+                            toFixedString(project_id, 36) AS project_id,
+                            toFixedString(deleted_id, 36) AS id
+                        FROM deletion_events_local
+                        WHERE source_table = 'traces'
+                          AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                          AND project_id != ''
+                          AND length(project_id) = 36
+                          AND length(deleted_id) = 36
+                    ),
+                    deleted AS (
+                        SELECT
+                            (workspace_id, project_id, id) AS key,
+                            toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)) AS version
+                        FROM traces_pre_cutover_backup
+                        WHERE _row_exists = 0
+                          AND (workspace_id, project_id, id) IN (SELECT workspace_id, project_id, id FROM bridged)
+                    )
+                SELECT count() AS c
+                FROM (
+                    SELECT
+                        (workspace_id, project_id, id) AS key,
+                        toUnixTimestamp64Micro(last_updated_at) AS version
+                    FROM traces FINAL
+                    WHERE _row_exists = 1
+                      AND (workspace_id, project_id, id) IN (SELECT workspace_id, project_id, id FROM bridged)
+                ) AS live
+                WHERE (live.key, live.version) IN (SELECT key, version FROM deleted)
+                SETTINGS apply_deleted_mask = 0, use_skip_indexes_if_final = 1
+                """;
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("gap_start", gapStart)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class)))))
+                .block();
+    }
+
+    /** Reverse direction: the parked successor (NEW shape) against the restored original. */
+    private ReconciliationCounts reverseCounts(String gapStart, String cutoverStart) {
+        return reconciliationCounts("traces_post_rollback_backup", Shape.NEW, "traces", gapStart, cutoverStart);
+    }
+
+    /**
+     * The counts 000006_verify_reconciliation.sql returns. {@code missing}, {@code stale} and {@code payloadMismatch}
+     * are the gate; {@code newer} is informational and expected to be non-zero wherever post-swap traffic touched a
+     * gap-window key. Built through the builder at every call site so each expected number is read with the bucket it
+     * belongs to — four positional longs would be indistinguishable from each other at a glance.
+     */
+    @Builder(toBuilder = true)
+    private record ReconciliationCounts(long missing, long stale, long payloadMismatch, long newer) {
+    }
+
+    /** The passing gate: nothing missing, nothing stale, no payload differing, and no post-swap write to tolerate. */
+    private static ReconciliationCounts reconciled() {
+        return ReconciliationCounts.builder().missing(0).stale(0).payloadMismatch(0).newer(0).build();
     }
 
     /**
@@ -1994,32 +3573,45 @@ class TracesLocalV2CutoverTest {
      * {@code FINAL} is that the check must see exactly what the mutation rewrites; it is argued in the .sql header.
      */
     private SentinelCounts sentinelCounts(String windowFrom, String windowTo) {
-        return sentinelCounts(windowFrom, windowTo, "");
+        return sentinelCounts(
+                """
+                        SELECT
+                            uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
+                            uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
+                            uniqExactIf((workspace_id, project_id, id),
+                                        duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
+                            uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
+                        FROM clusterAllReplicas('{cluster}', %s.traces)
+                        WHERE (   (created_at      >= toDateTime64(:from, 6, 'UTC') AND created_at      < toDateTime64(:to, 6, 'UTC'))
+                               OR (last_updated_at >= toDateTime64(:from, 6, 'UTC') AND last_updated_at < toDateTime64(:to, 6, 'UTC')))
+                        """
+                        .formatted(DATABASE_NAME),
+                windowFrom, windowTo);
     }
 
     /**
      * The same counts evaluated under a non-UTC {@code session_timezone}, which is the only way this suite can catch an
-     * unpinned epoch literal: the container runs UTC. The clause is a compile-time constant rather than a parameter —
-     * a {@code SETTINGS} value cannot be bound, so the alternative would be assembling one from an argument.
+     * unpinned epoch literal: the container runs UTC.
      */
     private SentinelCounts sentinelCountsUnderForeignTimezone(String windowFrom, String windowTo) {
-        return sentinelCounts(windowFrom, windowTo, " SETTINGS session_timezone = 'America/New_York'");
+        return sentinelCounts(
+                """
+                        SELECT
+                            uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
+                            uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
+                            uniqExactIf((workspace_id, project_id, id),
+                                        duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
+                            uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
+                        FROM clusterAllReplicas('{cluster}', %s.traces)
+                        WHERE (   (created_at      >= toDateTime64(:from, 6, 'UTC') AND created_at      < toDateTime64(:to, 6, 'UTC'))
+                               OR (last_updated_at >= toDateTime64(:from, 6, 'UTC') AND last_updated_at < toDateTime64(:to, 6, 'UTC')))
+                        SETTINGS session_timezone = 'America/New_York'
+                        """
+                        .formatted(DATABASE_NAME),
+                windowFrom, windowTo);
     }
 
-    private SentinelCounts sentinelCounts(String windowFrom, String windowTo, String settingsClause) {
-        var sql = """
-                SELECT
-                    uniqExactIf((workspace_id, project_id, id), end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
-                    uniqExactIf((workspace_id, project_id, id), isNaN(ttft)) AS sentinel_ttft,
-                    uniqExactIf((workspace_id, project_id, id),
-                                duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS negative_from_sentinel,
-                    uniqExactIf((workspace_id, project_id, id), duration < 0 AND end_time IS NULL) AS stale_duration
-                FROM clusterAllReplicas('{cluster}', %s.traces)
-                WHERE (   (created_at      >= toDateTime64(:from, 6, 'UTC') AND created_at      < toDateTime64(:to, 6, 'UTC'))
-                       OR (last_updated_at >= toDateTime64(:from, 6, 'UTC') AND last_updated_at < toDateTime64(:to, 6, 'UTC')))
-                """
-                .formatted(DATABASE_NAME)
-                + settingsClause;
+    private SentinelCounts sentinelCounts(String sql, String windowFrom, String windowTo) {
         return template
                 .nonTransaction(connection -> Mono
                         .from(connection.createStatement(sql)
@@ -2084,9 +3676,96 @@ class TracesLocalV2CutoverTest {
     // --- query helpers -------------------------------------------------------------------------------------------
 
     /**
-     * Distinct keys in the live {@code traces} matching a raw predicate. No {@code FINAL}, matching the scope of the
-     * repair mutation and of the counts that gate it.
+     * What the copy landed on the successor for one named row: whether it arrived at all, and whether the projection
+     * wrote the NaN {@code ttft} sentinel. One query, so {@code any()} over a single-row match is that row; callers
+     * assert {@code rows} first, so an empty match cannot be mistaken for a value.
      */
+    private CopiedRow copiedRow(String workspaceId, String name) {
+        var sql = """
+                SELECT
+                    count() AS rows,
+                    any(isNaN(ttft)) AS ttft_is_nan
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id AND name = :name
+                """;
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement(sql)
+                                .bind("workspace_id", workspaceId)
+                                .bind("name", name)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.map((row, ignored) -> new CopiedRow(
+                                row.get("rows", Long.class),
+                                row.get("ttft_is_nan", Boolean.class))))))
+                .block();
+    }
+
+    private record CopiedRow(long rows, boolean ttftIsNaN) {
+    }
+
+    /**
+     * Bridge events the deletion replay's window selects, with the session put WEST of UTC; see
+     * {@link #backfillWeekWestwardSession(int)}. The predicate repeats {@link #replayDeletions(String)}'s outer
+     * subquery, which is the point: it is what the replay filters on, and the two must stay in step.
+     */
+    private long bridgedDeletionsSinceWestwardSession(String backfillStart) {
+        return scalar("""
+                SELECT count() AS c
+                FROM deletion_events_local
+                WHERE source_table = 'traces'
+                  AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
+                  AND project_id != ''
+                  AND length(project_id) = 36
+                  AND length(deleted_id) = 36
+                SETTINGS session_timezone = 'America/New_York'
+                """, statement -> statement.bind("backfill_start", backfillStart));
+    }
+
+    /**
+     * The {@code version-ties} block, reimplemented inline like the rest of this class: keys whose newest
+     * {@code last_updated_at} is carried by more than one DISTINCT row content. Distinct content rather than row count
+     * is the whole point — the cutover puts several identical rows at one version on the successor, because 000002's
+     * delta re-copies rows the backfill already wrote and an unmodified row keeps its {@code last_updated_at}. Counting
+     * rows would call that a tie and fail the gate on a faithful copy. No {@code FINAL}: under it the rows this counts
+     * collapse to one.
+     *
+     * <p>The fingerprint comes from {@code rowHash}, the same normalization {@code fingerprint} uses, so "distinct"
+     * means distinct in the sense the gate cares about. Takes the table and its schema shape because the shipped block
+     * reads both sides; that block selects candidates by the compare's window and sample predicates, while this
+     * substitutes a per-workspace filter, the candidate set not being what is under test.
+     */
+    private long versionTies(String table, Shape shape, String workspaceId) {
+        return scalar("""
+                SELECT count() AS c
+                FROM (
+                    SELECT key, argMax(distinct_at_version, version) AS distinct_at_newest
+                    FROM (
+                        SELECT
+                            (workspace_id, project_id, id) AS key,
+                            last_updated_at AS version,
+                            uniqExact(%s) AS distinct_at_version
+                        FROM %s
+                        WHERE workspace_id = :workspace_id
+                        GROUP BY key, version
+                    )
+                    GROUP BY key
+                )
+                WHERE distinct_at_newest > 1
+                """.formatted(rowHash(shape == Shape.OLD ? OLD_HASH_OVERRIDES : NEW_HASH_OVERRIDES), table),
+                statement -> statement.bind("workspace_id", workspaceId));
+    }
+
+    private long scalar(String sql, Consumer<Statement> binder) {
+        return template
+                .nonTransaction(connection -> {
+                    var statement = connection.createStatement(sql);
+                    binder.accept(statement);
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class))));
+                })
+                .block();
+    }
+
     private long countMatching(String workspaceId, String predicate) {
         var sql = """
                 SELECT uniqExact(workspace_id, project_id, id) AS c
@@ -2189,7 +3868,7 @@ class TracesLocalV2CutoverTest {
 
     private String nowMicros() {
         return template.nonTransaction(connection -> Mono.from(connection.createStatement(
-                "SELECT toString(now64(6)) AS n")
+                "SELECT toString(now64(6, 'UTC')) AS n")
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("n", String.class)))))
                 .block();

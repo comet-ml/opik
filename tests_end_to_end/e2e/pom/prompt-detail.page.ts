@@ -1,8 +1,33 @@
 import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
+import { loadEnvConfig } from '../config/env.config';
 
 export class PromptDetailPage {
   constructor(private readonly page: Page) {}
+
+  /**
+   * Open a prompt's detail page directly, optionally deep-linked to one of its
+   * versions via `activeVersionId` — the query param the page resolves
+   * independently of whichever versions its paginated timeline has loaded.
+   *
+   * `tab=prompt` is set explicitly rather than left to the page's own effect,
+   * which replaces the URL a render later; navigating straight to the final URL
+   * keeps `waitForReady` from racing that replacement.
+   */
+  async goto(
+    projectId: string,
+    promptId: string,
+    opts: { activeVersionId?: string } = {},
+  ): Promise<void> {
+    return test.step(`open prompt ${promptId}${opts.activeVersionId ? ` at version ${opts.activeVersionId}` : ''}`, async () => {
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ tab: 'prompt' });
+      if (opts.activeVersionId) query.set('activeVersionId', opts.activeVersionId);
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
+      );
+    });
+  }
 
   async waitForReady(): Promise<void> {
     return test.step('wait for prompt detail to load', async () => {
@@ -56,6 +81,78 @@ export class PromptDetailPage {
       await sheet.getByRole('button', { name: 'Create new version' }).click();
       await sheet.waitFor({ state: 'hidden' });
     });
+  }
+
+  /** The version-history timeline in the right sidebar (xl breakpoint only). */
+  versionTimeline(): Locator {
+    return this.page.getByTestId('version-history-timeline');
+  }
+
+  /** Every version currently rendered in the timeline — one entry per loaded version. */
+  versionTimelineItems(): Locator {
+    return this.versionTimeline().locator('[data-testid^="version-history-item-"]');
+  }
+
+  /**
+   * The timeline's version labels, top to bottom.
+   *
+   * Read off each item's own `data-testid` rather than its rendered text: the
+   * item also renders a change description and a relative timestamp, so its
+   * text is not the label. Order is the assertion here, which is why this reads
+   * positionally at all — the labels themselves are still identities, not
+   * indices.
+   */
+  async readVersionTimelineLabels(): Promise<string[]> {
+    return test.step('read version timeline labels in order', async () => {
+      const testIds = await this.versionTimelineItems().evaluateAll((els) =>
+        els.map((el) => el.getAttribute('data-testid') ?? ''),
+      );
+      return testIds.map((id) => id.replace('version-history-item-', ''));
+    });
+  }
+
+  /**
+   * Scroll the timeline's last rendered version into view, which is what brings
+   * its load-more sentinel into the viewport and triggers the next page.
+   */
+  async scrollVersionTimelineToEnd(): Promise<void> {
+    return test.step('scroll the version timeline to its end', async () => {
+      await this.versionTimelineItems().last().scrollIntoViewIfNeeded();
+    });
+  }
+
+  /**
+   * Open the "Diff" menu and return its content.
+   *
+   * The menu lists every version except the active one, and keeps paging the
+   * version list for as long as it is open — so callers must assert on its
+   * contents with a retrying assertion rather than reading it once.
+   */
+  async openDiffMenu(): Promise<Locator> {
+    return test.step('open the Diff (compare against) menu', async () => {
+      await this.page.getByRole('button', { name: 'Diff' }).click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      return menu;
+    });
+  }
+
+  /** The entries offered by an open Diff menu. */
+  diffMenuItems(menu: Locator): Locator {
+    return menu.getByRole('menuitem');
+  }
+
+  /**
+   * The label element of one Diff menu entry, matched whole.
+   *
+   * Anchored and exact because these labels are prefixes of one another: a
+   * substring match on `v1` also matches `v10` through `v19`, which would make
+   * "the page-2 versions are listed" pass on a menu that only ever loaded page
+   * 1. The label sits in its own element, so an exact match on element text
+   * addresses it without depending on its position among the entry's parts.
+   */
+  diffMenuVersionLabel(menu: Locator, label: string): Locator {
+    return menu.getByText(label, { exact: true });
   }
 
   async selectVersion(label: string): Promise<void> {

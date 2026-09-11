@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -376,6 +377,68 @@ class CostServiceTest {
     }
 
     /**
+     * A compact-dated name must price at exactly the rate of the base model it normalizes to,
+     * not merely at some non-zero rate -- that is what distinguishes a real price-table hit from
+     * an accidental one. Every case below was observed in production traffic routed through an
+     * enterprise gateway, which emits Anthropic ids in reversed family/version order with a
+     * compact date. Before the fix each of these resolved to DEFAULT_COST and reported $0.00.
+     */
+    @ParameterizedTest
+    @MethodSource("provideCompactDatedModelNamesWithBaseEquivalent")
+    void calculateCost_compactDateSuffixPricesSameAsBaseModel(String datedModelName, String baseModelName,
+            String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal datedCost = CostService.calculateCost(datedModelName, provider, usage, null);
+        BigDecimal baseCost = CostService.calculateCost(baseModelName, provider, usage, null);
+
+        assertThat(baseCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(datedCost).isEqualByComparingTo(baseCost);
+    }
+
+    private static Stream<Arguments> provideCompactDatedModelNamesWithBaseEquivalent() {
+        return Stream.of(
+                // Reversed family/version order reaches the price row through an `alias_of` entry,
+                // which is only reachable once the compact date is stripped.
+                Arguments.of("anthropic/claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.6-sonnet-20260217", "claude-sonnet-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.5-haiku-20251001", "claude-haiku-4-5", "anthropic"),
+                // Same path without the provider prefix.
+                Arguments.of("claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                // Canonical order, compact date, dot form: reaches the row via dot normalization.
+                Arguments.of("claude-opus-4.6-20260205", "claude-opus-4-6", "anthropic"));
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithCompactDateSuffix() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-20251217", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * The month/day ranges in the pattern keep an arbitrary 8-digit build or revision number from
+     * being mistaken for a date and silently collapsing a distinct model onto another model's row.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.2-99999999", "gpt-5.2-20251345", "gpt-5.2-12345678"})
+    void calculateCost_shouldNotStripNonDateEightDigitSuffix(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
      * Test for issue #5621: LiteLLM OTel model names with provider prefix not found in pricing table.
      *
      * LiteLLM sends model names with provider prefix via gen_ai.request.model
@@ -589,17 +652,19 @@ class CostServiceTest {
     }
 
     /**
-     * Covers both branches of registering {@code xai} as a canonical provider so that the 40
-     * xai-tagged entries in {@code model_prices_and_context_window.json} (the full grok-2, grok-3,
-     * grok-4 and grok-code families) are no longer silently dropped at load time:
-     * <ul>
-     *   <li>xai model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
-     *   <li>xai model with cache rates routes through
-     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
-     *       LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
-     *       {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic
-     *       used for OpenAI/Azure applies unchanged here.</li>
-     * </ul>
+     * Covers registering {@code xai} as a canonical provider so that the xai-tagged entries in
+     * {@code model_prices_and_context_window.json} (the grok-3, grok-4 and grok-code families) are
+     * no longer silently dropped at load time, and that they route through
+     * {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     * LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     * {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic used for
+     * OpenAI/Azure applies unchanged here.
+     * <p>
+     * Both cases take that calculator, because every xai row carrying token rates also publishes
+     * {@code cache_read_input_token_cost}. They differ only in whether the usage payload reports
+     * cached tokens, which pins down that the subtraction leaves an uncached prompt billed in full.
+     * The cache-free {@link SpanCostCalculator#textGenerationCost} route is covered for this same
+     * usage shape by the {@code deepinfra} and {@code snowflake} cases.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("provideXaiProviderCases")
@@ -611,19 +676,22 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideXaiProviderCases() {
-        // xai/grok-2: input 2e-6, output 1e-5 (no cache rates) -> textGenerationCost
-        // 1000 * 2e-6 + 200 * 1e-5 = 0.002 + 0.002 = 0.004
-        // xai/grok-3: input 3e-6, output 1.5e-5, cache_read 7.5e-7 -> textGenerationWithCacheCostOpenAI
-        // non-cached input = 1000 - 300 = 700
-        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 7.5e-7 = 0.0021 + 0.003 + 0.000225 = 0.005325
+        // xai/grok-4.3: input 1.25e-6, output 2.5e-6, cache_read 2e-7. Pinned to this row because its
+        // rates have held while the grok-2 generation was retired upstream and grok-3 / grok-4 were
+        // re-priced; the above_200k tier rates it also publishes stay inactive at a 1000-token prompt.
+        // No cached tokens in usage -> the whole prompt bills at the input rate
+        // 1000 * 1.25e-6 + 200 * 2.5e-6 = 0.00125 + 0.0005 = 0.00175
+        // With cached tokens -> non-cached input = 1000 - 300 = 700
+        // 700 * 1.25e-6 + 200 * 2.5e-6 + 300 * 2e-7 = 0.000875 + 0.0005 + 0.00006 = 0.001435
         return Stream.of(
-                Arguments.of("plain text-generation route", "xai/grok-2",
-                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.004"),
-                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-3",
+                // Bare usage keys, as logged by SDKs below 1.6.0.
+                Arguments.of("cache-aware route, no cached tokens in usage", "xai/grok-4.3",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00175"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-4.3",
                         Map.of("original_usage.prompt_tokens", 1000,
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
-                        "0.005325"));
+                        "0.001435"));
     }
 
     /**
@@ -779,6 +847,20 @@ class CostServiceTest {
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.000965"));
+    }
+
+    @Test
+    void calculateCostHandlesCerebrasModels() {
+        // Registering cerebras as a canonical provider loads its 7 non-zero-cost entries in
+        // model_prices_and_context_window.json (llama and qwen models served on Cerebras Cloud),
+        // which drop at load time otherwise. No Cerebras model publishes cache rates, so requests
+        // route through SpanCostCalculator.textGenerationCost.
+        // cerebras/llama-3.3-70b: input 8.5e-7, output 1.2e-6
+        // 1000 * 8.5e-7 + 200 * 1.2e-6 = 0.00085 + 0.00024 = 0.00109
+        BigDecimal cost = CostService.calculateCost("cerebras/llama-3.3-70b", "cerebras",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00109");
     }
 
     /**
@@ -965,7 +1047,12 @@ class CostServiceTest {
                 Arguments.of("claude-sonnet-4.5", "anthropic"),
                 // 4. Provider prefix + date suffix: prefix stripped first, then date suffix removed
                 Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
-                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"));
+                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"),
+                // 5. Compact YYYYMMDD dates, the form Anthropic actually ships on every dated id.
+                Arguments.of("gpt-5.2-20251217", "openai"),
+                Arguments.of("claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("anthropic/claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("openai/gpt-5.2-20251217", "openai"));
     }
 
     /**
@@ -1045,16 +1132,18 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideDeepinfraProviderCases() {
-        // deepinfra/Gryphe/MythoMax-L2-13b: input 8e-8, output 9e-8 (no cache) -> textGenerationCost
-        // 1000 * 8e-8 + 200 * 9e-8 = 0.00008 + 0.000018 = 0.000098
+        // deepinfra/anthropic/claude-4-sonnet: input 3.3e-6, output 1.65e-5 (no cache) -> textGenerationCost
+        // 1000 * 3.3e-6 + 200 * 1.65e-5 = 0.0033 + 0.0033 = 0.0066
+        // Pinned to one of DeepInfra's Anthropic-hosted rows: it re-prices its open-weights catalog
+        // in bulk, while none of the anthropic-hosted rows has been re-priced.
         // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7
         // -> textGenerationWithCacheCostOpenAI
         // non-cached input = 1000 - 300 = 700
         // 700 * 3.3e-6 + 200 * 1.65e-5 + 300 * 3.3e-7 = 0.00231 + 0.0033 + 0.000099 = 0.005709
         return Stream.of(
                 Arguments.of("plain text-generation route",
-                        "deepinfra/Gryphe/MythoMax-L2-13b",
-                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.000098"),
+                        "deepinfra/anthropic/claude-4-sonnet",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0066"),
                 Arguments.of("cache-aware route via OpenAI calc",
                         "deepinfra/anthropic/claude-3-7-sonnet-latest",
                         Map.of("original_usage.prompt_tokens", 1000,

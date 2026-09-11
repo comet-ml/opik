@@ -85,8 +85,13 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for spanId '{}':\n\n{}", span.id(), scoreResults)))
-                .flatMap(scoreResults -> storeSpanScores(toFeedbackScores(scoreResults, span), span,
-                        message.userName(), message.workspaceId()))
+                .flatMap(scoreResults -> {
+                    var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
+                    OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc,
+                            pythonScores.valuelessNames(), "spanId", span.id());
+                    return storeSpanScores(toFeedbackScores(pythonScores.storable(), span), span,
+                            message.userName(), message.workspaceId());
+                })
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
