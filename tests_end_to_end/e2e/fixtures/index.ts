@@ -127,6 +127,11 @@ export type {
 } from './summarised-datasets.fixture';
 export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
 export type {
+  TimedThreadRef,
+  DurationThreadsRef,
+  TimedThreadsFixtures,
+} from './timed-threads.fixture';
+export type {
   PagedSpansRef,
   FarFuturePagedSpanRef,
   PagedSpansFixtures,

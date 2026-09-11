@@ -1,5 +1,5 @@
 import type { TestInfo } from '@playwright/test';
-import { test as baseTest } from './summarised-datasets.fixture';
+import { test as baseTest } from './timed-threads.fixture';
 import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './id-aged-traces.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import {
@@ -258,4 +258,4 @@ export const test = baseTest.extend<PagedSpansFixtures>({
   },
 });
 
-export { expect } from './summarised-datasets.fixture';
+export { expect } from './timed-threads.fixture';
