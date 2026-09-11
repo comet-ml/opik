@@ -781,7 +781,8 @@ class ThreadDAOImpl implements ThreadDAO {
      *  - The creator of the thread, which is the created_by of the first trace in the list.
      *  - The creation time of the thread, which is the created_at of the first trace in the list.
      ***/
-    private static final String SELECT_TRACES_THREAD_BY_ID = """
+    @VisibleForTesting
+    static final String SELECT_TRACES_THREAD_BY_ID = """
             WITH traces_ids AS (
                 SELECT
                     id
@@ -803,16 +804,29 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND id IN (SELECT id FROM traces_ids)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), spans_deduped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    id,
+                    last_updated_at,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
+                FROM spans_deduped
                 GROUP BY workspace_id, project_id, trace_id
             ), trace_threads_ids AS (
                 SELECT
