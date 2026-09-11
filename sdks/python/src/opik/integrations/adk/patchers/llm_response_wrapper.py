@@ -39,6 +39,21 @@ class LLMUsageData:
     provider: Optional[str]
 
 
+def pop_response_cost(result_dict: Dict[str, Any]) -> Optional[float]:
+    """Extracts the LiteLLM-computed cost from ADK output and removes it from the result dict.
+
+    Kept separate from ``pop_llm_usage_data``, and called before it, because that
+    function can both give up on and raise over usage it cannot parse, and the two
+    share one try/except: reading the cost afterwards would forfeit it to a problem
+    it has nothing to do with. The cost is reported by the proxy, not derived from
+    the tokens.
+    """
+    if (custom_metadata := result_dict.get("custom_metadata", None)) is None:
+        return None
+
+    return custom_metadata.pop("opik_response_cost", None)
+
+
 def pop_llm_usage_data(
     result_dict: Dict[str, Any], provider: Optional[str]
 ) -> Optional[LLMUsageData]:

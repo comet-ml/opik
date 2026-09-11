@@ -840,6 +840,42 @@ clickhouse:
   # shardsCount is.
   sharding:
     enabled: false
+  # Rendered into the ClickHouseInstallation's `spec.configuration.profiles`. The Altinity
+  # operator turns these into `users.d/chop-generated-profiles.xml`, the last file the server
+  # reads, so a value here wins over both the chart's `conf.d/profiles.xml` below and the
+  # operator's own `users.d/02-clickhouse-default-profile.xml`. That precedence is why the
+  # Distributed insert-queue settings live here rather than in `configuration.files`.
+  #
+  # WARNING: this is a Helm list, and Helm replaces lists wholesale rather than merging them. A
+  # values file declaring its own `additionalProfiles` must repeat the `default` entry below or
+  # silently lose these settings. `tests/clickhouse_profiles_test.yaml` asserts both.
+  #
+  # -- (list) Extra ClickHouse settings profiles. Wins over the operator's own defaults; carries
+  # the Distributed insert-queue baseline on `default`. A values file declaring its own list must
+  # repeat that entry — Helm replaces lists rather than merging them.
+  additionalProfiles:
+    # An INSERT into a Distributed table that does not land on a local replica is serialised to a
+    # file on disk, and a single background sender per node ships those files one per network
+    # round trip unless batching is on — each trip paying the receiving node's async-insert
+    # flush. That caps forwarding throughput hard, and once arrivals exceed it the queue and the
+    # ingestion visibility lag grow without bound, with no errors and no MergeTree throttling.
+    # Batching packs many files into each round trip; split_batch_on_failure retries a failed
+    # batch file-by-file rather than wedging the queue behind one bad file.
+    #
+    # These session-setting spellings are what belongs in a profile: they seed the Distributed
+    # engine's own background_insert_* table settings for tables created without a SETTINGS
+    # clause, which is all of ours.
+    #
+    # IMPORTANT: that seeding happens when the table is ATTACHED — on CREATE and on every server
+    # start — and is read from the server-wide context, so setting them per session has no
+    # effect. Landing these needs a rolling ClickHouse restart. No table recreate is required and
+    # the table definition is untouched; `ALTER TABLE ... MODIFY SETTING` is rejected on a
+    # Distributed table (Code 48, NOT_IMPLEMENTED).
+    #
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
   # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics

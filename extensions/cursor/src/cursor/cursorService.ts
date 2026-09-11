@@ -1,9 +1,24 @@
 import * as vscode from 'vscode';
 import { findAndReturnNewTraces, resolveStateDbPath } from './sessionManager';
 import { applyTurnUsage, logTracesToOpik } from '../opik';
-import { getSessionInfo, updateSessionInfo, getLastSyncedAt, updateLastSyncedAt } from '../state';
+import {
+  getLastSyncedAt,
+  getRequestLedger,
+  getSessionInfo,
+  updateLastSyncedAt,
+  updateRequestLedger,
+  updateSessionInfo,
+} from '../state';
 import { captureException } from '../sentry';
 import { UsageEnricher } from './usage';
+import { acknowledgeUploadedTraces } from './requestIdentity';
+import {
+  aggregateUsageWithRevision,
+  hasAppliedUsage,
+  recordAppliedUsage,
+  recordUsageEventOwnership,
+  usageDeliveryForComposer,
+} from './usageLedger';
 
 export class CursorService {
   private context: vscode.ExtensionContext;
@@ -13,18 +28,52 @@ export class CursorService {
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
-    this.usageEnricher = new UsageEnricher(context, async (pending, usage) => {
+    this.usageEnricher = new UsageEnricher(context, async (pending, usage, eventKeys) => {
       if (!this.apiKey) {
         throw new Error('No API key available to patch span usage');
       }
-      await applyTurnUsage(this.apiKey, pending, usage);
+      const ledger = getRequestLedger(this.context);
+      const entry = ledger[pending.requestKey];
+      if (!entry) {
+        await applyTurnUsage(this.apiKey, pending, usage);
+        return;
+      }
+
+      const delivery = usageDeliveryForComposer(entry, pending.composerId);
+      if (!delivery) {
+        await applyTurnUsage(this.apiKey, pending, usage);
+        return;
+      }
+
+      // A successful ledger update can be followed by a failed pending-queue
+      // removal. Keep that retry local: the same usage key must never be added
+      // to the aggregate or patched to Opik twice.
+      if (hasAppliedUsage(delivery, pending.usageKey)) {
+        recordUsageEventOwnership(delivery, pending.usageKey, eventKeys);
+        entry.lastSeenAt = Date.now();
+        await updateRequestLedger(this.context, ledger);
+        return;
+      }
+
+      // Build the absolute root total without acknowledging this revision yet.
+      // If the remote patch fails, the ledger must stay eligible for retry.
+      const aggregate = aggregateUsageWithRevision(delivery, pending.usageKey, usage);
+      await applyTurnUsage(this.apiKey, pending, aggregate);
+      recordAppliedUsage(delivery, pending.usageKey, usage, eventKeys);
+      delivery.usageStatus = 'complete';
+      entry.lastSeenAt = Date.now();
+      await updateRequestLedger(this.context, ledger);
     });
   }
 
   /**
    * Process cursor traces and log them to Opik
    */
-  async processCursorTraces(apiKey: string, vsInstallationPath: string): Promise<number> {
+  async processCursorTraces(
+    apiKey: string,
+    vsInstallationPath: string,
+    options: { includeHistorical?: boolean; automaticCutoffAt: number }
+  ): Promise<number> {
     // Prevent concurrent processing to avoid duplicates
     if (this.isProcessing) {
       console.log('⏳ Cursor trace processing already in progress, skipping this cycle');
@@ -35,12 +84,21 @@ export class CursorService {
     this.apiKey = apiKey;
     let numberOfTracesLogged = 0;
     let sessionInfo = getSessionInfo(this.context);
+    const requestLedger = getRequestLedger(this.context);
     const lastSyncedAt = getLastSyncedAt(this.context);
     // Capture current time before processing to avoid race conditions
     const currentSyncTime = Date.now();
     
     try {
-      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo, lastSyncedAt, currentSyncTime);
+      const cursorResult = await findAndReturnNewTraces(
+        this.context,
+        vsInstallationPath,
+        requestLedger,
+        lastSyncedAt,
+        currentSyncTime,
+        options.includeHistorical ?? false,
+        options.automaticCutoffAt
+      );
       
       if (cursorResult && cursorResult.tracesData) {
         const { tracesData, updatedSessionInfo } = cursorResult;
@@ -62,9 +120,30 @@ export class CursorService {
         
         if (tracesData.length > 0) {
           console.log(`📤 Logging ${tracesData.length} cursor traces to Opik`);
-          
+
+          // Persist pending identities before network I/O. A failed upload is
+          // retried with exactly the same UUIDv7 ids on the next cycle.
+          if (!this.usageEnricher.isEnabled()) {
+            for (const trace of tracesData) {
+              if (trace.cost_owner && requestLedger[trace.request_key]) {
+                const entry = requestLedger[trace.request_key];
+                if (entry.ownerComposerId === trace.thread_id) {
+                  entry.usageStatus = 'disabled';
+                } else if (trace.thread_id && entry.forkCopies?.[trace.thread_id]) {
+                  entry.forkCopies[trace.thread_id].usageStatus = 'disabled';
+                }
+              }
+            }
+          }
+          await updateRequestLedger(this.context, requestLedger);
+
           const loggedTurns = await logTracesToOpik(apiKey, tracesData);
-          this.usageEnricher.track(loggedTurns);
+          // Trace delivery is durable independently from best-effort usage
+          // queue persistence. Never re-upload a trace because the local cost
+          // work queue temporarily failed to save.
+          acknowledgeUploadedTraces(tracesData, requestLedger);
+          await updateRequestLedger(this.context, requestLedger);
+          await this.usageEnricher.track(loggedTurns);
           
           // Update session info for each composer session
           Object.entries(updatedSessionInfo).forEach(([sessionId, sessionData]) => {
@@ -91,13 +170,17 @@ export class CursorService {
         } else {
           // This is normal behavior when there are no new conversations
           console.log(`ℹ️ No new cursor traces to log`);
+          // Reconciliation can still populate the ledger while migrating an
+          // installation whose already-sent traces must not be uploaded again.
+          await updateRequestLedger(this.context, requestLedger);
         }
 
-        updateSessionInfo(this.context, sessionInfo);
-        
         // Update lastSyncedAt after successful processing (even if no traces uploaded)
         // This prevents re-querying the same conversations
-        updateLastSyncedAt(this.context, currentSyncTime);
+        await Promise.all([
+          updateSessionInfo(this.context, sessionInfo),
+          updateLastSyncedAt(this.context, currentSyncTime),
+        ]);
       } else {
         const error = new Error("No cursor data returned from findAndReturnNewTraces");
         captureException(error);

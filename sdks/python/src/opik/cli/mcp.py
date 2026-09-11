@@ -130,8 +130,9 @@ def configure(
 ) -> None:
     """Register the Opik MCP server with your AI client(s).
 
-    Reuses your existing Opik configuration (~/.opik.config), so run
-    `opik configure` first if you have not configured Opik yet.
+    Runs without the SDK installed: `uvx opik mcp configure`. Reuses your
+    existing Opik configuration (~/.opik.config) and offers to create one if
+    none exists.
 
     Without a terminal — a coding agent, a script — name the client, which is what
     makes the request explicit:

@@ -9729,6 +9729,9 @@ components:
           type: string
         resource:
           type: string
+        expires_at:
+          type: string
+          format: date-time
     AnalyticsQueryResponse:
       type: object
       properties:
@@ -13238,17 +13241,17 @@ components:
           - function
         content:
           type: string
-        reasoning_content:
+        reasoningContent:
           type: string
         name:
           type: string
-        tool_calls:
+        toolCalls:
           type: array
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
           type: string
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
       type: object
@@ -13260,7 +13263,7 @@ components:
           $ref: "#/components/schemas/AssistantMessage"
         delta:
           $ref: "#/components/schemas/Delta"
-        finish_reason:
+        finishReason:
           type: string
         logprobs:
           $ref: "#/components/schemas/LogProbs"
@@ -13280,14 +13283,14 @@ components:
             $ref: "#/components/schemas/ChatCompletionChoice"
         usage:
           $ref: "#/components/schemas/Usage"
-        system_fingerprint:
+        systemFingerprint:
           type: string
-        service_tier:
+        serviceTier:
           type: string
     CompletionTokensDetails:
       type: object
       properties:
-        reasoning_tokens:
+        reasoningTokens:
           type: integer
           format: int32
     Delta:
@@ -13297,13 +13300,13 @@ components:
           type: string
         content:
           type: string
-        reasoning_content:
+        reasoningContent:
           type: string
-        tool_calls:
+        toolCalls:
           type: array
           items:
             $ref: "#/components/schemas/ToolCall"
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     FunctionCall:
       type: object
@@ -13335,7 +13338,7 @@ components:
     PromptTokensDetails:
       type: object
       properties:
-        cached_tokens:
+        cachedTokens:
           type: integer
           format: int32
     ToolCall:
@@ -13355,18 +13358,18 @@ components:
     Usage:
       type: object
       properties:
-        total_tokens:
+        totalTokens:
           type: integer
           format: int32
-        prompt_tokens:
+        promptTokens:
           type: integer
           format: int32
-        prompt_tokens_details:
+        promptTokensDetails:
           $ref: "#/components/schemas/PromptTokensDetails"
-        completion_tokens:
+        completionTokens:
           type: integer
           format: int32
-        completion_tokens_details:
+        completionTokensDetails:
           $ref: "#/components/schemas/CompletionTokensDetails"
     ChatCompletionRequest:
       type: object
@@ -13380,7 +13383,7 @@ components:
         temperature:
           type: number
           format: double
-        top_p:
+        topP:
           type: number
           format: double
         "n":
@@ -13388,32 +13391,32 @@ components:
           format: int32
         stream:
           type: boolean
-        stream_options:
+        streamOptions:
           $ref: "#/components/schemas/StreamOptions"
         stop:
           type: array
           items:
             type: string
-        max_tokens:
+        maxTokens:
           type: integer
           format: int32
-        max_completion_tokens:
+        maxCompletionTokens:
           type: integer
           format: int32
-        presence_penalty:
+        presencePenalty:
           type: number
           format: double
-        frequency_penalty:
+        frequencyPenalty:
           type: number
           format: double
-        logit_bias:
+        logitBias:
           type: object
           additionalProperties:
             type: integer
             format: int32
         user:
           type: string
-        response_format:
+        responseFormat:
           $ref: "#/components/schemas/ResponseFormat"
         seed:
           type: integer
@@ -13422,9 +13425,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Tool"
-        tool_choice:
+        toolChoice:
           type: object
-        parallel_tool_calls:
+        parallelToolCalls:
           type: boolean
         store:
           type: boolean
@@ -13432,20 +13435,20 @@ components:
           type: object
           additionalProperties:
             type: string
-        reasoning_effort:
+        reasoningEffort:
           type: string
-        service_tier:
+        serviceTier:
           type: string
         logprobs:
           type: boolean
-        top_logprobs:
+        topLogprobs:
           type: integer
           format: int32
         functions:
           type: array
           items:
             $ref: "#/components/schemas/Function"
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     Function:
       type: object
@@ -13491,12 +13494,12 @@ components:
           - text
           - json_object
           - json_schema
-        json_schema:
+        jsonSchema:
           $ref: "#/components/schemas/JsonSchema"
     StreamOptions:
       type: object
       properties:
-        include_usage:
+        includeUsage:
           type: boolean
     Tool:
       type: object

@@ -3,11 +3,16 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.utils.ValidationUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.FinishReason;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -18,6 +23,7 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -674,5 +680,156 @@ class OnlineScoringEngineParsingTest {
 
         Mockito.verify(logger).warn(Mockito.contains("Nothing was scored"), Mockito.eq("traceId"),
                 Mockito.eq("t-1"), Mockito.contains("was not valid JSON"));
+    }
+
+    /**
+     * The Python side of the same concern the tests above cover for a judge answer: a metric may return a
+     * score with no value, which cannot be stored, and reporting it must not be forgeable or floodable.
+     */
+    @Nested
+    @DisplayName("valueless Python scores")
+    class ValuelessPythonScoresTests {
+
+        private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
+        private final Logger userFacingLogger = Mockito.mock(Logger.class);
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("split Python results by whether they can be stored")
+        void splitsPythonResultsByWhetherTheyCanBeStored(String scenario, List<PythonScoreResult> results,
+                List<String> expectedStorableNames, List<String> expectedValuelessNames) {
+            var split = OnlineScoringEngine.toStorablePythonScores(results);
+
+            assertThat(split.storable()).extracting(PythonScoreResult::name)
+                    .containsExactlyElementsOf(expectedStorableNames);
+            assertThat(split.valuelessNames()).containsExactlyElementsOf(expectedValuelessNames);
+        }
+
+        private static Stream<Arguments> splitsPythonResultsByWhetherTheyCanBeStored() {
+            var valued = pythonScore(BigDecimal.valueOf(0.75));
+            var zero = pythonScore(BigDecimal.ZERO);
+            var valueless = pythonScore(null);
+            var unnamed = PythonScoreResult.builder().build();
+
+            return Stream.of(
+                    arguments("a mixed batch keeps the valued score and reports the other",
+                            List.of(valued, valueless), List.of(valued.name()), List.of(valueless.name())),
+                    arguments("zero is a value, not a missing one",
+                            List.of(zero), List.of(zero.name()), List.of()),
+                    arguments("an unnamed valueless score is reported, not silently dropped",
+                            List.of(valued, unnamed), List.of(valued.name()), Collections.singletonList("")),
+                    arguments("a null entry is reported without being dereferenced",
+                            Stream.of(valued, null).toList(), List.of(valued.name()), Collections.singletonList("")),
+                    arguments("an empty result stores nothing", List.of(), List.of(), List.of()),
+                    arguments("a null result stores nothing", null, List.of(), List.of()));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("sanitize the score name written to the rule log")
+        void sanitizesTheScoreNameWrittenToTheRuleLog(String scenario, String scoreName, String expectedFragment) {
+            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(),
+                    Collections.singletonList(scoreName), "traceId", ID_GENERATOR.generateId());
+
+            assertThat(loggedArgument(0)).doesNotContain("\n", "\r").contains(expectedFragment);
+        }
+
+        private static Stream<Arguments> sanitizesTheScoreNameWrittenToTheRuleLog() {
+            return Stream.of(
+                    arguments("a line break cannot forge a log entry",
+                            "ok\nERROR [2026-01-01 00:00:00,000] forged entry", "ok ERROR"),
+                    arguments("an oversized name cannot flood one",
+                            RandomStringUtils.secure().nextAlphabetic(500), "…"),
+                    arguments("a blank name still names the score", "", "<unnamed>"),
+                    arguments("a null name still names the score", null, "<unnamed>"));
+        }
+
+        @Test
+        @DisplayName("sanitize the entity id too, since a thread id is caller-supplied")
+        void sanitizesTheEntityId() {
+            var forged = "%s\nERROR [2026-01-01 00:00:00,000] forged entry"
+                    .formatted(RandomStringUtils.secure().nextAlphanumeric(10));
+
+            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(),
+                    List.of(randomScoreName()), "threadId", forged);
+
+            assertThat(loggedArgument(2)).doesNotContain("\n", "\r").contains("ERROR");
+        }
+
+        @Test
+        @DisplayName("snapshot the lists it was built from, so a later mutation cannot change the result")
+        void snapshotsTheListsItWasBuiltFrom() {
+            var results = new ArrayList<>(List.of(pythonScore(BigDecimal.ONE)));
+            var names = new ArrayList<>(List.of(randomScoreName()));
+
+            var split = OnlineScoringEngine.StorablePythonScores.builder()
+                    .storable(results)
+                    .valuelessNames(names)
+                    .build();
+
+            results.clear();
+            names.clear();
+
+            assertThat(split.storable()).hasSize(1);
+            assertThat(split.valuelessNames()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("cap the reported names and count the remainder")
+        void capsTheReportedNamesAndCountsTheRemainder() {
+            var names = IntStream.range(0, 25).mapToObj("score_%d"::formatted).toList();
+
+            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(), names, "traceId",
+                    ID_GENERATOR.generateId());
+
+            assertThat(loggedArgument(0))
+                    .contains("'score_0'")
+                    .contains("'score_9'")
+                    .doesNotContain("'score_10'")
+                    .contains("and 15 more");
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("write nothing when no score was dropped")
+        void writesNothingWhenNoScoreWasDropped(String scenario, List<String> valuelessNames) {
+            OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc(), valuelessNames, "traceId",
+                    ID_GENERATOR.generateId());
+
+            Mockito.verifyNoInteractions(userFacingLogger);
+        }
+
+        private static Stream<Arguments> writesNothingWhenNoScoreWasDropped() {
+            return Stream.of(
+                    arguments("nothing was dropped", List.of()),
+                    arguments("the caller passed no list at all", null));
+        }
+
+        /** The nth interpolated argument of the single warning the helper wrote. */
+        private String loggedArgument(int index) {
+            var captor = ArgumentCaptor.forClass(Object.class);
+            Mockito.verify(userFacingLogger).warn(Mockito.anyString(), captor.capture(), captor.capture(),
+                    captor.capture());
+            return String.valueOf(captor.getAllValues().get(index));
+        }
+
+        private static Map<String, String> mdc() {
+            return Map.of(
+                    "workspace_id", ID_GENERATOR.generateId().toString(),
+                    "rule_id", ID_GENERATOR.generateId().toString());
+        }
+
+        private static PythonScoreResult pythonScore(BigDecimal value) {
+            return PythonScoreResult.builder()
+                    .name(randomScoreName())
+                    .value(value)
+                    .reason(RandomStringUtils.secure().nextAlphanumeric(16))
+                    .build();
+        }
+
+        private static String randomScoreName() {
+            return "score_" + RandomStringUtils.secure().nextAlphanumeric(10);
+        }
     }
 }

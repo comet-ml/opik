@@ -40,21 +40,48 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --receive-timeout N       seconds tolerated between server packets (receive_timeout), default 1800 against
+#                             ClickHouse's own 300. In this driver it also sets distributed_ddl_task_timeout, which is
+#                             the binding limit -- see the CH_ARGS comment below, and ../README.md for the trade-off.
 #   --confirm         actually run the drop/recycle; without it, prints what would happen and exits (dry run).
+#                   ONE OF THE TWO FLAGS BELOW IS REQUIRED with --confirm, and WHICH ONE depends on the branch. The
+#                   parked backup is the ONLY copy of the writes that sit either side of the swap and this script is what
+#                   destroys it, so the flag has to state the fact the operator is actually asserting. They are separate
+#                   flags rather than one because the two branches assert DIFFERENT things, and a gate in front of an
+#                   irreversible drop should not have a name that is true on one branch and false on the other. Neither
+#                   is checkable from SQL — nothing in the data records that a driver ran — so both are operator-asserted,
+#                   the same shape as --confirm-retention-paused. Both dry runs name the one this estate needs.
+#   --confirm-gap-reconciled
+#                     AFTER A CUTOVER, for the DROP of traces_pre_cutover_backup, which holds every trace written to the
+#                     old table between the last delta pass and the EXCHANGE. Nothing holds those writes across the swap,
+#                     so they are NOT live until reconcile.sh has swept them back. Asserts `reconcile.sh` ran and its
+#                     postcondition returned 0 (missing_keys / stale_keys / payload_mismatch_keys all zero) — on EVERY
+#                     shard, since every statement it issues is shard-local while this DROP is ON CLUSTER.
+#   --confirm-post-cutover-decision
+#                     AFTER A ROLLBACK, for the RECYCLE of traces_post_rollback_backup, which holds the post-cutover
+#                     writes the promote made non-live. Asserts the accept-or-recover decision rollback.sh printed has
+#                     been MADE: either `reconcile.sh --confirm-reimport-successor-writes` merged them back, or they are
+#                     knowingly being discarded. NOT that a recovery ran — that neither outcome is an accident.
 
 set -euo pipefail
 
 DATABASE=""
 CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
+RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total query time. See --receive-timeout.
 CONFIRM=0
+CONFIRM_GAP_RECONCILED=0        # post-cutover branch. See --confirm-gap-reconciled.
+CONFIRM_POST_CUTOVER_DECISION=0 # post-rollback branch. See --confirm-post-cutover-decision.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm) CONFIRM=1; shift ;;
+        --confirm-gap-reconciled) CONFIRM_GAP_RECONCILED=1; shift ;;
+        --confirm-post-cutover-decision) CONFIRM_POST_CUTOVER_DECISION=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -64,9 +91,23 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
+[[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
+
+# One place for the connection and client-side options, so every call site below carries the same host, port,
+# database, log_comment and receive_timeout, and cannot drift from the others.
+CH_ARGS=()
+[[ -z "$CH_HOST" ]] || CH_ARGS+=(--host "$CH_HOST")
+[[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
+# distributed_ddl_task_timeout as well as receive_timeout, and here it is the binding one: this driver runs no long
+# SELECT, and its DROP/TRUNCATE are ON CLUSTER, whose wait is capped server-side at 180s by default with
+# distributed_ddl_output_mode = 'throw'. A DROP ... SYNC that outlives the cap raises TIMEOUT_EXCEEDED however high the
+# client timeout is, while the DDL keeps running in the background — and on the recycle path that aborts between the
+# TRUNCATE and the RENAME.
+CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" \
+          --distributed_ddl_task_timeout="$RECEIVE_TIMEOUT" --log_comment 'traces_local_v2_cutover:finalize')
 
 ch() {
-    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:finalize' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --query "$1"
 }
 
 # Cluster-wide detection. finalize is the one irreversible step and production is multi-replica, so a table's presence is
@@ -124,6 +165,59 @@ else
     exit 0
 fi
 
+# The parked-writes gate. Which flag is required depends on the branch, because the two branches assert different facts
+# — see their option docs. Checked once the parked name is known, so the diagnostic can name the right flag and the right
+# hazard, and only on the acting path: a dry run exists to read the estate, and refusing it would tell the operator
+# nothing. Both dry runs name the flag this estate needs, so its first appearance is never a surprise at --confirm.
+#
+# Passing the OTHER branch's flag is refused rather than accepted: each one asserts a fact that is not established on
+# this branch, so honoring it would let the operator discharge the gate with the wrong assertion.
+if [[ "$BACKUP" == "traces_pre_cutover_backup" ]]; then
+    REQUIRED_FLAG="--confirm-gap-reconciled"
+    FLAG_GIVEN="$CONFIRM_GAP_RECONCILED"
+    WRONG_FLAG="--confirm-post-cutover-decision"
+    WRONG_GIVEN="$CONFIRM_POST_CUTOVER_DECISION"
+else
+    REQUIRED_FLAG="--confirm-post-cutover-decision"
+    FLAG_GIVEN="$CONFIRM_POST_CUTOVER_DECISION"
+    WRONG_FLAG="--confirm-gap-reconciled"
+    WRONG_GIVEN="$CONFIRM_GAP_RECONCILED"
+fi
+
+# The other branch's flag is an ERROR, not surplus. Demanding the right one already stops the gate being discharged by
+# the wrong assertion alone, so this catches the other shape: both passed, which means the operator asserted a fact
+# that is not established on this estate — copy-paste rather than a decision. reconcile.sh refuses its own
+# cross-direction flags for the same reason, and the two drivers should not disagree on that.
+if [[ "$WRONG_GIVEN" == "1" ]]; then
+    echo "ERROR: $WRONG_FLAG does not apply to this estate — '$BACKUP' is parked, so the assertion this step needs is" >&2
+    echo "       $REQUIRED_FLAG. The two are not interchangeable and asserting both asserts something that is not" >&2
+    echo "       established here. Drop $WRONG_FLAG and re-run." >&2
+    exit 2
+fi
+
+if [[ "$CONFIRM" == "1" && "$FLAG_GIVEN" != "1" ]]; then
+    echo "ERROR: retiring '$BACKUP' requires $REQUIRED_FLAG." >&2
+    if [[ "$BACKUP" == "traces_pre_cutover_backup" ]]; then
+        echo "       This table holds every trace written to the old table between the last delta pass and the EXCHANGE." >&2
+        echo "       Nothing holds those writes across the swap, so they are not live on the successor until reconcile.sh" >&2
+        echo "       has swept them back. Dropping the backup now would destroy the only copy — and this DROP is" >&2
+        echo "       ON CLUSTER, so it destroys every shard's. Run, and confirm it reports" >&2
+        echo "       missing_keys=0 stale_keys=0 payload_mismatch_keys=0 on EVERY shard:" >&2
+        echo "         ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --report-only \\" >&2
+        echo "             --gap-start '<delta_start> UTC' --swap-done '<exchange_done> UTC'" >&2
+    else
+        echo "       This table holds the post-cutover writes the promote made non-live. Recycling it discards them for" >&2
+        echo "       good. The flag asserts the accept-or-recover decision rollback.sh printed has been MADE — either" >&2
+        echo "       'reconcile.sh --confirm-reimport-successor-writes' merged them back into the restored original, or" >&2
+        echo "       they are knowingly being discarded. To size what would be lost first:" >&2
+        echo "         ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --report-only \\" >&2
+        echo "             --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'" >&2
+    fi
+    echo "       Nothing in the data records that a driver ran, so this cannot be checked from SQL — it is asserted, the" >&2
+    echo "       same shape as --confirm-retention-paused. Re-run with $REQUIRED_FLAG once it is true." >&2
+    exit 2
+fi
+
 LIVE_ROWS="$(max_rows traces)"
 BACKUP_ROWS="$(max_rows "$BACKUP")"
 
@@ -164,7 +258,9 @@ if [[ "$BACKUP" == "traces_post_rollback_backup" ]]; then
     fi
     if [[ "$CONFIRM" != "1" ]]; then
         echo "DRY RUN: would recycle $DATABASE.$BACKUP into an empty $DATABASE.traces_local_v2 (TRUNCATE + RENAME)."
-        echo "         Re-run with --confirm."
+        echo "         Re-run with --confirm --confirm-post-cutover-decision — the second flag asserts the"
+        echo "         accept-or-recover decision on the post-cutover writes this table holds has been MADE"
+        echo "         (see rollback.sh's output); it does not assert that a recovery ran."
         exit 0
     fi
     ch "TRUNCATE TABLE $BACKUP ON CLUSTER '{cluster}' SETTINGS max_table_size_to_drop = 0"
@@ -172,7 +268,9 @@ if [[ "$BACKUP" == "traces_post_rollback_backup" ]]; then
     echo "Recycled $DATABASE.$BACKUP into an empty $DATABASE.traces_local_v2. The rollback is finalized."
 else
     if [[ "$CONFIRM" != "1" ]]; then
-        echo "DRY RUN: would DROP TABLE $DATABASE.$BACKUP. Re-run with --confirm to drop it."
+        echo "DRY RUN: would DROP TABLE $DATABASE.$BACKUP."
+        echo "         Re-run with --confirm --confirm-gap-reconciled — the second flag asserts reconcile.sh has swept"
+        echo "         the last delta -> EXCHANGE gap out of this table and its postcondition returned 0 on every shard."
         exit 0
     fi
     ch "DROP TABLE IF EXISTS $BACKUP ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0"
