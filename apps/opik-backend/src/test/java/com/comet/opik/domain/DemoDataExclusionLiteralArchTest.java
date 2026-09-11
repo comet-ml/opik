@@ -66,9 +66,9 @@ class DemoDataExclusionLiteralArchTest {
 
     /**
      * The fetch side. The unscoped fetch loads every demo project in the installation, so a new caller is a new
-     * place that can put the whole set into a query. The trace paths use {@link ProjectService#getDemoProjectIds}
-     * instead, which is scoped to the projects that actually had activity, and the span usage paths are the only
-     * remaining callers until they migrate too.
+     * place that can put the whole set into a query. The trace paths use
+     * {@link ProjectService#getDemoProjectIdsInWorkspaces} instead, which is scoped to the workspaces that
+     * actually had activity, and the span usage paths are the only remaining callers until they migrate too.
      *
      * <p><b>Deliberately no {@code allowEmptyShould}</b>: the rule selects the unscoped method itself, so an empty
      * selection means it was renamed or removed and the rule guards nothing. Failing then is the point.
@@ -82,7 +82,7 @@ class DemoDataExclusionLiteralArchTest {
             .because("""
                     fetching every demo project in the installation is unbounded — one per signup — so it must not \
                     spread beyond the span usage paths that have yet to migrate. New callers scope the lookup to the \
-                    ids they already hold, via ProjectService#getDemoProjectIds\
+                    workspaces they already hold, via ProjectService#getDemoProjectIdsInWorkspaces\
                     """);
 
     /**

@@ -91,7 +91,7 @@ public interface ProjectService {
 
     Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
 
-    Mono<Set<UUID>> getDemoProjectIds(Set<UUID> candidateProjectIds);
+    Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
     Mono<Project> getOrCreate(String projectName);
 
@@ -142,7 +142,7 @@ class ProjectServiceImpl implements ProjectService {
     private static final Map<String, String> SORTING_FIELD_MAPPING = Map.of(
             SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
 
-    private static final int DEMO_PROJECT_ID_CHUNK_SIZE = 1_000;
+    private static final int DEMO_PROJECT_WORKSPACE_CHUNK_SIZE = 1_000;
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -487,21 +487,29 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     /**
-     * Bounded demo-project lookup: which of {@code candidateProjectIds} are demo projects.
+     * Bounded demo-project lookup: the demo projects belonging to {@code workspaceIds}.
      *
      * <p>{@link #getDemoProjectIdsWithTimestamps()} is unscoped by design, so it grows with every signup and every
-     * caller pays for the whole demo population. Callers that only need to test ids they already hold use this
-     * instead, and lose nothing by it: a demo project outside the candidate set cannot change their answer. The
-     * candidates are chunked to keep each {@code IN} list bounded however many are passed.
+     * caller pays for the whole demo population. Callers that only need to classify activity in workspaces they
+     * already hold use this instead. Scoping by workspace is what lets
+     * {@code projects_workspace_id_name_uk (workspace_id, name)} serve the query, and it bounds the result to the
+     * demo projects of those workspaces — a handful each, since {@link DemoData#PROJECTS} is a fixed list.
+     *
+     * <p>Returning a demo project that saw no activity is harmless: callers test membership, so an id absent from
+     * their rows is never consulted.
+     *
+     * <p>The workspaces are chunked, which keeps the {@code IN} list within the driver's bind-parameter limit
+     * however many are passed. A day's active workspaces sit well inside one chunk, so this is a single query in
+     * practice rather than a loop.
      */
     @Override
-    public Mono<Set<UUID>> getDemoProjectIds(Set<UUID> candidateProjectIds) {
-        if (CollectionUtils.isEmpty(candidateProjectIds)) {
+    public Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds) {
+        if (CollectionUtils.isEmpty(workspaceIds)) {
             return Mono.just(Set.of());
         }
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(ProjectDAO.class);
-            return Lists.partition(List.copyOf(candidateProjectIds), DEMO_PROJECT_ID_CHUNK_SIZE)
+            return Lists.partition(List.copyOf(workspaceIds), DEMO_PROJECT_WORKSPACE_CHUNK_SIZE)
                     .stream()
                     .flatMap(chunk -> repository.findByGlobalNames(DemoData.PROJECTS, Set.copyOf(chunk)).stream())
                     .map(Project::id)

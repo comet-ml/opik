@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 
 class ProjectServiceImplTest {
 
-    private static final int DEMO_PROJECT_ID_CHUNK_SIZE = 1_000;
+    private static final int DEMO_PROJECT_WORKSPACE_CHUNK_SIZE = 1_000;
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -50,17 +50,18 @@ class ProjectServiceImplTest {
 
     /**
      * The bounded demo-project lookup, which replaced fetching every demo project in the installation for the daily
-     * usage counts. Chunking the candidates is the part with something to get wrong.
+     * usage counts. A day's active workspaces fit in one chunk, so chunking is a bound rather than a loop — but it
+     * is still the part with something to get wrong.
      */
     @Nested
-    class GetDemoProjectIds {
+    class GetDemoProjectIdsInWorkspaces {
 
         @Test
-        void getDemoProjectIds__whenCandidatesExceedTheChunkSize__thenUnionsWhatEveryChunkMatched() {
-            var candidateIds = Stream.generate(ID_GENERATOR::generateId)
-                    .limit(DEMO_PROJECT_ID_CHUNK_SIZE + 1)
+        void getDemoProjectIdsInWorkspaces__whenWorkspacesExceedTheChunkSize__thenUnionsWhatEveryChunkMatched() {
+            var workspaceIds = Stream.generate(() -> UUID.randomUUID().toString())
+                    .limit(DEMO_PROJECT_WORKSPACE_CHUNK_SIZE + 1)
                     .collect(Collectors.toUnmodifiableSet());
-            var chunks = Lists.partition(List.copyOf(candidateIds), DEMO_PROJECT_ID_CHUNK_SIZE);
+            var chunks = Lists.partition(List.copyOf(workspaceIds), DEMO_PROJECT_WORKSPACE_CHUNK_SIZE);
             assertThat(chunks).hasSize(2);
 
             stubTransaction();
@@ -70,26 +71,26 @@ class ProjectServiceImplTest {
                     .map(this::stubDemoProjectInChunk)
                     .collect(Collectors.toUnmodifiableSet());
 
-            var actualIds = projectService.getDemoProjectIds(candidateIds).block();
+            var actualIds = projectService.getDemoProjectIdsInWorkspaces(workspaceIds).block();
 
             assertThat(actualIds).isEqualTo(expectedIds);
         }
 
         @Test
-        void getDemoProjectIds__whenNoCandidateIsADemoProject__thenReturnsEmpty() {
-            var candidateIds = Set.of(ID_GENERATOR.generateId());
+        void getDemoProjectIdsInWorkspaces__whenNoWorkspaceHasADemoProject__thenReturnsEmpty() {
+            var workspaceIds = Set.of(UUID.randomUUID().toString());
 
             stubTransaction();
-            when(projectDAO.findByGlobalNames(DemoData.PROJECTS, candidateIds)).thenReturn(List.of());
+            when(projectDAO.findByGlobalNames(DemoData.PROJECTS, workspaceIds)).thenReturn(List.of());
 
-            var actualIds = projectService.getDemoProjectIds(candidateIds).block();
+            var actualIds = projectService.getDemoProjectIdsInWorkspaces(workspaceIds).block();
 
             assertThat(actualIds).isEmpty();
         }
 
         @Test
-        void getDemoProjectIds__whenNoCandidates__thenReturnsEmptyWithoutTouchingTheDatabase() {
-            var actualIds = projectService.getDemoProjectIds(Set.of()).block();
+        void getDemoProjectIdsInWorkspaces__whenNoWorkspaces__thenReturnsEmptyWithoutTouchingTheDatabase() {
+            var actualIds = projectService.getDemoProjectIdsInWorkspaces(Set.of()).block();
 
             assertThat(actualIds).isEmpty();
             verifyNoInteractions(template);
@@ -103,15 +104,14 @@ class ProjectServiceImplTest {
             when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
         }
 
-        private UUID stubDemoProjectInChunk(List<UUID> chunk) {
-            var demoProjectId = chunk.getFirst();
+        private UUID stubDemoProjectInChunk(List<String> chunk) {
             var demoProject = factory.manufacturePojo(Project.class).toBuilder()
-                    .id(demoProjectId)
+                    .id(ID_GENERATOR.generateId())
                     .name(DemoData.PROJECTS.getFirst())
                     .build();
             when(projectDAO.findByGlobalNames(DemoData.PROJECTS, Set.copyOf(chunk)))
                     .thenReturn(List.of(demoProject));
-            return demoProjectId;
+            return demoProject.id();
         }
     }
 }

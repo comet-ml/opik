@@ -711,8 +711,8 @@ class TraceServiceImpl implements TraceService {
         return dao.getTraceBIInformationPerProject()
                 .collectList()
                 .flatMap(rows -> projectService
-                        .getDemoProjectIds(rows.stream()
-                                .map(WorkspaceProjectUserCount::projectId)
+                        .getDemoProjectIdsInWorkspaces(rows.stream()
+                                .map(WorkspaceProjectUserCount::workspaceId)
                                 .collect(Collectors.toSet()))
                         .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspaceAndUser(rows, demoProjectIds)))
                 .map(biInformation -> BiInformationResponse.builder()
@@ -722,14 +722,14 @@ class TraceServiceImpl implements TraceService {
 
     /**
      * Previous-day trace counts per workspace, with demo-project activity dropped. The demo lookup is scoped to the
-     * projects that actually had traces, which is what keeps it independent of how many demo projects exist.
+     * workspaces that actually had traces, which is what keeps it independent of how many demo projects exist.
      */
     private Mono<Map<String, Long>> countsByWorkspaceExcludingDemoProjects() {
         return dao.countTracesPerWorkspaceProject()
                 .collectList()
                 .flatMap(rows -> projectService
-                        .getDemoProjectIds(rows.stream()
-                                .map(WorkspaceProjectCount::projectId)
+                        .getDemoProjectIdsInWorkspaces(rows.stream()
+                                .map(WorkspaceProjectCount::workspaceId)
                                 .collect(Collectors.toSet()))
                         .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspace(rows, demoProjectIds)));
     }

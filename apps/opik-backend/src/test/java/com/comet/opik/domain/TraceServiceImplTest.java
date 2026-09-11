@@ -434,8 +434,7 @@ class TraceServiceImplTest {
                             .projectId(DEMO_PROJECT_ID)
                             .count(randomCount())
                             .build()));
-            when(projectService.getDemoProjectIds(
-                    Set.of(REGULAR_PROJECT_ID, OTHER_REGULAR_PROJECT_ID, DEMO_PROJECT_ID)))
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID)))
                     .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
 
             var expectedResponse = TraceCountResponse.builder()
@@ -481,8 +480,7 @@ class TraceServiceImplTest {
                             .user(USER)
                             .count(randomCount())
                             .build()));
-            when(projectService.getDemoProjectIds(
-                    Set.of(REGULAR_PROJECT_ID, OTHER_REGULAR_PROJECT_ID, DEMO_PROJECT_ID)))
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID)))
                     .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
 
             var expectedResponse = BiInformationResponse.builder()
@@ -525,8 +523,7 @@ class TraceServiceImplTest {
                             .projectId(OTHER_REGULAR_PROJECT_ID)
                             .count(otherWorkspaceCount)
                             .build()));
-            when(projectService.getDemoProjectIds(
-                    Set.of(REGULAR_PROJECT_ID, OTHER_REGULAR_PROJECT_ID, DEMO_PROJECT_ID)))
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID, OTHER_WORKSPACE_ID)))
                     .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
 
             var expectedCount = regularCount + otherWorkspaceCount;
@@ -537,12 +534,13 @@ class TraceServiceImplTest {
         }
 
         /**
-         * The bound, asserted where it is cheap to assert: the lookup only ever sees the projects that had traces.
+         * The bound, asserted where it is cheap to assert: the lookup only ever sees the workspaces that had
+         * traces.
          * {@code DemoDataExclusionLiteralArchTest} forbids the unscoped fetch from gaining callers at build time;
          * this pins that the trace path does not reach for it at runtime.
          */
         @Test
-        void countTracesPerWorkspace__whenFolding__thenTheDemoProjectLookupIsScopedToTheProjectsThatHadTraces() {
+        void countTracesPerWorkspace__whenFolding__thenTheDemoProjectLookupIsScopedToTheWorkspacesThatHadTraces() {
             when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.just(
                     WorkspaceProjectCount.builder()
                             .workspaceId(WORKSPACE_ID)
@@ -554,19 +552,19 @@ class TraceServiceImplTest {
                             .projectId(DEMO_PROJECT_ID)
                             .count(randomCount())
                             .build()));
-            when(projectService.getDemoProjectIds(Set.of(REGULAR_PROJECT_ID, DEMO_PROJECT_ID)))
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID)))
                     .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
 
             traceService.countTracesPerWorkspace().block();
 
-            verify(projectService).getDemoProjectIds(Set.of(REGULAR_PROJECT_ID, DEMO_PROJECT_ID));
+            verify(projectService).getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID));
             verify(projectService, never()).getDemoProjectIdsWithTimestamps();
         }
 
         @Test
         void countTracesPerWorkspace__whenNoTraces__thenReturnsEmptyResponse() {
             when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.empty());
-            when(projectService.getDemoProjectIds(Set.of())).thenReturn(Mono.just(Set.of()));
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of())).thenReturn(Mono.just(Set.of()));
 
             var expectedResponse = TraceCountResponse.builder().workspacesTracesCount(List.of()).build();
 

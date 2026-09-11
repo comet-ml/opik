@@ -3223,10 +3223,10 @@ class ProjectsResourceTest {
      */
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class GetDemoProjectIds {
+    class GetDemoProjectIdsInWorkspaces {
 
         @Test
-        void getDemoProjectIds__whenCandidatesAreGiven__thenReturnsOnlyTheDemoProjectsAmongThem() {
+        void getDemoProjectIdsInWorkspaces__whenWorkspacesAreGiven__thenReturnsOnlyTheirDemoProjects() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
@@ -3234,16 +3234,22 @@ class ProjectsResourceTest {
 
             var demoProjectId = projectResourceClient.createProject(DemoData.PROJECTS.getFirst(), apiKey,
                     workspaceName);
-            var demoProjectOutOfScopeId = projectResourceClient.createProject(DemoData.PROJECTS.get(1), apiKey,
-                    workspaceName);
             var regularProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
                     workspaceName);
 
-            var actualIds = projectService.getDemoProjectIds(Set.of(demoProjectId, regularProjectId)).block();
+            var otherApiKey = UUID.randomUUID().toString();
+            var otherWorkspaceId = UUID.randomUUID().toString();
+            var otherWorkspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, otherWorkspaceId);
+            var demoProjectOutOfScopeId = projectResourceClient.createProject(DemoData.PROJECTS.getFirst(),
+                    otherApiKey, otherWorkspaceName);
+
+            var actualIds = projectService.getDemoProjectIdsInWorkspaces(Set.of(workspaceId)).block();
 
             assertThat(actualIds)
-                    .as("only the demo projects among the candidates: '%s' is not a demo project, and demo project "
-                            + "'%s' was not offered as a candidate", regularProjectId, demoProjectOutOfScopeId)
+                    .as("only the demo projects of the given workspaces: '%s' is not a demo project, and demo "
+                            + "project '%s' belongs to a workspace that was not asked for", regularProjectId,
+                            demoProjectOutOfScopeId)
                     .containsExactly(demoProjectId);
         }
     }

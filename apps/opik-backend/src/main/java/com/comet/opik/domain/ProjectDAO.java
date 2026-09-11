@@ -98,22 +98,24 @@ interface ProjectDAO {
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
     /**
-     * Projects with the given names across all workspaces, optionally restricted to {@code ids}. When left
-     * unrestricted, the result grows with the number of projects carrying those names, so callers that already hold
-     * the ids they care about pass them and keep the query bounded.
+     * Projects with the given names, optionally restricted to {@code workspaceIds}. When left unrestricted the
+     * query spans every workspace, and neither index applies — {@code projects_workspace_id_name_uk} is keyed on
+     * {@code (workspace_id, name)}, so it needs the workspace to be known. Restricting by workspace both bounds the
+     * result and lets that index serve the lookup, which is why callers that know the workspaces they care about
+     * pass them.
      *
-     * <p>An empty {@code ids} reads as unrestricted rather than as "match nothing", so callers filtering a set they
-     * built must handle the empty case themselves.
+     * <p>An empty {@code workspaceIds} reads as unrestricted rather than as "match nothing", so callers filtering a
+     * set they built must handle the empty case themselves.
      */
     @SqlQuery("""
             SELECT * FROM projects
             WHERE name IN (<names>)
-            <if(ids)> AND id IN (<ids>) <endif>
+            <if(workspace_ids)> AND workspace_id IN (<workspace_ids>) <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Project> findByGlobalNames(@NonNull @BindList("names") List<String> names,
-            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
+            @Define("workspace_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "workspace_ids") Set<String> workspaceIds);
 
     default List<Project> findByGlobalNames(@NonNull List<String> names) {
         return findByGlobalNames(names, null);
