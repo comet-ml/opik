@@ -676,3 +676,46 @@ def test_insert__standalone_rest_client__honours_the_configured_compression(
     assert "Content-Encoding" not in capture.request_headers[0], (
         "An uncompressed body must not be labelled gzip"
     )
+
+
+# --------------------------------------------------------------------------- #
+# edges of the upload path
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("source", ["list", "generator"], ids=["list", "generator"])
+def test_insert__nothing_to_send__completes_without_a_request(source):
+    """An empty input must not produce an empty batch, or a request carrying none."""
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert([] if source == "list" else (item for item in []))
+
+    assert capture.request_count == 0, "An empty upload must send nothing at all"
+    assert dataset._dataset_items_count is None, (
+        "The cached count is invalidated either way; the insert did complete"
+    )
+
+
+def test_insert__source_raises_part_way__error_propagates_and_earlier_items_are_sent(
+    monkeypatch,
+):
+    """The iterator itself failing is a different path from an item that cannot be sent.
+
+    `insert` documents that a generator's failure leaves earlier items persisted, and the
+    cached count is invalidated in a `finally` for exactly this case.
+    """
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture, dataset_items_count=7)
+    assert dataset.dataset_items_count == 7
+
+    def source():
+        yield from _items(3)
+        raise RuntimeError("the source died")
+
+    with pytest.raises(RuntimeError, match="the source died"):
+        dataset.insert(source(), num_threads=1)
+
+    assert capture.request_count == 3, "Items drawn before the failure are still sent"
+    assert dataset._dataset_items_count is None, (
+        "A partial insert leaves a cached count that no longer describes the dataset"
+    )

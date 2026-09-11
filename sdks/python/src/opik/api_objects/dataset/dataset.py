@@ -943,7 +943,16 @@ class Dataset(DatasetExportOperations):
         batch_group_id = id_helpers.generate_id()
 
         try:
-            transport = self._upload_transport()
+            upload_client, _ = self._upload_transport()
+            # The enable flag gates the level: a client built with compression off must
+            # not be handed gzipped bodies, whatever level is configured. A transport that
+            # carries no setting of its own -- a REST client built directly sends through
+            # a plain httpx client -- takes the configured one, the same config the level
+            # and the serialiser are read from.
+            compressing = httpx_client.compresses_json_requests(
+                upload_client, default=opik_config.enable_json_request_compression
+            )
+
             pool = self._open_send_pool(num_threads)
             writer = streaming_writer.StreamingBatchWriter(
                 envelope={
@@ -955,16 +964,11 @@ class Dataset(DatasetExportOperations):
                 max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
                 max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
                 flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
-                # The enable flag gates the level: a client built with compression off
-                # must not be handed gzipped bodies, whatever level is configured. A
-                # transport that carries no setting of its own -- a REST client built
-                # directly sends through a plain httpx client -- takes the configured one,
-                # the same config this reads the level and the serialiser from.
-                gzip_level=opik_config.dataset_upload_compression_level
-                if httpx_client.compresses_json_requests(
-                    transport[0], default=opik_config.enable_json_request_compression
-                )
-                else None,
+                gzip_level=(
+                    opik_config.dataset_upload_compression_level
+                    if compressing
+                    else None
+                ),
                 use_orjson=opik_config.enable_orjson_serialization,
             )
 

@@ -1,8 +1,8 @@
 """Build dataset-item request bodies as rows arrive, instead of materialising the upload.
 
-The batching path accumulates every item, splits the list into batches, then serialises and
-compresses each batch. That holds the whole upload in memory and walks each item several
-times over. This writer serialises a row once as it is added, feeds the bytes straight into
+The path this replaced accumulated every item, split the list into batches, then serialised
+and compressed each batch. That held the whole upload in memory and walked each item
+several times over. This writer serialises a row once as it is added, feeds the bytes straight into
 a zlib stream, and hands a finished request body to a callback when a threshold trips, so
 what it holds is one in-flight body rather than the upload. What the caller keeps around
 it -- deduplication digests, say -- is its own business.
@@ -150,7 +150,9 @@ class StreamingBatchWriter:
         self._dumps = select_dumps(use_orjson)
 
         # Serialise the envelope once and splice the item array onto it, so the dataset
-        # name and group id are escaped by the same serialiser as everything else.
+        # name and group id are escaped by the same serialiser as everything else. The
+        # envelope always carries fields: splicing onto an empty `{}` would produce
+        # `{,"items":[`, so this is not a shape to make optional later.
         envelope_bytes = self._dumps(dict(envelope))
         self._prefix = envelope_bytes[:-1] + b',"items":['
         self._suffix = b"]}"
@@ -190,6 +192,8 @@ class StreamingBatchWriter:
         # -- where the batching splitter puts it. A request rejected for its size then
         # fails that one row instead of every row that shared its batch. The comparison is
         # the splitter's own, strictness included, so both paths group an input alike.
+        # The `+ 1` is the comma that would join this item to the batch; the check only
+        # runs when there is already an item for it to follow.
         if self._items > 0 and self._logical_bytes + 1 + len(payload) > (
             self._max_payload_bytes
         ):
@@ -296,9 +300,10 @@ def canonical_id(value: Any) -> Optional[str]:
     """The one form of an item identifier, for the wire and for anything keyed by it.
 
     `DatasetItem` declares its identifiers `SkipValidation[str]` and so passes through
-    whatever it was given. Everything that has to agree on what an item *is* -- the request
-    body, and the caches keyed by id -- goes through here, so a number and its string form
-    cannot end up as two identities for one item.
+    whatever it was given -- a `uuid.UUID` object, most usefully. Everything that has to
+    agree on what an item *is* goes through here, the request body and the caches keyed by
+    id alike, so an id and the form it was sent in cannot become two identities for one
+    item.
     """
     return value if value is None or isinstance(value, str) else str(value)
 
@@ -316,7 +321,7 @@ def validate_identifier(value: Any, field: str, index: Optional[int] = None) -> 
         return
     try:
         uuid.UUID(canonical)
-    except (ValueError, AttributeError, TypeError):
+    except ValueError:
         where = "" if index is None else f" at index {index}"
         raise ValueError(
             f"Dataset item{where} has an invalid {field}: {value!r} is not a UUID"
@@ -342,10 +347,9 @@ def item_payload(
     Anything added here that the generated client does not send would change the request.
 
     The three identifiers go through `canonical_id`, because `DatasetItem` passes whatever
-    it was given straight through. Serialising one of those as a JSON number would put an
-    id on the wire that the REST contract does not allow, and it is the same conversion
-    pydantic did for these fields before it stopped coercing, so callers that have always
-    passed a number keep working.
+    it was given straight through and a `uuid.UUID` is an identifier that simply is not a
+    string yet. Anything that is not a UUID in either form is refused before this, by
+    `validate_identifier`.
     """
     return {
         "id": canonical_id(item_id),

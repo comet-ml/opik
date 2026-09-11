@@ -564,3 +564,31 @@ def test_content_hash__digest_does_not_depend_on_orjson(monkeypatch):
     without_orjson = dataset_item.DatasetItem(**content).content_hash()
 
     assert with_orjson == without_orjson
+
+
+def test_pool__first_body_fails__surfaces_while_the_producer_is_still_submitting():
+    """The failure has to reach the producer at the bound, not only at `close()`.
+
+    `submit` collects finished futures once `num_threads * 2` are outstanding; that
+    collection is the only thing standing between a failed body and a producer that would
+    otherwise keep serialising into an upload that is already broken.
+    """
+    sent = []
+
+    def send(body: bytes) -> None:
+        sent.append(body)
+        if len(sent) == 1:
+            raise ValueError("the first body was rejected")
+
+    pool = streaming_writer.BoundedSendPool(send, num_threads=2)  # bound of 4
+
+    with pytest.raises(ValueError, match="the first body was rejected"):
+        # More bodies than the bound, so a wait happens before the producer is done.
+        for _ in range(20):
+            pool.submit(b"body", 1)
+
+    assert len(sent) < 20, "The producer kept going after a body had failed"
+
+    # Reported once, not twice: the failed future was collected by the wait above, so the
+    # close that `insert` runs in its `except` cannot raise over the producer's exception.
+    pool.close()
