@@ -166,27 +166,29 @@ export const setTracesCache = async (
       queryKey: [TRACES_KEY],
     }) ?? {};
 
-  query.map(async ({ queryKey }) => {
-    await queryClient.cancelQueries({ queryKey });
+  await Promise.all(
+    query.map(async ({ queryKey }) => {
+      await queryClient.cancelQueries({ queryKey });
 
-    queryClient.setQueryData(
-      queryKey,
-      (originalData: UseTracesListResponse) => {
-        return {
-          ...originalData,
-          content: originalData.content.map((trace) => {
-            if (trace.id === params.traceId) {
-              return {
-                ...trace,
-                feedback_scores: mutate(trace.feedback_scores),
-              };
-            }
-            return trace;
-          }),
-        };
-      },
-    );
-  });
+      queryClient.setQueryData(
+        queryKey,
+        (originalData: UseTracesListResponse) => {
+          return {
+            ...originalData,
+            content: originalData.content.map((trace) => {
+              if (trace.id === params.traceId) {
+                return {
+                  ...trace,
+                  feedback_scores: mutate(trace.feedback_scores),
+                };
+              }
+              return trace;
+            }),
+          };
+        },
+      );
+    }),
+  );
 };
 
 export const setSpansCache = async (

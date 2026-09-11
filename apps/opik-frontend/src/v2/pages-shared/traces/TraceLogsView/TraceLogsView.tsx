@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
   JsonParam,
@@ -826,8 +826,27 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     }) as ColumnData<BaseTraceData>[];
   }, [dynamicMetadataColumns]);
 
+  const selectedRowsMapRef = useRef(new Map<string, Trace>());
   const selectedRows: Array<Trace> = useMemo(() => {
-    return rows.filter((row) => rowSelection[row.id]);
+    const selectedRowsMap = selectedRowsMapRef.current;
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+    Object.entries(rowSelection).forEach(([id, selected]) => {
+      if (selected && rowsById.has(id)) {
+        selectedRowsMap.set(id, rowsById.get(id)!);
+      }
+    });
+
+    Array.from(selectedRowsMap.keys()).forEach((id) => {
+      if (!rowSelection[id]) {
+        selectedRowsMap.delete(id);
+      }
+    });
+
+    return Object.keys(rowSelection)
+      .filter((id) => rowSelection[id])
+      .map((id) => selectedRowsMap.get(id))
+      .filter((row): row is Trace => row !== undefined);
   }, [rowSelection, rows]);
 
   const getDataForExport = useCallback(async (): Promise<Array<Trace>> => {

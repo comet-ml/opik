@@ -11,7 +11,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
-import AnnotateTracesDialog from "@/v2/pages-shared/traces/AnnotateTracesDialog/AnnotateTracesDialog";
+import AnnotateTracesOrSpansDialog from "@/v2/pages-shared/traces/AnnotateTracesOrSpansDialog/AnnotateTracesOrSpansDialog";
 import AddTagDialog from "@/v2/pages-shared/traces/AddTagDialog/AddTagDialog";
 import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
@@ -137,7 +137,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         />
       )}
       {canAnnotateTraceSpanThread && (
-        <AnnotateTracesDialog
+        <AnnotateTracesOrSpansDialog
           key={`annotate-${resetKeyRef.current}`}
           rows={selectedRows}
           open={open === 5}

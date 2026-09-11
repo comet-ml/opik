@@ -46,7 +46,7 @@ vi.mock("@/shared/TooltipWrapper/TooltipWrapper", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock(
-  "@/v2/pages-shared/traces/AnnotateTracesDialog/AnnotateTracesDialog",
+  "@/v2/pages-shared/traces/AnnotateTracesOrSpansDialog/AnnotateTracesOrSpansDialog",
   () => ({
     default: ({
       open,

@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   JsonParam,
   NumberParam,
@@ -1112,8 +1118,27 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return fieldColumns;
   }, [dynamicMetadataColumns]);
 
+  const selectedRowsMapRef = useRef(new Map<string, Trace | Span>());
   const selectedRows: Array<Trace | Span> = useMemo(() => {
-    return rows.filter((row) => rowSelection[row.id]);
+    const selectedRowsMap = selectedRowsMapRef.current;
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+    Object.entries(rowSelection).forEach(([id, selected]) => {
+      if (selected && rowsById.has(id)) {
+        selectedRowsMap.set(id, rowsById.get(id)!);
+      }
+    });
+
+    Array.from(selectedRowsMap.keys()).forEach((id) => {
+      if (!rowSelection[id]) {
+        selectedRowsMap.delete(id);
+      }
+    });
+
+    return Object.keys(rowSelection)
+      .filter((id) => rowSelection[id])
+      .map((id) => selectedRowsMap.get(id))
+      .filter((row): row is Trace | Span => row !== undefined);
   }, [rowSelection, rows]);
 
   const getDataForExport = useCallback(async (): Promise<

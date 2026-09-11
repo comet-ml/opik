@@ -33,6 +33,81 @@ export const isNumericFeedbackScoreValid = (
   value?: number | "",
 ) => isNumber(value) && value >= min && value <= max;
 
+// Backend @DecimalMax / @DecimalMin. Cannot be stored as a JS number
+// (999999999.999999999 rounds to 1000000000).
+export const FEEDBACK_SCORE_DECIMAL_MAX = "999999999.999999999";
+export const FEEDBACK_SCORE_DECIMAL_MIN = "-999999999.999999999";
+
+const PLAIN_DECIMAL_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)$/;
+
+const compareUnsignedDecimalStrings = (a: string, b: string): number => {
+  const [aIntRaw = "0", aFrac = ""] = a.split(".");
+  const [bIntRaw = "0", bFrac = ""] = b.split(".");
+  const aInt = aIntRaw.replace(/^0+(?=\d)/, "") || "0";
+  const bInt = bIntRaw.replace(/^0+(?=\d)/, "") || "0";
+
+  if (aInt.length !== bInt.length) {
+    return aInt.length - bInt.length;
+  }
+  if (aInt !== bInt) {
+    return aInt < bInt ? -1 : 1;
+  }
+
+  const length = Math.max(aFrac.length, bFrac.length);
+  const aPadded = aFrac.padEnd(length, "0");
+  const bPadded = bFrac.padEnd(length, "0");
+  if (aPadded === bPadded) {
+    return 0;
+  }
+  return aPadded < bPadded ? -1 : 1;
+};
+
+const isRawWithinBackendDecimalBounds = (raw: string): boolean => {
+  if (!PLAIN_DECIMAL_RE.test(raw)) {
+    return true;
+  }
+
+  const unsigned = raw.replace(/^[+-]/, "");
+  if (unsigned === "" || unsigned === ".") {
+    return true;
+  }
+
+  return (
+    compareUnsignedDecimalStrings(unsigned, FEEDBACK_SCORE_DECIMAL_MAX) <= 0
+  );
+};
+
+export const parseNumericFeedbackScore = (
+  raw: string,
+  details: { min: number; max: number },
+): number | undefined => {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  // Number("999999999.999999999") === 1e9, which exceeds DecimalMax if submitted.
+  const roundedBound = Number(FEEDBACK_SCORE_DECIMAL_MAX);
+  if (parsed >= roundedBound || parsed <= -roundedBound) {
+    return undefined;
+  }
+
+  if (!isRawWithinBackendDecimalBounds(trimmed)) {
+    return undefined;
+  }
+
+  if (!isNumericFeedbackScoreValid(details, parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+};
+
 export const traceExist = (item: ExperimentItem) =>
   item.output || item.input || item.feedback_scores;
 
