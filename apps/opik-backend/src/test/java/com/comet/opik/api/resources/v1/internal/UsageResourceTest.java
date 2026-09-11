@@ -438,7 +438,7 @@ class UsageResourceTest {
          * equivalent rejection; this pins it for traces together with the count that depends on it.
          */
         @Test
-        void tracesCountCountsATraceOnceBecauseItsIdCannotMoveProjects() {
+        void tracesCountIncludesEachTraceOnceBecauseItsIdCannotMoveBetweenProjects() {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "test-workspace-" + UUID.randomUUID();
