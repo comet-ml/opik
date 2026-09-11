@@ -61,6 +61,11 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
+import useQueueItemSources from "@/v2/pages-shared/annotation-queues/useQueueItemSources";
+import {
+  createQueueItemSourceColumn,
+  withQueueItemSources,
+} from "@/v2/pages-shared/annotation-queues/queueItemSourceColumn";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -143,6 +148,8 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
   },
 ];
 
+const QUEUE_ITEM_SOURCE_COLUMN = createQueueItemSourceColumn<Thread>();
+
 const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
   {
     id: COLUMN_ID_ID,
@@ -180,6 +187,7 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
+  QUEUE_ITEM_SOURCE_COLUMN,
 ];
 
 const FILTER_COLUMNS: ColumnData<Thread>[] = [
@@ -204,6 +212,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "first_message",
   "last_message",
   "number_of_messages",
+  QUEUE_ITEM_SOURCE_COLUMN.id,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -212,6 +221,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "first_message",
   "last_message",
   "number_of_messages",
+  QUEUE_ITEM_SOURCE_COLUMN.id,
   COLUMN_COMMENTS_ID,
   "start_time",
   "end_time",
@@ -226,6 +236,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+const SELECTED_COLUMNS_KEY_V3 = `${SELECTED_COLUMNS_KEY}-v3`;
 const COLUMNS_WIDTH_KEY = "queue-thread-columns-width";
 const COLUMNS_ORDER_KEY = "queue-thread-columns-order";
 const COLUMNS_SORT_KEY = "queue-thread-columns-sort";
@@ -373,18 +384,23 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
 
+  const sourceById = useQueueItemSources(annotationQueue.id, rows);
+
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY_V3,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_ID_ID],
+        SELECTED_COLUMNS_KEY_V2,
+        migrateSelectedColumns(SELECTED_COLUMNS_KEY, DEFAULT_SELECTED_COLUMNS, [
+          COLUMN_ID_ID,
+          QUEUE_ITEM_SOURCE_COLUMN.id,
+        ]),
+        [QUEUE_ITEM_SOURCE_COLUMN.id],
       ),
     },
   );
@@ -419,7 +435,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
-      DEFAULT_COLUMNS,
+      withQueueItemSources(DEFAULT_COLUMNS, sourceById),
       {
         columnsOrder,
         selectedColumns,
@@ -449,6 +465,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     scoresColumnsData,
     scoresColumnsOrder,
     annotationQueue.id,
+    sourceById,
   ]);
 
   const sortConfig = useMemo(
