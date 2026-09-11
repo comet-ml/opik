@@ -1,4 +1,8 @@
-export { test, expect } from './annotation-queue-automation-ui.fixture';
+// Chain head. The three annotation-queue automation fixtures are links in one
+// line — ui -> automation -> routing — so every spec in the area resolves
+// through the same `test`. Re-parenting any of them without moving this line
+// orphans the ones past it.
+export { test, expect } from './annotation-queue-routing.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -135,4 +139,13 @@ export type {
   RegisterAnnotationQueueCleanup,
   AnnotationQueueAutomationFixtures,
 } from './annotation-queue-automation-ui.fixture';
+export type {
+  AutomatedQueueRef,
+  AutomatedQueueFixtures,
+} from './annotation-queue-automation.fixture';
+export type {
+  RoutingQueueRef,
+  CreateRoutingQueueArgs,
+  AnnotationQueueRoutingFixtures,
+} from './annotation-queue-routing.fixture';
 export type { ProjectRef } from '../core/backend';

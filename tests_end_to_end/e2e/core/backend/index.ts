@@ -44,9 +44,18 @@ export {
   type AnnotationQueueReviewerRef,
   type AnnotationQueueAutomationCondition,
   type AnnotationQueueAutomationRef,
+  type AnnotationQueueAutomationRecord,
+  type AnnotationQueueAutomationSeed,
+  type AnnotationQueueRecordRef,
+  type AnnotationQueueSeed,
   type AnnotationQueueSettingsRef,
+  type AnnotationQueueUpdateWrite,
   type AnnotationQueueItemRef,
   type AnnotationQueueItemSource,
+  type ScoreConditionOperator,
+  type ScoreConditionRef,
+  type ScoreConditionGroupRef,
+  type ScoreConditionsRef,
   ANNOTATION_QUEUE_ITEM_SOURCE,
   type ThreadRowRef,
   type ThreadDetail,
@@ -64,3 +73,4 @@ export {
   sumDatasetVersionField,
 } from './dataset-item-batches';
 export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
+export { type WaitForQueueItemsSettledOpts } from './wait-for-queue-items-settled';

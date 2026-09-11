@@ -50,8 +50,14 @@ export interface AutomationRoutingRef {
   nonMatchingScore: number;
 }
 
-/** Registers a queue id for teardown the moment it exists. */
-export type RegisterAnnotationQueueCleanup = (queueId: string) => void;
+/**
+ * Registers a queue id for teardown the moment it exists.
+ *
+ * `name` is optional and used only in the warning a failed delete logs. Callers
+ * that chose the id themselves (and so have the name to hand before the request)
+ * pass it; callers that read the id back off a create response do not.
+ */
+export type RegisterAnnotationQueueCleanup = (queueId: string, name?: string) => void;
 
 export interface AnnotationQueueAutomationFixtures {
   automationQueuePair: AutomationQueuePairRef;
@@ -85,19 +91,21 @@ export const test = baseTest.extend<AnnotationQueueAutomationFixtures>({
    * post-`use()` teardown never runs for a setup that threw.
    */
   registerAnnotationQueueCleanup: async ({ backendClient }, use, testInfo) => {
-    const queueIds: string[] = [];
+    const queues: Array<{ id: string; label: string }> = [];
 
-    await use((queueId: string) => {
-      queueIds.push(queueId);
+    await use((queueId: string, name?: string) => {
+      queues.push({ id: queueId, label: name ?? queueId });
     });
 
     if (!shouldLeaveArtifacts(testInfo)) {
-      while (queueIds.length) {
-        const id = queueIds.pop()!;
+      // Reverse order, so a test that built several queues on top of each other
+      // tears them down the way it made them.
+      while (queues.length) {
+        const { id, label } = queues.pop()!;
         try {
           await backendClient.deleteAnnotationQueue(id);
         } catch (err) {
-          console.warn(`[registerAnnotationQueueCleanup] delete warning for ${id}:`, err);
+          console.warn(`[registerAnnotationQueueCleanup] delete warning for ${label}:`, err);
         }
       }
     }

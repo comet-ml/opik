@@ -11,6 +11,10 @@ import {
   type WaitForScoresSettledOpts,
 } from './wait-for-scores-settled';
 import {
+  waitForQueueItemsSettled,
+  type WaitForQueueItemsSettledOpts,
+} from './wait-for-queue-items-settled';
+import {
   pollOptimizationStatus,
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
@@ -473,25 +477,133 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** The three threshold operators a score condition can carry (`>`, `<`, `=`). */
+export type ScoreConditionOperator = '>' | '<' | '=';
+
 /** One `score <op> value` test inside an automation condition group. */
-export interface AnnotationQueueAutomationCondition {
+export interface ScoreConditionRef {
   score: string;
-  operator: '>' | '<' | '=';
+  operator: ScoreConditionOperator;
   value: number;
 }
 
 /**
- * A queue's self-population rules. Groups are OR-ed, conditions inside a group
- * AND-ed.
+ * Alias kept because the UI-driven specs read the condition as "the thing the
+ * automation form builds", while the API-driven ones read it as "one row of the
+ * payload". Same type, two vocabularies; neither reads naturally under the
+ * other's name.
+ */
+export type AnnotationQueueAutomationCondition = ScoreConditionRef;
+
+/** A conjunction — every condition in the group must hold. */
+export interface ScoreConditionGroupRef {
+  conditions: ScoreConditionRef[];
+}
+
+/** The disjunction of groups: an item matches when ANY group matches. */
+export interface ScoreConditionsRef {
+  groups: ScoreConditionGroupRef[];
+}
+
+/**
+ * A queue's self-population rules, flattened — `groups` lifted out of the
+ * payload's `conditions` wrapper.
  *
  * `enabled` is carried separately from the groups because the two move
  * independently: switching automation off leaves the configured conditions in
  * place, and asserting the groups survived is the only way to tell a disable
  * from a wipe.
+ *
+ * Flat because its callers compare a whole automation against a literal they
+ * wrote, and the extra `conditions:` level is noise there. Where the *shape* of
+ * that wrapper is itself under test — a PATCH that may legitimately leave
+ * `conditions` absent — use `AnnotationQueueAutomationRecord`, which keeps it.
  */
 export interface AnnotationQueueAutomationRef {
   enabled: boolean;
   groups: Array<{ conditions: AnnotationQueueAutomationCondition[] }>;
+}
+
+/**
+ * A queue's automation as the record reads coming back, wrapper intact.
+ *
+ * `conditions` is nullable because the API's three-state PATCH lets a
+ * toggle-only request omit it; a caller comparing two reads must therefore
+ * assert it is present rather than compare two absences and call that
+ * agreement. That distinction is exactly what `AnnotationQueueAutomationRef`
+ * flattens away, so the two types are not interchangeable.
+ */
+export interface AnnotationQueueAutomationRecord {
+  enabled: boolean;
+  conditions: ScoreConditionsRef | null;
+}
+
+/**
+ * An annotation queue read back with the fields the API-level automation specs
+ * assert on.
+ *
+ * Separate from `AnnotationQueueDetail` (items/reviewers, what the delete spec
+ * needs) and from `AnnotationQueueSettingsRef` (the form round-trip) because
+ * these read a third half of the record: the config a PATCH is or is not
+ * allowed to disturb, plus `description` as the control field proving an
+ * ignored PATCH from an honoured one.
+ */
+export interface AnnotationQueueRecordRef {
+  id: string;
+  name: string;
+  description: string | null;
+  automation: AnnotationQueueAutomationRecord | null;
+}
+
+/**
+ * A create-time automation, where `conditions` is required rather than nullable.
+ *
+ * Not `AnnotationQueueAutomationRecord`: the "null means leave the stored
+ * conditions alone" branch only makes sense once something is stored, and on a
+ * first save there is nothing to leave alone. Verified against the local stack —
+ * `POST /v1/private/annotation-queues` with `automation: {enabled: true}` and no
+ * conditions answers **400 "Annotation queue automation requires conditions"
+ * having already written the queue row**, so the caller is left holding an
+ * error and a queue. Requiring the field here makes that unreachable from a
+ * spec rather than a 400 to discover at runtime.
+ */
+export interface AnnotationQueueAutomationSeed {
+  enabled: boolean;
+  conditions: ScoreConditionsRef;
+}
+
+/**
+ * A queue create, with the id chosen by the caller.
+ *
+ * The endpoint answers 201 with no body, so a server-chosen id would only be
+ * recoverable from the `Location` header — and not at all if the request fails
+ * after the row lands. A caller-supplied v7 id (`uuid7()`) means teardown knows
+ * what to delete whatever the response was.
+ */
+export interface AnnotationQueueSeed {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  automation?: AnnotationQueueAutomationSeed;
+}
+
+/**
+ * The subset of `AnnotationQueueUpdate` these specs PATCH.
+ *
+ * `automation` is optional *and* three-state at the API: omitting the key
+ * leaves the stored automation alone, `{enabled: false}` disables it while
+ * keeping its conditions, and a full object replaces the conditions wholesale.
+ * Modelled as an optional field precisely so a caller can express "no
+ * automation key at all", which is the case the UI's Edit dialog sends.
+ */
+export interface AnnotationQueueUpdateWrite {
+  name?: string;
+  description?: string;
+  automation?: {
+    enabled: boolean;
+    conditions?: ScoreConditionsRef;
+  };
 }
 
 /**
@@ -921,6 +1033,57 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * Queue membership for the given entity ids — how each one got into the queue.
+   *
+   * A lookup, not a listing: ids with no membership are simply absent from the
+   * response, which is what makes this the check for "the queue did NOT pick
+   * that one up". A routed item and an unrouted one differ by presence, not by
+   * a flag, so the caller has to ask about every entity whose membership it
+   * wants to assert — including the ones it expects NOT to be there.
+   *
+   * The endpoint rejects an empty `ids` list (422, "size must be between 1 and
+   * 1000"), so callers must pass at least one.
+   *
+   * Hoisted for the same reason as `localGetTrace`: `waitForQueueItemsSettled`
+   * is a free function and cannot reach the not-yet-constructed return object.
+   */
+  const localSearchAnnotationQueueItems = async (
+    queueId: string,
+    itemIds: string[],
+  ): Promise<AnnotationQueueItemRef[]> => {
+    if (itemIds.length === 0) {
+      throw new Error('searchAnnotationQueueItems: itemIds must not be empty (the API rejects it)');
+    }
+
+    const { status, message, json } = await rawFetch(
+      'POST',
+      `/v1/private/annotation-queues/${queueId}/items/search`,
+      { body: { ids: itemIds } },
+    );
+    if (status !== 200) {
+      throw new Error(
+        `searchAnnotationQueueItems(${queueId}): expected 200, got ${status}: ${message}`,
+      );
+    }
+
+    const content = (json as { content?: Array<{ id?: string; source?: string }> })?.content ?? [];
+    return content.map((item) => {
+      // The source is the whole point of the lookup, so an item that arrives
+      // without one fails here rather than being quietly read as manual.
+      if (
+        item.source !== ANNOTATION_QUEUE_ITEM_SOURCE.MANUAL &&
+        item.source !== ANNOTATION_QUEUE_ITEM_SOURCE.AUTOMATED
+      ) {
+        throw new Error(
+          `searchAnnotationQueueItems(${queueId}): item ${item.id} returned source '${item.source}', ` +
+            `expected one of manual|automated`,
+        );
+      }
+      return { id: String(item.id), source: item.source };
+    });
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -3167,6 +3330,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       feedbackDefinitionNames?: string[];
       /** Omitted entirely when null — which is the pre-automation payload shape. */
       automation?: AnnotationQueueAutomationRef | null;
+      /**
+       * Caps how many items automation may add to the queue. Omitted leaves the
+       * backend's own default; no spec drives it yet (see consolidation notes).
+       */
+      maxItemsInQueue?: number;
     }): Promise<string> {
       const { automation = null } = args;
       const { status, message, location } = await rawFetch(
@@ -3189,6 +3357,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
                   automation: {
                     enabled: automation.enabled,
                     conditions: { groups: automation.groups },
+                    ...(args.maxItemsInQueue === undefined
+                      ? {}
+                      : { max_items_in_queue: args.maxItemsInQueue }),
                   },
                 }),
           },
@@ -3201,7 +3372,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
       }
 
-      const id = location?.split('/').pop();
+      // `filter(Boolean)` so a Location with a trailing slash yields the id
+      // rather than an empty string, which would fail the check below as though
+      // the header were missing entirely.
+      const id = location?.split('/').filter(Boolean).pop();
       if (!id) {
         throw new Error(
           `createAnnotationQueueWithAutomation('${args.name}'): 201 carried no Location header to take the id from`,
@@ -3296,6 +3470,104 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Create a queue through REST with a caller-chosen id, answering the raw
+     * status.
+     *
+     * Distinct from `createAnnotationQueueWithAutomation`, which mints the id
+     * server-side and throws on anything but a 201. Here the status is part of
+     * what the specs assert (a create the backend rejects must not leave a
+     * half-written queue behind), and the caller-chosen id means teardown can
+     * reach a queue whose response never arrived.
+     */
+    async createAnnotationQueue(seed: AnnotationQueueSeed): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/annotation-queues',
+        {
+          body: {
+            id: seed.id,
+            project_id: seed.projectId,
+            name: seed.name,
+            scope: 'trace',
+            ...(seed.description === undefined ? {} : { description: seed.description }),
+            // Sent whole, not key-by-key: `AnnotationQueueAutomationSeed`
+            // requires `conditions`, so there is no absent-conditions case left
+            // to strip out — and stripping one would send the request the
+            // backend answers 400 to after creating the queue.
+            ...(seed.automation === undefined ? {} : { automation: seed.automation }),
+          },
+        },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * PATCH a queue, answering the raw status.
+     *
+     * `patch` is passed through verbatim — the three-state `automation`
+     * semantics turn on which keys are *present*, so a helper that filled in
+     * defaults would quietly convert "leave it alone" into "replace it" and
+     * destroy the distinction the specs exist to pin.
+     */
+    async updateAnnotationQueue(
+      id: string,
+      patch: AnnotationQueueUpdateWrite,
+    ): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'PATCH',
+        `/v1/private/annotation-queues/${id}`,
+        { body: patch },
+      );
+      return { status, message };
+    },
+
+    /** One queue by id with its automation config, or `null` when it is gone. */
+    async getAnnotationQueueRecord(id: string): Promise<AnnotationQueueRecordRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET annotation queue '${id}' answered ${status}: ${message}`);
+      }
+      return toAnnotationQueueRecord(json);
+    },
+
+    /**
+     * Every queue in one project, read through the LIST endpoint.
+     *
+     * Not redundant with `getAnnotationQueueRecord`: the list resolves each
+     * queue's automation through a different query than the by-id read
+     * (`findByQueueIds` vs `findByQueueId`), so one of the two can stop joining
+     * the automation row while the other keeps working. `total` is returned
+     * alongside the rows so a caller can assert the whole answer rather than
+     * finding its own queue inside a longer one.
+     */
+    async listAnnotationQueueRecords(
+      projectId: string,
+    ): Promise<{ total: number; queues: AnnotationQueueRecordRef[] }> {
+      const query = new URLSearchParams({ page: '1', size: '100' });
+      query.set(
+        'filters',
+        JSON.stringify([{ field: 'project_id', operator: '=', value: projectId }]),
+      );
+      const { status, message, json } = await rawFetch('GET', '/v1/private/annotation-queues', {
+        query,
+      });
+      if (status !== 200) {
+        throw new Error(
+          `LIST annotation queues for project '${projectId}' answered ${status}: ${message}`,
+        );
+      }
+      const page = (json ?? {}) as { total?: number; content?: unknown[] };
+      return {
+        total: Number(page.total ?? 0),
+        queues: (page.content ?? []).map(toAnnotationQueueRecord),
+      };
+    },
+
+    /**
      * Queue membership for the given item ids — how each one got into the queue.
      *
      * Ids with no membership are simply absent from the response, which is what
@@ -3305,38 +3577,35 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * The endpoint rejects an empty `ids` list (422, "size must be between 1 and
      * 1000"), so callers must pass at least one.
      */
-    async searchAnnotationQueueItems(
-      queueId: string,
-      itemIds: string[],
-    ): Promise<AnnotationQueueItemRef[]> {
-      if (itemIds.length === 0) {
-        throw new Error('searchAnnotationQueueItems: itemIds must not be empty (the API rejects it)');
-      }
+    searchAnnotationQueueItems: localSearchAnnotationQueueItems,
 
-      const { status, message, json } = await rawFetch(
+    /** Remove items from a queue — the reviewer's "dismiss this item" action. */
+    async removeAnnotationQueueItems(queueId: string, entityIds: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
         'POST',
-        `/v1/private/annotation-queues/${queueId}/items/search`,
-        { body: { ids: itemIds } },
+        `/v1/private/annotation-queues/${queueId}/items/delete`,
+        { body: { ids: entityIds } },
       );
-      if (status !== 200) {
+      if (status !== 204) {
         throw new Error(
-          `searchAnnotationQueueItems(${queueId}): expected 200, got ${status}: ${message}`,
+          `removeAnnotationQueueItems on queue ${queueId}: expected 204, got ${status}: ${message}`,
         );
       }
+    },
 
-      const content = (json as { content?: Array<{ id?: string; source?: string }> })?.content ?? [];
-      return content.map((item) => {
-        // The source is the whole point of the lookup, so an item that arrives
-        // without one fails here rather than being quietly read as manual.
-        if (item.source !== ANNOTATION_QUEUE_ITEM_SOURCE.MANUAL &&
-            item.source !== ANNOTATION_QUEUE_ITEM_SOURCE.AUTOMATED) {
-          throw new Error(
-            `searchAnnotationQueueItems(${queueId}): item ${item.id} returned source '${item.source}', ` +
-              `expected one of manual|automated`,
-          );
-        }
-        return { id: String(item.id), source: item.source };
-      });
+    /**
+     * Poll a queue's membership until it stops changing, then return it.
+     *
+     * The wait every routing assertion needs in both directions — see
+     * `wait-for-queue-items-settled.ts` for why a plain "wait until present"
+     * poll cannot serve the negative case.
+     */
+    async waitForQueueItemsSettled(
+      queueId: string,
+      entityIds: string[],
+      opts: WaitForQueueItemsSettledOpts = {},
+    ): Promise<AnnotationQueueItemRef[]> {
+      return waitForQueueItemsSettled(localSearchAnnotationQueueItems, queueId, entityIds, opts);
     },
 
     /**
@@ -3369,6 +3638,38 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         return { url, urlReachable: false, content: null };
       }
     },
+  };
+}
+
+/**
+ * Map one annotation queue payload onto the fields the automation specs read.
+ *
+ * A queue that has never been given an automation carries no `automation` key
+ * at all rather than a null one, so absent and explicit-null both normalise to
+ * `null` here — the two are the same fact ("this queue has no automation") and
+ * a spec asserting on the difference would be asserting about Jackson, not the
+ * product. `conditions` is NOT normalised the same way: a stored automation
+ * with its conditions missing is a real regression, so it stays distinguishable.
+ */
+function toAnnotationQueueRecord(payload: unknown): AnnotationQueueRecordRef {
+  const q = (payload ?? {}) as {
+    id?: unknown;
+    name?: unknown;
+    description?: unknown;
+    automation?: { enabled?: unknown; conditions?: ScoreConditionsRef | null } | null;
+  };
+  const automation = q.automation ?? null;
+  return {
+    id: String(q.id ?? ''),
+    name: String(q.name ?? ''),
+    description: typeof q.description === 'string' ? q.description : null,
+    automation:
+      automation === null
+        ? null
+        : {
+            enabled: Boolean(automation.enabled),
+            conditions: automation.conditions ?? null,
+          },
   };
 }
 

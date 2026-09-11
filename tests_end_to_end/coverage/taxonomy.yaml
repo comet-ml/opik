@@ -640,7 +640,10 @@ areas:
     specs:
       - annotation-queues/annotation-queue-automation-column.spec.ts
       - annotation-queues/annotation-queue-automation-edit.spec.ts
+      - annotation-queues/annotation-queue-automation-persistence.spec.ts
+      - annotation-queues/annotation-queue-automation-provenance.spec.ts
       - annotation-queues/annotation-queue-automation-routing.spec.ts
+      - annotation-queues/annotation-queue-automation-update.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
       - annotation-queues/annotation-queue-scoring.spec.ts
     capabilities:
@@ -649,14 +652,28 @@ areas:
       skip-item:               { covered: true,  tier: t2-cuj }
       scores-reach-traces:     { covered: true,  tier: t2-cuj, note: "SDK-verified" }
       list-queues:             { covered: true,  tier: t2-cuj, note: "Automation column reads On/Off per queue on the project-scoped list" }
-      create-queue:            { covered: true,  tier: t2-cuj, note: "create with automation via Logs > Add automation; routing and item provenance asserted on the same journey" }
-      edit-queue:              { covered: true,  tier: t2-cuj, note: "automation round-trips into the edit form; disabling keeps the condition groups and does not re-enable comments" }
+      # covered:/tier: are derived — reconcile.py computes them from the @cap:
+      # tags and nobody edits them by hand. The honest scoping goes in the note.
+      create-queue:            { covered: true,  tier: t2-cuj, note: "UI create with automation via Logs > Add automation, item provenance asserted on the same journey; separately, a two-group automation POSTed over the API returns unchanged from both the by-id read and the project LIST" }
+      edit-queue:              { covered: true,  tier: t2-cuj, note: "automation round-trips into the edit form; disabling keeps the condition groups and does not re-enable comments; the three PATCH states (toggle-only keeps conditions, an absent key leaves them alone, a full object replaces them wholesale) plus a rename through the Edit dialog asserting the stored automation survives an edit that never mentions it" }
       # Second case in this spec is a test.fail() known failure for OPIK-7903
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.
-      delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
+      delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903; automation cascade asserted by recreating a queue on the deleted id, with a bystander queue's automation asserted to survive" }
       queue-configuration-tab: { covered: false }
-      add-traces-to-queue:     { covered: false }
+      # Covered for the AUTOMATION path only (OPIK-6303): a queue whose score
+      # conditions pull traces in by itself, asserted on membership + source
+      # 'automated' and on the reviewer's items table. The reviewer-driven
+      # AddToQueueDialog is a separate surface and is tracked under
+      # traces.add-trace-to-queue, still uncovered.
+      #
+      # DECISION FOR A HUMAN: the routing engine's own semantics (OR groups, AND
+      # groups, trace-source filtering, no-re-add after dismissal, and the
+      # untested max_items_in_queue ceiling) are filed across this key and
+      # create-queue because no key names them. Whether that warrants an
+      # `automation-routing` capability is a call about the coverage
+      # denominator, so it is left open rather than decided here.
+      add-traces-to-queue:     { covered: true,  tier: t2-cuj, note: "automation routing only; manual add-to-queue dialog still uncovered (traces.add-trace-to-queue)" }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 

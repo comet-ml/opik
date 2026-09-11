@@ -78,6 +78,42 @@ export class AnnotationQueuesPage {
     });
   }
 
+  /**
+   * Rename a queue through the row's kebab → Edit → AddEditAnnotationQueueDialog,
+   * the only path a user has to editing a queue. Resolves once the dialog has
+   * closed and the row shows the new name.
+   *
+   * Same selector story as `deleteQueue`: the kebab, the menu items and the
+   * shared dialog carry no data-testids, so this scopes by the row and then
+   * uses the accessible names from AnnotationQueueRowActionsCell and the
+   * dialog's own title/submit copy. The dialog must be scoped before the Name
+   * field is filled — the queues table renders a "Name" column header, and an
+   * unscoped label match would be ambiguous.
+   */
+  async renameQueue(queueId: string, newName: string): Promise<void> {
+    return test.step(`rename annotation queue ${queueId} to "${newName}"`, async () => {
+      const row = this.queueRow(queueId);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+
+      const dialog = this.editQueueDialog;
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByLabel('Name', { exact: true }).fill(newName);
+      await dialog.getByRole('button', { name: 'Update queue' }).click();
+
+      await dialog.waitFor({ state: 'hidden' });
+      await expect(row.getByText(newName, { exact: true })).toBeVisible();
+    });
+  }
+
+  /** The queue create/edit dialog, in its edit incarnation. */
+  get editQueueDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Edit annotation queue' }),
+    });
+  }
+
   /** The destructive confirm dialog raised by the row's Delete action. */
   get deleteQueueConfirmDialog(): Locator {
     return this.page.getByRole('dialog').filter({
@@ -329,6 +365,17 @@ export class AnnotationQueuePage {
   }
 
   /**
+   * Every row of the queue's items table.
+   *
+   * For asserting the TOTAL, which `itemRow(id)` cannot: a per-id check answers
+   * "is this one here" and stays silent about a fourth item routed from
+   * somewhere the test never seeded.
+   */
+  get itemRows(): Locator {
+    return this.page.locator('tr[data-row-id]');
+  }
+
+  /**
    * The Source cell of one queue item — whether a person added it or automation
    * matched it.
    *
@@ -363,7 +410,7 @@ export class AnnotationQueuePage {
     return test.step('Wait for the queue items table', async () => {
       await this.waitForReady();
       await Promise.race([
-        this.page.locator('tr[data-row-id]').first().waitFor({ state: 'visible' }),
+        this.itemRows.first().waitFor({ state: 'visible' }),
         this.page
           .getByText(/no items|no traces/i)
           .first()
