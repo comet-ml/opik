@@ -11,16 +11,12 @@ import {
 } from "@/lib/annotation-queues";
 import { Trace, Thread } from "@/types/traces";
 import { isObjectThread } from "@/lib/traces";
-import { prettifyMessage, prettifyTraceField } from "@/lib/traces";
+import { prettifyThreadField, prettifyTraceField } from "@/lib/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
-const getPreviewText = (
-  obj: object | undefined,
-  type: "input" | "output",
-): string => {
-  const result = prettifyMessage(obj, {
-    type,
-  });
+const getPreviewText = (thread: Thread, type: "input" | "output"): string => {
+  const obj = type === "input" ? thread.first_message : thread.last_message;
+  const result = prettifyThreadField(thread, type);
   if (typeof result.message === "string") return result.message;
   return obj ? JSON.stringify(obj).slice(0, 80) : "";
 };
@@ -35,10 +31,8 @@ const getItemPreviews = (
       thread.id.slice(-12);
     return {
       name,
-      input: getPreviewText(thread.first_message, "input"),
-      output: thread.last_message
-        ? getPreviewText(thread.last_message, "output")
-        : "",
+      input: getPreviewText(thread, "input"),
+      output: thread.last_message ? getPreviewText(thread, "output") : "",
     };
   }
   const trace = item as Trace;

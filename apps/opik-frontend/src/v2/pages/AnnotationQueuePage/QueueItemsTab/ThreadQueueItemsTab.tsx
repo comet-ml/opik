@@ -46,6 +46,7 @@ import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyConten
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
+import { getThreadPrettifyConfig } from "@/lib/traces";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
@@ -78,6 +79,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      getPrettifyConfig: getThreadPrettifyConfig,
     },
   },
   {
@@ -88,6 +90,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      getPrettifyConfig: getThreadPrettifyConfig,
     },
   },
   {

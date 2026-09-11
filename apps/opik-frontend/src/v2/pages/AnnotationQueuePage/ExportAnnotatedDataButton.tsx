@@ -26,7 +26,7 @@ import {
   getFeedbackScoresByUser,
   getCommentsByUser,
 } from "@/lib/annotation-queues";
-import { prettifyMessage, prettifyTraceField } from "@/lib/traces";
+import { prettifyThreadField, prettifyTraceField } from "@/lib/traces";
 import { JsonNode } from "@/types/shared";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -170,10 +170,9 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       return threads.map((thread: Thread) => {
         const baseData: ExportThreadData = {
           id: thread.id,
-          first_message: prettifyMessage(thread.first_message, {
-            type: "input",
-          }).message as JsonNode,
-          last_message: prettifyMessage(thread.last_message, { type: "output" })
+          first_message: prettifyThreadField(thread, "input")
+            .message as JsonNode,
+          last_message: prettifyThreadField(thread, "output")
             .message as JsonNode,
         };
 

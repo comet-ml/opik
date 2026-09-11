@@ -266,6 +266,10 @@ public class OpenTelemetryMapper {
                     break;
 
                 case THREAD_ID :
+                    // Empty IDs must not suppress a valid conversation/session fallback.
+                    if (value.hasStringValue() && StringUtils.isBlank(value.getStringValue())) {
+                        break;
+                    }
                     // On OpenInference spans: explicit Opik ID > GenAI conversation > session.
                     // Repeated attributes of the same priority retain the first value.
                     boolean explicit = THREAD_ID.equals(key);

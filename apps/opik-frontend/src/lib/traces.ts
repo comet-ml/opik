@@ -734,3 +734,31 @@ export const prettifyTraceField = (
   source: PrettifySource,
   type: "input" | "output",
 ) => prettifyMessage(source[type], getPrettifyConfig(source, type));
+
+type ThreadPrettifySource = Partial<
+  Pick<Thread, "first_message" | "last_message">
+>;
+
+export const getThreadPrettifyConfig = (
+  source: ThreadPrettifySource,
+  type: "input" | "output",
+): PrettifyMessageConfig => ({
+  type,
+  // Thread aggregates omit the source trace's metadata. Recognize structured
+  // messages from the field itself without enabling synthetic raw fallbacks.
+  openInferenceHint: isOpenInferenceField(
+    type === "input" ? source.first_message : source.last_message,
+    type,
+    true,
+    false,
+  ),
+});
+
+export const prettifyThreadField = (
+  source: ThreadPrettifySource,
+  type: "input" | "output",
+) =>
+  prettifyMessage(
+    type === "input" ? source.first_message : source.last_message,
+    getThreadPrettifyConfig(source, type),
+  );

@@ -2382,6 +2382,37 @@ class OpenTelemetryMapperTest {
         }
 
         @ParameterizedTest
+        @ValueSource(strings = {"", "   ", "\t\n"})
+        void ignoresBlankThreadIdsWhenSelectingFallbacks(String blank) {
+            var attributes = new ArrayList<>(List.of(str("openinference.span.kind", "LLM"),
+                    str("thread_id", blank), str("gen_ai.conversation.id", blank), str("session.id", "session")));
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("session");
+            attributes.add(str("gen_ai.conversation.id", "conversation"));
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("conversation");
+            Collections.reverse(attributes);
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("conversation");
+            attributes.add(str("thread_id", "explicit"));
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("explicit");
+            Collections.reverse(attributes);
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("explicit");
+        }
+
+        @Test
+        void preservesNumericExplicitThreadIdOverSession() {
+            var span = enrich(List.of(str("openinference.span.kind", "LLM"),
+                    integer("thread_id", 0), str("session.id", "session")));
+            assertThat(span.metadata().path("thread_id").asInt()).isZero();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"", "   "})
+        void skipsBlankThreadIdsOnUnmarkedSpans(String blank) {
+            var attributes = List.of(str("thread_id", blank), str("gen_ai.conversation.id", "conversation"));
+            assertThat(enrich(attributes).metadata().path("thread_id").asText()).isEqualTo("conversation");
+            assertThat(enrich(List.of(str("thread_id", blank))).metadata().has("thread_id")).isFalse();
+        }
+
+        @ParameterizedTest
         @CsvSource({"100,80,50,0", "100,20,10,70", "2147483647,0,0,2147483647"})
         void boundsExclusiveOpenInferenceUsage(int prompt, int read, int write, int expected) {
             var span = enrich(List.of(str("openinference.span.kind", "LLM"), str("llm.provider", "anthropic"),

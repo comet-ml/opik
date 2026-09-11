@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import {
   getPrettifyConfig,
+  getThreadPrettifyConfig,
   PrettifyMessageConfig,
   PrettifySource,
 } from "@/lib/traces";
@@ -85,5 +86,23 @@ describe("PrettyCell", () => {
         <TestTable row={row} value={(thread) => thread.last_message} />,
       ),
     ).toContain("Thread answer");
+  });
+
+  it("renders canonical thread output as text through the thread column config", () => {
+    const row = {
+      last_message: {
+        messages: [{ role: "assistant", content: "Thread answer" }],
+      },
+    };
+    const html = renderToStaticMarkup(
+      <TestTable
+        row={row}
+        value={(thread) => thread.last_message ?? ""}
+        config={getThreadPrettifyConfig}
+      />,
+    );
+    expect(html).toContain("Thread answer");
+    expect(html).not.toContain("&quot;messages&quot;");
+    expect(html).not.toContain("&quot;role&quot;");
   });
 });
