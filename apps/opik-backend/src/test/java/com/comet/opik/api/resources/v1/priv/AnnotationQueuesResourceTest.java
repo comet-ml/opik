@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueAutomation;
+import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueReviewer;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -58,6 +60,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -532,6 +535,219 @@ class AnnotationQueuesResourceTest {
     }
 
     @Nested
+    @DisplayName("Annotation Queue Automation Config")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AnnotationQueueAutomationConfig {
+
+        private AnnotationQueue createQueue(AnnotationQueueAutomation automation, int expectedStatus) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var queue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .automation(automation)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue)), API_KEY, TEST_WORKSPACE, expectedStatus);
+
+            return queue;
+        }
+
+        private AnnotationQueue readBack(UUID queueId) {
+            return annotationQueuesResourceClient.getAnnotationQueueById(
+                    queueId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+        }
+
+        private AnnotationQueueAutomation.Conditions conditionsOn(String score, double value) {
+            return AnnotationQueueAutomation.Conditions.builder()
+                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
+                            .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
+                                    .scoreName(score)
+                                    .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
+                                    .value(value)
+                                    .build()))
+                            .build()))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("should persist conditions and the item ceiling and return them on get")
+        void persistsAutomation() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation()).isEqualTo(automation);
+        }
+
+        @Test
+        @DisplayName("should return no automation for a queue created without one")
+        void noAutomation() {
+            var queue = createQueue(null, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation()).isNull();
+        }
+
+        @Test
+        @DisplayName("should accept an automation without an item ceiling")
+        void automationWithoutCeiling() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("relevance", 0.8))
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            var stored = readBack(queue.id()).automation();
+            assertThat(stored.enabled()).isTrue();
+            assertThat(stored.maxItemsInQueue()).isNull();
+        }
+
+        @Test
+        @DisplayName("should keep conditions and the ceiling when a request only flips enabled off")
+        void toggleOnlyPreservesTheRest() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder().enabled(false).build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var stored = readBack(queue.id()).automation();
+            assertThat(stored.enabled()).isFalse();
+            assertThat(stored.maxItemsInQueue()).isEqualTo(25);
+            assertThat(stored.conditions()).isEqualTo(automation.conditions());
+        }
+
+        @Test
+        @DisplayName("should keep conditions when a request only changes the ceiling")
+        void ceilingOnlyUpdatePreservesConditions() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(25)
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder()
+                                    .enabled(true)
+                                    .maxItemsInQueue(4)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var stored = readBack(queue.id()).automation();
+            assertThat(stored.maxItemsInQueue()).isEqualTo(4);
+            assertThat(stored.conditions()).isEqualTo(automation.conditions());
+        }
+
+        @Test
+        @DisplayName("should reject an enabled automation that has never been given conditions, and create no queue")
+        void enabledWithoutConditionsIsRejected() {
+            var queue = createQueue(AnnotationQueueAutomation.builder().enabled(true).build(),
+                    HttpStatus.SC_BAD_REQUEST);
+
+            // The rejection must happen before the queue is written, or the caller is left with a queue it
+            // was told it did not create.
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    queue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        private Stream<Arguments> nonFiniteThresholds() {
+            return Stream.of(
+                    arguments(Double.NaN, "NaN"),
+                    arguments(Double.POSITIVE_INFINITY, "+Infinity"),
+                    arguments(Double.NEGATIVE_INFINITY, "-Infinity"));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource("nonFiniteThresholds")
+        @DisplayName("should reject a threshold that is not a finite number:")
+        void nonFiniteThresholdIsRejected(double value, String label) {
+            var conditions = AnnotationQueueAutomation.Conditions.builder()
+                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
+                            .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
+                                    .scoreName("safety")
+                                    .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
+                                    .value(value)
+                                    .build()))
+                            .build()))
+                    .build();
+
+            // Non-finite values parse and pass @NotNull, and every comparison against NaN is false, so
+            // without this they would be stored and the automation would silently never match.
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditions)
+                    .build(),
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("should reject a null condition group rather than failing on it")
+        void nullConditionGroupIsRejected() {
+            var conditions = AnnotationQueueAutomation.Conditions.builder()
+                    .groups(Collections.<AnnotationQueueAutomation.ConditionGroup>singletonList(null))
+                    .build();
+
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditions)
+                    .build(),
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should reject a null score condition rather than failing on it")
+        void nullScoreConditionIsRejected() {
+            var conditions = AnnotationQueueAutomation.Conditions.builder()
+                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
+                            .conditions(Collections.<AnnotationQueueAutomation.ScoreCondition>singletonList(null))
+                            .build()))
+                    .build();
+
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditions)
+                    .build(),
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+
+        private Stream<Arguments> invalidCeilings() {
+            return Stream.of(arguments(0, "zero"), arguments(-1, "negative"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidCeilings")
+        @DisplayName("should reject an item ceiling that is not positive:")
+        void invalidCeilingIsRejected(int value, String label) {
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditionsOn("safety", 0.5))
+                    .maxItemsInQueue(value)
+                    .build(),
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Nested
     @DisplayName("Annotation Queue Item Management")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AnnotationQueueItemManagement {
@@ -595,6 +811,101 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should keep item history after the items are removed from the queue")
+        void historyOutlivesItemRemoval() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var itemIds = Set.of(idGenerator.generateId(), idGenerator.generateId());
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // History is what stops automation re-adding an item a reviewer deliberately removed, so it
+            // has to survive the removal that makes it matter.
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isZero();
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+        }
+
+        @Test
+        @DisplayName("should clear item history when the queue is deleted")
+        void deletingQueueClearsHistory() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var itemIds = Set.of(idGenerator.generateId(), idGenerator.generateId());
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    Set.of(annotationQueue.id()), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isZero();
+        }
+
+        @Test
+        @DisplayName("should return membership metadata for queue members and omit non-members")
+        void searchItemsReturnsMembershipAndOmitsNonMembers() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var member = idGenerator.generateId();
+            var nonMember = idGenerator.generateId();
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), Set.of(member), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var found = annotationQueuesResourceClient.searchAnnotationQueueItems(
+                    annotationQueue.id(), Set.of(member, nonMember), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(found.content()).hasSize(1);
+            assertThat(found.content().getFirst().id()).isEqualTo(member);
+            // Added through the API, so it is a person's doing rather than an automation's.
+            assertThat(found.content().getFirst().source()).isEqualTo(AnnotationQueueItemSource.MANUAL);
+        }
+
+        @Test
+        @DisplayName("should return an empty result when none of the ids are in the queue")
+        void searchItemsWithNoMembers() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var found = annotationQueuesResourceClient.searchAnnotationQueueItems(
+                    annotationQueue.id(), Set.of(idGenerator.generateId()), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+
+            assertThat(found.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should return 404 when searching items of a non-existent annotation queue")
+        void searchItemsOfMissingQueue() {
+            annotationQueuesResourceClient.searchAnnotationQueueItems(
+                    idGenerator.generateId(), Set.of(idGenerator.generateId()), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
@@ -2107,7 +2418,23 @@ class AnnotationQueuesResourceTest {
                 .lockTimeoutSeconds(updateRequest.lockTimeoutSeconds() != null
                         ? updateRequest.lockTimeoutSeconds()
                         : existingQueue.lockTimeoutSeconds())
+                .automation(updateRequest.automation() != null
+                        ? updateRequest.automation()
+                        : existingQueue.automation())
                 .build();
+    }
+
+    private int getItemHistoryCount(String workspaceId, UUID queueId) {
+        String historyCountQuery = "SELECT count(*) as cnt FROM annotation_queue_item_history WHERE workspace_id=:workspace_id AND queue_id=:queue_id";
+
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(historyCountQuery)
+                    .bind("workspace_id", workspaceId)
+                    .bind("queue_id", queueId.toString());
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("cnt", Integer.class)))
+                    .singleOrEmpty();
+        }).block();
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {

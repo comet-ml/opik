@@ -3,7 +3,9 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
+import com.comet.opik.api.AnnotationQueueItem;
 import com.comet.opik.api.AnnotationQueueItemIds;
+import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.BatchDelete;
@@ -248,7 +250,7 @@ public class AnnotationQueuesResource {
         log.info("Adding '{}' items to annotation queue with id '{}' on workspaceId '{}'",
                 request.ids().size(), queueId, workspaceId);
 
-        annotationQueueService.addItems(queueId, request.ids())
+        annotationQueueService.addItems(queueId, request.ids(), AnnotationQueueItemSource.MANUAL)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -256,6 +258,30 @@ public class AnnotationQueuesResource {
                 request.ids().size(), queueId, workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/{id}/items/search")
+    // VIEW, not ANNOTATE: this is a read, and the items table calls it on every page load to render the
+    // Source column. Gating it on ANNOTATE would 403 a view-only user who is allowed to open the page at
+    // all - GET /{id} is VIEW - and leave them a blank column with an error in the console.
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_VIEW)
+    @Operation(operationId = "searchAnnotationQueueItems", summary = "Search annotation queue items", description = "Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.", responses = {
+            @ApiResponse(responseCode = "200", description = "Annotation queue items", content = @Content(schema = @Schema(implementation = AnnotationQueueItem.AnnotationQueueItems.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView(AnnotationQueueItem.View.Public.class)
+    public Response searchAnnotationQueueItems(
+            @PathParam("id") UUID queueId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueItemIds.class))) @Valid AnnotationQueueItemIds request) {
+
+        log.info("Finding '{}' items of annotation queue with id '{}'", request.ids().size(), queueId);
+
+        var items = annotationQueueService.findItemsByIds(queueId, request.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.ok(items).build();
     }
 
     @POST
