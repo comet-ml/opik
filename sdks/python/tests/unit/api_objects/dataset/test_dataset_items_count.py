@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 import opik.config as config
+from opik.api_objects import constants
 from opik.api_objects.dataset.dataset import Dataset
 
 from .upload_capture import UploadCapture
@@ -235,10 +236,7 @@ class _FailAfterFirstRequest(UploadCapture):
         return response
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_count(
-    streaming,
-):
+def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_count():
     """A partial insert has changed the dataset, so the cached count is stale too.
 
     Nothing is rolled back when an upload fails part-way, so the items in the
@@ -247,23 +245,15 @@ def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_coun
     demonstrably added items -- and reports it indefinitely, since the cache is
     only refilled once it has been cleared.
 
-    Both upload paths are covered: a `Dataset` with no HTTP client of its own
-    uploads through the generated REST client and has the same obligation.
+    This was parametrised over the two upload paths; there is only one now, and a
+    `Dataset` built from a REST client alone takes it like any other.
     """
     mock_rest_client = Mock()
     capture = _FailAfterFirstRequest()
-
-    if streaming:
-        transport = {
-            "rest_httpx_client": capture,
-            "url_override": capture.base_url,
-        }
-    else:
-        transport = {}
-        mock_rest_client.datasets.create_or_update_dataset_items.side_effect = [
-            None,
-            RuntimeError("connection lost mid-upload"),
-        ]
+    transport = {
+        "rest_httpx_client": capture,
+        "url_override": capture.base_url,
+    }
 
     dataset = Dataset(
         name="test_dataset",
@@ -287,4 +277,36 @@ def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_coun
 
     assert dataset._dataset_items_count is None, (
         "A failed insert that persisted earlier items must clear the cached count"
+    )
+
+
+def test_delete__fails_after_earlier_batches_were_deleted__still_invalidates_count(
+    monkeypatch,
+):
+    """The same obligation as a partial insert, on the other side.
+
+    `delete` removes items batch by batch with no rollback, so a failure part-way leaves
+    the dataset smaller than the cached count says -- and the cache is only refilled once
+    cleared, so it would report the stale number indefinitely.
+    """
+    monkeypatch.setattr(constants, "DATASET_ITEMS_MAX_BATCH_SIZE", 1)
+    mock_rest_client = Mock()
+    mock_rest_client.datasets.delete_dataset_items.side_effect = [
+        None,
+        RuntimeError("connection lost mid-delete"),
+    ]
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=5,
+    )
+    assert dataset.dataset_items_count == 5
+
+    with pytest.raises(RuntimeError):
+        dataset.delete(["id-1", "id-2"])
+
+    assert dataset._dataset_items_count is None, (
+        "A failed delete that removed earlier items must clear the cached count"
     )

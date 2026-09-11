@@ -34,7 +34,9 @@ def _writer(flush_callback, **kwargs):
         "max_items": 1_000,
         "flush_interval_seconds": None,
         "gzip_level": 6,
-        "use_orjson": False,
+        # The shipped default. Tests that build a stdlib expectation pass
+        # `use_orjson=False` explicitly; everything else runs what users run.
+        "use_orjson": True,
     }
     params.update(kwargs)
     return streaming_writer.StreamingBatchWriter(**params)
@@ -96,10 +98,14 @@ def test_flush__no_items__does_nothing():
     assert bodies == []
 
 
-def test_body__matches_a_one_shot_gzip_of_the_same_rows():
+@pytest.mark.parametrize("use_orjson", [False, True])
+def test_body__matches_a_one_shot_gzip_of_the_same_rows(use_orjson):
     """Incremental compression must produce the same bytes as compressing once."""
+    if use_orjson:
+        pytest.importorskip("orjson")
+    dumps = streaming_writer.select_dumps(use_orjson)
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, gzip_level=6)
+    writer = _writer(flush_callback, gzip_level=6, use_orjson=use_orjson)
 
     rows = [{"id": f"item-{i}", "data": {"v": i}} for i in range(5)]
     for row in rows:
@@ -108,11 +114,9 @@ def test_body__matches_a_one_shot_gzip_of_the_same_rows():
 
     incremental = bodies[0][0]
     one_shot_payload = (
-        json.dumps(
-            {"dataset_name": "d", "project_name": None, "batch_group_id": "g"}
-        ).encode("utf-8")[:-1]
+        dumps({"dataset_name": "d", "project_name": None, "batch_group_id": "g"})[:-1]
         + b',"items":['
-        + b",".join(json.dumps(row).encode("utf-8") for row in rows)
+        + b",".join(dumps(row) for row in rows)
         + b"]}"
     )
 
@@ -283,18 +287,108 @@ def test_pool__worker_error__is_reraised_to_the_producer():
         pool.close()
 
 
-def test_pool__workers_exited__fails_instead_of_blocking_for_ever():
-    """`SystemExit` leaves no consumer, and the queue is bounded: an insert must not hang."""
+def _executor_threads(pool) -> int:
+    """How many threads the executor has actually started.
+
+    `ThreadPoolExecutor._threads` is a stdlib internal, and the only observer of the
+    property under test: nothing downstream distinguishes three workers from sixty-four,
+    which is why starting them eagerly went unnoticed before.
+    """
+    return len(pool._pool._threads)
+
+
+def test_pool__workers_follow_the_upload_not_the_ceiling():
+    """`num_threads` is a ceiling. A three-body upload must not start sixty-four threads."""
+    sent = []
+    pool = streaming_writer.BoundedSendPool(sent.append, num_threads=64)
+
+    assert _executor_threads(pool) == 0, "No worker before there is a body to send"
+
+    for index in range(3):
+        pool.submit(f"body-{index}".encode(), 1)
+    pool.close()
+
+    # Asserted together on purpose: a pool that started no threads because it sent
+    # nothing would satisfy the worker count on its own.
+    assert sorted(sent) == [b"body-0", b"body-1", b"body-2"], (
+        "Every body must still have been sent, exactly once"
+    )
+    assert _executor_threads(pool) <= 3, "Started a thread with no body for it"
+
+
+def test_pool__sustained_load__grows_to_the_ceiling_and_no_further():
+    """Growing lazily must not cost concurrency when the upload actually needs it."""
+    release = threading.Event()
+    started = threading.Semaphore(0)
+    sent = []
+
+    def blocked_send(body: bytes) -> None:
+        sent.append(body)
+        started.release()
+        release.wait(5)
+
+    pool = streaming_writer.BoundedSendPool(blocked_send, num_threads=8)
+    try:
+        for expected in range(1, 9):
+            pool.submit(b"body", 1)
+            # Wait for the body to be picked up, so the next submit sees no idle worker.
+            assert started.acquire(timeout=5), "the body was never picked up"
+            assert _executor_threads(pool) == expected, (
+                "A body with every worker busy should have grown the pool"
+            )
+
+        pool.submit(b"body", 1)
+        assert _executor_threads(pool) == 8, "num_threads is a ceiling and must hold"
+
+        release.set()
+        pool.close()
+        assert len(sent) == 9, "Every body must still have been sent"
+    finally:
+        release.set()
+
+
+def test_pool__saturated__submit_blocks_until_a_body_lands():
+    """The back-pressure that keeps memory bounded: the producer cannot run ahead."""
+    release = threading.Event()
+
+    def blocked_send(body: bytes) -> None:
+        release.wait(5)
+
+    # num_threads=2 bounds the outstanding bodies at 4.
+    pool = streaming_writer.BoundedSendPool(blocked_send, num_threads=2)
+    returned = threading.Event()
+
+    def fill_and_overflow() -> None:
+        for _ in range(4):
+            pool.submit(b"body", 1)
+        pool.submit(b"body", 1)  # the fifth has to wait for one of the four
+        returned.set()
+
+    producer = threading.Thread(target=fill_and_overflow, daemon=True)
+    producer.start()
+    try:
+        assert not returned.wait(0.5), (
+            "The producer ran past the bound instead of waiting for a body to land"
+        )
+    finally:
+        release.set()
+
+    assert returned.wait(5), "The producer never resumed once a body had landed"
+    producer.join(5)
+    pool.close()
+
+
+def test_pool__send_raising_a_base_exception__reaches_the_producer():
+    """`SystemExit` from a send must surface, not be swallowed or left hanging."""
 
     def send(body: bytes) -> None:
         raise SystemExit("interrupted")
 
-    pool = streaming_writer.BoundedSendPool(send, num_threads=2, max_pending=1)
+    pool = streaming_writer.BoundedSendPool(send, num_threads=2)
+    pool.submit(b"body", 1)
 
-    with pytest.raises(streaming_writer.SendWorkersGoneError):
-        # More bodies than the queue holds, so a put has to wait on a worker that is gone.
-        for _ in range(5):
-            pool.submit(b"body", 1)
+    with pytest.raises(SystemExit):
+        pool.close()
 
 
 def test_add__item_at_the_cap__gets_its_own_request():
@@ -321,7 +415,9 @@ def test_add__item_at_the_cap__gets_its_own_request():
 def test_add__batch_never_exceeds_the_payload_cap():
     """Closing the batch before the item that would overflow it, not after."""
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, max_payload_bytes=300)
+    # On the standard library, so the size the assertion recomputes below is the one the
+    # writer measured; the cap arithmetic itself does not depend on the serialiser.
+    writer = _writer(flush_callback, max_payload_bytes=300, use_orjson=False)
 
     for i in range(10):
         writer.add({"id": f"item-{i}", "data": {"padding": "x" * 60}})
@@ -426,55 +522,3 @@ def test_item_payload__explicit_nulls_are_sent_not_omitted():
         "evaluators": None,
         "execution_policy": None,
     }
-
-
-def test_pool__workers_follow_the_upload_not_the_ceiling():
-    """`num_threads` is a ceiling. A three-body upload must not start sixty-four threads."""
-    sent = []
-    pool = streaming_writer.BoundedSendPool(sent.append, num_threads=64)
-
-    assert pool._workers == [], "No worker should exist before there is a body to send"
-
-    for index in range(3):
-        pool.submit(f"body-{index}".encode(), 1)
-    pool.close()
-
-    # Asserted together on purpose: a pool that started no threads because it sent
-    # nothing would satisfy the worker count on its own.
-    assert sorted(sent) == [b"body-0", b"body-1", b"body-2"], (
-        "Every body must still have been sent, exactly once"
-    )
-    assert len(pool._workers) <= 3, (
-        f"Started {len(pool._workers)} threads for three bodies"
-    )
-
-
-def test_pool__sustained_load__grows_to_the_ceiling_and_no_further():
-    """Growing lazily must not cost concurrency when the upload actually needs it."""
-    release = threading.Event()
-    started = threading.Semaphore(0)
-    sent = []
-
-    def blocked_send(body: bytes) -> None:
-        sent.append(body)
-        started.release()
-        release.wait(5)
-
-    pool = streaming_writer.BoundedSendPool(blocked_send, num_threads=8)
-    try:
-        for expected in range(1, 9):
-            pool.submit(b"body", 1)
-            # Wait for the body to be picked up, so the next submit sees no idle worker.
-            assert started.acquire(timeout=5), "the body was never picked up"
-            assert len(pool._workers) == expected, (
-                "A body with every worker busy should have grown the pool"
-            )
-
-        pool.submit(b"body", 1)
-        assert len(pool._workers) == 8, "num_threads is a ceiling and must hold"
-
-        release.set()
-        pool.close()
-        assert len(sent) == 9, "Every body must still have been sent"
-    finally:
-        release.set()

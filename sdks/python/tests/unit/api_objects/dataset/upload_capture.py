@@ -8,7 +8,7 @@ still say `capture.items[0]["data"]` -- while checking what actually goes on the
 
 import gzip
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class _Response:
@@ -28,6 +28,7 @@ class UploadCapture:
         status_code: int = 204,
         responses: Optional[List[int]] = None,
         response_headers: Optional[Dict[str, str]] = None,
+        on_request: Optional[Callable[[], None]] = None,
     ) -> None:
         self.bodies: List[bytes] = []
         self.urls: List[str] = []
@@ -36,8 +37,12 @@ class UploadCapture:
         # Consumed in order when given, so a test can script a 429 followed by a success.
         self._responses = list(responses) if responses is not None else None
         self._response_headers = response_headers or {}
+        # Runs inside the request, so a test can observe or hold uploads in flight.
+        self._on_request = on_request
 
     def request(self, method: str, url: str, **kwargs: Any) -> _Response:
+        if self._on_request is not None:
+            self._on_request()
         self.urls.append(url)
         self.bodies.append(kwargs["content"])
         self.request_headers.append(dict(kwargs.get("headers") or {}))
@@ -68,6 +73,21 @@ class UploadCapture:
     def items(self) -> List[Dict[str, Any]]:
         """Every item sent, flattened across requests."""
         return [item for batch in self.batches for item in batch]
+
+
+def rest_client_with_transport(capture: "UploadCapture", **attrs: Any) -> Any:
+    """A mock REST client whose own httpx transport is `capture`.
+
+    How a `Dataset` built from nothing but a REST client resolves its transport: the
+    generated client's wrapper holds the real `OpikHttpxClient`, so the upload reaches it
+    without the caller supplying anything.
+    """
+    from unittest.mock import Mock
+
+    rest_client = Mock(**attrs)
+    rest_client._client_wrapper.httpx_client.httpx_client = capture
+    rest_client._client_wrapper.get_base_url.return_value = capture.base_url
+    return rest_client
 
 
 def make_dataset(

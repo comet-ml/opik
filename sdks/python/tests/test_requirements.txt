@@ -1,4 +1,5 @@
 numpy
+orjson
 pytest
 pytest-asyncio
 pytest-cov

@@ -1,6 +1,8 @@
 from unittest.mock import Mock, patch
 
 from opik.api_objects.dataset import rest_operations
+
+from .upload_capture import UploadCapture
 from opik.rest_api.types import dataset_item as rest_dataset_item
 
 
@@ -39,11 +41,16 @@ def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitt
         [_backend_dataset("my-suite", "evaluation_suite", items_total=1)]
     )
 
+    capture = UploadCapture()
     suites = rest_operations.get_test_suites(
         project_name="Test project",
         rest_client=mock_rest_client,
     )
     assert len(suites) == 1
+    # The suite is built by the factory, so the transport of the dataset it wraps is
+    # substituted after the fact.
+    suites[0]._dataset._rest_httpx_client = capture
+    suites[0]._dataset._url_override = capture.base_url
 
     backend_item = rest_dataset_item.DatasetItem(
         id="existing-item-id", source="sdk", data=existing_content
@@ -59,14 +66,7 @@ def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitt
             ]
         )
 
-    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
-    submitted = [
-        item
-        for call in create_or_update.call_args_list
-        for item in call.kwargs["items"]
-    ]
-
-    assert [item.data for item in submitted] == [{"question": "brand new"}], (
+    assert [item["data"] for item in capture.items] == [{"question": "brand new"}], (
         "The item the suite already holds must be recognised as a duplicate and "
         "left out of the batch"
     )

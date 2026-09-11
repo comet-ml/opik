@@ -3,8 +3,6 @@
 import base64
 import datetime
 import json
-import threading
-import time
 import tracemalloc
 from unittest.mock import Mock
 
@@ -13,14 +11,12 @@ import tenacity
 
 import opik.config as config
 from opik import exceptions
-from opik.api_objects import constants
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
-from opik.message_processing.batching import sequence_splitter
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
 from opik.rest_client_configurator import retry_decorator
 
-from .upload_capture import UploadCapture, make_dataset
+from .upload_capture import UploadCapture, make_dataset, rest_client_with_transport
 
 
 @pytest.fixture
@@ -216,22 +212,19 @@ def test_insert__value_not_json_serializable__raises_explicitly():
 # compatibility: a Dataset built from a rest client alone still uploads
 # --------------------------------------------------------------------------- #
 def test_insert__dataset_built_without_an_owning_client__still_uploads():
-    """Third-party code constructs Dataset this way; it must keep working."""
-    mock_rest_client = Mock()
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    """Third-party code constructs Dataset this way; it must keep working.
+
+    There is no second upload path any more: the transport comes from the REST client's
+    own wrapper, which is the same `OpikHttpxClient` an owning client would have handed
+    over, so this construction streams like any other.
+    """
+    capture = UploadCapture()
+    dataset = _rest_client_only_dataset(capture)
 
     dataset.insert(_items(2))
 
-    create = mock_rest_client.datasets.create_or_update_dataset_items
-    assert create.call_count == 1, (
-        "Without an HTTP client of its own the upload must fall back to the REST client"
-    )
-    assert len(create.call_args.kwargs["items"]) == 2
+    assert capture.request_count == 1
+    assert len(capture.items) == 2
 
 
 # --------------------------------------------------------------------------- #
@@ -288,6 +281,23 @@ def test_insert__streaming__server_error_raises(instant_retries):
 
     with pytest.raises(ApiError):
         dataset.insert(_items(1))
+
+
+# --------------------------------------------------------------------------- #
+# a Dataset built from a REST client alone: the same path, resolved differently
+# --------------------------------------------------------------------------- #
+def _rest_client_only_dataset(capture, **rest_client_attrs):
+    """A Dataset built from nothing but a REST client, as third-party code builds one.
+
+    It resolves its transport from the REST client's own wrapper, so it uploads through
+    the same path as every other Dataset.
+    """
+    return Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=rest_client_with_transport(capture, **rest_client_attrs),
+    )
 
 
 def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatch):
@@ -350,173 +360,61 @@ def test_insert__streaming__permanent_server_error_still_raises(instant_retries)
 
 
 # --------------------------------------------------------------------------- #
-# the rest-client-only fallback: slower, but bounded the same way
+# a Dataset built from a REST client alone: the same path, resolved differently
 # --------------------------------------------------------------------------- #
-def _fallback_dataset(rest_client):
-    """A Dataset with no HTTP client of its own, so uploads take the fallback path."""
+def _rest_client_only_dataset(capture, **rest_client_attrs):
+    """A Dataset built from nothing but a REST client, as third-party code builds one.
+
+    It resolves its transport from the REST client's own wrapper, so it uploads through
+    the same path as every other Dataset.
+    """
     return Dataset(
         name="test_dataset",
         description="Test description",
         project_name="Test project",
-        rest_client=rest_client,
+        rest_client=rest_client_with_transport(capture, **rest_client_attrs),
     )
 
 
-def test_insert__rest_client_only__generator_consumed_lazily_not_drained_up_front(
-    monkeypatch,
+def test_insert__parallel_upload__a_failing_request_raises_to_the_caller(
+    monkeypatch, instant_retries
 ):
-    """The fallback used to build the whole upload as a list before batching."""
+    """A failure on a worker thread must reach the caller, not be lost in the pool."""
     monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
-    mock_rest_client = Mock()
-    dataset = _fallback_dataset(mock_rest_client)
-
-    drawn = []
-    drawn_when_sent = []
-
-    def source():
-        for item in _items(6):
-            drawn.append(item)
-            yield item
-
-    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
-        lambda **kwargs: drawn_when_sent.append(len(drawn))
-    )
-
-    dataset.insert(source(), num_threads=1)
-
-    assert drawn_when_sent == [1, 2, 3, 4, 5, 6], (
-        "Each request should go out as its batch fills, not after the source is drained"
-    )
-
-
-def test_insert__rest_client_only__requests_in_flight_are_bounded(monkeypatch):
-    """Submitting every batch up front would hold the whole upload as queued futures."""
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
-    num_threads = 4
-    total = 200
-
+    capture = UploadCapture(status_code=500)
     mock_rest_client = Mock()
     mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
-    dataset = _fallback_dataset(mock_rest_client)
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
-    release = threading.Event()
-    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
-        lambda **kwargs: release.wait(10)
-    )
+    from opik.rest_api.core.api_error import ApiError
 
-    drawn = []
-
-    def source():
-        for item in _items(total):
-            drawn.append(item)
-            yield item
-
-    drawn_while_blocked = []
-
-    def unblock_once_the_producer_stalls():
-        previous = -1
-        while previous != len(drawn):
-            previous = len(drawn)
-            time.sleep(0.1)
-        drawn_while_blocked.append(len(drawn))
-        release.set()
-
-    watcher = threading.Thread(target=unblock_once_the_producer_stalls, daemon=True)
-    watcher.start()
-    dataset.insert(source(), num_threads=num_threads)
-    watcher.join(5)
-
-    assert drawn_while_blocked, "The watcher never observed the upload"
-    assert drawn_while_blocked[0] <= num_threads * 2 + 1, (
-        f"Work in flight is not bounded: {drawn_while_blocked[0]} items were drawn "
-        f"while every worker was blocked"
-    )
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == total
-
-
-def test_insert__rest_client_only__batches_match_the_splitter(monkeypatch):
-    """Incremental batching must split exactly where `split_into_batches` split."""
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)
-    monkeypatch.setattr(constants, "DATASET_ITEMS_MAX_BATCH_SIZE", 3)
-
-    # Mixed sizes, two of them past the cap, so the oversized-item boundary is exercised
-    # and not only the count limit.
-    payloads = [
-        {"i": i, "input": "x" * (4000 if i in (4, 5) else 120)} for i in range(14)
-    ]
-    mock_rest_client = Mock()
-    dataset = _fallback_dataset(mock_rest_client)
-
-    dataset.insert(payloads, num_threads=1)
-
-    create = mock_rest_client.datasets.create_or_update_dataset_items
-    sent = [call.kwargs["items"] for call in create.call_args_list]
-    in_source_order = sorted(
-        (item for batch in sent for item in batch), key=lambda item: item.data["i"]
-    )
-    expected = sequence_splitter.split_into_batches(
-        in_source_order,
-        max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
-        max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
-    )
-
-    def indices(batches):
-        return [[item.data["i"] for item in batch] for batch in batches]
-
-    assert indices(sent) == indices(expected), "Batching diverged from the splitter"
-    assert len(in_source_order) == len(payloads), "Every item must be sent exactly once"
-    groups = {call.kwargs["batch_group_id"] for call in create.call_args_list}
-    assert len(groups) == 1, "All batches must share one batch_group_id"
-
-
-def test_insert__rest_client_only__batch_failure_propagates(monkeypatch):
-    """A failing batch must raise, as it did when every batch was submitted up front."""
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
-    mock_rest_client = Mock()
-    mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
-    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = ValueError(
-        "backend rejected the batch"
-    )
-    dataset = _fallback_dataset(mock_rest_client)
-
-    with pytest.raises(ValueError):
+    with pytest.raises(ApiError):
         dataset.insert(_items(50), num_threads=4)
 
 
-def test_insert__rest_client_only__list_input__nothing_is_sent_if_an_item_is_invalid(
-    monkeypatch,
+@pytest.mark.parametrize("materialised", [True, False], ids=["list", "generator"])
+def test_insert__invalid_item__items_sent_before_it_stay_persisted(
+    monkeypatch, materialised
 ):
-    """A list was checked in full before the first request went out; it still is."""
+    """What a single-pass upload can promise on failure, for both input shapes.
+
+    The upload used to have a second path that built every item before sending, so from a
+    list an invalid item raised with nothing persisted. That path is gone: an item that
+    cannot be serialised is now found when it is reached, whatever the input was, and the
+    requests already sent stay sent. `insert`'s docstring says exactly this.
+    """
     monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
-    mock_rest_client = Mock()
-    dataset = _fallback_dataset(mock_rest_client)
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
 
     items = _items(5)
-    items[4]["input"] = {"bad": object()}  # not serialisable, so it cannot be converted
+    items[4]["input"] = {"bad": object()}  # not serialisable, so it cannot be sent
+    source = items if materialised else (item for item in items)
 
     with pytest.raises(streaming_writer.ItemNotSerializableError):
-        dataset.insert(items, num_threads=1)
+        dataset.insert(source, num_threads=1)
 
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 0, (
-        "A list input must be validated before anything is persisted"
-    )
-
-
-def test_insert__rest_client_only__generator_input__earlier_items_are_already_sent(
-    monkeypatch,
-):
-    """The documented trade for a generator: it cannot be checked without draining it."""
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
-    mock_rest_client = Mock()
-    dataset = _fallback_dataset(mock_rest_client)
-
-    items = _items(5)
-    items[4]["input"] = {"bad": object()}
-
-    with pytest.raises(streaming_writer.ItemNotSerializableError):
-        dataset.insert((item for item in items), num_threads=1)
-
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 4, (
+    assert capture.request_count == 4, (
         "The items before the invalid one are sent, as the docstring says"
     )
 
@@ -534,8 +432,8 @@ def _payloads_with_an_oversized_item():
     ]
 
 
-def test_insert__oversized_item__both_paths_emit_the_same_requests(monkeypatch):
-    """Same input, same batches, same order, whichever transport sends it."""
+def test_insert__oversized_item__gets_its_own_request_in_input_order(monkeypatch):
+    """An item past the cap is sent alone, and the input's order survives batching."""
     monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)
 
     capture = UploadCapture()
@@ -543,16 +441,6 @@ def test_insert__oversized_item__both_paths_emit_the_same_requests(monkeypatch):
     streaming.insert(_payloads_with_an_oversized_item(), num_threads=1)
     via_streaming = [[item["data"]["i"] for item in batch] for batch in capture.batches]
 
-    mock_rest_client = Mock()
-    fallback = _fallback_dataset(mock_rest_client)
-    fallback.insert(_payloads_with_an_oversized_item(), num_threads=1)
-    create = mock_rest_client.datasets.create_or_update_dataset_items
-    via_fallback = [
-        [item.data["i"] for item in call.kwargs["items"]]
-        for call in create.call_args_list
-    ]
-
-    assert via_streaming == via_fallback, "The transports disagree on batching"
     assert via_streaming == [[0, 1], [2], [3]], (
         "The oversized item gets its own request, and the input order is kept"
     )
@@ -561,20 +449,13 @@ def test_insert__oversized_item__both_paths_emit_the_same_requests(monkeypatch):
 # --------------------------------------------------------------------------- #
 # identifiers on the wire
 # --------------------------------------------------------------------------- #
-def test_insert__numeric_item_id__sent_as_a_string_on_both_paths():
+def test_insert__numeric_item_id__sent_as_a_string():
     """`DatasetItem` skips validating its id, so a number reaches the writer unchecked."""
     capture = UploadCapture()
     streaming = make_dataset(Dataset, Mock(), capture)
     streaming.insert([{"id": 123, "input": {"k": "v"}}])
 
     assert capture.items[0]["id"] == "123", "A numeric id must not go out as a number"
-
-    mock_rest_client = Mock()
-    fallback = _fallback_dataset(mock_rest_client)
-    fallback.insert([{"id": 123, "input": {"k": "v"}}])
-
-    sent = mock_rest_client.datasets.create_or_update_dataset_items.call_args.kwargs
-    assert sent["items"][0].id == "123", "The fallback must agree, not reject it"
 
 
 def test_insert_delete_reinsert__numeric_id__the_item_is_not_skipped():
@@ -602,8 +483,9 @@ def test_insert_delete_reinsert__numeric_id__the_item_is_not_skipped():
 @pytest.mark.parametrize("bad_id", [None, ""], ids=["none", "empty-string"])
 def test_delete__id_that_identifies_nothing__raises_before_anything_is_sent(bad_id):
     """Both reach `delete_dataset_items` as a request to delete nothing in particular."""
-    mock_rest_client = Mock()
-    dataset = _fallback_dataset(mock_rest_client)
+    capture = UploadCapture()
+    dataset = _rest_client_only_dataset(capture)
+    mock_rest_client = dataset._rest_client
 
     with pytest.raises(ValueError) as exc_info:
         dataset.delete(["real-id", bad_id])
@@ -615,7 +497,9 @@ def test_delete__id_that_identifies_nothing__raises_before_anything_is_sent(bad_
 
 
 @pytest.mark.parametrize("deduplication", [True, False])
-def test_insert__flexible_value__reaches_both_transports(deduplication):
+def test_insert__flexible_value__is_encoded_the_way_the_generated_client_encoded_it(
+    deduplication,
+):
     """Hashing runs before the writer does, so dedup must accept what the upload accepts."""
     item = {
         "input": {"when": datetime.datetime(2024, 1, 2, tzinfo=datetime.timezone.utc)},
@@ -627,17 +511,13 @@ def test_insert__flexible_value__reaches_both_transports(deduplication):
     streaming.insert([item], deduplication=deduplication)
     sent_streaming = capture.items[0]["data"]
 
-    mock_rest_client = Mock()
-    fallback = _fallback_dataset(mock_rest_client)
-    fallback.insert([item], deduplication=deduplication)
-    create = mock_rest_client.datasets.create_or_update_dataset_items
-    # The model holds the value unconverted; the generated client encodes it on the way
-    # out, which is the form to compare against what the writer produced.
-    sent_fallback = jsonable_encoder(create.call_args.kwargs["items"][0])["data"]
-
-    assert sent_streaming == sent_fallback, (
-        "The transports disagree on the encoded value"
+    # The generated client would have encoded the same value with `jsonable_encoder` on
+    # the way out; the writer has to agree with it.
+    expected = jsonable_encoder(
+        {"when": datetime.datetime(2024, 1, 2, tzinfo=datetime.timezone.utc)}
     )
+    assert sent_streaming["input"] == expected
+
     assert sent_streaming["input"]["when"] == "2024-01-02T00:00:00Z"
     assert (
         sent_streaming["expected_output"]["raw"] == base64.b64encode(b"bytes").decode()
@@ -654,3 +534,45 @@ def test_insert__list_containing_something_that_is_not_an_item__raises_before_se
 
     assert "index 1" in str(exc_info.value)
     assert capture.request_count == 0, "The valid item must not have been sent"
+
+
+@pytest.mark.parametrize("use_orjson", [True, False])
+def test_insert__integer_beyond_64_bits__sent_whichever_serialiser_is_in_use(
+    monkeypatch, use_orjson
+):
+    """orjson refuses these at any option; the standard library writes them.
+
+    Which serialiser happens to be installed must not decide whether an item can be
+    uploaded -- and `content_hash`, which runs first, has always accepted them.
+    """
+    if use_orjson:
+        pytest.importorskip("orjson")
+    monkeypatch.setenv("OPIK_ENABLE_ORJSON_SERIALIZATION", str(use_orjson).lower())
+    huge = 2**70
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert([{"input": {"n": huge}}])
+
+    assert capture.items[0]["data"]["input"]["n"] == huge
+
+
+def test_insert__producer_error_with_a_worker_error_pending__producer_error_wins(
+    monkeypatch,
+):
+    """Closing the pool must not replace the exception that explains the failure."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
+
+    def failing_upload() -> None:
+        raise ValueError("the worker's own failure")
+
+    capture = UploadCapture(on_request=failing_upload)
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
+
+    items = _items(5)
+    items[4]["input"] = {"bad": object()}  # the producer fails on this one
+
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        dataset.insert(items, num_threads=4)

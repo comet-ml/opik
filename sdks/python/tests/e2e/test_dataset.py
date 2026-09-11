@@ -697,26 +697,25 @@ def test_insert__generator_source__every_item_lands_in_a_single_version(
     version_info = opik_client.get_dataset(
         name=name, project_name=PROJECT_NAME
     ).get_version_info()
-    if version_info is not None:
-        assert version_info.version_name == "v1"
-        assert version_info.items_total == item_count
+    assert version_info is not None, "A dataset that was just written must have a version"
+    assert version_info.version_name == "v1"
+    assert version_info.items_total == item_count
 
 
 @pytest.mark.parametrize("payload_kind", ["json_native", "flexible_types"])
-def test_insert__streaming_and_rest_client_paths__store_identical_items(
+def test_insert__dataset_built_from_a_rest_client__stores_identical_items(
     opik_client: opik.Opik, dataset_name: str, payload_kind: str
 ):
-    """The two upload paths must not disagree about what an item looks like.
+    """A `Dataset` built from a REST client alone must store what any other does.
 
-    A `Dataset` that owns an HTTP client serialises items itself; one built from
-    a REST client alone still goes through the generated client. Two serialisers
-    for one wire format is the standing risk in this design, and the unit tests
-    compare each against a captured body rather than against each other on a
-    real backend.
+    It resolves its transport from the REST client's own wrapper rather than from
+    an owning client, so this is the construction that would break first if that
+    resolution were wrong -- and it is the one third-party code uses.
 
-    `flexible_types` is where they are most likely to drift: those values reach
-    the generated client's `jsonable_encoder` on one path and `encode_flexible`
-    on the other, and nothing else pins the two to the same output.
+    `flexible_types` is the payload most likely to expose a difference: those
+    values are normalised by `encode_flexible` on the way out, and a mismatch
+    with what the backend stored would show up here rather than in a unit test
+    that only reads back the body it captured.
     """
     if payload_kind == "json_native":
         data = {"question": "What is the capital of France?", "n": 1, "ok": True}
@@ -732,8 +731,8 @@ def test_insert__streaming_and_rest_client_paths__store_identical_items(
 
     items = [{"input": data, "expected_output": {"output": "Paris"}}]
 
-    streaming_name = f"{dataset_name}-streaming-{payload_kind}"
-    fallback_name = f"{dataset_name}-fallback-{payload_kind}"
+    streaming_name = f"{dataset_name}-owning-client-{payload_kind}"
+    fallback_name = f"{dataset_name}-rest-client-only-{payload_kind}"
 
     streaming_dataset = opik_client.create_dataset(
         streaming_name, description="E2E streaming path", project_name=PROJECT_NAME
@@ -741,10 +740,10 @@ def test_insert__streaming_and_rest_client_paths__store_identical_items(
     streaming_dataset.insert(items)
 
     opik_client.create_dataset(
-        fallback_name, description="E2E rest-client path", project_name=PROJECT_NAME
+        fallback_name, description="E2E rest-client-only path", project_name=PROJECT_NAME
     )
-    # Deliberately without `client=`, which is what makes `_upload_transport()`
-    # return None and sends this insert through the generated REST client.
+    # Deliberately without `client=`: the transport has to come from the REST
+    # client's own wrapper for this to upload at all.
     fallback_dataset = dataset.Dataset(
         name=fallback_name,
         description="E2E rest-client path",
@@ -758,7 +757,7 @@ def test_insert__streaming_and_rest_client_paths__store_identical_items(
 
     assert _streamed_content(streaming_dataset) == _streamed_content(
         fallback_dataset
-    ), "The streaming upload and the REST-client fallback must store the same item"
+    ), "A Dataset built from a REST client alone must store the same item"
 
 
 def test_insert__request_compression_disabled__items_are_still_stored(

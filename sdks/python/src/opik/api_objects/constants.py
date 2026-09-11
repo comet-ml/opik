@@ -20,7 +20,9 @@ DATASET_ITEMS_MAX_BATCH_SIZE = 1000
 # How long a partially filled batch may stay open while items trickle in. Checked as each
 # item arrives rather than on a timer, so a producer that stops entirely leaves its batch
 # open until the end of the upload, which flushes regardless. Only reachable when items
-# arrive slowly enough that neither the size nor the count threshold trips.
+# arrive slowly enough that neither the size nor the count threshold trips -- a generator
+# that does per-item work between yields, say. For those the interval overlaps a batch's
+# upload with the production of the next items instead of holding everything to the end.
 DATASET_ITEMS_FLUSH_INTERVAL_SECONDS = 5.0
 ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 DELETE_TRACE_BATCH_SIZE = 1000

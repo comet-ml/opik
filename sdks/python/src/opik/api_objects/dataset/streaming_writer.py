@@ -18,12 +18,11 @@ import enum
 import json
 import logging
 import pathlib
-import queue
-import threading
 import time
 import uuid
 import zlib
-from typing import Any, Callable, Dict, List, Mapping, Optional, overload
+from concurrent import futures
+from typing import Any, Callable, Dict, Mapping, Optional, Set, overload
 
 import pydantic
 
@@ -33,14 +32,15 @@ LOGGER = logging.getLogger(__name__)
 
 try:
     import orjson
-except ImportError:  # pragma: no cover - exercised by the kill-switch test
+except ImportError:  # pragma: no cover
+    # orjson is a declared dependency, so this is a broken or stripped install rather
+    # than a supported configuration. Degrading to the standard library keeps such an
+    # install working instead of failing at import; turning the serialiser off on
+    # purpose is what `enable_orjson_serialization` is for.
     orjson = None  # type: ignore[assignment]
 
 # gzip container rather than a raw deflate stream, matching what the server expects.
 _GZIP_WBITS = 16 + zlib.MAX_WBITS
-
-# How long a blocked hand-off waits before checking that a worker is still there to take it.
-_PUT_POLL_SECONDS = 0.5
 
 # Values the generated client accepted that a JSON serialiser rejects on its own: exactly
 # the types `jsonable_encoder` normalises deliberately. Its last-resort branch encodes an
@@ -70,10 +70,6 @@ class ItemNotSerializableError(TypeError):
     """
 
 
-class SendWorkersGoneError(RuntimeError):
-    """No worker thread is left to send a dataset upload batch."""
-
-
 def encode_flexible(value: Any) -> Any:
     """One value the wire serialiser could not encode, in the form the client sent before.
 
@@ -100,11 +96,17 @@ def _dumps_orjson(value: Any) -> bytes:
         # Non-string mapping keys, which `json.dumps` coerces. Supporting them costs about
         # 2.5x per item when left on, so the rare item that has them pays for a retry
         # instead of every item paying for the option.
-        return orjson.dumps(
-            value,
-            default=encode_flexible,
-            option=orjson.OPT_PASSTHROUGH_DATETIME | orjson.OPT_NON_STR_KEYS,
-        )
+        try:
+            return orjson.dumps(
+                value,
+                default=encode_flexible,
+                option=orjson.OPT_PASSTHROUGH_DATETIME | orjson.OPT_NON_STR_KEYS,
+            )
+        except TypeError:
+            # Integers outside 64 bits are the known case: the standard library writes
+            # them, orjson refuses them at any option. Which serialiser is in use must not
+            # decide whether an item can be uploaded, so the slower one finishes the job.
+            return _dumps_stdlib(value)
 
 
 def select_dumps(use_orjson: bool) -> Callable[[Any], bytes]:
@@ -224,18 +226,18 @@ class StreamingBatchWriter:
 
 
 class BoundedSendPool:
-    """Send finished bodies from a bounded queue, optionally across worker threads.
+    """Send finished bodies, with only so many outstanding at once.
 
     The bound is the point: without it a producer that serialises faster than the network
     drains would turn "never materialise the upload" back into "materialise it as queued
-    request bodies". `submit` blocks once the queue is full, so memory stays bounded by the
-    number of bodies in flight.
+    request bodies". `submit` blocks once `num_threads * 2` bodies are outstanding, so
+    memory stays bounded by the bodies in flight.
 
-    With a single worker the body is sent inline, which keeps the common case free of
-    threads, and above that workers are started as bodies arrive rather than up front, so
-    the count follows the upload rather than the ceiling the caller allowed. The first
-    failure is re-raised to the producer; as before there is no rollback, so bodies
-    already accepted stay persisted.
+    `ThreadPoolExecutor` does the thread handling: it grows a worker per submitted body up
+    to `num_threads` rather than starting them up front, and needs no shutdown protocol of
+    its own. With a single worker the body is sent inline, which keeps the common case free
+    of threads. The first failure is re-raised to the producer; as before there is no
+    rollback, so bodies already accepted stay persisted.
     """
 
     def __init__(
@@ -245,96 +247,39 @@ class BoundedSendPool:
         max_pending: Optional[int] = None,
     ) -> None:
         self._send = send
-        self._threaded = num_threads > 1
-        self._error: Optional[BaseException] = None
-
-        self._workers: List[threading.Thread] = []
-        if not self._threaded:
-            return
-
-        self._max_workers = num_threads
-        self._idle = 0
-        self._queue: "queue.Queue[Optional[bytes]]" = queue.Queue(
-            maxsize=max_pending if max_pending is not None else num_threads * 2
+        self._max_pending = max_pending if max_pending is not None else num_threads * 2
+        self._pending: Set["futures.Future[None]"] = set()
+        self._pool: Optional[futures.ThreadPoolExecutor] = (
+            futures.ThreadPoolExecutor(max_workers=num_threads)
+            if num_threads > 1
+            else None
         )
-        self._lock = threading.Lock()
-
-    def _grow(self) -> None:
-        """Add a worker only when there is no idle one to take the next body.
-
-        `num_threads` is a ceiling, not an order: `ThreadPoolExecutor` -- which the other
-        upload path uses directly -- starts a thread per submitted task up to its own
-        ceiling, so a three-batch upload does not start sixty-four threads because the
-        caller allowed that many.
-        """
-        with self._lock:
-            if self._idle > 0 or len(self._workers) >= self._max_workers:
-                return
-            worker = threading.Thread(target=self._worker, daemon=True)
-            worker.start()
-            self._workers.append(worker)
-
-    def _worker(self) -> None:
-        while True:
-            with self._lock:
-                self._idle += 1
-            body = self._queue.get()
-            with self._lock:
-                self._idle -= 1
-            try:
-                if body is None:
-                    return
-                if self._error is None:
-                    self._send(body)
-            except Exception as exception:  # noqa: BLE001 - re-raised in close()
-                with self._lock:
-                    if self._error is None:
-                        self._error = exception
-            finally:
-                self._queue.task_done()
-
-    def _put(self, body: Optional[bytes]) -> None:
-        """Hand one item to the workers, failing if none is left alive to take it.
-
-        The queue is bounded, so an unbounded put would block for good once every worker
-        has gone -- which a worker only does by raising through `_worker`, on
-        `KeyboardInterrupt` or `SystemExit`. An upload that hangs there is worse than one
-        that says why it stopped.
-        """
-        while True:
-            try:
-                self._queue.put(body, timeout=_PUT_POLL_SECONDS)
-                return
-            except queue.Full:
-                if not any(worker.is_alive() for worker in self._workers):
-                    raise SendWorkersGoneError(
-                        "Dataset upload workers are no longer running, "
-                        "the remaining batches cannot be sent"
-                    ) from None
 
     def submit(self, body: bytes, item_count: int) -> None:
         LOGGER.debug("Sending dataset items batch of size %d", item_count)
-        if not self._threaded:
+        if self._pool is None:
             self._send(body)
             return
-        self._raise_if_failed()
-        self._grow()
-        self._put(body)
+
+        # Waiting here is the back-pressure: the producer cannot run ahead of the network
+        # by more than the bodies this set holds.
+        if len(self._pending) >= self._max_pending:
+            done, self._pending = futures.wait(
+                self._pending, return_when=futures.FIRST_COMPLETED
+            )
+            for future in done:
+                future.result()
+
+        self._pending.add(self._pool.submit(self._send, body))
 
     def close(self) -> None:
-        if self._threaded:
-            for _ in self._workers:
-                self._put(None)
-            # Joining without a timeout on purpose: a live worker is sending a body, and
-            # abandoning it would misreport what was persisted. Each send is bounded by the
-            # HTTP client's own timeouts, and a worker that died is already joinable.
-            for worker in self._workers:
-                worker.join()
-        self._raise_if_failed()
-
-    def _raise_if_failed(self) -> None:
-        if self._error is not None:
-            raise self._error
+        if self._pool is None:
+            return
+        try:
+            for future in futures.as_completed(self._pending):
+                future.result()
+        finally:
+            self._pool.shutdown(wait=True)
 
 
 @overload
