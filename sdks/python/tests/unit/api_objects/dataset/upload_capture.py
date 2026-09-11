@@ -31,6 +31,7 @@ class UploadCapture:
     ) -> None:
         self.bodies: List[bytes] = []
         self.urls: List[str] = []
+        self.request_headers: List[Dict[str, str]] = []
         self._status_code = status_code
         # Consumed in order when given, so a test can script a 429 followed by a success.
         self._responses = list(responses) if responses is not None else None
@@ -39,6 +40,7 @@ class UploadCapture:
     def request(self, method: str, url: str, **kwargs: Any) -> _Response:
         self.urls.append(url)
         self.bodies.append(kwargs["content"])
+        self.request_headers.append(dict(kwargs.get("headers") or {}))
 
         status = self._status_code
         if self._responses:

@@ -93,31 +93,40 @@ def _prepare_headers(
     return result
 
 
+def compresses_json_requests(client: httpx.Client) -> bool:
+    """Whether bodies sent through `client` are expected to be gzipped.
+
+    One reading of the setting for both the code that produces a prepared body and the
+    code that labels it, so the `Content-Encoding` header cannot disagree with the bytes.
+    A plain `httpx.Client` carries no such setting and is taken to compress, which is how
+    every Opik client is built unless the user turns it off.
+    """
+    compress: bool = getattr(client, "compress_json_requests", True)
+    return compress
+
+
 def send_prepared_json(
     client: httpx.Client,
     base_url: str,
     path: str,
     body: bytes,
 ) -> httpx.Response:
-    """PUT an already-serialised, already-gzipped JSON body.
+    """PUT an already-serialised JSON body.
 
     Exists so a caller that has produced the request body itself can send it without a
     second serialisation pass. Auth and workspace headers ride on `client`, which is the
     same client the generated REST client sends through, so this does not depend on the
-    generated client's internals.
+    generated client's internals. The body is declared gzipped only when `client` is
+    configured to compress, which is the same flag its producer read.
     """
     url = urllib.parse.urljoin(
         base_url if base_url.endswith("/") else base_url + "/", path
     )
-    return client.request(
-        "PUT",
-        url,
-        content=body,
-        headers={
-            "Content-Type": "application/json;charset=utf-8",
-            "Content-Encoding": "gzip",
-        },
-    )
+    headers = {"Content-Type": "application/json;charset=utf-8"}
+    if compresses_json_requests(client):
+        headers["Content-Encoding"] = "gzip"
+
+    return client.request("PUT", url, content=body, headers=headers)
 
 
 class OpikHttpxClient(httpx.Client):

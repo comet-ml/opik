@@ -573,9 +573,9 @@ def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
     workers_per_insert = []
     original_send = Dataset._upload_via_rest_client
 
-    def spy_upload(self, payloads, batch_group_id, num_threads):
+    def spy_upload(self, payloads, batch_group_id, num_threads, **kwargs):
         workers_per_insert.append(num_threads)
-        return original_send(self, payloads, batch_group_id, num_threads)
+        return original_send(self, payloads, batch_group_id, num_threads, **kwargs)
 
     monkeypatch.setattr(Dataset, "_upload_via_rest_client", spy_upload)
 
@@ -629,9 +629,9 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
     used_workers = []
     original_send = Dataset._upload_via_rest_client
 
-    def spy_upload(self, payloads, batch_group_id, num_threads):
+    def spy_upload(self, payloads, batch_group_id, num_threads, **kwargs):
         used_workers.append(num_threads)
-        return original_send(self, payloads, batch_group_id, num_threads)
+        return original_send(self, payloads, batch_group_id, num_threads, **kwargs)
 
     monkeypatch.setattr(Dataset, "_upload_via_rest_client", spy_upload)
 

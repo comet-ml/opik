@@ -7,6 +7,7 @@ import tracemalloc
 from unittest.mock import Mock
 
 import pytest
+import tenacity
 
 import opik.config as config
 from opik import exceptions
@@ -14,8 +15,24 @@ from opik.api_objects import constants
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 from opik.message_processing.batching import sequence_splitter
+from opik.rest_client_configurator import retry_decorator
 
 from .upload_capture import UploadCapture, make_dataset
+
+
+@pytest.fixture
+def instant_retries(monkeypatch):
+    """The shared retry policy with its waits removed, so a retry test does not sleep."""
+    monkeypatch.setattr(
+        retry_decorator,
+        "opik_rest_retry",
+        tenacity.retry(
+            stop=tenacity.stop_after_attempt(3),
+            wait=tenacity.wait_none(),
+            retry=tenacity.retry_if_exception(retry_decorator._allowed_to_retry),
+            reraise=True,
+        ),
+    )
 
 
 def _items(count: int, prefix: str = "item"):
@@ -244,7 +261,9 @@ def test_insert__streaming__worker_count_gated_by_backend_version(monkeypatch):
     assert len(capture.items) == 4
 
 
-def test_insert__streaming__rate_limited_request_is_retried(monkeypatch):
+def test_insert__streaming__rate_limited_request_is_retried(
+    monkeypatch, instant_retries
+):
     """429 handling lives outside the generated client now, so it needs its own check."""
     monkeypatch.setattr("opik.api_objects.rest_helpers._sleep", lambda _seconds: None)
     capture = UploadCapture(
@@ -258,7 +277,7 @@ def test_insert__streaming__rate_limited_request_is_retried(monkeypatch):
     assert capture.request_count == 2, "The throttled request should have been retried"
 
 
-def test_insert__streaming__server_error_raises():
+def test_insert__streaming__server_error_raises(instant_retries):
     capture = UploadCapture(status_code=500)
     dataset = make_dataset(Dataset, Mock(), capture)
 
@@ -288,6 +307,43 @@ def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatc
 
     assert levels == [2]
     assert len(capture.items) == 2
+
+
+def test_insert__compression_disabled_on_the_client__plain_body_and_no_gzip_header():
+    """`enable_json_request_compression=False` must reach the streaming path too."""
+    capture = UploadCapture()
+    capture.compress_json_requests = False  # what the httpx client is built with
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert(_items(2))
+
+    body = capture.bodies[0]
+    assert json.loads(body)["items"], "The body should be readable as plain JSON"
+    assert "Content-Encoding" not in capture.request_headers[0], (
+        "An uncompressed body must not be labelled gzip"
+    )
+
+
+def test_insert__streaming__transient_server_error_is_retried(instant_retries):
+    """The prepared-body sender bypasses the generated client, so it carries the retry."""
+    capture = UploadCapture(responses=[503, 204])
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert(_items(1))
+
+    assert capture.request_count == 2, "A 503 must be retried, not surfaced"
+
+
+def test_insert__streaming__permanent_server_error_still_raises(instant_retries):
+    capture = UploadCapture(status_code=503)
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    from opik.rest_api.core.api_error import ApiError
+
+    with pytest.raises(ApiError):
+        dataset.insert(_items(1))
+
+    assert capture.request_count == 3, "The retry budget should have been spent"
 
 
 # --------------------------------------------------------------------------- #
@@ -422,3 +478,41 @@ def test_insert__rest_client_only__batch_failure_propagates(monkeypatch):
 
     with pytest.raises(ValueError):
         dataset.insert(_items(50), num_threads=4)
+
+
+def test_insert__rest_client_only__list_input__nothing_is_sent_if_an_item_is_invalid(
+    monkeypatch,
+):
+    """A list was checked in full before the first request went out; it still is."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    mock_rest_client = Mock()
+    dataset = _fallback_dataset(mock_rest_client)
+
+    items = _items(5)
+    items[4]["input"] = {"bad": object()}  # not serialisable, so it cannot be converted
+
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        dataset.insert(items, num_threads=1)
+
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 0, (
+        "A list input must be validated before anything is persisted"
+    )
+
+
+def test_insert__rest_client_only__generator_input__earlier_items_are_already_sent(
+    monkeypatch,
+):
+    """The documented trade for a generator: it cannot be checked without draining it."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    mock_rest_client = Mock()
+    dataset = _fallback_dataset(mock_rest_client)
+
+    items = _items(5)
+    items[4]["input"] = {"bad": object()}
+
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        dataset.insert((item for item in items), num_threads=1)
+
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 4, (
+        "The items before the invalid one are sent, as the docstring says"
+    )

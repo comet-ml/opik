@@ -1,9 +1,18 @@
+import datetime
+import decimal
+import enum
 import gzip
 import json
+import uuid
 
 import pytest
 
 from opik.api_objects.dataset import streaming_writer
+from opik.rest_api.core.jsonable_encoder import jsonable_encoder
+
+
+class Color(enum.Enum):
+    RED = "red"
 
 
 def _collect():
@@ -144,8 +153,11 @@ def test_add__not_serializable_with_orjson__raises_the_same_error():
     bodies, flush_callback = _collect()
     writer = _writer(flush_callback, use_orjson=True)
 
+    class NotSerializable:
+        pass
+
     with pytest.raises(streaming_writer.ItemNotSerializableError):
-        writer.add({"id": "a", "data": {"bad": {1, 2, 3}}})
+        writer.add({"id": "a", "data": {"bad": NotSerializable()}})
 
 
 def test_select_dumps__orjson_disabled__falls_back_to_the_standard_library():
@@ -164,3 +176,157 @@ def test_dumps__orjson_and_stdlib__decode_to_the_same_value():
     fast = streaming_writer.select_dumps(use_orjson=True)(value)
 
     assert json.loads(stdlib) == json.loads(fast) == value
+
+
+# --------------------------------------------------------------------------- #
+# values the generated client accepted: the writer must not narrow them
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("use_orjson", [False, True])
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone.utc),
+        datetime.datetime(2024, 1, 2, 3, 4, 5),
+        datetime.date(2024, 1, 2),
+        datetime.time(3, 4, 5),
+        {"only"},
+        (1, 2),
+        Color.RED,
+        b"hi",
+        decimal.Decimal("1.5"),
+        uuid.UUID("00000000-0000-0000-0000-000000000001"),
+    ],
+)
+def test_add__flexible_value__serialised_the_way_the_generated_client_did(
+    value, use_orjson
+):
+    """`datetime`, `set`, `Enum` and friends reached the backend before; they still must."""
+    if use_orjson:
+        pytest.importorskip("orjson")
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback, use_orjson=use_orjson)
+
+    writer.add({"id": "a", "data": {"v": value}})
+    writer.flush()
+
+    sent = _decode(bodies[0][0])["items"][0]["data"]["v"]
+    assert sent == json.loads(json.dumps(jsonable_encoder(value)))
+
+
+@pytest.mark.parametrize("use_orjson", [False, True])
+def test_add__non_string_mapping_keys__coerced_like_json_dumps(use_orjson):
+    """`json.dumps` turns these keys into strings; orjson rejects them by default."""
+    if use_orjson:
+        pytest.importorskip("orjson")
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback, use_orjson=use_orjson)
+
+    writer.add({"id": "a", "data": {1: "x", 2.5: "y", None: "z"}})
+    writer.flush()
+
+    assert _decode(bodies[0][0])["items"][0]["data"] == json.loads(
+        json.dumps({1: "x", 2.5: "y", None: "z"})
+    )
+
+
+def test_add__unknown_object__still_raises_rather_than_being_encoded_as_empty():
+    """The encoder's own last resort is `vars(obj)`; uploading `{}` would hide the error."""
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback)
+
+    class Custom:
+        def __init__(self):
+            self.x = 1
+
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        writer.add({"id": "a", "data": {"bad": Custom()}})
+
+
+# --------------------------------------------------------------------------- #
+# compression can be turned off
+# --------------------------------------------------------------------------- #
+def test_flush__compression_disabled__body_is_plain_json():
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback, gzip_level=None)
+
+    writer.add({"id": "a", "data": {"k": "v"}})
+    writer.flush()
+
+    body = bodies[0][0]
+    assert json.loads(body)["items"] == [{"id": "a", "data": {"k": "v"}}]
+    assert not body.startswith(b"\x1f\x8b"), "The body must not be a gzip stream"
+
+
+def test_flush__compression_enabled__body_is_still_gzip():
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback)
+
+    writer.add({"id": "a", "data": {"k": "v"}})
+    writer.flush()
+
+    assert _decode(bodies[0][0])["items"] == [{"id": "a", "data": {"k": "v"}}]
+
+
+# --------------------------------------------------------------------------- #
+# BoundedSendPool shutdown
+# --------------------------------------------------------------------------- #
+def test_pool__worker_error__is_reraised_to_the_producer():
+    def send(body: bytes) -> None:
+        raise ValueError("rejected")
+
+    pool = streaming_writer.BoundedSendPool(send, num_threads=2)
+    pool.submit(b"body", 1)
+
+    with pytest.raises(ValueError):
+        pool.close()
+
+
+def test_pool__workers_exited__fails_instead_of_blocking_for_ever():
+    """`SystemExit` leaves no consumer, and the queue is bounded: an insert must not hang."""
+
+    def send(body: bytes) -> None:
+        raise SystemExit("interrupted")
+
+    pool = streaming_writer.BoundedSendPool(send, num_threads=2, max_pending=1)
+
+    with pytest.raises(streaming_writer.SendWorkersGoneError):
+        # More bodies than the queue holds, so a put has to wait on a worker that is gone.
+        for _ in range(5):
+            pool.submit(b"body", 1)
+
+
+def test_add__item_at_the_cap__gets_its_own_request():
+    """The splitter always gave an oversized item a request to itself; so must the writer.
+
+    Otherwise a batch that is rejected for its size takes otherwise-valid rows with it.
+    """
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback, max_payload_bytes=200)
+
+    writer.add({"id": "small"})
+    writer.add({"id": "big", "data": {"padding": "x" * 300}})
+    writer.add({"id": "also-small"})
+    writer.flush()
+
+    batches = [_decode(body)["items"] for body, _ in bodies]
+    assert [[item["id"] for item in batch] for batch in batches] == [
+        ["small"],
+        ["big"],
+        ["also-small"],
+    ]
+
+
+def test_add__batch_never_exceeds_the_payload_cap():
+    """Closing the batch before the item that would overflow it, not after."""
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback, max_payload_bytes=300)
+
+    for i in range(10):
+        writer.add({"id": f"item-{i}", "data": {"padding": "x" * 60}})
+    writer.flush()
+
+    for body, _ in bodies:
+        payload = _decode(body)
+        assert len(json.dumps(payload["items"]).encode("utf-8")) <= 300 or (
+            len(payload["items"]) == 1
+        ), "Only a single oversized item may fill a request past the cap"

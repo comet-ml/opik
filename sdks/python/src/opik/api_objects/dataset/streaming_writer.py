@@ -10,11 +10,23 @@ Serialisation here is for the wire only. Content hashes are computed elsewhere, 
 standard library, so item identity never depends on which serialiser is in use.
 """
 
+import dataclasses
+import datetime
+import decimal
+import enum
 import json
 import logging
+import pathlib
+import queue
+import threading
 import time
+import uuid
 import zlib
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
+
+import pydantic
+
+from ...rest_api.core.jsonable_encoder import jsonable_encoder
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +38,27 @@ except ImportError:  # pragma: no cover - exercised by the kill-switch test
 # gzip container rather than a raw deflate stream, matching what the server expects.
 _GZIP_WBITS = 16 + zlib.MAX_WBITS
 
+# How long a blocked hand-off waits before checking that a worker is still there to take it.
+_PUT_POLL_SECONDS = 0.5
+
+# Values the generated client accepted that a JSON serialiser rejects on its own: exactly
+# the types `jsonable_encoder` normalises deliberately. Its last-resort branch encodes an
+# unknown object as `vars(obj)`, which would upload an empty dict instead of telling the
+# caller their value cannot be sent, so anything outside this list still raises.
+_FLEXIBLE_TYPES = (
+    bytes,
+    enum.Enum,
+    datetime.date,  # also covers datetime.datetime
+    datetime.time,
+    decimal.Decimal,
+    uuid.UUID,
+    set,
+    frozenset,
+    tuple,
+    pathlib.PurePath,
+    pydantic.BaseModel,
+)
+
 
 class ItemNotSerializableError(TypeError):
     """A dataset item could not be serialised to JSON.
@@ -36,12 +69,41 @@ class ItemNotSerializableError(TypeError):
     """
 
 
+class SendWorkersGoneError(RuntimeError):
+    """No worker thread is left to send a dataset upload batch."""
+
+
+def _encode_flexible(value: Any) -> Any:
+    """One value the wire serialiser could not encode, in the form the client sent before.
+
+    Called only for values a serialiser rejects, so ordinary JSON-native items never pay
+    for the normalisation pass this restores.
+    """
+    if isinstance(value, _FLEXIBLE_TYPES) or dataclasses.is_dataclass(value):
+        return jsonable_encoder(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _dumps_stdlib(value: Any) -> bytes:
-    return json.dumps(value).encode("utf-8")
+    return json.dumps(value, default=_encode_flexible).encode("utf-8")
 
 
 def _dumps_orjson(value: Any) -> bytes:
-    return orjson.dumps(value)
+    # Datetimes are passed through to the encoder above rather than serialised by orjson,
+    # so the wire form of a date does not depend on which serialiser is in use.
+    try:
+        return orjson.dumps(
+            value, default=_encode_flexible, option=orjson.OPT_PASSTHROUGH_DATETIME
+        )
+    except TypeError:
+        # Non-string mapping keys, which `json.dumps` coerces. Supporting them costs about
+        # 2.5x per item when left on, so the rare item that has them pays for a retry
+        # instead of every item paying for the option.
+        return orjson.dumps(
+            value,
+            default=_encode_flexible,
+            option=orjson.OPT_PASSTHROUGH_DATETIME | orjson.OPT_NON_STR_KEYS,
+        )
 
 
 def select_dumps(use_orjson: bool) -> Callable[[Any], bytes]:
@@ -52,10 +114,16 @@ def select_dumps(use_orjson: bool) -> Callable[[Any], bytes]:
 
 
 class StreamingBatchWriter:
-    """Accumulate serialised items and emit complete, gzipped request bodies.
+    """Accumulate serialised items and emit complete request bodies.
 
     `flush_callback` receives `(body, item_count)` for each finished body. It is called on
     the adding thread, so a bounded callback is what applies back-pressure to the producer.
+
+    `gzip_level` of None emits the body uncompressed, for a client configured with
+    `enable_json_request_compression` off. `flush_interval_seconds` is evaluated when an
+    item arrives, so it bounds how long a *trickle* of items leaves a batch open, not how
+    long a producer that stops entirely does; `flush()` at the end of the upload covers
+    that case.
     """
 
     def __init__(
@@ -66,7 +134,7 @@ class StreamingBatchWriter:
         max_payload_bytes: int,
         max_items: int,
         flush_interval_seconds: Optional[float] = None,
-        gzip_level: int,
+        gzip_level: Optional[int],
         use_orjson: bool = True,
     ) -> None:
         self._flush_callback = flush_callback
@@ -85,13 +153,18 @@ class StreamingBatchWriter:
         self._start_buffer()
 
     def _start_buffer(self) -> None:
-        self._compressor = zlib.compressobj(
-            self._gzip_level, zlib.DEFLATED, _GZIP_WBITS
+        self._compressor = (
+            None
+            if self._gzip_level is None
+            else zlib.compressobj(self._gzip_level, zlib.DEFLATED, _GZIP_WBITS)
         )
-        self._chunks = [self._compressor.compress(self._prefix)]
+        self._chunks = [self._encode(self._prefix)]
         self._logical_bytes = 0
         self._items = 0
         self._opened_at = time.monotonic()
+
+    def _encode(self, data: bytes) -> bytes:
+        return data if self._compressor is None else self._compressor.compress(data)
 
     def _serialize(self, item: Mapping[str, Any]) -> bytes:
         try:
@@ -107,8 +180,17 @@ class StreamingBatchWriter:
     def add(self, item: Mapping[str, Any]) -> None:
         payload = self._serialize(item)
 
+        # Close the batch before an item that would take it past the cap rather than
+        # after, so an item at or over the cap on its own ends up in a request of its own
+        # -- where the batching splitter has always put it. A request rejected for its
+        # size then fails that one row instead of every row that shared its batch.
+        if self._items > 0 and self._logical_bytes + 1 + len(payload) >= (
+            self._max_payload_bytes
+        ):
+            self.flush()
+
         separator = b"" if self._items == 0 else b","
-        self._chunks.append(self._compressor.compress(separator + payload))
+        self._chunks.append(self._encode(separator + payload))
         self._logical_bytes += len(payload) + len(separator)
         self._items += 1
 
@@ -129,8 +211,9 @@ class StreamingBatchWriter:
         if self._items == 0:
             return
 
-        self._chunks.append(self._compressor.compress(self._suffix))
-        self._chunks.append(self._compressor.flush(zlib.Z_FINISH))
+        self._chunks.append(self._encode(self._suffix))
+        if self._compressor is not None:
+            self._chunks.append(self._compressor.flush(zlib.Z_FINISH))
         body = b"".join(self._chunks)
         item_count = self._items
 
@@ -161,11 +244,9 @@ class BoundedSendPool:
         self._threaded = num_threads > 1
         self._error: Optional[BaseException] = None
 
+        self._workers: List[threading.Thread] = []
         if not self._threaded:
             return
-
-        import queue
-        import threading
 
         self._queue: "queue.Queue[Optional[bytes]]" = queue.Queue(
             maxsize=max_pending if max_pending is not None else num_threads * 2
@@ -186,12 +267,31 @@ class BoundedSendPool:
                     return
                 if self._error is None:
                     self._send(body)
-            except BaseException as exception:  # noqa: BLE001 - re-raised in close()
+            except Exception as exception:  # noqa: BLE001 - re-raised in close()
                 with self._lock:
                     if self._error is None:
                         self._error = exception
             finally:
                 self._queue.task_done()
+
+    def _put(self, body: Optional[bytes]) -> None:
+        """Hand one item to the workers, failing if none is left alive to take it.
+
+        The queue is bounded, so an unbounded put would block for good once every worker
+        has gone -- which a worker only does by raising through `_worker`, on
+        `KeyboardInterrupt` or `SystemExit`. An upload that hangs there is worse than one
+        that says why it stopped.
+        """
+        while True:
+            try:
+                self._queue.put(body, timeout=_PUT_POLL_SECONDS)
+                return
+            except queue.Full:
+                if not any(worker.is_alive() for worker in self._workers):
+                    raise SendWorkersGoneError(
+                        "Dataset upload workers are no longer running, "
+                        "the remaining batches cannot be sent"
+                    ) from None
 
     def submit(self, body: bytes, item_count: int) -> None:
         LOGGER.debug("Sending dataset items batch of size %d", item_count)
@@ -199,12 +299,15 @@ class BoundedSendPool:
             self._send(body)
             return
         self._raise_if_failed()
-        self._queue.put(body)
+        self._put(body)
 
     def close(self) -> None:
         if self._threaded:
             for _ in self._workers:
-                self._queue.put(None)
+                self._put(None)
+            # Joining without a timeout on purpose: a live worker is sending a body, and
+            # abandoning it would misreport what was persisted. Each send is bounded by the
+            # HTTP client's own timeouts, and a worker that died is already joinable.
             for worker in self._workers:
                 worker.join()
         self._raise_if_failed()

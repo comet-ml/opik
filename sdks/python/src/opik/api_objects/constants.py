@@ -17,8 +17,10 @@ EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB = 3.5
 EXPERIMENT_ITEMS_BULK_MAX_THREADS = 32
 DATASET_ITEMS_MAX_BATCH_SIZE = 1000
 
-# Upper bound on how long a partially filled batch waits before being sent. Only reachable
-# when items arrive slowly enough that neither the size nor the count threshold trips.
+# How long a partially filled batch may stay open while items trickle in. Checked as each
+# item arrives rather than on a timer, so a producer that stops entirely leaves its batch
+# open until the end of the upload, which flushes regardless. Only reachable when items
+# arrive slowly enough that neither the size nor the count threshold trips.
 DATASET_ITEMS_FLUSH_INTERVAL_SECONDS = 5.0
 ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 DELETE_TRACE_BATCH_SIZE = 1000

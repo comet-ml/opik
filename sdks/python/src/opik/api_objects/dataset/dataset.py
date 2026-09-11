@@ -1,4 +1,5 @@
 import abc
+import collections.abc
 import datetime
 import logging
 
@@ -19,6 +20,7 @@ from typing import (
 )
 
 from opik.api_objects import rest_helpers
+from opik.rest_client_configurator import retry_decorator
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
@@ -807,7 +809,7 @@ class Dataset(DatasetExportOperations):
         return httpx_client_, base_url
 
     def _send_prepared_body(self, body: bytes) -> None:
-        """Send one already-serialised, already-compressed request body."""
+        """Send one already-serialised request body."""
         transport = self._upload_transport()
         assert transport is not None  # only reached on the streaming path
         httpx_client_, base_url = transport
@@ -823,13 +825,20 @@ class Dataset(DatasetExportOperations):
                     body=response.text,
                 )
 
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(send)
+        # `rest_client_configurator` wraps every generated client method in this retry, so
+        # a body sent through the raw sender has to carry it too or the bulk path would be
+        # the one path that gives up on a transient 5xx. Nested as it is there: retries
+        # inside, the rate-limit wait outside.
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            retry_decorator.opik_rest_retry(send)
+        )
 
     def _upload_via_rest_client(
         self,
         payloads: Iterable[Dict[str, Any]],
         batch_group_id: str,
         num_threads: int,
+        validate_up_front: bool,
     ) -> None:
         """Upload through the generated client, one batch per request.
 
@@ -837,11 +846,23 @@ class Dataset(DatasetExportOperations):
         constructed directly from a REST client. That construction predates the streaming
         path and still works; it just does not get the single-pass serialisation.
 
-        The iterable is consumed one item at a time and the number of requests in flight
-        is bounded, so this path is slower than the streaming one but no less bounded in
-        memory. Batches are split where `sequence_splitter.split_into_batches` split them,
-        so the requests themselves are unchanged.
+        The iterable is consumed one item at a time and the number of requests in flight is
+        bounded, so this path is slower than the streaming one but no less bounded in
+        memory. `validate_up_front` trades that back for the guarantee the caller had when
+        the whole upload was materialised anyway: every item is converted, and so
+        validated, before the first request goes out.
         """
+        items: Iterable[rest_dataset_item.DatasetItemWrite] = (
+            rest_dataset_item.DatasetItemWrite(**payload) for payload in payloads
+        )
+        if validate_up_front:
+            items = list(items)
+
+        batches = sequence_splitter.stream_into_batches(
+            items,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+        )
 
         def send(batch: List[rest_dataset_item.DatasetItemWrite]) -> None:
             rest_helpers.ensure_rest_api_call_respecting_rate_limit(
@@ -853,44 +874,14 @@ class Dataset(DatasetExportOperations):
                 )
             )
 
-        def batches() -> Iterator[List[rest_dataset_item.DatasetItemWrite]]:
-            max_payload_size_MB = config.MAX_BATCH_SIZE_MB
-            max_length = constants.DATASET_ITEMS_MAX_BATCH_SIZE
-            current_batch: List[rest_dataset_item.DatasetItemWrite] = []
-            current_batch_size_MB = 0.0
-
-            for payload in payloads:
-                item = rest_dataset_item.DatasetItemWrite(**payload)
-                item_size_MB = sequence_splitter.get_payload_size_MB(item)
-
-                # An item at or over the cap cannot share a batch, and the batch being
-                # filled stays open rather than being cut short by it -- both as in the
-                # splitter, so the same input still produces the same batches.
-                if item_size_MB >= max_payload_size_MB:
-                    yield [item]
-                    continue
-
-                if (
-                    len(current_batch) == max_length
-                    or current_batch_size_MB + item_size_MB > max_payload_size_MB
-                ):
-                    yield current_batch
-                    current_batch, current_batch_size_MB = [], 0.0
-
-                current_batch.append(item)
-                current_batch_size_MB += item_size_MB
-
-            if len(current_batch) > 0:
-                yield current_batch
-
         if num_threads <= 1:
-            for batch in batches():
+            for batch in batches:
                 send(batch)
             return
 
         with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
             pending: Set["futures.Future[None]"] = set()
-            for batch in batches():
+            for batch in batches:
                 # Bounded like the streaming pool, and for the same reason: submitting
                 # every batch up front would hold the whole upload as queued futures.
                 if len(pending) >= num_threads * 2:
@@ -996,6 +987,7 @@ class Dataset(DatasetExportOperations):
         items: Iterable[dataset_item.DatasetItem],
         num_threads: int = 1,
         deduplication: bool = True,
+        items_materialised: Optional[bool] = None,
     ) -> None:
         # Validated here rather than in each public entry point: every insert
         # path funnels through this method. A truthy string or None would
@@ -1030,7 +1022,11 @@ class Dataset(DatasetExportOperations):
         opik_config = config.OpikConfig()
         batch_group_id = id_helpers.generate_id()
 
-        if self._upload_transport() is None:
+        if items_materialised is None:
+            items_materialised = isinstance(items, collections.abc.Sequence)
+
+        transport = self._upload_transport()
+        if transport is None:
             self._upload_via_rest_client(
                 (
                     self._item_payload(item)
@@ -1038,6 +1034,12 @@ class Dataset(DatasetExportOperations):
                 ),
                 batch_group_id,
                 num_threads,
+                # The caller already holds every item, so converting them all before the
+                # first request adds no copy of the data and keeps what this path
+                # guaranteed when it materialised the upload anyway: an invalid item
+                # raises with nothing persisted. A one-pass iterator cannot be checked
+                # that way, and its items are the ones that must not be retained.
+                validate_up_front=items_materialised,
             )
             self._dataset_items_count = None
             return
@@ -1053,7 +1055,11 @@ class Dataset(DatasetExportOperations):
             max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
             max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
             flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
-            gzip_level=opik_config.dataset_upload_compression_level,
+            # The enable flag gates the level: a client built with compression off must
+            # not be handed gzipped bodies, whatever level is configured.
+            gzip_level=opik_config.dataset_upload_compression_level
+            if httpx_client.compresses_json_requests(transport[0])
+            else None,
             use_orjson=opik_config.enable_orjson_serialization,
         )
 
@@ -1079,7 +1085,10 @@ class Dataset(DatasetExportOperations):
         Args:
             items: Dicts (or ``DatasetItem`` objects) to add to the dataset. Any
                 iterable is accepted, including a generator, and it is consumed lazily so
-                the whole upload is never held in memory. A list keeps working as before.
+                the whole upload is never held in memory. A list keeps working as before,
+                and is checked before the first request goes out; from a generator an
+                invalid item can only be found once earlier items have been sent, and
+                those stay persisted.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -1106,13 +1115,17 @@ class Dataset(DatasetExportOperations):
             raise ValueError("deduplication must be a bool")
 
         # A generator rather than a list: converting lazily is what lets a generator
-        # argument stay un-materialised all the way to the wire.
+        # argument stay un-materialised all the way to the wire. Whether it was one is
+        # passed along, because by here it no longer shows.
         dataset_items = (
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
         )
         self.__internal_api__insert_items_as_dataclasses__(
-            dataset_items, num_threads=num_threads, deduplication=deduplication
+            dataset_items,
+            num_threads=num_threads,
+            deduplication=deduplication,
+            items_materialised=isinstance(items, collections.abc.Sequence),
         )
 
     @property

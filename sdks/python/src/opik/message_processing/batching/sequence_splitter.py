@@ -1,5 +1,6 @@
 import logging
-from typing import List, Optional, TypeVar, Sequence, Any
+import math
+from typing import Any, Iterable, Iterator, List, Optional, Sequence, TypeVar
 import opik.jsonable_encoder as jsonable_encoder
 
 T = TypeVar("T")
@@ -65,41 +66,43 @@ def _get_json_size(obj: Any) -> Any:
         return float("inf")
 
 
-def split_into_batches(
-    items: Sequence[T],
+def stream_into_batches(
+    items: Iterable[T],
     max_payload_size_MB: Optional[float] = None,
     max_length: Optional[int] = None,
-) -> List[List[T]]:
+) -> Iterator[List[T]]:
+    """Yield batches as they fill, so an input that is never materialised can be batched.
+
+    The rules live here rather than being restated by a streaming caller: an item at or
+    over the size cap is yielded on its own, and the batch being filled stays open rather
+    than being cut short by it.
+    """
     assert (max_payload_size_MB is not None) or (max_length is not None), (
         "At least one limitation must be set for splitting"
     )
 
-    if max_length is None:
-        max_length = len(items)
+    size_limit_MB = math.inf if max_payload_size_MB is None else max_payload_size_MB
+    # No count limit means no batch can ever reach it, which is what a limit of the whole
+    # input meant when the input had to be a sequence to be measured.
+    length_limit = math.inf if max_length is None else max_length
 
-    if max_payload_size_MB is None:
-        max_payload_size_MB = float("inf")
-
-    batches: List[List[T]] = []
     current_batch: List[T] = []
     current_batch_size_MB: float = 0.0
 
     for item in items:
-        item_size_MB = (
-            0.0 if max_payload_size_MB is None else _get_expected_payload_size_MB(item)
-        )
+        item_size_MB = _get_expected_payload_size_MB(item)
 
-        if item_size_MB >= max_payload_size_MB:
-            batches.append([item])
+        if item_size_MB >= size_limit_MB:
+            yield [item]
             continue
 
-        batch_is_already_full = len(current_batch) == max_length
+        batch_is_already_full = len(current_batch) == length_limit
         batch_will_exceed_memory_limit_after_adding = (
-            current_batch_size_MB + item_size_MB > max_payload_size_MB
+            current_batch_size_MB + item_size_MB > size_limit_MB
         )
 
         if batch_is_already_full or batch_will_exceed_memory_limit_after_adding:
-            batches.append(current_batch)
+            yield current_batch
             current_batch = [item]
             current_batch_size_MB = item_size_MB
         else:
@@ -107,6 +110,12 @@ def split_into_batches(
             current_batch_size_MB += item_size_MB
 
     if len(current_batch) > 0:
-        batches.append(current_batch)
+        yield current_batch
 
-    return batches
+
+def split_into_batches(
+    items: Sequence[T],
+    max_payload_size_MB: Optional[float] = None,
+    max_length: Optional[int] = None,
+) -> List[List[T]]:
+    return list(stream_into_batches(items, max_payload_size_MB, max_length))
