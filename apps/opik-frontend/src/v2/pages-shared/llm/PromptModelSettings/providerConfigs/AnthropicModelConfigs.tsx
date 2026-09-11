@@ -12,6 +12,7 @@ import { Button } from "@/ui/button";
 import { X } from "lucide-react";
 import {
   getAnthropicThinkingEffortOptions,
+  resolveSamplingParams,
   supportsAnthropicThinkingEffort,
   supportsSamplingParams,
 } from "@/lib/modelUtils";
@@ -34,8 +35,11 @@ const AnthropicModelConfigs = ({
   const showThinkingEffort = supportsAnthropicThinkingEffort(model);
   const showSamplingParams = supportsSamplingParams(model);
   const thinkingEffortOptions = getAnthropicThinkingEffortOptions(model);
-  const hasTemperatureValue = !isNil(configs.temperature);
-  const hasTopPValue = !isNil(configs.topP);
+  // Read the pair through the resolver rather than off the config: it is what the request will
+  // carry, and it guarantees exactly one half is live, so the two sliders can't both look editable.
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const hasTemperatureValue = !isNil(temperature);
+  const hasTopPValue = !isNil(topP);
   const temperatureDisabled = hasTopPValue && !hasTemperatureValue;
   const topPDisabled = hasTemperatureValue && !hasTopPValue;
 
@@ -77,12 +81,7 @@ const AnthropicModelConfigs = ({
             }
           >
             <SliderInputControl
-              value={
-                configs.temperature ??
-                (temperatureDisabled
-                  ? undefined
-                  : DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE)
-              }
+              value={temperature}
               onChange={handleTemperatureChange}
               id="temperature"
               min={0}
@@ -132,10 +131,7 @@ const AnthropicModelConfigs = ({
         <div className="space-y-2">
           <div className={topPDisabled ? "pointer-events-none opacity-50" : ""}>
             <SliderInputControl
-              value={
-                configs.topP ??
-                (topPDisabled ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P)
-              }
+              value={topP}
               onChange={handleTopPChange}
               id="topP"
               min={0}

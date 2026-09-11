@@ -4,6 +4,7 @@ import {
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   getThinkingLevelOptions,
+  resolveSamplingParams,
   sanitizeConfigForRequest,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
@@ -19,6 +20,8 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
+import { getProviderFromModel } from "@/lib/provider";
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
@@ -93,7 +96,9 @@ describe("supportsSamplingParams", () => {
 });
 
 describe("updateProviderConfig — Anthropic", () => {
-  it("strips temperature and topP when switching into Opus 4.7", () => {
+  it("retains temperature and topP when switching into Opus 4.7, which rejects them", () => {
+    // Kept in the config, omitted from the request: Opus 4.7 hides both sliders, and dropping the
+    // values here is what used to lose them for good once the user picked a model that takes them.
     const config: LLMAnthropicConfigsType = {
       temperature: 0.5,
       topP: 0.9,
@@ -103,9 +108,16 @@ describe("updateProviderConfig — Anthropic", () => {
       model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
       provider: ANTHROPIC,
     });
-    expect(result?.temperature).toBeUndefined();
-    expect(result?.topP).toBeUndefined();
+    expect(result?.temperature).toBe(0.5);
+    expect(result?.topP).toBe(0.9);
     expect(result?.maxCompletionTokens).toBe(4000);
+
+    const request = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      result as unknown as Record<string, unknown>,
+    );
+    expect(request.temperature).toBeUndefined();
+    expect(request.topP).toBeUndefined();
   });
 
   it("keeps temperature when switching into Opus 4.6", () => {
@@ -240,7 +252,10 @@ describe("getOpenAIReasoningEffortOptions", () => {
 });
 
 describe("updateProviderConfig — OpenAI", () => {
-  it("bumps temperature to 1 when switching into a reasoning model with temp < 1", () => {
+  it("keeps temperature when switching into a reasoning model, which does not take one", () => {
+    // o3 accepts only its own default temperature, so there is nothing to legalise here: the panel
+    // offers no slider and the request omits the field. Rewriting the value would lose the user's
+    // choice for whenever they pick a model that does take one.
     const config: LLMOpenAIConfigsType = {
       temperature: 0,
       maxCompletionTokens: 4000,
@@ -252,13 +267,19 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    expect(result?.temperature).toBe(1);
+    expect(result?.temperature).toBe(0);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_O3,
+        result as unknown as Record<string, unknown>,
+      ).temperature,
+    ).toBeUndefined();
   });
 
-  it("does not change temperature when already 1, but still strips topP on a reasoning model", () => {
-    // topP=1 is the slider default and "harmless" in spirit, but OpenAI rejects any topP value
-    // on reasoning models (the constraint is the parameter's presence, not its value). The
-    // reconciler strips it; that's a real change so reference equality no longer holds.
+  it("leaves the config untouched on a reasoning model that already has temperature 1", () => {
+    // OpenAI rejects any topP value on reasoning models — the constraint is the parameter's
+    // presence, not its value — but that is the request builder's job to enforce, so nothing here
+    // needs changing and the reference survives.
     const config: LLMOpenAIConfigsType = {
       temperature: 1,
       maxCompletionTokens: 4000,
@@ -270,8 +291,13 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    expect(result?.temperature).toBe(1);
-    expect(result?.topP).toBeUndefined();
+    expect(result).toBe(config);
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_O3,
+        result as unknown as Record<string, unknown>,
+      ).topP,
+    ).toBeUndefined();
   });
 
   it("coerces invalid reasoningEffort to high when switching into a model that doesn't support it", () => {
@@ -369,9 +395,9 @@ describe("updateProviderConfig — OpenAI", () => {
     expect(result).toBe(config);
   });
 
-  it("drops topP when switching into a reasoning OpenAI model", () => {
-    // OpenAI rejects top_p with 400 on reasoning models. The reconciler must clear stale
-    // values when the user switches from gpt-4o (where top_p is valid) to gpt-5.5.
+  it("retains both sampling params when switching into a reasoning OpenAI model", () => {
+    // Both are kept so gpt-4o -> gpt-5.5 -> gpt-4o gives the sliders back with the user's own
+    // values; the request builder is what keeps them off a gpt-5.5 call.
     const config: LLMOpenAIConfigsType = {
       temperature: 0.7,
       maxCompletionTokens: 4000,
@@ -383,9 +409,14 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_5_5,
       provider: OPEN_AI,
     });
-    expect(result?.topP).toBeUndefined();
-    // Temperature should also be coerced to 1.0 in the same call.
-    expect(result?.temperature).toBe(1.0);
+    expect(result).toBe(config);
+
+    const request = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      result as unknown as Record<string, unknown>,
+    );
+    expect(request.topP).toBeUndefined();
+    expect(request.temperature).toBeUndefined();
   });
 
   it("keeps topP when switching to a non-reasoning OpenAI model", () => {
@@ -522,14 +553,14 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBe("high");
   });
 
-  it("strips topP for OpenAI reasoning models", () => {
-    // gpt-5.5 is a reasoning model; OpenAI returns 400 if top_p is in the request.
+  it("strips both sampling params for OpenAI reasoning models", () => {
+    // gpt-5.5 returns 400 if top_p is in the request, and accepts only its own default temperature.
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
-      temperature: 1,
+      temperature: 0.3,
       topP: 0.9,
     });
     expect(result.topP).toBeUndefined();
-    expect(result.temperature).toBe(1);
+    expect(result.temperature).toBeUndefined();
   });
 
   it("keeps topP for non-reasoning OpenAI models", () => {
@@ -1043,5 +1074,200 @@ describe("updateProviderConfig — Gemini thinking level", () => {
     });
 
     expect(next).toBe(config);
+  });
+});
+
+describe("sampling params survive a model round trip", () => {
+  it("keeps topP across gpt-4o-mini -> gpt-5.5 -> gpt-4o-mini", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+    const back = updateProviderConfig(onReasoning, {
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: OPEN_AI,
+    });
+
+    expect(back?.topP).toBe(0.9);
+  });
+
+  it("keeps temperature across sonnet-4.6 -> sonnet-5 -> sonnet-4.6", () => {
+    const config: LLMAnthropicConfigsType = {
+      temperature: 0.7,
+      maxCompletionTokens: 4000,
+    };
+
+    const onSonnet5 = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+      provider: ANTHROPIC,
+    });
+    const back = updateProviderConfig(onSonnet5, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      provider: ANTHROPIC,
+    });
+
+    expect(back?.temperature).toBe(0.7);
+  });
+
+  it("keeps temperature across gpt-4o-mini -> gpt-5.5 -> gpt-4o-mini", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0.3,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    const onReasoning = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+    });
+    const back = updateProviderConfig(onReasoning, {
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: OPEN_AI,
+    });
+
+    expect(back?.temperature).toBe(0.3);
+  });
+
+  it("still omits the retained value from the wire while the model rejects it", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        temperature: 0.7,
+        maxCompletionTokens: 4000,
+      }).temperature,
+    ).toBeUndefined();
+
+    const onReasoningModel = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      { temperature: 0.3, topP: 0.9 },
+    );
+    expect(onReasoningModel.topP).toBeUndefined();
+    expect(onReasoningModel.temperature).toBeUndefined();
+  });
+});
+
+describe("resolveSamplingParams", () => {
+  it("re-establishes the temperature/topP pair for an Anthropic config that has neither", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {}),
+    ).toEqual({ temperature: 0 });
+  });
+
+  it("omits both for an Anthropic model that rejects sampling params", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({});
+  });
+
+  it("keeps temperature and drops topP when an Anthropic config carries both", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7 });
+  });
+
+  it("keeps topP alone when the user cleared temperature", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        topP: 0.9,
+      }),
+    ).toEqual({ topP: 0.9 });
+  });
+
+  it("does not invent a topP the config has no value for", () => {
+    // The same panels serve the LLM judge, whose rule stores no topP. Putting a parameter back for
+    // a surface that owns it is that surface's job — restoreMissingConfigKeys for the playground.
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        temperature: 0,
+      }).topP,
+    ).toBeUndefined();
+  });
+
+  it("omits both for OpenAI reasoning models, which take neither", () => {
+    // top_p is rejected outright and temperature accepts only the provider's own default, so
+    // neither is tunable and the panel offers no slider for either.
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_5, {
+        temperature: 0.3,
+        topP: 0.9,
+      }),
+    ).toEqual({});
+  });
+
+  it("passes other providers' values through untouched", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, {
+        temperature: 0.3,
+        topP: 0.8,
+      }),
+    ).toEqual({ temperature: 0.3, topP: 0.8 });
+  });
+});
+
+describe("resolveSamplingParams provider routing", () => {
+  it("routes every model with an Anthropic capability row to the Anthropic rules", () => {
+    // getProviderFromModel falls back to OpenAI for a model it cannot place, and the OpenAI branch
+    // fills in a default topP. An Anthropic model missing from the registry would therefore be sent
+    // temperature and top_p together, which Anthropic rejects.
+    for (const model of Object.keys(
+      ANTHROPIC_MODEL_CAPABILITIES,
+    ) as PROVIDER_MODEL_TYPE[]) {
+      expect(getProviderFromModel(model)).toBe(PROVIDER_TYPE.ANTHROPIC);
+      expect(
+        resolveSamplingParams(model, { temperature: 0 }).topP,
+      ).toBeUndefined();
+    }
+  });
+});
+
+describe("the settings panel and the request agree on sampling params", () => {
+  // Both shapes are what an earlier model switch left behind in PLAYGROUND_STATE. The panel reads
+  // them through resolveSamplingParams, so the request has to resolve to the same values.
+  it("sends the temperature the panel resolves for an Anthropic config that lost both", () => {
+    const configs: LLMAnthropicConfigsType = { maxCompletionTokens: 4000 };
+
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+        configs as unknown as Record<string, unknown>,
+      ).temperature,
+    ).toBe(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, configs)
+        .temperature,
+    );
+  });
+
+  it("sends the topP the panel resolves for an OpenAI config that carries one", () => {
+    const configs: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 0.75,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+        configs as unknown as Record<string, unknown>,
+      ).topP,
+    ).toBe(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_4O_MINI, configs).topP,
+    );
   });
 });
