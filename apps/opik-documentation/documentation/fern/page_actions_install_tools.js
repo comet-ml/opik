@@ -11,8 +11,8 @@
       id: "auto",
       icon: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
       label: "Auto",
-      text: "Sets up every coding agent found on this machine. Needs uv and no Opik SDK.",
-      command: "uvx opik mcp configure"
+      text: "Sets up every coding agent found on this machine. uv is the only prerequisite.",
+      command: "uvx opik mcp configure --ai-client all --skills"
     },
     {
       id: "claude-code",

@@ -311,8 +311,8 @@ your client stores no API key.
 
 On a self-hosted deployment the URL is your own Opik API base plus `/v1/mcp`, and
 the deployment has to run the MCP OAuth authorization server. It is off by
-default: turn on `mcpOAuth.enabled` in the Helm chart, or set
-`MCP_OAUTH_ENABLED=true` with a public `OPIK_BASE_URL`. Where it is off, the
+default: turn on `mcpOAuth.enabled` in the Helm chart together with
+`MCP_OAUTH_ENABLED=true` and a public `OPIK_BASE_URL` on the backend. Where it is off, the
 endpoint has no sign-in routes, so use the [local server](#local-server-uvx)
 instead.
 
