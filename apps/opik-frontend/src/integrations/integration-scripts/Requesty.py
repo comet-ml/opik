@@ -1,13 +1,16 @@
+import os
+
 from openai import OpenAI
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.openai import track_openai  # HIGHLIGHTED_LINE
 
 configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
-# Initialize the OpenAI client with Requesty base URL
+# Initialize the OpenAI client with the Requesty base URL.
+# Set REQUESTY_API_KEY in your environment, keys are created at https://app.requesty.ai/api-keys
 client = OpenAI(
     base_url="https://router.requesty.ai/v1",
-    # api_key="YOUR_REQUESTY_API_KEY",
+    api_key=os.environ["REQUESTY_API_KEY"],
 )
 
 # Track all Requesty API calls with Opik
