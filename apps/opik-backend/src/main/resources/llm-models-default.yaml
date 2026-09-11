@@ -65,6 +65,8 @@ openai:
   - id: "o1"
     label: "GPT o1"
     reasoning: true
+  - id: "gpt-live-1"
+    label: "GPT Live 1"
   - id: "chatgpt-4o-latest"
     structuredOutput: true
   - id: "chatgpt-image-latest"
@@ -613,6 +615,8 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-pro-0813:batch"
     label: "deepseek/deepseek-v4-pro-0813:batch"
+  - id: "deepseek/deepseek-v4.1-flash"
+    label: "deepseek/deepseek-v4.1-flash"
   - id: "dots-studio/dots-3-note-preview:free"
     label: "dots-studio/dots-3-note-preview:free"
   - id: "eleutherai/llemma_7b"
@@ -798,6 +802,8 @@ openrouter:
     label: "inclusionai/ling-3.0-flash-fin:free"
   - id: "inclusionai/ling-3.0-flash-sante:free"
     label: "inclusionai/ling-3.0-flash-sante:free"
+  - id: "inclusionai/ling-3.0-flash-vl:free"
+    label: "inclusionai/ling-3.0-flash-vl:free"
   - id: "inclusionai/ling-3.0-flash:free"
     label: "inclusionai/ling-3.0-flash:free"
   - id: "inclusionai/ling-3.0-tiny:free"
