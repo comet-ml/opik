@@ -1,5 +1,7 @@
 """Streaming behaviour of `Dataset.insert`: laziness, memory, and the widened signature."""
 
+import base64
+import datetime
 import json
 import threading
 import time
@@ -15,6 +17,7 @@ from opik.api_objects import constants
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 from opik.message_processing.batching import sequence_splitter
+from opik.rest_api.core.jsonable_encoder import jsonable_encoder
 from opik.rest_client_configurator import retry_decorator
 
 from .upload_capture import UploadCapture, make_dataset
@@ -609,3 +612,45 @@ def test_delete__id_that_identifies_nothing__raises_before_anything_is_sent(bad_
     assert mock_rest_client.datasets.delete_dataset_items.call_count == 0, (
         "The valid id before it must not have been deleted"
     )
+
+
+@pytest.mark.parametrize("deduplication", [True, False])
+def test_insert__flexible_value__reaches_both_transports(deduplication):
+    """Hashing runs before the writer does, so dedup must accept what the upload accepts."""
+    item = {
+        "input": {"when": datetime.datetime(2024, 1, 2, tzinfo=datetime.timezone.utc)},
+        "expected_output": {"raw": b"bytes"},
+    }
+
+    capture = UploadCapture()
+    streaming = make_dataset(Dataset, Mock(), capture)
+    streaming.insert([item], deduplication=deduplication)
+    sent_streaming = capture.items[0]["data"]
+
+    mock_rest_client = Mock()
+    fallback = _fallback_dataset(mock_rest_client)
+    fallback.insert([item], deduplication=deduplication)
+    create = mock_rest_client.datasets.create_or_update_dataset_items
+    # The model holds the value unconverted; the generated client encodes it on the way
+    # out, which is the form to compare against what the writer produced.
+    sent_fallback = jsonable_encoder(create.call_args.kwargs["items"][0])["data"]
+
+    assert sent_streaming == sent_fallback, (
+        "The transports disagree on the encoded value"
+    )
+    assert sent_streaming["input"]["when"] == "2024-01-02T00:00:00Z"
+    assert (
+        sent_streaming["expected_output"]["raw"] == base64.b64encode(b"bytes").decode()
+    )
+
+
+def test_insert__list_containing_something_that_is_not_an_item__raises_before_sending():
+    """A shape check costs an isinstance per item and keeps the old failure point."""
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    with pytest.raises(ValueError) as exc_info:
+        dataset.insert([{"input": "fine"}, 42])
+
+    assert "index 1" in str(exc_info.value)
+    assert capture.request_count == 0, "The valid item must not have been sent"

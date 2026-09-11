@@ -141,9 +141,56 @@ def test_content_hash__ordinary_value__does_not_use_the_fallback(content, monkey
     )
 
 
-def test_content_hash__unhashable_value__still_raises():
+def test_content_hash__unserializable_value__still_raises():
     class NotSerializable:
         pass
 
+    # The object hashes fine by identity; it is serialising it to JSON that fails.
     with pytest.raises(TypeError):
         dataset_item.DatasetItem(input=NotSerializable()).content_hash()
+
+
+# --------------------------------------------------------------------------- #
+# the digests themselves, not just their agreement with a recomputation
+# --------------------------------------------------------------------------- #
+# Written down rather than derived: comparing against `_legacy_digest` proves only that
+# two pieces of code agree, and both would move together if the encoding changed. These
+# are the bytes items already stored were hashed with. A failure here is a dedup break for
+# every existing dataset, never a test to update.
+GOLDEN_DIGESTS = [
+    pytest.param(
+        {"input": "plain"},
+        "600b81afbd8dce5513f499d27f3ea08ed5e6cf832f06fda3063d3020f68df563",
+        id="flat-string",
+    ),
+    pytest.param(
+        {"b": 2, "a": 1},
+        "d8497d9d82770a70729261095aa98f7ef5154d7af499f8037b6ca250296785a6",
+        id="keys-out-of-order",
+    ),
+    pytest.param(
+        {"input": {"nested": {"deep": [1, 2, {"x": "y"}]}}},
+        "22db775c8b17b17d508784e9483aa308ecfceb8bfab868d77f3f1882b6d281fa",
+        id="nested",
+    ),
+    pytest.param(
+        {"input": "héllo wörld 🙂", "expected_output": "ünïcode"},
+        "ee04cc26d4a9e227b622640cef5c7cd438d554adbe349527a3fa59c358b108f2",
+        id="non-ascii",
+    ),
+    pytest.param(
+        {"input": None, "expected_output": 0, "flag": False},
+        "a2d5992170a01f0113609c032f38bf26762f069551fafa347fc971a7887fe8dd",
+        id="falsy-values",
+    ),
+    pytest.param(
+        {"input": {"a": 1.5, "b": [True, None]}},
+        "b371305d07e634117f65ae40c2e5aaad61fc1c3aa64d73df90ceeb7c54779080",
+        id="mixed-scalars",
+    ),
+]
+
+
+@pytest.mark.parametrize("content, digest", GOLDEN_DIGESTS)
+def test_content_hash__matches_the_recorded_digest(content, digest):
+    assert dataset_item.DatasetItem(**content).content_hash() == digest

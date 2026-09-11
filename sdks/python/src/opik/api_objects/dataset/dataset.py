@@ -1063,10 +1063,14 @@ class Dataset(DatasetExportOperations):
                 in flight are capped. That is the bounded part; deduplication is not, and
                 keeps a content digest and an id per item for the life of the ``Dataset``
                 however the items arrived -- pass ``deduplication=False`` for an upload
-                that retains nothing at all. A list keeps working as before, and is
-                checked before the first request goes out; from a generator an invalid
-                item can only be found once earlier items have been sent, and those stay
-                persisted.
+                that retains nothing at all. A list keeps working as before, and its
+                items are checked for shape before the first request goes out; a value
+                that cannot be serialised is found when the item carrying it is reached,
+                so items sent before it stay persisted. From a generator nothing can be
+                checked in advance at all -- a single-pass upload cannot know the last
+                item is invalid before sending the first batch. A ``Dataset`` built from
+                a REST client alone is the exception: that path already builds every item
+                before sending, so from a list it still raises with nothing persisted.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -1092,6 +1096,21 @@ class Dataset(DatasetExportOperations):
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
 
+        items_materialised = isinstance(items, collections.abc.Sequence)
+        if items_materialised:
+            # One isinstance per item and nothing retained, so it is worth running over
+            # the whole input before anything is sent: it turns the AttributeError an item
+            # of the wrong type raises part-way through the upload -- with earlier items
+            # already persisted -- back into an error raised before the first request, as
+            # it was when the upload was materialised. Shape only; a value that cannot be
+            # serialised is still found when it is reached.
+            for index, item in enumerate(items):
+                if not isinstance(item, (dict, dataset_item.DatasetItem)):
+                    raise ValueError(
+                        f"Dataset item at index {index} must be a dict or a DatasetItem, "
+                        f"got {type(item).__name__}"
+                    )
+
         # A generator rather than a list: converting lazily is what lets a generator
         # argument stay un-materialised all the way to the wire. Whether it was one is
         # passed along, because by here it no longer shows.
@@ -1103,7 +1122,7 @@ class Dataset(DatasetExportOperations):
             dataset_items,
             num_threads=num_threads,
             deduplication=deduplication,
-            items_materialised=isinstance(items, collections.abc.Sequence),
+            items_materialised=items_materialised,
         )
 
     @property
