@@ -16,6 +16,7 @@ from typing import (
     Set,
     TYPE_CHECKING,
     Tuple,
+    Union,
 )
 
 from opik.api_objects import rest_helpers
@@ -983,7 +984,7 @@ class Dataset(DatasetExportOperations):
 
     def insert(
         self,
-        items: Iterable[Dict[str, Any]],
+        items: Iterable[Union[Dict[str, Any], dataset_item.DatasetItem]],
         num_threads: int = 4,
         deduplication: bool = True,
     ) -> None:
@@ -1174,7 +1175,11 @@ class Dataset(DatasetExportOperations):
 
         try:
             for batch in batches:
-                LOGGER.debug("Deleting dataset items batch: %s", batch)
+                LOGGER.debug(
+                    "Deleting dataset items batch of size %d, first ids: %s",
+                    len(batch),
+                    batch[:5],
+                )
                 self._delete_batch_with_retry(batch, batch_group_id=batch_group_id)
 
                 for item_id in batch:

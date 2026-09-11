@@ -42,15 +42,17 @@ def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitt
     )
 
     capture = UploadCapture()
+    # The capture goes where the Dataset looks for its transport, so the suite the factory
+    # builds resolves it the way it would in production -- no reaching into the object
+    # afterwards.
+    mock_rest_client._client_wrapper.httpx_client.httpx_client = capture
+    mock_rest_client._client_wrapper.get_base_url.return_value = capture.base_url
+
     suites = rest_operations.get_test_suites(
         project_name="Test project",
         rest_client=mock_rest_client,
     )
     assert len(suites) == 1
-    # The suite is built by the factory, so the transport of the dataset it wraps is
-    # substituted after the fact.
-    suites[0]._dataset._rest_httpx_client = capture
-    suites[0]._dataset._url_override = capture.base_url
 
     backend_item = rest_dataset_item.DatasetItem(
         id="existing-item-id", source="sdk", data=existing_content

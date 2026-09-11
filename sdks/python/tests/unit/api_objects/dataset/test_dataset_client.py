@@ -602,3 +602,21 @@ def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
         "Parallel upload is the default, so the version gate must be probed once "
         "per dataset rather than once per insert"
     )
+
+
+def test_insert__typed_dataset_items__accepted_like_dicts():
+    """`insert` has always taken DatasetItem objects; the annotation now says so too."""
+    mock_rest_client = Mock()
+    dataset, capture = _dataset_with_capture(mock_rest_client)
+
+    dataset.insert(
+        [
+            dataset_item.DatasetItem(input={"key": "typed"}),
+            {"input": {"key": "dict"}},
+        ]
+    )
+
+    assert sorted(item["data"]["input"]["key"] for item in capture.items) == [
+        "dict",
+        "typed",
+    ]
