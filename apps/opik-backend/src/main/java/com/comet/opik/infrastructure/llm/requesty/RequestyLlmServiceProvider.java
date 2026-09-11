@@ -6,7 +6,6 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
-import com.comet.opik.infrastructure.llm.openai.LlmProviderOpenAi;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Named;
@@ -23,12 +22,16 @@ class RequestyLlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
-        return new LlmProviderOpenAi(clientGenerator.newOpenAiClient(config));
+        return new LlmProviderRequesty(clientGenerator.newOpenAiClient(config));
     }
 
     @Override
     public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
+        // The router only knows the bare vendor/model id, so the Opik-side prefix is dropped here.
+        var routerModelParameters = modelParameters.toBuilder()
+                .name(RequestyModelName.stripPrefix(modelParameters.name()))
+                .build();
+        return clientGenerator.newOpenAiChatLanguageModel(config, routerModelParameters);
     }
 }
