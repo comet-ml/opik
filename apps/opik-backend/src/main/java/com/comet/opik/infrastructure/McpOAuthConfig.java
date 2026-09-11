@@ -37,6 +37,9 @@ public class McpOAuthConfig {
     @NotNull private Duration refreshTokenTtl;
 
     @Valid @JsonProperty
+    @NotNull private Duration refreshTokenAbsoluteTtl;
+
+    @Valid @JsonProperty
     @NotNull private Duration codeTtl;
 
     @Valid @JsonProperty

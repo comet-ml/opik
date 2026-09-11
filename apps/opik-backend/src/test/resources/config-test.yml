@@ -293,8 +293,11 @@ mcpOAuth:
   # Description: Access token lifetime
   accessTokenTtl: PT1H
   # Default: P7D
-  # Description: Refresh token absolute lifetime (not sliding)
+  # Description: Refresh token idle lifetime; sliding, renewed on every rotation
   refreshTokenTtl: P7D
+  # Default: P30D
+  # Description: Absolute lifetime of a token family from the authorization that created it; caps the sliding lifetime
+  refreshTokenAbsoluteTtl: P30D
   # Default: PT60S
   # Description: Authorization code lifetime
   codeTtl: PT60S

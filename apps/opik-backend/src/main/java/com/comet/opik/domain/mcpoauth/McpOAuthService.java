@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -131,12 +132,20 @@ public class McpOAuthService {
         McpOAuthToken row = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash));
 
-        if (!isValidRefreshToken(row, clientId, now)) {
-            throw new BadRequestException(ERROR_INVALID_GRANT);
+        // The detail on these exceptions is for the log line in OAuthTokenService; the client only ever sees
+        // invalid_grant (RFC 6749 §5.2).
+        if (row == null || !TYPE_REFRESH.equals(row.type())) {
+            throw new BadRequestException("unknown refresh token");
+        }
+        if (!row.clientId().equals(clientId)) {
+            throw new BadRequestException("refresh token was issued to another client");
+        }
+        if (!row.expiresAt().isAfter(now)) {
+            throw new BadRequestException("refresh token expired at '%s'".formatted(row.expiresAt()));
         }
 
         return underFamilyLock(row.familyId(), () -> rotate(row, now))
-                .orElseThrow(() -> new BadRequestException(ERROR_INVALID_GRANT));
+                .orElseThrow(() -> new BadRequestException("refresh token reuse detected, family revoked"));
     }
 
     /**
@@ -156,30 +165,29 @@ public class McpOAuthService {
             McpOAuthToken current = family.stream()
                     .filter(token -> token.id().equals(row.id()))
                     .findFirst()
-                    .orElseThrow(() -> new BadRequestException(ERROR_INVALID_GRANT));
+                    .orElseThrow(() -> new BadRequestException("refresh token vanished during rotation"));
 
             if (isFamilyRevoked(family)) {
-                throw new BadRequestException(ERROR_INVALID_GRANT);
+                throw new BadRequestException("refresh token family already revoked");
             }
 
-            if (current.revokedAt() == null) {
-                if (tokenDao.revoke(current.tokenHash(), RevokedReason.ROTATED) != 1) {
-                    throw new BadRequestException(ERROR_INVALID_GRANT);
-                }
-            } else
-                if (!isBenignRotationRetry(current, now)
-                        || countDescendantPairs(family, current) > config().getRefreshRotationMaxRetries()) {
-                            // Reuse detected: kill the whole lineage
-                            tokenDao.revokeFamily(current.familyId(), RevokedReason.REUSE);
-                            return Optional.empty();
-                        }
+            boolean retry = current.revokedAt() != null;
+            if (!retry && tokenDao.revoke(current.tokenHash(), RevokedReason.ROTATED) != 1) {
+                throw new BadRequestException("refresh token could not be rotated");
+            }
+            if (retry && (!isBenignRotationRetry(current, now)
+                    || countDescendantPairs(family, current) > config().getRefreshRotationMaxRetries())) {
+                // Reuse detected: kill the whole lineage
+                tokenDao.revokeFamily(current.familyId(), RevokedReason.REUSE);
+                return Optional.empty();
+            }
 
             tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
                     now.plus(config().getAccessTokenTtl())));
             tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_REFRESH,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(newRefreshToken),
-                    current.expiresAt()));
+                    slidingRefreshExpiry(family, now)));
 
             return Optional.of(buildTokenResponse(accessToken, newRefreshToken, current.workspaceId(),
                     current.workspaceName()));
@@ -276,17 +284,6 @@ public class McpOAuthService {
     }
 
     /**
-     * A refresh token is usable only if it exists, is actually a refresh token (not an access token),
-     * was issued to the requesting client, and has not passed its absolute expiry.
-     */
-    private static boolean isValidRefreshToken(McpOAuthToken token, String clientId, Instant now) {
-        return token != null
-                && TYPE_REFRESH.equals(token.type())
-                && token.clientId().equals(clientId)
-                && token.expiresAt().isAfter(now);
-    }
-
-    /**
      * Distinguishes a harmless client retry from token theft. After rotation the old refresh token is
      * revoked; if the rotation response was lost in transit the client legitimately re-presents it. Such
      * a re-presentation is benign only when the token was revoked specifically for rotation and arrives
@@ -295,6 +292,23 @@ public class McpOAuthService {
     private boolean isBenignRotationRetry(McpOAuthToken token, Instant now) {
         return token.revokedReason() == RevokedReason.ROTATED
                 && !now.isAfter(token.revokedAt().plus(config().getRefreshRotationGrace()));
+    }
+
+    /**
+     * The expiry of a refresh token issued by rotation: {@code refreshTokenTtl} from now, so a connector that keeps
+     * refreshing stays connected (OAuth 2.1 §4.3.3 ties refresh expiry to inactivity), capped at
+     * {@code refreshTokenAbsoluteTtl} from the authorization that created the family. The family's oldest token
+     * carries that authorization time.
+     */
+    private Instant slidingRefreshExpiry(List<McpOAuthToken> family, Instant now) {
+        Instant familyStart = family.stream()
+                .map(McpOAuthToken::issuedAt)
+                .filter(Objects::nonNull)
+                .min(Instant::compareTo)
+                .orElse(now);
+        Instant sliding = now.plus(config().getRefreshTokenTtl());
+        Instant absolute = familyStart.plus(config().getRefreshTokenAbsoluteTtl());
+        return sliding.isBefore(absolute) ? sliding : absolute;
     }
 
     /**
