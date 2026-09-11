@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
@@ -13,6 +12,7 @@ import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortableFields;
@@ -24,6 +24,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.stats.StatsMerger;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -77,7 +78,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
-import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.stats.StatsMapper.mapProjectScoresStats;
@@ -128,7 +128,11 @@ public interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
-    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
+    /**
+     * Previous-day trace counts per workspace and project. Callers drop demo projects and re-aggregate via
+     * {@link DemoDataExclusionUtils}, so the exclusion never reaches the query text.
+     */
+    Flux<WorkspaceProjectCount> countTracesPerWorkspaceProject();
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
@@ -143,11 +147,10 @@ public interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
-    Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
+    /** Same as {@link #countTracesPerWorkspaceProject()}, broken down by user for the BI events. */
+    Flux<WorkspaceProjectUserCount> getTraceBIInformationPerProject();
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
-
-    Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
             List<? extends Filter> filters, Instant fromTime, Instant toTime);
@@ -1529,31 +1532,43 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String TRACE_COUNT_BY_WORKSPACE_ID = """
+    /**
+     * Previous-day trace counts per workspace, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspace} can drop demo projects and re-aggregate in Java.
+     *
+     * <p><b>The demo-project exclusion must not render into this query text.</b> It used to, as an inline
+     * {@code project_id NOT IN [...]} literal holding one UUID per demo project across all workspaces. Once
+     * {@code traces} is wrapped in a {@code Distributed} table the query text is re-parsed per shard, so that
+     * literal — unbounded, one demo project per signup — grew until the query exceeded
+     * {@code max_execution_time} and the daily usage counts silently stopped being produced. Keeping the text
+     * constant is what makes growth in the demo set unable to reintroduce that; see {@link DemoDataExclusionUtils}.
+     */
+    private static final String TRACE_DAILY_COUNT_BY_WORKSPACE_PROJECT = """
             SELECT
                  workspace_id,
+                 project_id,
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-             <endif>
-             GROUP BY workspace_id
+             GROUP BY workspace_id, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String TRACE_DAILY_BI_INFORMATION = """
+    /**
+     * Previous-day trace counts per workspace and user for the BI events, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspaceAndUser} can drop demo projects and re-aggregate in Java. Same
+     * constraint on the query text as {@link #TRACE_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     */
+    private static final String TRACE_DAILY_BI_INFORMATION_BY_PROJECT = """
             SELECT
                  workspace_id,
                  created_by AS user,
+                 project_id,
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-            GROUP BY workspace_id, created_by
+            GROUP BY workspace_id, created_by, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4481,75 +4496,33 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(@NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(TRACE_COUNT_BY_WORKSPACE_ID, "count_traces_per_workspace", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
+    public Flux<WorkspaceProjectCount> countTracesPerWorkspaceProject() {
+        var template = getSTWithLogComment(TRACE_DAILY_COUNT_BY_WORKSPACE_PROJECT, "count_traces_per_workspace", "",
+                "", "");
 
         return asyncTemplate
-                .nonTransaction(
-                        connection -> {
-                            Statement statement = connection.createStatement(template.render());
-
-                            if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids",
-                                        excludedProjectIds.keySet().toArray(UUID[]::new));
-                            }
-
-                            if (demoDataCreatedAt.isPresent()) {
-                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                            }
-
-                            return Mono.from(statement.execute());
-                        })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
-                        .workspace(row.get("workspace_id", String.class))
-                        .traceCount(row.get("trace_count", Integer.class))
+                .nonTransaction(connection -> Mono.from(connection.createStatement(template.render()).execute()))
+                .flatMapMany(result -> result.map((row, _) -> WorkspaceProjectCount.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
+                        .count(row.get("trace_count", Long.class))
                         .build()));
     }
 
     @Override
     @WithSpan
-    public Flux<BiInformation> getTraceBIInformation(@NonNull Map<UUID, Instant> excludedProjectIds) {
+    public Flux<WorkspaceProjectUserCount> getTraceBIInformationPerProject() {
+        var template = getSTWithLogComment(TRACE_DAILY_BI_INFORMATION_BY_PROJECT, "get_trace_bi_information", "", "",
+                "");
 
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(TRACE_DAILY_BI_INFORMATION, "get_trace_bi_information", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return asyncTemplate.nonTransaction(connection -> {
-            Statement statement = connection.createStatement(template.render());
-
-            if (!excludedProjectIds.isEmpty()) {
-                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-            }
-
-            if (demoDataCreatedAt.isPresent()) {
-                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-            }
-
-            return Mono.from(statement.execute());
-        })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> BiInformation.builder()
+        return asyncTemplate
+                .nonTransaction(connection -> Mono.from(connection.createStatement(template.render()).execute()))
+                .flatMapMany(result -> result.map((row, _) -> WorkspaceProjectUserCount.builder()
                         .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
                         .user(row.get("user", String.class))
-                        .count(row.get("trace_count", Long.class)).build()));
+                        .count(row.get("trace_count", Long.class))
+                        .build()));
     }
 
     @Override
@@ -4739,41 +4712,6 @@ class TraceDAOImpl implements TraceDAO {
                 || template.getAttribute("feedback_scores_empty_filters") != null
                 || template.getAttribute("span_feedback_scores_empty_filters") != null
                 || template.getAttribute("guardrails_filters") != null;
-    }
-
-    @Override
-    public Mono<Long> getDailyTraces(@NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(TRACE_COUNT_BY_WORKSPACE_ID, "get_daily_traces_count", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return asyncTemplate
-                .nonTransaction(
-                        connection -> {
-                            Statement statement = connection.createStatement(template.render());
-
-                            if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids",
-                                        excludedProjectIds.keySet().toArray(UUID[]::new));
-                            }
-
-                            if (demoDataCreatedAt.isPresent()) {
-                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                            }
-
-                            return Mono.from(statement.execute());
-                        })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("trace_count", Long.class)))
-                .reduce(0L, Long::sum);
     }
 
     @Override
