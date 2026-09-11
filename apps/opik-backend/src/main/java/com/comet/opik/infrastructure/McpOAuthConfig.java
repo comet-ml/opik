@@ -36,6 +36,10 @@ public class McpOAuthConfig {
     @Valid @JsonProperty
     @NotNull private Duration refreshTokenTtl;
 
+    // Longest a refresh-token family may be configured to live, idle or absolute. A grant that never has to be
+    // re-authorized is a standing credential; a year is already generous for a connector.
+    private static final Duration MAX_REFRESH_LIFETIME = Duration.ofDays(365);
+
     // Java-side defaults on the settings added after the first release, so an externally supplied mcpOAuth block
     // that predates them still validates.
     @Valid @JsonProperty
@@ -80,12 +84,12 @@ public class McpOAuthConfig {
         return refreshTokenAbsoluteTtl.compareTo(refreshTokenTtl) >= 0 ? refreshTokenAbsoluteTtl : refreshTokenTtl;
     }
 
-    @AssertTrue(message = "mcpOAuth.refreshTokenTtl must be positive") public boolean isRefreshTokenTtlPositive() {
-        return isPositive(refreshTokenTtl);
+    @AssertTrue(message = "mcpOAuth.refreshTokenTtl must be positive and at most 365 days") public boolean isRefreshTokenTtlPositive() {
+        return isPositive(refreshTokenTtl) && refreshTokenTtl.compareTo(MAX_REFRESH_LIFETIME) <= 0;
     }
 
-    @AssertTrue(message = "mcpOAuth.refreshTokenAbsoluteTtl must be positive") public boolean isRefreshTokenAbsoluteTtlPositive() {
-        return isPositive(refreshTokenAbsoluteTtl);
+    @AssertTrue(message = "mcpOAuth.refreshTokenAbsoluteTtl must be positive and at most 365 days") public boolean isRefreshTokenAbsoluteTtlPositive() {
+        return isPositive(refreshTokenAbsoluteTtl) && refreshTokenAbsoluteTtl.compareTo(MAX_REFRESH_LIFETIME) <= 0;
     }
 
     @AssertTrue(message = "mcpOAuth.refreshLockLease must be positive") public boolean isRefreshLockLeasePositive() {

@@ -11,6 +11,7 @@ import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -19,6 +20,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -34,6 +36,7 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_TYPE_BEARER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class McpOAuthService {
@@ -238,12 +241,32 @@ public class McpOAuthService {
     }
 
     private <T> Optional<T> underFamilyLock(String familyId, Supplier<Optional<T>> action) {
+        Duration lease = config().getRefreshLockLease();
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(familyId, FAMILY_LOCK),
-                Mono.fromSupplier(action).subscribeOn(Schedulers.boundedElastic()),
-                config().getRefreshLockLease())
+                Mono.fromSupplier(() -> timed(familyId, lease, action)).subscribeOn(Schedulers.boundedElastic()),
+                lease)
                 .blockOptional()
                 .orElseGet(Optional::empty);
+    }
+
+    /**
+     * The Redis permit is a lease, not a fence: once it lapses the action keeps running while another request may
+     * enter. Correctness does not depend on it (every write re-reads the family in its own transaction and the
+     * rotation itself is a conditional UPDATE), but a lapsed lease can turn a legitimate parallel retry into
+     * {@code invalid_grant}, so make it visible when it happens.
+     */
+    private static <T> T timed(String familyId, Duration lease, Supplier<T> action) {
+        long start = System.nanoTime();
+        try {
+            return action.get();
+        } finally {
+            Duration held = Duration.ofNanos(System.nanoTime() - start);
+            if (held.compareTo(lease) > 0) {
+                log.warn("MCP OAuth family lock held for '{}' longer than its lease '{}' on family '{}'; "
+                        + "raise mcpOAuth.refreshLockLease", held, lease, familyId);
+            }
+        }
     }
 
     public ValidatedToken validateAccessTokenForWorkspace(@NonNull String token, String headerWorkspace) {

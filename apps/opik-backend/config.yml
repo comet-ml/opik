@@ -386,10 +386,10 @@ mcpOAuth:
   # Description: Access token lifetime
   accessTokenTtl: ${MCP_OAUTH_ACCESS_TOKEN_TTL:-PT1H}
   # Default: P7D
-  # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize
+  # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize. At most 365 days
   refreshTokenTtl: ${MCP_OAUTH_REFRESH_TOKEN_TTL:-P7D}
   # Default: P30D
-  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed. Never effectively shorter than refreshTokenTtl
+  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed. Never effectively shorter than refreshTokenTtl; at most 365 days
   refreshTokenAbsoluteTtl: ${MCP_OAUTH_REFRESH_TOKEN_ABSOLUTE_TTL:-P30D}
   # Default: PT60S
   # Description: Authorization code lifetime

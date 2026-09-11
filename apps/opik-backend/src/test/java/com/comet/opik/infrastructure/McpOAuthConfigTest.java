@@ -80,6 +80,12 @@ class McpOAuthConfigTest {
                 arguments("refreshTokenTtlPositive", "zero idle TTL",
                         (UnaryOperator<McpOAuthConfig.McpOAuthConfigBuilder>) b -> b
                                 .refreshTokenTtl(Duration.ZERO)),
+                arguments("refreshTokenAbsoluteTtlPositive", "absolute TTL above one year",
+                        (UnaryOperator<McpOAuthConfig.McpOAuthConfigBuilder>) b -> b
+                                .refreshTokenAbsoluteTtl(Duration.ofDays(366))),
+                arguments("refreshTokenTtlPositive", "idle TTL above one year",
+                        (UnaryOperator<McpOAuthConfig.McpOAuthConfigBuilder>) b -> b
+                                .refreshTokenTtl(Duration.ofDays(366))),
                 arguments("refreshLockLeasePositive", "zero lock lease",
                         (UnaryOperator<McpOAuthConfig.McpOAuthConfigBuilder>) b -> b
                                 .refreshLockLease(Duration.ZERO)),
