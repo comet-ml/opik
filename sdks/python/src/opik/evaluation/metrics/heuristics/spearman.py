@@ -62,6 +62,19 @@ class SpearmanRanking(BaseMetric):
                 "Rankings cannot be empty for Spearman correlation."
             )
 
+        if len(set(output)) != len(output) or len(set(reference)) != len(reference):
+            # A rank is only well-defined when each item appears exactly
+            # once. Without this check a duplicate silently collapses in
+            # `ref_ranks` below (a dict comprehension keeps only the last
+            # occurrence's index), and the same-items check next can still
+            # pass when both sequences repeat items in a way that keeps
+            # their sets equal -- producing a numeric rho for an input that
+            # was never a valid pair of rankings, instead of raising.
+            raise MetricComputationError(
+                "Rankings must not contain duplicate items; each item's "
+                "rank must be well-defined."
+            )
+
         ref_ranks = {item: idx for idx, item in enumerate(reference)}
         if set(output) != set(reference):
             raise MetricComputationError("Rankings must contain the same items.")
