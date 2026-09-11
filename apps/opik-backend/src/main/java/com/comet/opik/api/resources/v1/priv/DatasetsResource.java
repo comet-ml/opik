@@ -19,6 +19,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemsExportParams;
 import com.comet.opik.api.ExportJob;
 import com.comet.opik.api.ExportStatus;
 import com.comet.opik.api.JsonUploadFormat;
@@ -929,6 +930,55 @@ public class DatasetsResource {
                 workspaceId);
 
         // Return 202 if new job was created (PENDING status), 200 if existing job found
+        var status = job.status() == ExportStatus.PENDING
+                ? Response.Status.ACCEPTED
+                : Response.Status.OK;
+
+        return Response.status(status).entity(job).build();
+    }
+
+    @POST
+    @Path("/{id}/experiments/export")
+    @Operation(operationId = "startExperimentItemsExport", summary = "Start experiment results CSV export", description = "Initiates an asynchronous CSV export of the full result set for the given experiments. Returns immediately with job details for polling.", responses = {
+            @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = ExportJob.class))),
+            @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = ExportJob.class)))
+    })
+    @JsonView(ExportJob.View.Public.class)
+    @RateLimited
+    public Response startExperimentItemsExport(@PathParam("id") @NotNull UUID datasetId,
+            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+
+        if (experimentIds.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                            "experiment_ids cannot be empty"))
+                    .build();
+        }
+
+        log.info("Starting experiment items export for dataset '{}', experiments '{}' on workspaceId '{}'",
+                datasetId, experimentIds.size(), workspaceId);
+
+        // Verify dataset exists
+        var dataset = service.findById(datasetId);
+
+        var params = ExperimentItemsExportParams.builder()
+                .datasetId(datasetId)
+                .experimentIds(List.copyOf(experimentIds))
+                .build();
+
+        String resourceName = "%s-%d-experiments".formatted(dataset.name(), experimentIds.size());
+
+        ExportJob job = csvExportService.startExport(params, resourceName)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Export job '{}' created/found for experiments on dataset '{}' on workspaceId '{}'", job.id(),
+                datasetId, workspaceId);
+
         var status = job.status() == ExportStatus.PENDING
                 ? Response.Status.ACCEPTED
                 : Response.Status.OK;

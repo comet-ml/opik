@@ -43,13 +43,6 @@ public interface ExportSource {
     Flux<SequencedMap<String, String>> streamRows(ExportParams params, int batchSize);
 
     /**
-     * Human-readable label for the progress panel and the download filename, snapshotted onto the job at creation.
-     */
-    default Mono<String> resolveResourceName(ExportParams params) {
-        return Mono.just(exportType().toLowerCase());
-    }
-
-    /**
      * Convenience for implementations that need their own params type without an unchecked cast at every use.
      */
     default <T extends ExportParams> T cast(ExportParams params, Class<T> type) {

@@ -167,7 +167,6 @@ class CsvExportServiceImpl implements CsvExportService {
 
             ExportMessage message = ExportMessage.builder()
                     .jobId(job.id())
-                    .params(job.params())
                     .workspaceId(workspaceId)
                     .workspaceName(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null))
                     .build();

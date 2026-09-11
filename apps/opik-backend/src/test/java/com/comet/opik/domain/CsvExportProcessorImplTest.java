@@ -45,9 +45,6 @@ class CsvExportProcessorImplTest {
     @Mock
     private FileService fileService;
 
-    @Mock
-    private DatasetService datasetService;
-
     private ExportConfig exportConfig;
 
     private CsvExportProcessorImpl processor;
@@ -70,7 +67,7 @@ class CsvExportProcessorImplTest {
 
         // Exercise the dataset path through the real source, so the test covers the seam the processor now uses.
         var registry = new ExportSourceRegistry(
-                java.util.Set.of(new DatasetExportSource(datasetItemDao, datasetService)));
+                java.util.Set.of(new DatasetExportSource(datasetItemDao)));
 
         processor = new CsvExportProcessorImpl(registry, fileService, exportConfig);
     }

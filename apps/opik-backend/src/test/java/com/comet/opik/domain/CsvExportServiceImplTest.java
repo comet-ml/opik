@@ -67,7 +67,8 @@ class CsvExportServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new CsvExportServiceImpl(jobService, redisClient, exportConfig, lockService, fileService);
+        service = new CsvExportServiceImpl(jobService, redisClient, exportConfig, lockService,
+                fileService);
     }
 
     @Test

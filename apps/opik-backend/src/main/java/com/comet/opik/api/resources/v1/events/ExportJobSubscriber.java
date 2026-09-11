@@ -64,12 +64,12 @@ public class ExportJobSubscriber extends BaseRedisSubscriber<ExportMessage> {
 
     @Override
     protected Mono<Void> processEvent(@NonNull ExportMessage message) {
-        log.info("Processing export job: jobId='{}', exportType='{}', workspaceId='{}'",
-                message.jobId(), message.params().exportType(), message.workspaceId());
+        log.info("Processing export job: jobId='{}', workspaceId='{}'", message.jobId(), message.workspaceId());
 
         // Set reactive context for the processing
         return jobService.updateJobToProcessing(message.jobId()) // Set status to PROCESSING first
-                .then(csvProcessor.generateAndUploadCsv(message.params()))
+                .then(jobService.getJob(message.jobId()))
+                .flatMap(job -> csvProcessor.generateAndUploadCsv(job.params()))
                 .flatMap(result -> {
                     log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
                             message.jobId(), result.filePath(), result.expiresAt());

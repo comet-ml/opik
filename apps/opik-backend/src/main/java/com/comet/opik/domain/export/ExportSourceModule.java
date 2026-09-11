@@ -17,5 +17,6 @@ public class ExportSourceModule extends AbstractModule {
         Multibinder<ExportSource> sources = Multibinder.newSetBinder(binder(), ExportSource.class);
 
         sources.addBinding().to(DatasetExportSource.class);
+        sources.addBinding().to(ExperimentItemsExportSource.class);
     }
 }

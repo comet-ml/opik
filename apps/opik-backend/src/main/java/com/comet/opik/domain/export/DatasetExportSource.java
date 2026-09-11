@@ -4,7 +4,6 @@ import com.comet.opik.api.DatasetExportParams;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExportParams;
 import com.comet.opik.domain.DatasetItemDAO;
-import com.comet.opik.domain.DatasetService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
@@ -32,7 +31,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DatasetExportSource implements ExportSource {
 
     private final @NonNull DatasetItemDAO datasetItemDao;
-    private final @NonNull DatasetService datasetService;
 
     @Override
     public String exportType() {
@@ -59,13 +57,6 @@ public class DatasetExportSource implements ExportSource {
         UUID datasetId = cast(params, DatasetExportParams.class).datasetId();
 
         return streamItems(datasetId, new AtomicReference<>(), batchSize).map(this::toRow);
-    }
-
-    @Override
-    public Mono<String> resolveResourceName(@NonNull ExportParams params) {
-        UUID datasetId = cast(params, DatasetExportParams.class).datasetId();
-
-        return Mono.fromCallable(() -> datasetService.findById(datasetId).name());
     }
 
     private Flux<DatasetItem> streamItems(UUID datasetId, AtomicReference<UUID> lastRetrievedId, int batchSize) {

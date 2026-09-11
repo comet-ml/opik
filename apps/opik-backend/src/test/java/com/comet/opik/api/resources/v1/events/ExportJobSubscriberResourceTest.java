@@ -162,8 +162,7 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create job and publish to Redis stream
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -198,8 +197,7 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create job and publish to Redis stream
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -238,24 +236,21 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create jobs and publish to Redis stream
             ExportJob job1 = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset1.id()).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset1.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
             ExportJob job2 = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset2.id()).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset2.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
             ExportJob job3 = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset3.id()).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset3.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -297,8 +292,7 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create job and publish to Redis stream
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -339,8 +333,7 @@ class ExportJobSubscriberResourceTest {
             // When - Use CsvExportService to start export for non-existent dataset
             // The export should complete successfully with an empty file (no columns, no items)
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(nonExistentDatasetId).build(),
-                            "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(nonExistentDatasetId).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
