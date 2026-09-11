@@ -1,10 +1,12 @@
 import asyncio
 import subprocess
 import sys
+import threading
 
 import pytest
 from typing import Any, List, Union
 
+import _opik
 from opik.evaluation.metrics import base_metric, score_result
 
 
@@ -89,6 +91,38 @@ def test_base_metric_ascore_returns_expected_result():
     assert actual_result == expected_result
 
 
+@pytest.mark.parametrize(
+    "base_class",
+    [base_metric.BaseMetric, _opik.BaseMetric],
+    ids=["opik.BaseMetric", "_opik.BaseMetric"],
+)
+def test_base_metric_ascore__score_blocks__event_loop_keeps_running(base_class):
+    release = threading.Event()
+    call_order = []
+
+    class BlockingMetric(base_class):
+        def score(self, *args: Any, **kwargs: Any) -> score_result.ScoreResult:
+            release.wait(timeout=5)
+            call_order.append("score_returned")
+            return score_result.ScoreResult(value=1.0, name=self.name)
+
+    async def main():
+        scoring = asyncio.create_task(BlockingMetric(track=False).ascore())
+
+        # Hand control back to the loop. If ascore ran score() inline, the loop
+        # would be stuck inside it and would not get back here to release it.
+        await asyncio.sleep(0)
+        call_order.append("loop_resumed")
+        release.set()
+
+        return await asyncio.wait_for(scoring, timeout=5)
+
+    actual_result = asyncio.run(main())
+
+    assert call_order == ["loop_resumed", "score_returned"]
+    assert actual_result == score_result.ScoreResult(name="BlockingMetric", value=1.0)
+
+
 class TestLightweightOpikPackage:
     """Tests for the _opik lightweight package and sys.modules patching.
 
@@ -102,12 +136,21 @@ class TestLightweightOpikPackage:
         someone added a dependency to _opik that pulls in heavy packages.
 
         HOW TO FIX: Remove the heavy import from _opik/. The _opik package
-        must only depend on stdlib (abc, dataclasses, typing).
+        must only depend on stdlib (abc, dataclasses, typing), and asyncio -
+        needed by the default `ascore` - must stay deferred to call time.
         """
         code = """
 import sys
 
 from _opik import BaseMetric, ScoreResult
+
+if "asyncio" in sys.modules:
+    print("FAIL")
+    print(
+        "Importing _opik pulled in asyncio, which costs tens of milliseconds.\\n"
+        "Keep the asyncio import inside BaseMetric.ascore."
+    )
+    sys.exit(1)
 
 # Verify basic functionality works
 class SimpleMetric(BaseMetric):

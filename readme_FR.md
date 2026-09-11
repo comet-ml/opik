@@ -110,6 +110,19 @@ def my_function(input: str) -> str:
 
 Chaque appel à `my_function` est désormais journalisé dans Opik, y compris les appels imbriqués, ce qui fonctionne donc pour des traces complètes d'agents et de pipelines, et pas seulement pour des appels LLM isolés. Consultez le [guide de démarrage rapide](https://www.comet.com/docs/opik/quickstart?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_hero_link&utm_campaign=opik) pour le SDK TypeScript et d'autres options de configuration.
 
+### Connectez votre agent de codage
+
+Laissez Claude Code, Cursor, VS Code Copilot, Codex ou opencode lire vos traces, noter les sorties et lancer des évaluations depuis le chat. Une seule commande suffit. Elle nécessite [`uv`](https://docs.astral.sh/uv/) et aucun SDK :
+
+```bash
+uvx opik mcp configure
+```
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D)
+
+Les badges et la commande de secours `add-mcp` ciblent Opik Cloud ; la commande ci-dessus couvre aussi les déploiements auto-hébergés. Autres clients MCP sur Opik Cloud : `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`. Les détails, le dépannage et la FAQ se trouvent dans le [guide du serveur MCP](https://www.comet.com/docs/opik/mcp-server?utm_source=opik&utm_medium=github&utm_content=mcp_quickstart_link&utm_campaign=opik).
+
 <br>
 
 <a id="-how-opik-compares"></a>
@@ -333,6 +346,7 @@ La façon la plus simple de journaliser des traces est d'utiliser l'une de nos i
 | Spring AI             | Journalise les traces des appels du framework Spring AI | [Documentation](https://www.comet.com/docs/opik/integrations/spring-ai?utm_source=opik&utm_medium=github&utm_content=spring_ai_link&utm_campaign=opik)                         |
 | Strands Agents        | Journalise les traces des appels Strands agents        | [Documentation](https://www.comet.com/docs/opik/integrations/strands-agents?utm_source=opik&utm_medium=github&utm_content=strands_agents_link&utm_campaign=opik)               |
 | Together AI           | Journalise les traces des appels LLM Together AI        | [Documentation](https://www.comet.com/docs/opik/integrations/together-ai?utm_source=opik&utm_medium=github&utm_content=together_ai_link&utm_campaign=opik)                     |
+| TrueFoundry           | Journalise les traces des appels LLM TrueFoundry AI Gateway | [Documentation](https://www.comet.com/docs/opik/integrations/truefoundry?utm_source=opik&utm_medium=github&utm_content=truefoundry_link&utm_campaign=opik)                     |
 | Vercel AI SDK         | Journalise les traces des appels Vercel AI SDK         | [Documentation](https://www.comet.com/docs/opik/integrations/vercel-ai-sdk?utm_source=opik&utm_medium=github&utm_content=vercel_ai_sdk_link&utm_campaign=opik)                 |
 | VoltAgent             | Journalise les traces des appels du framework d'agents VoltAgent | [Documentation](https://www.comet.com/docs/opik/integrations/voltagent?utm_source=opik&utm_medium=github&utm_content=voltagent_link&utm_campaign=opik)                         |
 | WatsonX               | Journalise les traces des appels LLM IBM watsonx       | [Documentation](https://www.comet.com/docs/opik/integrations/watsonx?utm_source=opik&utm_medium=github&utm_content=watsonx_link&utm_campaign=opik)                             |

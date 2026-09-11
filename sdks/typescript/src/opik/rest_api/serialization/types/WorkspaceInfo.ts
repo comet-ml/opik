@@ -8,11 +8,13 @@ export const WorkspaceInfo: core.serialization.ObjectSchema<serializers.Workspac
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string().optional(),
+        isDefault: core.serialization.property("is_default", core.serialization.boolean().optional()),
     });
 
 export declare namespace WorkspaceInfo {
     export interface Raw {
         id?: string | null;
         name?: string | null;
+        is_default?: boolean | null;
     }
 }

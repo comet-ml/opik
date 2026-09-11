@@ -1,3 +1,22 @@
+/**
+ * A seeded span's `usage` map: the three counts every LLM span reports, plus
+ * whatever else the scenario needs.
+ *
+ * Open-ended because the backend's cost calculators read far more than the
+ * trio — audio, cache and reasoning token counts all arrive as extra keys on
+ * this same flat map (`original_usage.completion_tokens_details.reasoning_tokens`
+ * and friends), and the bridge types the field as a plain `dict[str, int]`.
+ *
+ * Note the Python SDK normalises what it is given: a bare OTel key is re-emitted
+ * under the `original_usage.` prefix. A seed that must arrive with the bare key
+ * cannot go through the bridge at all — see `backendClient.createSpan`.
+ */
+export type SpanSeedUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+} & Record<string, number>;
+
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
   createTrace(args: {
@@ -34,7 +53,7 @@ export interface PythonSdkClient {
       metadata?: Record<string, unknown>;
       model?: string;
       provider?: string;
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage?: SpanSeedUsage;
       total_cost?: number;
       parent_index?: number;
     }>;
@@ -60,14 +79,80 @@ export interface PythonSdkClient {
    * One `Dataset.insert(...)` into an existing dataset — and therefore exactly
    * one new dataset version, however many 1000-item batches the SDK splits the
    * payload into. `num_threads` > 1 uploads those batches in parallel.
+   * `deduplication: false` bypasses the content-hash dedup path, so identical
+   * content sent twice is stored twice.
    */
   insertDatasetItems(args: {
     dataset_name: string;
     project_name: string;
     items: Array<Record<string, unknown>>;
     num_threads?: number;
+    deduplication?: boolean;
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number }>;
+  /**
+   * Several `Dataset.insert(...)` calls sharing ONE `Dataset` object — the
+   * shape `insertDatasetItems` cannot express, because the bridge builds a
+   * fresh client per request and a backend-fetched `Dataset` always starts
+   * with its hash cache unsynced. Reach for this only when one insert's effect
+   * on the NEXT one is the subject; otherwise use `insertDatasetItems`.
+   */
+  insertDatasetItemsSession(args: {
+    dataset_name: string;
+    project_name: string;
+    inserts: Array<{
+      items: Array<Record<string, unknown>>;
+      num_threads?: number;
+      deduplication?: boolean;
+    }>;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number[] }>;
+  /**
+   * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
+   * order it returned them** — the property a concurrent paged read has to
+   * preserve, and the one a set comparison would not notice losing.
+   *
+   * Omit a knob to exercise the SDK's own default for it; the bridge only
+   * forwards the ones set here. `num_threads`, `chunk_size` and `nb_samples`
+   * are deliberately unconstrained so a caller can assert the SDK's own
+   * validation: an argument it refuses comes back as `value_error` carrying the
+   * ValueError's message, with no items, rather than as a bridge failure.
+   */
+  readDatasetItems(args: {
+    dataset_name: string;
+    project_name: string;
+    nb_samples?: number;
+    num_threads?: number;
+    chunk_size?: number;
+    filter_string?: string;
+    workspace?: string;
+  }): Promise<{ item_ids: string[]; value_error: string | null }>;
+  /**
+   * A chunked `stream_items()` read with an insert committed part-way through
+   * it — the scenario the read's version pin exists for.
+   *
+   * The interleaving is deterministic, not raced: the bridge consumes
+   * `pause_after_chunks` chunks, runs the insert to completion, then consumes
+   * the remaining pages, which are therefore all fetched against a backend that
+   * already holds the new items. `chunk_size * (pause_after_chunks + 2 *
+   * num_threads)` must stay well under the dataset size, or the reader's
+   * look-ahead will have fetched everything before the insert lands and the
+   * scenario silently degrades into an ordinary read.
+   */
+  readDatasetItemsWithMidReadInsert(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    chunk_size: number;
+    num_threads?: number;
+    pause_after_chunks: number;
+    workspace?: string;
+  }): Promise<{
+    item_ids: string[];
+    chunk_sizes: number[];
+    chunks_before_insert: number;
+    inserted: number;
+  }>;
   evaluateExperiment(args: {
     project_name: string;
     dataset_name: string;
@@ -142,6 +227,7 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  /** `deduplication: false` stores identical test cases as separate items. */
   insertTestSuiteItems(args: {
     suite_name: string;
     project_name: string;
@@ -150,7 +236,17 @@ export interface PythonSdkClient {
       assertions?: string[];
       description?: string;
     }>;
+    deduplication?: boolean;
     workspace?: string;
+    /**
+     * Which client factory the suite being inserted into is obtained from.
+     * `get_or_create` (the bridge's default) is what every other caller wants;
+     * `list` reaches the suite through `get_test_suites()`. The two build a
+     * suite object with different local content-hash state, and that state is
+     * what decides whether an insert of an item the suite already holds is
+     * deduplicated — so a spec covering dedup has to name the path it means.
+     */
+    resolve_via?: 'get_or_create' | 'list';
   }): Promise<{ suite_id: string; inserted: number }>;
   runTestSuite(args: {
     suite_name: string;
@@ -328,6 +424,35 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         args,
         { timeoutMs: 180_000 },
       );
+    },
+    async insertDatasetItemsSession(args) {
+      // Same budget as insertDatasetItems, and for the same reason — except
+      // this route runs several inserts back to back inside one request.
+      return request<{ dataset_id: string; inserted: number[] }>(
+        'POST',
+        '/datasets/insert-items-session',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async readDatasetItems(args) {
+      // A multi-page read of a few thousand items is well inside the default
+      // budget, but a `num_threads=1` pass over small chunks is not.
+      return request<{ item_ids: string[]; value_error: string | null }>(
+        'POST',
+        '/datasets/read-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async readDatasetItemsWithMidReadInsert(args) {
+      // Holds a whole chunked read AND an insert open on one request.
+      return request<{
+        item_ids: string[];
+        chunk_sizes: number[];
+        chunks_before_insert: number;
+        inserted: number;
+      }>('POST', '/datasets/read-with-mid-read-insert', args, { timeoutMs: 180_000 });
     },
     async compareSeed(args) {
       return request<{

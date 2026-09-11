@@ -14,7 +14,7 @@ export const ChatCompletionChoice: core.serialization.ObjectSchema<
     index: core.serialization.number().optional(),
     message: AssistantMessage.optional(),
     delta: Delta.optional(),
-    finishReason: core.serialization.property("finish_reason", core.serialization.string().optional()),
+    finishReason: core.serialization.string().optional(),
     logprobs: LogProbs.optional(),
 });
 
@@ -23,7 +23,7 @@ export declare namespace ChatCompletionChoice {
         index?: number | null;
         message?: AssistantMessage.Raw | null;
         delta?: Delta.Raw | null;
-        finish_reason?: string | null;
+        finishReason?: string | null;
         logprobs?: LogProbs.Raw | null;
     }
 }

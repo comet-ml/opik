@@ -104,7 +104,11 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
-import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItem;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsContain;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInAnyOrder;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1078,9 +1082,7 @@ class DatasetVersionResourceTest {
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
-            assertThat(v1ItemsAfter)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(v1Items);
+            assertDatasetItems(v1ItemsAfter, v1Items);
         }
 
         @Test
@@ -1268,7 +1270,7 @@ class DatasetVersionResourceTest {
 
             var addedItemId = v2Items.stream()
                     .filter(item -> !v1ItemIds.contains(item.datasetItemId()))
-                    .map(DatasetItem::datasetItemId)
+                    .map(DatasetItem::id)
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Added item not found in v2"));
 
@@ -1353,10 +1355,8 @@ class DatasetVersionResourceTest {
             assertThat(v2Items).hasSize(6);
 
             // Every v1 item must appear in v2 with the same fields. id changes per version, so
-            // we ignore it via IGNORED_FIELDS_DATA_ITEM and compare the rest of the entity.
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsAll(v1Items);
+            // the helper ignores it and compares the rest of the entity.
+            assertDatasetItemsContain(v2Items, v1Items);
         }
     }
 
@@ -1561,9 +1561,7 @@ class DatasetVersionResourceTest {
             assertThat(v2Items.stream().map(DatasetItem::datasetItemId))
                     .doesNotContain(itemToDelete.datasetItemId());
 
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsAll(expectedSurvivors);
+            assertDatasetItemsContain(v2Items, expectedSurvivors);
         }
 
         @Test
@@ -3613,18 +3611,14 @@ class DatasetVersionResourceTest {
                     datasetId, List.of(experimentId), null, null, sorting, API_KEY, TEST_WORKSPACE);
 
             // Compare the whole DatasetItem objects, in order - not just their ids.
-            assertThat(sorted.content())
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyElementsOf(expected);
+            assertDatasetItemsInOrder(sorted.content(), expected);
 
             // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
             // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
             var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
                     datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
             assertThat(pageTwo.total()).isEqualTo(count);
-            assertThat(pageTwo.content())
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactly(expected.get(count - 1));
+            assertDatasetItemsInOrder(pageTwo.content(), List.of(expected.get(count - 1)));
         }
 
         @Test
@@ -3842,12 +3836,9 @@ class DatasetVersionResourceTest {
             // counter that agrees with it.
             assertThat(stored).extracting(DatasetItem::id)
                     .containsExactlyInAnyOrder(duplicatedId, distinctId);
-            assertThat(stored)
-                    .filteredOn(item -> distinctId.equals(item.id()))
-                    .singleElement()
-                    .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(distinctItem);
+            var storedDistinctItems = stored.stream().filter(item -> distinctId.equals(item.id())).toList();
+            assertThat(storedDistinctItems).hasSize(1);
+            assertDatasetItem(storedDistinctItems.getFirst(), distinctItem);
 
             // items_total must agree with what is actually stored.
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
@@ -3903,9 +3894,7 @@ class DatasetVersionResourceTest {
             var stored = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
 
-            assertThat(stored)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyInAnyOrder(updatedShared, otherItem);
+            assertDatasetItemsInAnyOrder(stored, updatedShared, otherItem);
             assertThat(version.itemsTotal()).isEqualTo(stored.size());
         }
 
@@ -4801,9 +4790,7 @@ class DatasetVersionResourceTest {
                     .evaluators(newEvaluators)
                     .description(newDescription)
                     .build();
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactly(expectedItem);
+            assertDatasetItemsInOrder(v2Items, List.of(expectedItem));
         }
 
         @Test
@@ -5372,10 +5359,7 @@ class DatasetVersionResourceTest {
             var expectedItem = items.getFirst().toBuilder()
                     .id(returnedItem.id())
                     .build();
-            assertThat(returnedItem)
-                    .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(expectedItem);
+            assertDatasetItem(returnedItem, expectedItem);
         }
 
         @Test
@@ -6108,6 +6092,65 @@ class DatasetVersionResourceTest {
             // The winner created exactly one new version on top of the seed; its 3 rows landed in latest.
             assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total()).isEqualTo(2L);
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
+        }
+
+        @Test
+        @DisplayName("Concurrent appends sharing a stable id: itemsTotal matches the rows actually stored")
+        void concurrentAppendsSharingStableId__thenItemsTotalMatchesStoredRows() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Establish the group version and get a server-issued stable id to re-send. Seeding first
+            // means every racing batch below takes the unlocked append branch.
+            UUID sharedBatchGroupId = UUID.randomUUID();
+            var seedBatch = buildBatch(datasetId, sharedBatchGroupId, 1, "seed");
+            try (var response = datasetResourceClient.callCreateDatasetItems(seedBatch, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            var seeded = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+            UUID sharedItemId = seeded.stream()
+                    .filter(item -> "seed-input-0".equals(item.data().get("input").asText()))
+                    .map(DatasetItem::id)
+                    .findFirst()
+                    .orElseThrow();
+
+            long rowsBefore = latestItemCount(datasetId);
+
+            // Every writer re-sends the SAME stable id (the documented upsert key). This is the SDK-retry shape the
+            // reviewer flagged: with the append unlocked, each batch can classify the id as new
+            // (countExistingItemIds sees the pre-existing row, but concurrent siblings do not see each
+            // other) and each increments items_total, while ReplacingMergeTree keeps a single row.
+            int writers = 6;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemBatch.builder()
+                            .datasetId(datasetId)
+                            .batchGroupId(sharedBatchGroupId)
+                            .items(List.of(DatasetItem.builder()
+                                    .id(sharedItemId)
+                                    .source(DatasetItemSource.MANUAL)
+                                    .traceId(null)
+                                    .spanId(null)
+                                    .data(Map.of(
+                                            "input", JsonUtils.getJsonNodeFromString("\"retry-input\""),
+                                            "output", JsonUtils.getJsonNodeFromString("\"retry-output-" + i + "\"")))
+                                    .build()))
+                            .build())
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+            assertThat(statuses).allMatch(status -> status == 204);
+
+            // Re-sending an existing id is an update, not an insert, so the row count must not move.
+            long rowsAfter = latestItemCount(datasetId);
+            assertThat(rowsAfter).isEqualTo(rowsBefore);
+
+            // The stored rows are ground truth: itemsTotal on the group's version must agree with them.
+            DatasetVersion groupVersion = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content().stream()
+                    .max(Comparator.comparing(DatasetVersion::createdAt))
+                    .orElseThrow();
+            assertThat(groupVersion.itemsTotal()).isEqualTo((int) rowsAfter);
         }
     }
 

@@ -66,6 +66,25 @@ export class ThreadPanelPage {
     return this.turn(traceId).getByText(output, { exact: true });
   }
 
+  /**
+   * The header's duration chip, matched on the formatted string it must show.
+   *
+   * The chip is an unlabelled `<div>` holding a clock icon and the output of
+   * `formatDuration(thread.duration, false)`; its only accessible name is a
+   * hover tooltip ("Thread duration") rendered in a portal, so there is no
+   * role, label or testid to select it by. Matching the expected text exactly
+   * and scoped to the panel is the most stable handle available on a deployed
+   * build — the FE should grow a `data-testid="thread-duration"` here, and this
+   * should move to it.
+   *
+   * Exact, not substring: "0.005s" is a substring of nothing else here, but
+   * "1h 15.3s" would also match a hypothetical "1h 15.3s ago", and a duration
+   * assertion that passes on a longer string is not asserting the format.
+   */
+  durationChip(formatted: string): Locator {
+    return this.root.getByText(formatted, { exact: true });
+  }
+
   // --- Feedback scores tab ---
   //
   // The panel's second tab. It renders the same ConfigurableFeedbackScoreTable

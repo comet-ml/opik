@@ -1616,7 +1616,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }
 
         return getDatasetId(batch)
-                .flatMap(datasetId -> withDatasetVersionLock(datasetId, Mono.deferContextual(ctx -> {
+                .flatMap(datasetId -> Mono.deferContextual(ctx -> {
 
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String userName = ctx.get(RequestContext.USER_NAME);
@@ -1626,14 +1626,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     if (batchGroupId == null) {
                         // No batch_group_id: mutate the latest version (backwards compatibility)
                         log.info("Mutating latest version for dataset '{}' (no batch_group_id)", datasetId);
-                        return mutateLatestVersionWithInsert(batch, datasetId, workspaceId, userName);
+                        return withDatasetVersionLock(datasetId, Mono.defer(
+                                () -> mutateLatestVersionWithInsert(batch, datasetId, workspaceId, userName)));
                     }
 
                     // batch_group_id provided: create new version with batch grouping
                     log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
                             batchGroupId);
                     return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
-                })))
+                }))
                 .then();
     }
 
@@ -2324,26 +2325,44 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<DatasetVersion> handleGroupedInsertion(UUID batchGroupId, DatasetItemBatch batch,
             UUID datasetId, String workspaceId, String userName) {
-        return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic())
+        return findGroupVersion(batchGroupId, datasetId, workspaceId)
                 .flatMap(optionalVersion -> {
                     if (optionalVersion.isPresent()) {
                         // Version exists - append items to it
                         var existingVersion = optionalVersion.get();
-                        log.info("Appending '{}' items to existing version '{}' for batch_group_id '{}'",
-                                batch.items().size(), existingVersion.id(), batchGroupId);
-                        return insertItemsIntoVersion(batch, datasetId, existingVersion.id(), workspaceId, userName)
-                                .then(Mono.<DatasetVersion>empty());
-                    } else {
-                        // No version with this batch_group_id - create new one
-                        log.info("Creating new version with batch_group_id '{}' for dataset '{}'",
-                                batchGroupId, datasetId);
-                        return saveItemsWithVersion(batch, datasetId, batchGroupId)
-                                .contextWrite(ctx -> ctx
-                                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                                        .put(RequestContext.USER_NAME, userName));
+                        log.info("Appending items to existing group version; batchGroupId='{}' versionId='{}' "
+                                + "itemCount='{}'", batchGroupId, existingVersion.id(), batch.items().size());
+                        return appendToGroupVersion(batch, datasetId, existingVersion.id(), workspaceId, userName);
                     }
+                    return withDatasetVersionLock(datasetId,
+                            findGroupVersion(batchGroupId, datasetId, workspaceId)
+                                    .flatMap(recheck -> {
+                                        if (recheck.isPresent()) {
+                                            log.debug(
+                                                    "Concurrent group version creation detected; batchGroupId='{}' itemCount='{}'",
+                                                    batchGroupId, batch.items().size());
+                                            return appendToGroupVersion(batch, datasetId, recheck.get().id(),
+                                                    workspaceId, userName);
+                                        }
+                                        log.info("Creating new group version; batchGroupId='{}' datasetId='{}'",
+                                                batchGroupId, datasetId);
+                                        return saveItemsWithVersion(batch, datasetId, batchGroupId)
+                                                .contextWrite(ctx -> ctx
+                                                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                                                        .put(RequestContext.USER_NAME, userName));
+                                    }));
                 });
+    }
+
+    private Mono<Optional<DatasetVersion>> findGroupVersion(UUID batchGroupId, UUID datasetId, String workspaceId) {
+        return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<DatasetVersion> appendToGroupVersion(DatasetItemBatch batch, UUID datasetId, UUID versionId,
+            String workspaceId, String userName) {
+        return Mono.defer(() -> insertItemsIntoVersion(batch, datasetId, versionId, workspaceId, userName))
+                .then(Mono.<DatasetVersion>empty());
     }
 
     /**

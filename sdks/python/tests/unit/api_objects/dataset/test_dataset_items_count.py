@@ -176,3 +176,38 @@ def test_backend_returns_none_count__property_returns_none():
 
     assert count is None
     mock_rest_client.datasets.get_dataset_by_id.assert_called_once()
+
+
+def test_from_public__response_carries_id__id_returned_without_a_lookup():
+    """The get-dataset response already holds the id, so reads must not pay a
+    second by-name lookup for it."""
+    mock_rest_client = Mock()
+    mock_dataset_public = DatasetPublic(
+        id="01a06bd3-f379-7231-a8ff-842808c8ba38",
+        name="test_dataset",
+        dataset_items_count=7,
+    )
+
+    dataset = Dataset.from_public(
+        dataset_fern=mock_dataset_public,
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    assert dataset.id == "01a06bd3-f379-7231-a8ff-842808c8ba38"
+    mock_rest_client.datasets.get_dataset_by_identifier.assert_not_called()
+
+
+def test_from_public__response_without_id__falls_back_to_the_lookup():
+    mock_rest_client = Mock()
+    mock_rest_client.datasets.get_dataset_by_identifier.return_value.id = "looked-up"
+    mock_dataset_public = DatasetPublic(name="test_dataset")
+
+    dataset = Dataset.from_public(
+        dataset_fern=mock_dataset_public,
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    assert dataset.id == "looked-up"
+    mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once()

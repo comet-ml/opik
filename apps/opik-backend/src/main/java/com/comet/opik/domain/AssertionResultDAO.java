@@ -132,6 +132,14 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
         for (var i = 0; i < scores.size(); i++) {
             var item = scores.get(i);
 
+            // Same guard as FeedbackScoreDAO, for the other half of the split FeedbackScoreService makes by
+            // score destination. No caller can pass a null today — the judge path drops a valueless score
+            // before building items and the REST batch endpoints bean-validate value as @NotNull — but the
+            // dereference below would raise an NPE that fails the whole insert, taking every other assertion
+            // in the batch with it, which is the failure this ticket is about on the feedback-score side.
+            Preconditions.checkArgument(item.value() != null,
+                    "Assertion score '%s' cannot be stored without a value", item.name());
+
             statement.bind("entity_type" + i, entityType.getType())
                     .bind("entity_id" + i, item.id())
                     .bind("project_id" + i, item.projectId())

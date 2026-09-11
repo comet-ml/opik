@@ -19,6 +19,7 @@ public class TracesCreated extends BaseEvent {
     // Resolved from RequestContext.WORKSPACE_NAME at publish time (TraceService). May be null/blank
     // for callers that don't carry it; consumers fall back to workspaceId.
     private final @Nullable String workspaceName;
+    private final @Nullable String cipxDeviceId;
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName) {
         this(traces, workspaceId, userName, null);
@@ -26,9 +27,15 @@ public class TracesCreated extends BaseEvent {
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
             @Nullable String workspaceName) {
+        this(traces, workspaceId, userName, workspaceName, null);
+    }
+
+    public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
+            @Nullable String workspaceName, @Nullable String cipxDeviceId) {
         super(workspaceId, userName);
         this.traces = traces;
         this.workspaceName = workspaceName;
+        this.cipxDeviceId = cipxDeviceId;
     }
 
     public Set<UUID> projectIds() {

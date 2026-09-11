@@ -46,10 +46,10 @@ export function usePromptVersionsWithLabels(
       versions.map((version, index) => ({
         version,
         index,
-        label: `v${total - index}`,
+        label: version.version_number ?? version.commit,
         stage: pickHighestStage(version.tags),
       })),
-    [versions, total],
+    [versions],
   );
 
   const getDescriptor = useMemo(() => {

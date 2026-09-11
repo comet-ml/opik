@@ -1,6 +1,6 @@
 """Shared helpers for the local traces-cutover simulation scripts.
 
-These scripts stand up a representative dataset and live traffic on a *local* Opik so the traces buffered-cutover runbook
+These scripts stand up a representative dataset and live traffic on a *local* Opik so the traces cutover runbook
 (apps/opik-backend/data-migrations/traces-local-v2-cutover) can be rehearsed end to end. They are ad-hoc CLI tools, not
 pytest suites.
 

@@ -17,6 +17,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -331,9 +332,9 @@ class RetentionPolicyServiceTest {
             var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build();
             retentionClient.createAndGet(rule, API_KEY, wsName);
 
-            // Pin the cutoff to cutoffDay so a row one day older shares its ISO week (same Monday). This
-            // exercises the upper bound toMonday(id_at) < addWeeks(toMonday(cutoff), 1): the row must still be
-            // deleted regardless of where in the week the cutoff lands.
+            // Pin the cutoff to cutoffDay so a row one day older shares its ISO week (same Monday). This exercises
+            // the sweep's upper week bound — the Date32 week of id_at below addWeeks(the cutoff's Date32 week, 1) —
+            // so the row must still be deleted regardless of where in the week the cutoff lands.
             var cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(90)
                     .with(TemporalAdjusters.previousOrSame(cutoffDay));
             var now = cutoffDate.plusDays(RetentionPeriod.BASE_60D.getDays())
@@ -364,9 +365,10 @@ class RetentionPolicyServiceTest {
         /**
          * Drives a full retention cycle and asserts a span whose own {@code id} is a much later ISO week than its
          * {@code trace_id} is still deleted — purely on {@code trace_id}. The span's {@code id} (and thus the future
-         * partition column {@code id_at}) is client-assigned and can lag its {@code trace_id}'s week, which is why the
-         * retention paths carry no {@code toMonday(id_at)} bound. This test would fail if such a bound were
-         * reintroduced, since it would exclude the late-id span from the sweep.
+         * partition column {@code id_at}) is client-assigned and can lag its {@code trace_id}'s week, which is why
+         * {@code SpanDAO}'s retention paths carry no week bound on {@code id_at} at all — whatever the expression's
+         * width, since the objection is which column the sweep's range keys on. This test fails if one is introduced,
+         * since it would exclude the late-id span from the sweep.
          */
         @Test
         @DisplayName("Retention cycle deletes a span whose id is a later week than its trace_id")
@@ -381,7 +383,7 @@ class RetentionPolicyServiceTest {
             Instant now = Instant.now();
 
             // Deletable: trace_id 61d old (past the 60d cutoff, inside the sliding window), but the span's own id is
-            // only 5d old — a much later ISO week, the case a toMonday(id_at) upper bound would have excluded.
+            // only 5d old — a much later ISO week, the case an upper week bound on id_at would have excluded.
             var oldTraceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
             var lateSpanId = idGenerator.generateId(now.minus(5, ChronoUnit.DAYS));
             createTestTrace(oldTraceId, API_KEY, wsName);
@@ -654,6 +656,76 @@ class RetentionPolicyServiceTest {
             assertThat(updated.catchUpCursor()).isNull();
         }
 
+    }
+
+    /**
+     * {@code SCOUT_FIRST_DAY_WITH_DATA} against a real ClickHouse. Its only production caller is
+     * {@code RetentionEstimationService.scoutFirstDataCursor}, reached solely when the full estimation query throws
+     * TOO_MANY_ROWS — which the suite exercises with a mocked {@code TraceDAO}, because the row-limit profile that
+     * provokes it also blocks the INSERTs the fixture needs. So the statement had no coverage, and neither thing
+     * OPIK-8241 changed about it is one a mock can catch:
+     *
+     * <ul>
+     *   <li>the projected {@code day} became {@code toDate32(...)}, which has to keep binding into the
+     *   {@code LocalDate} the DAO reads it as;</li>
+     *   <li>the week bounds became the {@code Date32} expression on both operands, and one that over-restricts here
+     *   fails silently — it reports a later first day, moving the catch-up cursor past real data.</li>
+     * </ul>
+     */
+    @Nested
+    @DisplayName("Scout first day with data")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ScoutFirstDayWithData {
+
+        private static final String WS_SCOUT = UUID.randomUUID().toString();
+        private static final String WS_SCOUT_API_KEY = UUID.randomUUID().toString();
+        private static final String WS_SCOUT_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+        private static final String WS_SCOUT_USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+        @BeforeAll
+        void setUp() {
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), WS_SCOUT_API_KEY, WS_SCOUT_NAME, WS_SCOUT,
+                    WS_SCOUT_USER);
+        }
+
+        /**
+         * Three traces spanning three distinct ISO weeks, so the scan is not satisfiable from a single week and both
+         * bounds have something to admit. The oldest day must come back: it is the {@code ORDER BY day LIMIT 1}
+         * winner, and it is the answer the caller turns into a catch-up cursor.
+         */
+        @Test
+        @DisplayName("returns the earliest day in range, across several weeks")
+        void returnsTheEarliestDayInRange(TraceDAO traceDAO) {
+            var oldest = Instant.now().minus(30, ChronoUnit.DAYS);
+            var ids = List.of(
+                    idGenerator.generateId(oldest),
+                    idGenerator.generateId(oldest.plus(10, ChronoUnit.DAYS)),
+                    idGenerator.generateId(oldest.plus(20, ChronoUnit.DAYS)));
+            ids.forEach(id -> createTestTrace(id, WS_SCOUT_API_KEY, WS_SCOUT_NAME));
+            waitForRows("traces", WS_SCOUT, ids.size());
+
+            var actualFirstDay = traceDAO.scoutFirstDayWithData(WS_SCOUT,
+                    idGenerator.generateId(oldest.minus(1, ChronoUnit.DAYS)),
+                    idGenerator.generateId(Instant.now())).block();
+
+            assertThat(actualFirstDay).isEqualTo(oldest.truncatedTo(ChronoUnit.DAYS));
+        }
+
+        /**
+         * The empty answer, which the caller distinguishes from a real day by the {@code Instant.MAX} sentinel: a
+         * range below every seeded id must scout nothing rather than fall back to the earliest row in the table.
+         */
+        @Test
+        @DisplayName("returns the no-data sentinel for a range holding nothing")
+        void returnsTheSentinelForAnEmptyRange(TraceDAO traceDAO) {
+            var rangeEnd = Instant.now().minus(365, ChronoUnit.DAYS);
+
+            var actualFirstDay = traceDAO.scoutFirstDayWithData(WS_SCOUT,
+                    idGenerator.generateId(rangeEnd.minus(30, ChronoUnit.DAYS)),
+                    idGenerator.generateId(rangeEnd)).block();
+
+            assertThat(actualFirstDay).isEqualTo(Instant.MAX);
+        }
     }
 
     // -- Resource client insert helpers --

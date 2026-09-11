@@ -1,9 +1,12 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.cloud.vertexai.Transport;
 import com.google.cloud.vertexai.VertexAI;
 import dev.langchain4j.data.message.UserMessage;
@@ -182,6 +185,42 @@ class VertexAIClientGeneratorTest {
         }
     }
 
+    private void completeWithCustomParameters(Map<String, Object> customParameters) {
+        var request = ChatCompletionRequest.builder()
+                .model(MODEL)
+                .customParameters(customParameters)
+                .build();
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(serviceAccountJson)
+                .configuration(Map.of("location", "global"))
+                .build();
+
+        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+                .generate(config, request)) {
+            client.chat(UserMessage.from("hello"));
+        }
+    }
+
+    /**
+     * The generation config is not observable on the built client, so it is read back off the request the SDK actually
+     * sent.
+     */
+    private JsonNode sentGenerationConfig() {
+        var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        assertThat(requests).hasSize(1);
+
+        // get() rather than path(): path() degrades to a MissingNode, which would make every negative
+        // assertion below pass even if the generation config stopped being sent or were renamed.
+        var generationConfig = JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString())
+                .get("generationConfig");
+
+        assertThat(generationConfig)
+                .as("outbound body should carry a generationConfig")
+                .isNotNull();
+
+        return generationConfig;
+    }
+
     private void assertCalledWithLocation(String expectedLocation) {
         wireMock.server().verify(postRequestedFor(urlPathMatching(
                 ".*/locations/" + expectedLocation + "/publishers/google/models/.*")));
@@ -303,6 +342,97 @@ class VertexAIClientGeneratorTest {
 
                 assertThat(predictionClient.isShutdown()).isTrue();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Thinking configuration")
+    class ThinkingConfiguration {
+
+        @Test
+        @DisplayName("a thinking level is translated into the budget Vertex expects")
+        void translatesLevelIntoBudget() {
+            completeWithCustomParameters(Map.of("thinking", Map.of("level", "medium")));
+
+            assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
+                    .isEqualTo(8192);
+        }
+
+        @Test
+        @DisplayName("an explicit budget is forwarded as given")
+        void forwardsExplicitBudget() {
+            completeWithCustomParameters(Map.of("thinking", Map.of("budget_tokens", 1234)));
+
+            assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
+                    .isEqualTo(1234);
+        }
+
+        @Test
+        @DisplayName("level off disables thinking, which is the Gemini 2.5 Flash Lite default")
+        void levelOffDisablesThinking() {
+            completeWithCustomParameters(Map.of("thinking", Map.of("level", "off")));
+
+            // has() before asInt(): a MissingNode also reports 0, so without this the test could not
+            // tell "thinkingBudget: 0 was sent" from "no thinkingConfig at all" — the regression it exists
+            // to catch.
+            var thinkingConfig = sentGenerationConfig().get("thinkingConfig");
+            assertThat(thinkingConfig).isNotNull();
+            assertThat(thinkingConfig.has("thinkingBudget")).isTrue();
+            assertThat(thinkingConfig.get("thinkingBudget").asInt()).isZero();
+        }
+
+        @Test
+        @DisplayName("no thinking parameters leaves the generation config without a thinking block")
+        void omitsThinkingConfigWhenNotRequested() {
+            completeWithCustomParameters(Map.of());
+
+            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        }
+
+        @Test
+        @DisplayName("an unrecognised level is ignored rather than guessed at")
+        void ignoresUnrecognisedLevel() {
+            completeWithCustomParameters(Map.of("thinking", Map.of("level", "aggressive")));
+
+            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        }
+
+        @Test
+        @DisplayName("the judge path forwards thinking from its own custom parameters")
+        void judgePathForwardsThinking() {
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
+                    JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+                    .generateChat(config, modelParameters)) {
+                client.chat(UserMessage.from("hello"));
+            }
+
+            assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
+                    .isEqualTo(24576);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"[1, 2]", "\"x\"", "5", "null"})
+        @DisplayName("custom_parameters that is not an object is ignored rather than failing the run")
+        void ignoresNonObjectCustomParameters(String customParameters) {
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
+                    JsonUtils.getJsonNodeFromString(customParameters));
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+                    .generateChat(config, modelParameters)) {
+                client.chat(UserMessage.from("hello"));
+            }
+
+            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
         }
     }
 }
