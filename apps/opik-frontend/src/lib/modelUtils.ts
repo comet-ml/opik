@@ -480,6 +480,60 @@ export const resolveSamplingParams = (
   return { temperature, topP };
 };
 
+export type EffortParams = {
+  reasoningEffort?: ReasoningEffort;
+  thinkingEffort?: AnthropicThinkingEffort;
+};
+
+/**
+ * The effort a model will actually run at, for the providers that expose one. The companion to
+ * {@link resolveSamplingParams} for the effort dropdowns.
+ *
+ * Unlike the sampling pair this does substitute a default, because the dropdown has no empty state:
+ * it renders "High (Default)" for a config holding nothing, which is also what a fresh config is
+ * seeded with. Resolving to that same value is what stops the control claiming an effort the
+ * request never carries — a model change into a reasoning model leaves the config's effort unset,
+ * and the provider would then apply its own default rather than the high the panel showed.
+ *
+ * "high" is offered by every model in both capability maps, so it is always a valid substitute.
+ */
+export const resolveEffort = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: EffortParams,
+): EffortParams => {
+  if (!model) {
+    return { ...configs };
+  }
+
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_AI) {
+    const options = getOpenAIReasoningEffortOptions(model);
+    if (options.length === 0) {
+      return {};
+    }
+    return {
+      reasoningEffort: options.some((o) => o.value === configs.reasoningEffort)
+        ? configs.reasoningEffort
+        : "high",
+    };
+  }
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    const options = getAnthropicThinkingEffortOptions(model);
+    if (options.length === 0) {
+      return {};
+    }
+    return {
+      thinkingEffort: options.some((o) => o.value === configs.thinkingEffort)
+        ? configs.thinkingEffort
+        : "high",
+    };
+  }
+
+  return { ...configs };
+};
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -514,15 +568,16 @@ export const sanitizeConfigForRequest = (
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
-  if (provider === PROVIDER_TYPE.OPEN_AI && sanitized.reasoningEffort != null) {
-    if (!supportsOpenAIReasoningEffort(model)) {
-      delete sanitized.reasoningEffort;
-    } else {
-      const allowed = getOpenAIReasoningEffortOptions(model).map(
-        (o) => o.value,
-      );
-      if (!allowed.includes(sanitized.reasoningEffort as ReasoningEffort)) {
-        delete sanitized.reasoningEffort;
+  if (
+    provider === PROVIDER_TYPE.ANTHROPIC ||
+    provider === PROVIDER_TYPE.OPEN_AI
+  ) {
+    const effort = resolveEffort(model, configs as EffortParams);
+    for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
+      if (effort[key] === undefined) {
+        delete sanitized[key];
+      } else {
+        sanitized[key] = effort[key];
       }
     }
   }
