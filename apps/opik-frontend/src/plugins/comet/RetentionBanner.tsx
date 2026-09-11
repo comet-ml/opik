@@ -17,21 +17,35 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 interface RetentionBannerProps {
   onChangeHeight: (height: number) => void;
+  onVisibilityResolved?: () => void;
 }
 
 const SHOW_BANNER_MIN_THRESHOLD = 0.8;
 
-const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
+const RetentionBanner = ({
+  onChangeHeight,
+  onVisibilityResolved,
+}: RetentionBannerProps) => {
   const { data: user } = useUser();
   const heightRef = useRef(0);
 
   const [closed, setClosed] = useState(false);
   const activeWorkspaceName = useActiveWorkspaceName();
 
-  const { data: quotas } = useWorkspaceQuotas(
+  const {
+    data: quotas,
+    isPending: quotasPending,
+    isError: quotasError,
+  } = useWorkspaceQuotas(
     { workspaceName: activeWorkspaceName },
     { enabled: !!activeWorkspaceName && !!user?.loggedIn },
   );
+
+  // "Am I on screen?" is only answerable once the quota question has an
+  // answer, one way or the other. A disabled query stays pending forever, so
+  // the cases where it never runs count as resolved.
+  const visibilityResolved =
+    !user?.loggedIn || !activeWorkspaceName || quotasError || !quotasPending;
 
   const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
@@ -83,6 +97,12 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   useEffect(() => {
     onChangeHeight(!hideBanner ? heightRef.current : 0);
   }, [hideBanner, onChangeHeight]);
+
+  useEffect(() => {
+    if (visibilityResolved) {
+      onVisibilityResolved?.();
+    }
+  }, [visibilityResolved, onVisibilityResolved]);
 
   if (hideBanner) {
     return null;
