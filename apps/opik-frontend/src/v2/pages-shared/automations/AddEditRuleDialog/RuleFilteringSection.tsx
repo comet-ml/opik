@@ -32,7 +32,7 @@ import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpa
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { EVAL_TRIGGER_SCOPE, EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/ui/description";
@@ -247,6 +247,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
   projectId,
 }) => {
   const scope = form.watch("scope");
+  const triggerScope = form.watch("triggerScope");
   const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
@@ -419,6 +420,12 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
     [form],
   );
 
+  // Neither filters nor the sampling rate reach an experiment trace, so a rule that only targets
+  // experiments has nothing to configure here.
+  if (triggerScope === EVAL_TRIGGER_SCOPE.experiment) {
+    return null;
+  }
+
   return (
     <Accordion
       type="single"
@@ -462,6 +469,8 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                   ? "threads"
                   : "spans"}
               .
+              {isTraceScope &&
+                " Both apply to production traces only — traces from experiments, the playground and optimization runs ignore them."}
             </Description>
 
             <FormField
