@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
+import { AnnotationQueueFormSheet } from './annotation-queue.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -495,6 +496,25 @@ export class LogsPage {
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=threads&thread=${threadId}`;
       await this.page.goto(url);
       return new ThreadPanelPage(this.page, threadId);
+    });
+  }
+
+  /**
+   * Open "Add automation → Annotation queue", returning the create form it
+   * raises in place.
+   *
+   * The menu item's accessible name is its label followed by its description
+   * ("Annotation queue Automatically add matching traces…"), so it is matched
+   * on the label as a prefix rather than exactly.
+   */
+  async openAddAutomationQueueForm(): Promise<AnnotationQueueFormSheet> {
+    return test.step('Open "Add automation → Annotation queue"', async () => {
+      await this.page.getByRole('button', { name: 'Add automation' }).click();
+      await this.page.getByRole('menuitem', { name: /^Annotation queue/ }).click();
+
+      const sheet = AnnotationQueueFormSheet.create(this.page);
+      await sheet.waitForReady();
+      return sheet;
     });
   }
 }
