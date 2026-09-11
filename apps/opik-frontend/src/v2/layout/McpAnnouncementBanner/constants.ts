@@ -50,13 +50,12 @@ export const MCP_BANNER_HEIGHT = 32;
 export const MCP_BANNER_HEIGHT_CLASS = "h-8";
 
 export const MCP_BANNER_COPY =
-  "Opik MCP: debug traces and fix failing evals from Claude Code, Codex, Cursor or VS Code.";
+  "Opik MCP: debug traces and fix failing evals from Claude Code or Codex.";
 
 /**
- * The phone line. The full copy is 88 characters and roughly 45 fit at 400px
- * once the icon, the CTA and the dismiss control have taken their space, so a
- * phone would read a fragment. The client list goes rather than being
- * abbreviated, and the framing stays on the agent doing the work.
+ * The phone line. Even the shortened desktop copy does not fit at 400px once
+ * the icon, the CTA and the dismiss control have taken their space, so the
+ * client names go entirely and the framing stays on the agent doing the work.
  */
 export const MCP_BANNER_COPY_SHORT = "Opik MCP: debug traces with your agent.";
 

@@ -2,6 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
+import { TooltipProvider } from "@/ui/tooltip";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpAnnouncementBanner from "./McpAnnouncementBanner";
 import {
@@ -59,13 +60,17 @@ vi.mock("@/hooks/useIsPhone", () => ({
   }),
 }));
 
+// The app mounts one provider at the root; the dismiss control's tooltip needs
+// it here too.
 const renderBanner = (props?: { retentionBannerSettled?: boolean }) =>
   render(
-    <McpAnnouncementBanner
-      onChangeHeight={vi.fn()}
-      retentionBannerVisible={false}
-      retentionBannerSettled={props?.retentionBannerSettled ?? true}
-    />,
+    <TooltipProvider>
+      <McpAnnouncementBanner
+        onChangeHeight={vi.fn()}
+        retentionBannerVisible={false}
+        retentionBannerSettled={props?.retentionBannerSettled ?? true}
+      />
+    </TooltipProvider>,
   );
 
 beforeEach(() => {

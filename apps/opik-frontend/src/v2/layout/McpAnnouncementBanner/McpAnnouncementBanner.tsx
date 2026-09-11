@@ -7,6 +7,7 @@ import { useIsPhone } from "@/hooks/useIsPhone";
 import { buildDocsUrl, cn } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { Button } from "@/ui/button";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   MCP_BANNER_CAMPAIGN_ID,
   MCP_BANNER_COPY,
@@ -133,9 +134,12 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
           variant="link"
           size="2xs"
           asChild
-          // The link variant's own hover language is the underline, so a link
-          // that is always underlined inverts it: the rule lifts on hover.
-          className="shrink-0 text-white underline underline-offset-2 hover:text-white hover:no-underline focus-visible:ring-white"
+          // The underline stays on hover: it reads as the link's identity here,
+          // not as its hover state. The affordance is a faint white veil, given
+          // as an explicit rgba because `white` is configured as a bare
+          // `var(--white)` with no <alpha-value>, so Tailwind emits no rule for
+          // bg-white/15 and friends.
+          className="shrink-0 rounded text-white underline underline-offset-2 hover:bg-[rgba(255,255,255,0.18)] hover:text-white hover:underline focus-visible:ring-white active:bg-[rgba(255,255,255,0.28)]"
         >
           <a
             href={buildDocsUrl(MCP_BANNER_DOCS_PATH)}
@@ -148,15 +152,17 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
           </a>
         </Button>
       </div>
-      <Button
-        variant="ghostInverted"
-        size="icon-2xs"
-        aria-label="Dismiss announcement"
-        onClick={handleDismiss}
-        className="shrink-0 text-white focus-visible:ring-white"
-      >
-        <X />
-      </Button>
+      <TooltipWrapper content="Dismiss">
+        <Button
+          variant="ghostInverted"
+          size="icon-2xs"
+          aria-label="Dismiss announcement"
+          onClick={handleDismiss}
+          className="shrink-0 text-white hover:bg-[rgba(255,255,255,0.18)] focus-visible:ring-white active:bg-[rgba(255,255,255,0.28)]"
+        >
+          <X />
+        </Button>
+      </TooltipWrapper>
     </div>
   );
 };
