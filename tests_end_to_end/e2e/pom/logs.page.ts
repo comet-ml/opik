@@ -130,11 +130,13 @@ export class LogsPage {
    * first.
    */
   async readPaginationTotal(): Promise<number | null> {
-    const summary = this.paginationSummary;
-    if ((await summary.count()) === 0) return null;
-    const text = ((await summary.textContent()) ?? '').trim();
-    const match = /of ([\d,]+)$/.exec(text);
-    return match ? Number(match[1].replace(/,/g, '')) : null;
+    return test.step('Read the population the table footer reports', async () => {
+      const summary = this.paginationSummary;
+      if ((await summary.count()) === 0) return null;
+      const text = ((await summary.textContent()) ?? '').trim();
+      const match = /of ([\d,]+)$/.exec(text);
+      return match ? Number(match[1].replace(/,/g, '')) : null;
+    });
   }
 
   /**
@@ -231,32 +233,35 @@ export class LogsPage {
 
   /**
    * The period-over-period delta a metrics card renders next to its value,
-   * e.g. "125%" or "25pp".
+   * e.g. "125%" or "25pp". Returns the bare magnitude+unit; the arrow direction
+   * is an icon, not text.
    *
-   * The delta carries no test id of its own — it is the card's trailing text
-   * after the label and the value — so it is read by subtracting those two from
-   * the card's own text rather than by a structural child selector. Returns the
-   * bare magnitude+unit; the arrow direction is an icon, not text.
+   * The delta carries no test id of its own, but it is not merely "the card's
+   * trailing text" either: `MetricCard` renders it as the span immediately
+   * after the value span, both inside the same flex row, so it is addressed
+   * structurally. Subtracting the value's text from the card's instead would
+   * mis-parse whenever the value's characters also occur in the delta — a card
+   * reading `0` beside a `-100%` delta finds the `0` in `100` and returns
+   * `"%"`. The current seed happens to avoid that; the next one need not.
    *
    * Only rendered when each card is at least 240px wide (`getCardMode`), so a
-   * caller asserting on it must widen the viewport.
+   * caller asserting on it must widen the viewport. `renderChange()` also
+   * returns nothing at all when the delta is undefined or non-finite, which is
+   * why an absent sibling is reported as such rather than read as "".
    */
   async readMetricsCardDelta(type: string): Promise<string> {
     return test.step(`Read the "${type}" metrics card delta`, async () => {
-      const card = this.page.getByTestId(`metrics-card-${type}`);
-      await card.waitFor({ state: 'visible' });
       const value = this.metricsCardValue(type);
       await value.waitFor({ state: 'visible' });
-      const cardText = ((await card.innerText()) ?? '').replace(/\s+/g, ' ').trim();
-      const valueText = ((await value.innerText()) ?? '').trim();
-      const index = cardText.lastIndexOf(valueText);
-      if (index < 0) {
+      const delta = value.locator('xpath=following-sibling::span[1]');
+      if ((await delta.count()) === 0) {
         throw new Error(
-          `LogsPage.readMetricsCardDelta: card "${type}" text "${cardText}" ` +
-            `does not contain its own value "${valueText}"`,
+          `LogsPage.readMetricsCardDelta: card "${type}" rendered no delta beside its ` +
+            `value — the viewport may be too narrow (needs ~240px per card), or the ` +
+            `delta is undefined/non-finite`,
         );
       }
-      return cardText.slice(index + valueText.length).trim();
+      return ((await delta.innerText()) ?? '').replace(/\s+/g, ' ').trim();
     });
   }
 
