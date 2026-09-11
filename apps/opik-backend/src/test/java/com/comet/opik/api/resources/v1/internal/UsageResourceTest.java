@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.UsageResourceClient;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.IdGenerator;
@@ -28,6 +29,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -113,6 +115,7 @@ class UsageResourceTest {
     private TransactionTemplateAsync clickHouseTemplate;
     private TransactionTemplate mySqlTemplate;
     private ExperimentResourceClient experimentResourceClient;
+    private TraceResourceClient traceResourceClient;
     private UsageResourceClient usageResourceClient;
 
     @BeforeAll
@@ -126,6 +129,7 @@ class UsageResourceTest {
         ClientSupportUtils.config(client);
 
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.usageResourceClient = new UsageResourceClient(client, baseURI);
     }
 
@@ -424,6 +428,40 @@ class UsageResourceTest {
             subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
 
             awaitTraceCount(workspaceId, regularTraces.size());
+        }
+
+        /**
+         * The premise the fold rests on: summing per-project counts equals the distinct-id total the
+         * workspace-grouped query used to return, because a trace id belongs to exactly one project. The write path
+         * is what guarantees it — presenting an existing id under another project is a conflict, not a move — so no
+         * id can contribute a row under two projects for the sum to double-count. Spans already cover the
+         * equivalent rejection; this pins it for traces together with the count that depends on it.
+         */
+        @Test
+        void tracesCountCountsATraceOnceBecauseItsIdCannotMoveProjects() {
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var trace = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .getFirst()
+                    .toBuilder()
+                    .id(ID_GENERATOR.generateId())
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .build();
+            createTraces(List.of(trace), apiKey, workspaceName);
+
+            var sameIdInAnotherProject = trace.toBuilder()
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .build();
+            try (var response = traceResourceClient.callCreateTrace(sameIdInAnotherProject, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            awaitTraceCount(workspaceId, 1);
         }
 
         /**

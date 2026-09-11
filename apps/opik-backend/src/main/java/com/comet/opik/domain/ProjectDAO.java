@@ -4,6 +4,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
@@ -97,9 +98,9 @@ interface ProjectDAO {
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
     /**
-     * Projects with the given names across all workspaces, optionally restricted to {@code ids}. Left unrestricted
-     * the result grows with the number of projects carrying those names, so callers that already hold the ids they
-     * care about pass them and keep the query bounded.
+     * Projects with the given names across all workspaces, optionally restricted to {@code ids}. When left
+     * unrestricted, the result grows with the number of projects carrying those names, so callers that already hold
+     * the ids they care about pass them and keep the query bounded.
      *
      * <p>An empty {@code ids} reads as unrestricted rather than as "match nothing", so callers filtering a set they
      * built must handle the empty case themselves.
@@ -111,10 +112,10 @@ interface ProjectDAO {
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    List<Project> findByGlobalNames(@BindList("names") List<String> names,
+    List<Project> findByGlobalNames(@NonNull @BindList("names") List<String> names,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
 
-    default List<Project> findByGlobalNames(List<String> names) {
+    default List<Project> findByGlobalNames(@NonNull List<String> names) {
         return findByGlobalNames(names, null);
     }
 }
