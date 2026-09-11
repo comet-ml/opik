@@ -6,12 +6,27 @@ og:title: Integrate with Opik's MCP server
 title: Opik's MCP server
 ---
 
-One command connects your coding assistant to your traces — and teaches it how to
-create them in the first place:
+One command connects your coding assistant to your traces and teaches it how to
+create them in the first place. It needs [`uv`](https://docs.astral.sh/uv/) and no
+Opik SDK:
 
 ```bash
-opik mcp configure
+uvx opik mcp configure
 ```
+
+One click for Cursor and VS Code, or a prompt you paste into any coding agent. All
+three use the Opik Cloud hosted server and sign in through the browser:
+
+<div className="mcp-clients no-external-icon">
+  <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
+  <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
+  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Detect the coding agents installed here and which one you are; ask me 'only you, or all of them?' and wait. For each chosen agent, add the MCP server `opik-mcp` (Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its user-level config: use the client's own command with user scope where it has one (`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`), otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that already has a server with that URL. Install the skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you see in config files. Verify in the agent you are: reload MCP servers or ask me to, complete the browser sign-in if prompted, then call the Opik `list` tool with entity_type project and show the result; if the server only loads in a new session, say so and tell me what to ask you next. Report per agent: file, entry added, verified or pending sign-in. Change nothing else." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
+</div>
+
+The Cursor and VS Code buttons add the server only. The copied prompt has your agent
+detect the coding agents on your machine, ask which ones to set up, install the server
+and the skills for them, and verify with a real call. Another client, or a self-hosted
+Opik? See [Manual setup](#manual-setup).
 
 ## What this unlocks
 
@@ -45,36 +60,33 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
 [Manual setup](#manual-setup).
 </Tip>
 
-<Note>
-**Asking your coding agent to do this works.** Setup writes into your AI client's
-own configuration, so it never happens on a run that did not ask for it — but
-naming what you want is asking, and that works without a terminal:
-
-```bash
-opik configure --install-mcp --install-skills   # Opik + MCP + skill pack
-opik mcp configure --ai-client cursor              # just the server, one client
-```
-
-A run that names nothing and has no terminal — a CI job, a Docker build — writes
-nothing, which is the behaviour you want there.
-</Note>
-
 <Steps>
-  <Step title="Install the Opik CLI">
-    The CLI ships with the `opik` Python package. `--upgrade` installs the latest
-    release, which is what you want — these commands gain clients and flags often:
-
-    ```bash
-    pip install --upgrade opik
+  <Step title="Install uv, if you don't have it">
+    ```bash title="macOS / Linux"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
+
+    ```powershell title="Windows"
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
+
+    Open a new terminal afterwards so `uvx` is on your `PATH`.
   </Step>
   <Step title="Configure the MCP server">
     ```bash
-    opik mcp configure
+    uvx opik mcp configure
     ```
+
+    The first run downloads the Opik CLI and takes a few seconds; later runs start
+    in about a second.
 
     This reuses your existing Opik configuration (`~/.opik.config`); if you
     haven't configured Opik yet, the wizard offers to do it for you first.
+
+    <Tip>
+    Already have the `opik` Python package installed? `opik mcp configure`
+    without `uvx` is the same command.
+    </Tip>
 
     <Tip>
     You'll choose your AI client from a list, then confirm the MCP server and
@@ -83,7 +95,9 @@ nothing, which is the behaviour you want there.
   </Step>
   <Step title="Restart your AI client">
     Assistants read their configuration at startup, so **start a new session**
-    before trying the prompts in [Start using it](#start-using-it).
+    before trying the prompts in [Start using it](#start-using-it). Reconnecting
+    inside a running session only refreshes servers it already loaded; a newly
+    added server needs a new session.
 
     <Note>
     If your client isn't detected, see [Manual setup](#manual-setup).
@@ -99,7 +113,7 @@ client points at — and whether it still matches your current Opik configuratio
 run:
 
 ```bash
-opik mcp status
+uvx opik mcp status
 ```
 
 It prints your active Opik configuration, then each AI client that has the Opik
@@ -123,25 +137,42 @@ Opik MCP server — configured for 1 AI client:
 ```
 
 A client that has drifted is flagged `✗ OUT OF SYNC` — re-run
-`opik mcp configure` to fix it.
+`uvx opik mcp configure` to fix it.
 
 <Warning>
 A client keeps its MCP connection for the lifetime of its process. After changing
-your Opik configuration or re-running `opik mcp configure`, **restart your AI
+your Opik configuration or re-running `uvx opik mcp configure`, **restart your AI
 client** so it reconnects with the updated settings.
 </Warning>
 
 To view just your active Opik configuration (file path, environment, workspace):
 
 ```bash
-opik configure status
+uvx opik configure status
 ```
 
 <Note>
-To refresh the skill pack, re-run `opik mcp configure` — it rewrites the pack
+To refresh the skill pack, re-run `uvx opik mcp configure`. It rewrites the pack
 from the latest published version. Assistants read their skills at session start,
 so start a new session afterwards.
 </Note>
+
+### From a script or CI
+
+Setup writes into your AI client's own configuration, so a run with no terminal
+writes nothing unless you name the client:
+
+```bash
+uvx opik mcp configure --ai-client cursor --skills
+```
+
+Credentials come from `~/.opik.config` or from `OPIK_API_KEY` and `OPIK_WORKSPACE`
+already present in the environment, such as a CI secret; do not paste the key into
+the command line. `--ai-client` takes `claude-code`, `cursor`, `vscode`, `codex`,
+`opencode`, or `all` for every client detected on the machine; repeat it for
+several. `--skills` installs the skill pack without asking, `--no-skills` skips it.
+A run that names nothing and has no terminal, a CI job or a Docker build, writes
+nothing.
 
 ## Start using it
 
@@ -169,24 +200,27 @@ you change something.
 
 ### The tools you'll have
 
-Your assistant gets six tools. It picks between them on its own — this is here so
+Your assistant gets five tools and picks between them on its own. This is here so
 you know what it can reach for:
 
 | Tool | What your assistant can do with it |
 |---|---|
-| `read` | Fetch one thing by id, name, or `opik://` URI — a trace, span, project, experiment, prompt, or test suite. |
+| `read` | Fetch one thing by id, name, or `opik://` URI: a trace, span, project, experiment, prompt, test suite, or thread. |
 | `list` | Page through any of those, optionally filtered by name. |
 | `write` | Log traces and spans, score, comment, save prompt versions, manage test suites and experiments. |
 | `schema` | Look up the exact payload shape for a write, so it constructs valid ones. |
-| `ask_ollie` | Investigate or synthesize across entities via Opik's in-product assistant. |
-| `run_experiment` | Run an evaluation experiment end to end. |
+| `read_skill` | Load one of the Opik skills on demand, when the skill pack is not installed in the client. |
+
+Running an evaluation end to end is the skill pack's job, not a tool's: the
+`opik-evaluate` skill drives the Opik SDK, and the MCP tools record and read the
+results. That is why the command above installs both.
 
 To see a payload shape yourself, ask **"show me the schema for trace.create"** —
 or read the [full list](https://github.com/comet-ml/opik-mcp#tools).
 
 ## Opik Cloud and self-hosted deployments
 
-`opik mcp configure` works the same whether you're on Opik Cloud, self-hosted,
+`uvx opik mcp configure` works the same whether you're on Opik Cloud, self-hosted,
 or a local install — it sets up the right server for your deployment
 automatically.
 
@@ -198,9 +232,10 @@ first connect, so:
 
 - **No API key is stored** in the client's config — you authenticate through OAuth
   in the browser.
-- **`uv` is not required** — there is no local process to run.
+- **`uv` is only needed for the setup command.** There is no local process to run
+  afterwards.
 - Your workspace is selected during the OAuth sign-in, so a hosted server shows
-  no workspace in `opik mcp status`.
+  no workspace in `uvx opik mcp status`.
 
 ### Self-hosted and local (local server)
 
@@ -213,24 +248,36 @@ prints the exact command to install it for your platform.
 
 For the local server your workspace is written into the client's config, so it has
 to be the right one. If your Opik configuration doesn't name a workspace and your
-account has more than one, `opik mcp configure` **refuses to continue** rather
+account has more than one, `uvx opik mcp configure` **refuses to continue** rather
 than falling back to your account default:
 
 ```text
 Your Opik configuration does not name a workspace, but this account has 3:
 acme-ai, acme-research, sandbox. The MCP server would fall back to your default
-workspace and silently read from the wrong place. Run `opik configure` and choose
-a workspace, then re-run `opik mcp configure`.
+workspace and silently read from the wrong place. Run `uvx opik configure` and choose
+a workspace, then re-run `uvx opik mcp configure`.
 ```
 
 Guessing here is the one failure this CLI can produce that doesn't look like a
 failure: your agent would read real traces from the wrong workspace and report
-them confidently. Run `opik configure`, pick a workspace, and re-run.
+them confidently. Run `uvx opik configure`, pick a workspace, and re-run.
 
 ## Manual setup
 
 Prefer to wire it up yourself, or your client wasn't detected? Configure any client
 by hand below.
+
+On Opik Cloud, any MCP client can take the hosted server in one line:
+
+```bash
+npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
+```
+
+[`add-mcp`](https://github.com/neon-solutions/add-mcp) writes the URL into Windsurf,
+Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more. The client
+has to support browser sign-in (OAuth) for remote MCP servers; without it the
+hosted endpoint answers 401. On a self-hosted deployment, replace the URL with your own API base plus `/v1/mcp`, or
+use the [local server](#local-server-uvx).
 
 For the **skill pack** on a client the CLI doesn't cover, the community
 [`skills`](https://github.com/vercel-labs/skills) CLI knows the skill directories
@@ -241,7 +288,7 @@ npx skills add comet-ml/opik-skills
 ```
 
 <Note>
-There are two servers you can add by hand. [`opik mcp configure`](#quick-setup-with-the-opik-cli)
+There are two servers you can add by hand. [`uvx opik mcp configure`](#quick-setup-with-the-opik-cli)
 picks the right one for you, but you can also add either directly in your AI
 client's MCP settings:
 
@@ -253,10 +300,24 @@ client's MCP settings:
 
 ### Hosted server (Opik Cloud)
 
-The hosted server connects over HTTP and signs in with a browser-based OAuth
-flow on first connect — no API key is stored in the client config. Point your client
-at your deployment's MCP endpoint, which is your Opik API base plus `/v1/mcp`. On
-Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
+Every client below asks for this URL:
+
+```text title="Remote MCP server URL"
+https://www.comet.com/opik/api/v1/mcp
+```
+
+The server connects over HTTP and signs in through the browser on first use, so
+your client stores no API key.
+
+On a self-hosted deployment the URL is your own Opik API base plus `/v1/mcp`, and
+the deployment has to run the MCP OAuth authorization server. It is off by
+default: turn on `mcpOAuth.enabled` in the Helm chart together with
+`MCP_OAUTH_ENABLED=true` and `OPIK_BASE_URL` on the backend. Set `OPIK_BASE_URL`
+to the public deployment root without `/api`, for example
+`https://opik.example.com/opik`. The server appends `/api/v1/mcp` to it to build
+the MCP resource URI, so a value that already ends in `/api` advertises the wrong
+one and sign-in fails. Where MCP OAuth is off, the endpoint has no sign-in routes
+at all, so use the [local server](#local-server-uvx) instead.
 
 <Tabs>
     <Tab title="Claude Code">
@@ -318,6 +379,41 @@ Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
     ```
 
     Reload the window and complete the browser sign-in when prompted.
+
+    </Tab>
+    <Tab title="Codex">
+
+    Add the server with one command:
+
+    ```bash
+    codex mcp add opik-mcp --url https://www.comet.com/opik/api/v1/mcp
+    ```
+
+    Confirm with `codex mcp get opik-mcp`, start a new session and complete the
+    browser sign-in when prompted.
+
+    </Tab>
+    <Tab title="Claude.ai and Claude Desktop">
+
+    Claude calls a remote MCP server a **custom connector** and adds it through the
+    UI rather than a config file.
+
+    - On a Pro or Max plan: **Customize → Connectors → + → Add custom connector**,
+      then paste the URL above. Leave Advanced settings empty. Opik registers your
+      client automatically.
+    - On Team or Enterprise, an owner adds it in
+      **Organization settings → Connectors → Add → Custom → Web**.
+
+    Claude then opens the Opik sign-in in your browser. Until you finish signing in,
+    the connector lists only the `authenticate` and `complete_authentication`
+    tools. The rest appear afterwards.
+
+    <Note>
+    Claude reaches the server from Anthropic's cloud, not from your machine, so a
+    self-hosted deployment also has to be reachable from the public internet. One
+    on `localhost` or behind a VPN is out of reach, so use the
+    [local server](#local-server-uvx) with a desktop client instead.
+    </Note>
 
     </Tab>
 </Tabs>
@@ -401,8 +497,8 @@ connect to a named cloud workspace.
 
     <Tip>
     **Cursor 60s timeout.** Cursor enforces a hard tool-call timeout that does
-    not reset on progress notifications. Long `ask_ollie` turns will fail on
-    Cursor — see [Known client limits](#known-client-limits).
+    not reset on progress notifications, so reads of very large traces can fail
+    there. See [Troubleshooting](#troubleshooting).
     </Tip>
 
     </Tab>
@@ -458,7 +554,7 @@ connect to a named cloud workspace.
     **"list my Opik projects"**.
 
     <Note>
-    `opik mcp configure --ai-client codex` drives the `codex` CLI rather than editing
+    `uvx opik mcp configure --ai-client codex` drives the `codex` CLI rather than editing
     `config.toml`, so your comments and formatting are left alone. If the `codex`
     CLI isn't on your `PATH` it tells you to add the table by hand instead of
     rewriting your TOML.
@@ -507,31 +603,8 @@ connect to a named cloud workspace.
 
 <Tip>
 **Self-hosted Opik.** Add `COMET_URL_OVERRIDE` to the `env` block (and `OPIK_URL`
-if Opik lives at a non-default path). `ask_ollie` and `run_experiment` are
-available on Comet Cloud only — on self-hosted those calls fail at dispatch;
-use `read` / `list` / `write` directly.
+if Opik lives at a non-default path).
 </Tip>
-
-## Ollie & auto-approve
-
-By default, writes that Ollie performs mid-stream (scores, comments, prompt
-versions, test-suite items) execute without a per-action confirmation step.
-Each auto-approved write is logged as a JSON audit row on the `opik_mcp.audit`
-Python logger.
-
-To require manual confirmation instead, set `OPIK_MCP_AUTO_APPROVE=disabled` in
-the server's `env` block. Ollie's confirmation requests then surface as typed
-errors that you can re-issue manually.
-
-`ask_ollie` and `run_experiment` are available on Comet Cloud only — on
-self-hosted those calls fail at dispatch; use `read` / `list` / `write`
-directly.
-
-## Known client limits
-
-- **Cursor enforces a 60-second hard tool-call timeout** that does not reset on
-  progress notifications. Long `ask_ollie` turns will fail on Cursor. For
-  long-running investigations, use Claude Code or VS Code Copilot.
 
 ## Example conversation
 
@@ -539,10 +612,157 @@ A typical investigative loop using Claude Code:
 
 > **You:** Why did the experiment "gpt-4o-rerank-v3" regress on factuality?
 >
-> **Claude:** *(calls `ask_ollie`)* Three traces failed because the reranker
+> **Claude:** *(calls `list`, then `read` on the failing traces)* Three traces failed because the reranker
 > dropped the system message. The remaining 12 traces scored above 0.8…
 >
 > **You:** Score the bottom 3 traces 0.2 with reason "dropped system message".
 >
 > **Claude:** *(calls `write` with `score.create` ×3)* Done — three scores
 > recorded on traces `<id-1>`, `<id-2>`, `<id-3>`.
+
+## Troubleshooting
+
+Before anything else: run `uvx opik mcp status`, then start a new session in your
+client. Most problems end there.
+
+<AccordionGroup>
+  <Accordion title="The client asks for authentication, or the browser sign-in never opened">
+    The hosted server signs you in through the browser on the first connection, and
+    the client only tries once per session.
+
+    - Start a new session, then trigger sign-in from the client: `/mcp` in Claude
+      Code, the MCP settings panel in Cursor, `codex mcp login opik-mcp` in Codex.
+    - On a corporate network, allow `www.comet.com`. On self-hosted Opik, allow your
+      deployment's domain and its identity provider instead.
+    - Sessions expire. When that happens, the client asks you to sign in again.
+  </Accordion>
+  <Accordion title="The client lists only `authenticate` and `complete_authentication`">
+    You are connected but not signed in. Those two tools are how you sign in.
+
+    - Ask your assistant to authenticate, or run the `authenticate` tool, and
+      finish in the browser tab it opens.
+    - In Claude Code, run `/mcp` and choose Authenticate.
+    - The other tools appear once the sign-in completes.
+  </Accordion>
+  <Accordion title="Opik does not show up in the client, or shows no tools">
+    Clients read MCP servers and skills when a session starts.
+
+    - Start a new session.
+    - Run `uvx opik mcp status`. It lists the clients the CLI knows (Claude Code,
+      Cursor, VS Code Copilot, Codex, opencode) that have the server, and the config
+      file it lives in. If your client is missing, run `uvx opik mcp configure`
+      again. Clients you configured by hand are not listed; check their config file.
+    - If setup printed `exists but is not a valid JSON object`, that client's config
+      has comments in it. Paste the block the CLI printed into the file by hand.
+  </Accordion>
+  <Accordion title='"Opik is not configured yet" or "needs either a terminal or an explicit client"'>
+    The command ran without a terminal, from an agent, a script or CI, so it could
+    not ask you anything.
+
+    - Name the client: `uvx opik mcp configure --ai-client cursor --skills`.
+    - Provide credentials through `OPIK_API_KEY` and `OPIK_WORKSPACE` in the
+      environment, or through `~/.opik.config` from an earlier `uvx opik configure`.
+      Do not type the key into the command.
+  </Accordion>
+  <Accordion title="The agent sees no data, or data from the wrong workspace">
+    The server points at a different workspace than you expect.
+
+    - Hosted server: the workspace was chosen at sign-in. Sign out and in again
+      from the client's MCP panel and pick the right one.
+    - Local server: run `uvx opik configure`, choose the workspace, then
+      `uvx opik mcp configure` again, then a new session.
+    - `✗ OUT OF SYNC` in `uvx opik mcp status` means the client config is older
+      than your Opik configuration. The same re-run fixes it.
+  </Accordion>
+  <Accordion title='Status shows "Local (stdio)" on Opik Cloud'>
+    The CLI checks `/.well-known/oauth-authorization-server/opik` on your
+    deployment to pick the server. If a proxy, VPN or TLS error blocks that check,
+    it falls back to the local server and stores your API key in the client config.
+
+    - Re-run `uvx opik mcp configure` from a network that can reach the deployment.
+    - A 404 on that check means the deployment has no hosted server. On self-hosted
+      Opik, pass `--local-server`; that is the intended path.
+  </Accordion>
+  <Accordion title='"uvx: command not found"'>
+    `uv` is not installed, or the terminal was opened before the install.
+
+    - Install it with the one-liner in [Quick setup](#quick-setup-with-the-opik-cli).
+    - Open a new terminal and run `uvx --version`.
+  </Accordion>
+  <Accordion title="The first tool call takes a long time, or the client says the server failed to start">
+    With the local server the client runs `uvx opik-mcp`, which downloads the
+    package and a Python runtime on first use. Setup pre-warms that cache, but
+    gives up after a timeout.
+
+    - Let the first call finish once. Later calls start in about a second.
+    - If it fails, run `uvx opik-mcp --help` in a terminal to see the real error.
+  </Accordion>
+  <Accordion title="Cursor: tool call timed out after 60 seconds">
+    Cursor enforces a hard 60-second timeout per tool call, and large traces hit it.
+
+    - Ask for fewer traces, or for one span at a time.
+    - For long investigations use Claude Code or VS Code, which have no such cap.
+  </Accordion>
+</AccordionGroup>
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Do I need the Opik SDK, Python or Node?">
+    No. `uvx opik mcp configure` needs only `uv`. The Cursor and VS Code buttons
+    need nothing. `npx add-mcp` and `npx skills add` need Node. The language of
+    your project does not matter.
+  </Accordion>
+  <Accordion title="Hosted or local server: which one do I get, and where do credentials live?">
+    On Opik Cloud, and on any deployment that advertises it, you get the hosted
+    server: your client signs in through the browser and nothing is stored in its
+    config. Everywhere else, or with `--local-server`, you get the local server:
+    `uvx opik-mcp` runs on your machine with `OPIK_API_KEY` and `OPIK_WORKSPACE` in
+    the client's `env` block (`environment` in opencode). If setup could not reach
+    your deployment to detect the hosted server, it falls back to the local one, so
+    check `uvx opik mcp status`: it shows which server each client uses.
+  </Accordion>
+  <Accordion title="Is it safe to let an agent write to my workspace?">
+    The agent acts with your permissions and cannot exceed them. One tool,
+    `write`, can score, comment, save prompt versions and create traces; everything
+    else is read-only. Keep your client's tool approval on for writes. Trace content
+    is text your users wrote, so treat anything the agent reads from a trace as
+    data, not as instructions.
+  </Accordion>
+  <Accordion title="Can I use Opik from Claude.ai, Claude Desktop or Cowork?">
+    Yes, as a custom connector. Add `https://www.comet.com/opik/api/v1/mcp` under
+    **Customize → Connectors → Add custom connector**, or under
+    **Organization settings → Connectors** on Team and Enterprise. Claude opens the
+    Opik sign-in in your browser. This gives you the MCP server; the skill pack is
+    for coding agents only. [Manual setup](#hosted-server-opik-cloud) has the steps
+    and the self-hosted caveat.
+  </Accordion>
+  <Accordion title="My client is not in the list. Can I still use it?">
+    Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode.
+    For any other client on Opik Cloud, run
+    `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`, or point
+    the client at that URL yourself with the Streamable HTTP transport. Skills for
+    other clients: `npx skills add comet-ml/opik-skills`. See
+    [Manual setup](#manual-setup).
+  </Accordion>
+  <Accordion title="Can I work with several workspaces?">
+    One workspace per client config. On the hosted server you pick it at sign-in.
+    On the local server, `uvx opik configure` switches it, then run
+    `uvx opik mcp configure` again.
+  </Accordion>
+  <Accordion title="Is there a read-only mode or a per-project scope?">
+    Not yet. Until then, use your client's tool approval to gate the `write` tool.
+  </Accordion>
+  <Accordion title="How do I update?">
+    `uvx opik@latest mcp configure`. It re-runs setup for each client, reports the
+    result per client, and refreshes the skill pack; a client whose config it could
+    not write is reported, not silently skipped. Plain `uvx opik` reuses the version
+    it already has cached. Start a new session afterwards.
+  </Accordion>
+  <Accordion title="How do I remove it?">
+    There is no remove command. Use `claude mcp remove opik-mcp` or
+    `codex mcp remove opik-mcp`, or delete the `opik-mcp` entry from your client's
+    MCP config file. Local server telemetry switches off with
+    `OPIK_MCP_ANALYTICS_ENABLED=false` in the same config.
+  </Accordion>
+</AccordionGroup>

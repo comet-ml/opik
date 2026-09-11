@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.53](https://img.shields.io/badge/Version-2.2.53-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.53](https://img.shields.io/badge/AppVersion-2.2.53-informational?style=flat-square)
+![Version: 2.2.59](https://img.shields.io/badge/Version-2.2.59-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.59](https://img.shields.io/badge/AppVersion-2.2.59-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -108,6 +108,7 @@ Call opik api on http://localhost:5173/api
 | chartMigration.nodeSelector | object | `{}` |  |
 | chartMigration.serviceAccountName | string | `""` |  |
 | chartMigration.tolerations | list | `[]` |  |
+| clickhouse.additionalProfiles | list | `[{"name":"default","settings":{"distributed_background_insert_batch":1,"distributed_background_insert_split_batch_on_failure":1}}]` | Extra ClickHouse settings profiles. Wins over the operator's own defaults; carries the Distributed insert-queue baseline on `default`. A values file declaring its own list must repeat that entry — Helm replaces lists rather than merging them. |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |

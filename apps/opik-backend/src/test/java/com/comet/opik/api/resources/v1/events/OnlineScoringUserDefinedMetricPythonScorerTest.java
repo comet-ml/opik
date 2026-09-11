@@ -176,6 +176,69 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void dropsScoresWithoutValueAndStoresTheRest() {
+            // A user metric may return ScoreResult(value=None) for a check that did not apply. That score
+            // cannot be stored, but it must not cost the rest of the batch: binding it used to throw an NPE
+            // that failed the whole insert, so a trace scored by several metrics stored none of them.
+            var message = sampleMessage();
+            var valued = PythonScoreResult.builder()
+                    .name("answer_relevance")
+                    .value(BigDecimal.valueOf(0.75))
+                    .reason("relevant")
+                    .build();
+            var valueless = PythonScoreResult.builder()
+                    .name("hallucination")
+                    .reason("metric could not decide")
+                    .build();
+
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(valued, valueless)));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfTraces(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    traceScore("answer_relevance", BigDecimal.valueOf(0.75), "relevant", message.trace())));
+        }
+
+        @Test
+        void reportsTheDroppedScoreOnTheRuleLog() {
+            var message = sampleMessage();
+            var valueless = PythonScoreResult.builder().name("hallucination").build();
+
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(valueless)));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(userFacingLogger).warn(
+                    contains("because the metric returned no value"),
+                    eq("'hallucination'"),
+                    eq("traceId"),
+                    eq(traceId.toString()));
+        }
+
+        @Test
+        void storesNothingAndDoesNotFailWhenEveryScoreIsValueless() {
+            var message = sampleMessage();
+
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder().name("first").build(),
+                            PythonScoreResult.builder().name("second").build())));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfTraces(captor.capture());
+            assertThat(captor.getValue()).isEmpty();
+        }
+
+        @Test
         void skipsSpanFetchWhenSpansArgumentAbsent() {
             // The sample metric maps only input/output; the `spans` opt-in key isn't present,
             // so the scorer must not call out to the span service.

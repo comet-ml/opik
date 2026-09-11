@@ -124,3 +124,38 @@ OpenAIInstrumentor().instrument()
   Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
   the GRPC exporter you will face errors.
 </Warning>
+
+## Opik-specific span attributes
+
+Opik reads a small set of span attributes and maps them to Opik fields. Set them with
+the standard OpenTelemetry API on any span.
+
+| Attribute | Effect |
+| --- | --- |
+| `opik.tags` | Adds tags to the span. On the root span, Opik also adds the tags to the trace, so you can filter your traces by tag. |
+| `opik.metadata.<key>` | Adds `<key>` to the metadata of the span. The metadata of the root span also becomes the metadata of the trace. |
+| `thread_id` | Groups traces into one conversational thread. See [Multi-turn conversations](/evaluation/evaluate_threads). |
+| `opik.trace_id`, `opik.parent_span_id`, `opik.span_id` | Attaches the span to an Opik trace and parent span that already exist. See [Distributed traces](/tracing/advanced/log_distributed_traces). |
+
+### Tagging traces and spans
+
+Opik accepts three formats for the `opik.tags` attribute:
+
+- A list of strings: `["production", "chatbot"]`
+- A JSON array in a string: `'["production", "chatbot"]'`
+- A comma-separated string: `"production,chatbot"`
+
+```python wordWrap
+with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
+    # The root span carries the tags, so the trace carries them too
+    conversation_span.set_attribute("opik.tags", ["production", "chatbot"])
+    conversation_span.set_attribute("opik.metadata.environment", "staging")
+
+    with tracer.start_as_current_span("llm_completion") as llm_span:
+        # A child span carries the tags on the span only
+        llm_span.set_attribute("opik.tags", ["llm-call"])
+```
+
+<Note>
+  Set `opik.tags` on the root span if you want to filter traces by tag. Tags on a child span apply to that span only.
+</Note>

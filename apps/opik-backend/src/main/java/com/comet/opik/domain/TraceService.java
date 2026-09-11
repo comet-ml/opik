@@ -12,6 +12,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -26,6 +27,8 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -97,12 +100,18 @@ public interface TraceService {
 
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
+    /**
+     * Previous-day trace counts per workspace, excluding activity in demo projects — including demo projects
+     * created after install, which earlier counted. {@link DemoDataExclusionUtils} carries the why.
+     */
     Mono<TraceCountResponse> countTracesPerWorkspace();
 
+    /** The same window and exclusion as {@link #countTracesPerWorkspace()}, broken down by user for the BI events. */
     Mono<BiInformationResponse> getTraceBIInformation();
 
     Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
 
+    /** Previous-day traces across every workspace, under the same exclusion as {@link #countTracesPerWorkspace()}. */
     Mono<Long> getDailyCreatedCount();
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
@@ -567,16 +576,19 @@ class TraceServiceImpl implements TraceService {
     }
 
     /**
-     * All-or-nothing over the batch: an error anywhere skips {@code TracesDeleted} and the deletion-events capture for
-     * every pair, not just the failed one. OPIK-8230 widens the window — the DAO can now emit several statements per
-     * batch, so earlier partitions' rows may already be gone. Deletes are idempotent; restructuring this coupling is
-     * out of that ticket's scope.
+     * All-or-nothing over the batch: an error anywhere skips {@code TracesDeleted} for every pair, not just the failed
+     * one. OPIK-8230 widens the window — the DAO can now emit several statements per batch, so earlier partitions' rows
+     * may already be gone. Deletes are idempotent; restructuring this coupling is out of that ticket's scope. The
+     * deletion-events capture is outside it: it runs first, so a failed or partially-applied delete is still recorded.
      */
     private Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, Connection connection) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
-            return dao.delete(projectIdTraceIdPairs, connection)
+            // Deferred so the delete is assembled after the capture rather than alongside it: TraceDAO.delete
+            // validates and logs eagerly.
+            return captureDeletions(projectIdTraceIdPairs, workspaceId, userName)
+                    .then(Mono.defer(() -> dao.delete(projectIdTraceIdPairs, connection)))
                     .doOnSuccess(_ -> projectIdTraceIdPairs.stream()
                             .collect(Collectors.groupingBy(Pair::getLeft,
                                     Collectors.mapping(Pair::getRight, Collectors.toUnmodifiableSet())))
@@ -590,17 +602,27 @@ class TraceServiceImpl implements TraceService {
                                 log.info(
                                         "Published TracesDeleted event, trace ids count '{}', project id '{}', workspace '{}'",
                                         traceIds.size(), projectId, workspaceId);
-                            }))
-                    .then(captureDeletions(projectIdTraceIdPairs, workspaceId, userName));
+                            }));
         });
     }
 
     /**
-     * Records the deleted (project_id, trace_id) pairs in the deletion-events bridge so deletes issued while the table
-     * is being migrated survive the copy. Runs after the delete and is best-effort: capture is auxiliary and must never
-     * disrupt the delete, so failures are logged and swallowed. Running after the delete also avoids recording a delete
-     * that did not happen. No-op unless capture is enabled. Deferred so that nothing is built or run until subscribed,
-     * i.e. only after the delete succeeds.
+     * Records the (project_id, trace_id) pairs about to be deleted in the deletion-events bridge, so deletes issued
+     * while the table is being migrated survive the copy, and so a rollback re-applies them instead of resurrecting the
+     * rows.
+     * <p>
+     * Runs <b>before</b> the delete (OPIK-8141). The bridge is the only record of a lightweight delete, and a delete can
+     * fail its client while the server-side mutation still applies — the observed case being a client timeout on a
+     * mutation that then completed — so capturing afterwards let exactly those deletes go unrecorded, unrecoverably:
+     * neither replay direction can re-apply what the bridge does not name. Capturing first over-records instead when
+     * the delete does fail, which is the recoverable direction: the forward replay skips any id still live on the
+     * source, and a rollback re-applies a delete the user did ask for. The ordering is only worth something because the
+     * analytics connection carries {@code wait_for_async_insert = 1}: the insert completing means the rows are in the
+     * table, not merely queued in the async-insert buffer.
+     * <p>
+     * Still best-effort: a capture failure is logged and swallowed, never propagated. A lost event risks a resurrected
+     * row at the next copy or rollback, whereas failing the delete would impact live traffic — the worse trade for an
+     * auxiliary insert. No-op unless capture is enabled. Deferred so nothing is built or run until subscribed.
      */
     private Mono<Void> captureDeletions(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, String workspaceId,
             String userName) {
@@ -676,30 +698,46 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
-
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(dao::countTracesPerWorkspace)
-                .collectList()
-                .map(items -> TraceCountResponse.builder()
-                        .workspacesTracesCount(items)
-                        .build())
-                .switchIfEmpty(Mono.just(TraceCountResponse.empty()));
+        return countsByWorkspaceExcludingDemoProjects()
+                .map(countsByWorkspace -> TraceCountResponse.builder()
+                        .workspacesTracesCount(countsByWorkspace.entrySet()
+                                .stream()
+                                .map(entry -> TraceCountResponse.WorkspaceTraceCount.builder()
+                                        .workspace(entry.getKey())
+                                        .traceCount(Math.toIntExact(entry.getValue()))
+                                        .build())
+                                .toList())
+                        .build());
     }
 
     @Override
     @WithSpan
     public Mono<BiInformationResponse> getTraceBIInformation() {
         log.info("Getting trace BI events daily data");
-
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(dao::getTraceBIInformation)
+        return dao.getTraceBIInformationPerProject()
                 .collectList()
-                .map(items -> BiInformationResponse.builder()
-                        .biInformation(items)
-                        .build())
-                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+                .flatMap(rows -> projectService
+                        .getDemoProjectIdsInWorkspaces(rows.stream()
+                                .map(WorkspaceProjectUserCount::workspaceId)
+                                .collect(Collectors.toSet()))
+                        .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspaceAndUser(rows, demoProjectIds)))
+                .map(biInformation -> BiInformationResponse.builder()
+                        .biInformation(biInformation)
+                        .build());
+    }
+
+    /**
+     * Previous-day trace counts per workspace, with demo-project activity dropped. The demo lookup is scoped to the
+     * workspaces that actually had traces, which is what keeps it independent of how many demo projects exist.
+     */
+    private Mono<Map<String, Long>> countsByWorkspaceExcludingDemoProjects() {
+        return dao.countTracesPerWorkspaceProject()
+                .collectList()
+                .flatMap(rows -> projectService
+                        .getDemoProjectIdsInWorkspaces(rows.stream()
+                                .map(WorkspaceProjectCount::workspaceId)
+                                .collect(Collectors.toSet()))
+                        .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspace(rows, demoProjectIds)));
     }
 
     @Override
@@ -713,8 +751,11 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
+        return countsByWorkspaceExcludingDemoProjects()
+                .map(countsByWorkspace -> countsByWorkspace.values()
+                        .stream()
+                        .mapToLong(Long::longValue)
+                        .sum());
     }
 
     @Override

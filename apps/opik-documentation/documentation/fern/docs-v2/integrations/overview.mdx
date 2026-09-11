@@ -12,12 +12,19 @@ Opik helps you easily log, visualize, and evaluate everything from raw LLM calls
 
 ## <Icon icon="fa-regular fa-robot" /> AI Coding Assistants
 
-Connect your AI coding assistant directly to your Opik workspace with the MCP server. Read traces, score outputs, save prompts, and run experiments from chat — works with Claude Code, Cursor, and VS Code Copilot.
+Log your coding agent's sessions to Opik, or connect the agent to your Opik workspace with the MCP server. Start with the [coding agents overview](/integrations/coding-agents) to pick the right path.
 
-<CardGroup cols={1}>
-  <Card title="MCP Server — Claude Code, Cursor, VS Code Copilot, Codex, opencode" href="/mcp-server" icon="fa-regular fa-network-wired">
-    Run `opik mcp configure` and drive your entire Opik workspace from your AI assistant's chat.
+<CardGroup cols={3}>
+  <Card title="Coding agents overview" href="/integrations/coding-agents" icon="fa-regular fa-compass">
+    Opik tracing, Cost Intelligence or the MCP server: which one fits, and setup per agent.
   </Card>
+  <Card title="MCP Server" href="/mcp-server" icon="fa-regular fa-network-wired">
+    Run `uvx opik mcp configure` (no SDK needed) and drive your Opik workspace from Claude Code, Cursor, VS Code Copilot, Codex, opencode, or any other MCP client.
+  </Card>
+  <Card title="Claude Code" href="/integrations/claude-code" icon="fa-regular fa-terminal" />
+  <Card title="Cursor" href="/integrations/cursor" icon="fa-regular fa-i-cursor" />
+  <Card title="GitHub Copilot" href="/integrations/github-copilot" icon="fa-brands fa-github" />
+  <Card title="OpenAI Codex" href="/integrations/openai-codex" icon="fa-regular fa-code" />
 </CardGroup>
 
 ## <Icon icon="fa-brands fa-js" /> TypeScript
@@ -195,14 +202,12 @@ Connect your AI coding assistant directly to your Opik workspace with the MCP se
 ## <Icon icon="fa-solid fa-wand-magic-sparkles" /> No-Code
 
 <CardGroup cols={3}>
-  <Card title="Cursor" href="/integrations/cursor" />
   <Card title="Dify" href="/integrations/dify" />
   <Card title="Flowise" href="/integrations/flowise" />
   <Card title="Hermes" href="/integrations/hermes" />
   <Card title="Langflow" href="/integrations/langflow" />
   <Card title="n8n" href="/integrations/n8n" />
   <Card title="OpenClaw" href="/integrations/openclaw" />
-  <Card title="OpenAI Codex" href="/integrations/openai-codex" />
   <Card title="OpenWebUI" href="/integrations/openwebui" />
   <Card title="Prompt Flow" href="/integrations/prompt-flow" />
 </CardGroup>

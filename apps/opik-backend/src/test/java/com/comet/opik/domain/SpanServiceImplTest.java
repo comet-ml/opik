@@ -19,12 +19,14 @@ import reactor.core.publisher.Mono;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -120,7 +122,7 @@ class SpanServiceImplTest {
             var workspaceId = UUID.randomUUID().toString();
             mockSpanDeleteFlow(traceIds, spanIds, projectId);
             when(spanDAO.deleteByIds(spanIds, projectId)).thenReturn(Mono.just((long) spanIds.size()));
-            when(deletionEventDAO.insert(any(), eq(DEFAULT_USER)))
+            when(deletionEventDAO.insert(deletionEvents(projectId, spanIds, workspaceId), DEFAULT_USER))
                     .thenReturn(Mono.error(new RuntimeException("Error inserting deletion events")));
 
             spanService = newSpanService(DatabaseAnalyticsDataModelConfig.builder()
@@ -135,12 +137,12 @@ class SpanServiceImplTest {
 
             verify(spanDAO).deleteByIds(spanIds, projectId);
             verify(eventBus).post(any(SpansDeleted.class));
-            verify(deletionEventDAO).insert(any(), eq(DEFAULT_USER));
+            verify(deletionEventDAO).insert(deletionEvents(projectId, spanIds, workspaceId), DEFAULT_USER);
         }
 
         @Test
-        @DisplayName("when the delete fails, then no deletion events are recorded and the error propagates")
-        void delete__whenDeleteFails__thenRecordsNoDeletionEventsAndPropagates() {
+        @DisplayName("when the delete fails, then the deletion events are still recorded and the error propagates")
+        void delete__whenDeleteFails__thenStillRecordsDeletionEventsAndPropagates() {
             var traceIds = Set.of(idGenerator.generateId());
             var spanIds = Set.of(idGenerator.generateId(), idGenerator.generateId());
             var projectId = idGenerator.generateId();
@@ -148,11 +150,13 @@ class SpanServiceImplTest {
             mockSpanDeleteFlow(traceIds, spanIds, projectId);
             when(spanDAO.deleteByIds(spanIds, projectId))
                     .thenReturn(Mono.error(new RuntimeException("Error deleting spans")));
+            when(deletionEventDAO.insert(deletionEvents(projectId, spanIds, workspaceId), DEFAULT_USER))
+                    .thenReturn(Mono.empty());
 
             spanService = newSpanService(DatabaseAnalyticsDataModelConfig.builder()
                     .spanDeletionEventsCaptureEnabled(true)
                     .build());
-            // Capture runs only after a successful delete, so a failed delete records nothing and surfaces the error.
+            // OPIK-8141, cascade side: capture runs before the delete, so a failed delete is recorded anyway.
             assertThatThrownBy(() -> spanService
                     .deleteByTraceIds(traceIds, projectId)
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
@@ -161,8 +165,11 @@ class SpanServiceImplTest {
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("Error deleting spans");
 
-            verify(spanDAO).deleteByIds(spanIds, projectId);
-            verifyNoInteractions(deletionEventDAO, eventBus);
+            // The ordering is the fix, so assert it rather than infer it from both having happened.
+            var inOrder = inOrder(deletionEventDAO, spanDAO);
+            inOrder.verify(deletionEventDAO).insert(deletionEvents(projectId, spanIds, workspaceId), DEFAULT_USER);
+            inOrder.verify(spanDAO).deleteByIds(spanIds, projectId);
+            verifyNoInteractions(eventBus);
         }
 
         @Test
@@ -186,6 +193,23 @@ class SpanServiceImplTest {
             verify(spanDAO).getSpanIdsForTraces(traceIds, projectId);
             verify(spanDAO, never()).deleteByIds(any(), any());
             verifyNoInteractions(deletionEventDAO, eventBus);
+        }
+
+        /**
+         * The bridge rows the cascade is expected to record: one {@code spans} / {@code cascade} event per span id,
+         * with {@code eventTime} left null for ClickHouse to stamp. Matching the insert on this rather than on
+         * {@code any()} is what pins the recorded contents, so a wrong source table, reason or id fails the test.
+         */
+        private Set<DeletionEvent> deletionEvents(UUID projectId, Set<UUID> spanIds, String workspaceId) {
+            return spanIds.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.SPANS)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.CASCADE)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
         }
 
         // Stubs the cascade steps that run before the span lightweight delete: id resolution and the
