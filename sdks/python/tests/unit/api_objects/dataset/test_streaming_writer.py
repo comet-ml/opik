@@ -566,29 +566,37 @@ def test_content_hash__digest_does_not_depend_on_orjson(monkeypatch):
     assert with_orjson == without_orjson
 
 
-def test_pool__first_body_fails__surfaces_while_the_producer_is_still_submitting():
+def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound():
     """The failure has to reach the producer at the bound, not only at `close()`.
 
     `submit` collects finished futures once `num_threads * 2` are outstanding; that
     collection is the only thing standing between a failed body and a producer that would
     otherwise keep serialising into an upload that is already broken.
+
+    Which body fails is fixed rather than "whichever ran first", and every other body waits
+    for it, so the submit that raises is the same one on any scheduling.
     """
-    sent = []
+    failed = threading.Event()
 
     def send(body: bytes) -> None:
-        sent.append(body)
-        if len(sent) == 1:
-            raise ValueError("the first body was rejected")
+        if body == b"body-0":
+            failed.set()
+            raise ValueError("body-0 was rejected")
+        failed.wait(5)
 
-    pool = streaming_writer.BoundedSendPool(send, num_threads=2)  # bound of 4
+    pool = streaming_writer.BoundedSendPool(send, num_threads=2)  # a bound of four
 
-    with pytest.raises(ValueError, match="the first body was rejected"):
-        # More bodies than the bound, so a wait happens before the producer is done.
-        for _ in range(20):
-            pool.submit(b"body", 1)
+    attempts = 0
+    with pytest.raises(ValueError, match="body-0 was rejected"):
+        for index in range(20):
+            attempts += 1
+            pool.submit(f"body-{index}".encode(), 1)
 
-    assert len(sent) < 20, "The producer kept going after a body had failed"
+    # Four submits fill the bound; the fifth waits, collects the failed future and raises.
+    assert attempts == 5, (
+        "The failure must surface on the submit that waits at the bound, not at close"
+    )
 
-    # Reported once, not twice: the failed future was collected by the wait above, so the
-    # close that `insert` runs in its `except` cannot raise over the producer's exception.
+    # Reported once, not twice: the failed future was collected by that wait, so the close
+    # `insert` runs in its `except` cannot raise over the producer's own exception.
     pool.close()
