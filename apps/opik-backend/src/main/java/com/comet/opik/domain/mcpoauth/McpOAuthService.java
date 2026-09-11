@@ -126,8 +126,10 @@ public class McpOAuthService {
      * most {@code refreshRotationMaxRetries} of them, such a re-presentation is the legitimate client retrying and
      * still gets a fresh pair off the same family rather than {@code invalid_grant}: a host that sees
      * {@code invalid_grant} on refresh discards its tokens and forces the user to re-authorize (RFC 6819 §5.2.2.3
-     * flags exactly this clustered-client hazard of rotation). Outside the window, or past the cap, the
-     * re-presentation is treated as reuse and the whole family is revoked, per OAuth 2.1 §4.3.1.
+     * flags exactly this clustered-client hazard of rotation). Outside the window the re-presentation is treated
+     * as reuse and the whole family is revoked, per OAuth 2.1 §4.3.1. Inside the window but past the cap only that
+     * request is refused: hitting the cap is oversubscription, not theft, and must not cost the host the
+     * credentials it already holds.
      */
     public TokenResponse refresh(@NonNull String refreshToken, @NonNull String clientId) {
         String tokenHash = McpOAuthTokenUtils.hash(refreshToken);
@@ -192,11 +194,17 @@ public class McpOAuthService {
             if (!retry && tokenDao.revoke(current.tokenHash(), RevokedReason.ROTATED) != 1) {
                 throw new BadRequestException("refresh token could not be rotated");
             }
-            if (retry && (!isBenignRotationRetry(current, now)
-                    || countDescendantPairs(family, current) > config().getRefreshRotationMaxRetries())) {
-                // Reuse detected: kill the whole lineage
+            if (retry && !isBenignRotationRetry(current, now)) {
+                // Outside the grace window a re-presentation is the theft signal OAuth 2.1 §4.3.1 is about: the
+                // legitimate host stopped holding this token long ago. Kill the whole lineage.
                 tokenDao.revokeFamily(current.familyId(), RevokedReason.REUSE);
                 return Optional.empty();
+            }
+            if (retry && countDescendantPairs(family, current) > config().getRefreshRotationMaxRetries()) {
+                // Inside the grace window the presenter is holding the token the host legitimately still has,
+                // which is why the retries below the cap are served. The cap bounds how many pairs one token may
+                // mint; refuse this request and leave the family, and the host's other credentials, alone.
+                throw new BadRequestException("in-grace retry cap exceeded for this refresh token");
             }
 
             // Rows minted before the column existed carry no absolute expiry; their cap starts counting now.

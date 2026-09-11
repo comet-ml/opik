@@ -56,6 +56,8 @@ class OAuthRefreshRotationIntegrationTest {
     private static final int PARALLEL_REFRESHES = 5;
     // One rotation plus this many in-grace retries may be served off a single refresh token.
     private static final int MAX_RETRIES = PARALLEL_REFRESHES - 1;
+    // More parallel calls than the cap can serve: 1 rotation + MAX_RETRIES retries + 2 over the cap.
+    private static final int OVERSUBSCRIBED_REFRESHES = MAX_RETRIES + 3;
     private static final Duration BURST_TIMEOUT = Duration.ofSeconds(30);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -109,28 +111,7 @@ class OAuthRefreshRotationIntegrationTest {
         String clientId = minted.clientId();
         String refreshToken = minted.tokens().refreshToken();
 
-        // One dedicated thread per request, all released by the same barrier, so the requests really are in
-        // flight together rather than trickling through a shared pool one at a time.
-        var barrier = new CyclicBarrier(PARALLEL_REFRESHES);
-        ExecutorService workers = Executors.newFixedThreadPool(PARALLEL_REFRESHES);
-        List<OAuthResourceClient.RefreshOutcome> outcomes;
-        try {
-            outcomes = IntStream.range(0, PARALLEL_REFRESHES)
-                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> {
-                        try {
-                            barrier.await(BURST_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
-                        } catch (Exception e) {
-                            throw new IllegalStateException("burst did not line up", e);
-                        }
-                        return oauthClient.refresh(clientId, refreshToken);
-                    }, workers))
-                    .toList()
-                    .stream()
-                    .map(future -> future.orTimeout(BURST_TIMEOUT.toSeconds(), TimeUnit.SECONDS).join())
-                    .toList();
-        } finally {
-            workers.shutdownNow();
-        }
+        List<OAuthResourceClient.RefreshOutcome> outcomes = refreshBurst(PARALLEL_REFRESHES, clientId, refreshToken);
 
         assertThat(outcomes)
                 .as("every parallel refresh with the same refresh token is answered with a token pair")
@@ -154,8 +135,40 @@ class OAuthRefreshRotationIntegrationTest {
     }
 
     @Test
-    @DisplayName("one more retry than the cap is treated as reuse and revokes the whole family")
-    void retriesBeyondCap_revokeFamily() {
+    @DisplayName("a burst larger than the retry cap refuses the surplus but keeps the family alive")
+    void burstBeyondCap_refusesSurplusWithoutKillingFamily() {
+        var minted = oauthClient.mintArtifacts();
+        String clientId = minted.clientId();
+
+        List<OAuthResourceClient.RefreshOutcome> outcomes = refreshBurst(OVERSUBSCRIBED_REFRESHES, clientId,
+                minted.tokens().refreshToken());
+
+        List<OAuthResourceClient.RefreshOutcome> served = outcomes.stream()
+                .filter(OAuthResourceClient.RefreshOutcome::isOk)
+                .toList();
+        assertThat(served)
+                .as("the rotation plus every in-grace retry the cap allows is served")
+                .hasSize(MAX_RETRIES + 1);
+        assertThat(outcomes)
+                .filteredOn(outcome -> !outcome.isOk())
+                .as("the surplus is refused with invalid_grant")
+                .isNotEmpty()
+                .allSatisfy(outcome -> {
+                    assertThat(outcome.status()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+                    assertThat(outcome.error().error()).isEqualTo(ERROR_INVALID_GRANT);
+                });
+
+        // The point of the test: hitting the cap must not take down credentials the host already holds.
+        for (OAuthResourceClient.RefreshOutcome outcome : served) {
+            assertThat(oauthClient.refresh(clientId, outcome.tokens().refreshToken()).status())
+                    .as("a pair served before the cap was hit still rotates")
+                    .isEqualTo(Response.Status.OK.getStatusCode());
+        }
+    }
+
+    @Test
+    @DisplayName("sequential retries past the cap are refused one by one while the family stays alive")
+    void retriesBeyondCap_refusedWithoutKillingFamily() {
         var minted = oauthClient.mintArtifacts();
         String clientId = minted.clientId();
         String original = minted.tokens().refreshToken();
@@ -163,7 +176,6 @@ class OAuthRefreshRotationIntegrationTest {
         OAuthResourceClient.RefreshOutcome rotation = oauthClient.refresh(clientId, original);
         assertThat(rotation.status()).isEqualTo(Response.Status.OK.getStatusCode());
 
-        String latest = rotation.tokens().refreshToken();
         List<String> issued = new ArrayList<>(List.of(rotation.tokens().refreshToken()));
         for (int retry = 1; retry <= MAX_RETRIES; retry++) {
             OAuthResourceClient.RefreshOutcome allowed = oauthClient.refresh(clientId, original);
@@ -172,18 +184,21 @@ class OAuthRefreshRotationIntegrationTest {
             assertThat(allowed.tokens().accessToken()).isNotBlank();
             assertThat(allowed.tokens().refreshToken()).isNotBlank();
             issued.add(allowed.tokens().refreshToken());
-            latest = allowed.tokens().refreshToken();
         }
         assertThat(issued).as("every served retry carries its own refresh token").doesNotHaveDuplicates();
 
-        OAuthResourceClient.RefreshOutcome overCap = oauthClient.refresh(clientId, original);
-        assertThat(overCap.status()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
-        assertThat(overCap.error().error()).isEqualTo(ERROR_INVALID_GRANT);
+        for (int surplus = 1; surplus <= 2; surplus++) {
+            OAuthResourceClient.RefreshOutcome overCap = oauthClient.refresh(clientId, original);
+            assertThat(overCap.status()).as("request %d past the cap is refused", surplus)
+                    .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+            assertThat(overCap.error().error()).isEqualTo(ERROR_INVALID_GRANT);
+        }
 
-        OAuthResourceClient.RefreshOutcome afterKill = oauthClient.refresh(clientId, latest);
-        assertThat(afterKill.status()).as("the family is gone, including the pairs handed out before the cap")
-                .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
-        assertThat(afterKill.error().error()).isEqualTo(ERROR_INVALID_GRANT);
+        for (String refreshToken : issued) {
+            assertThat(oauthClient.refresh(clientId, refreshToken).status())
+                    .as("every pair handed out before the cap still rotates")
+                    .isEqualTo(Response.Status.OK.getStatusCode());
+        }
     }
 
     @Test
@@ -203,4 +218,26 @@ class OAuthRefreshRotationIntegrationTest {
         assertThat(retry.error().error()).isEqualTo(ERROR_INVALID_GRANT);
     }
 
+    /** One dedicated thread per request, all released by the same barrier, so the burst really is concurrent. */
+    private List<OAuthResourceClient.RefreshOutcome> refreshBurst(int size, String clientId, String refreshToken) {
+        var barrier = new CyclicBarrier(size);
+        ExecutorService workers = Executors.newFixedThreadPool(size);
+        try {
+            return IntStream.range(0, size)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            barrier.await(BURST_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+                        } catch (Exception e) {
+                            throw new IllegalStateException("burst did not line up", e);
+                        }
+                        return oauthClient.refresh(clientId, refreshToken);
+                    }, workers))
+                    .toList()
+                    .stream()
+                    .map(future -> future.orTimeout(BURST_TIMEOUT.toSeconds(), TimeUnit.SECONDS).join())
+                    .toList();
+        } finally {
+            workers.shutdownNow();
+        }
+    }
 }

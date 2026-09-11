@@ -398,7 +398,7 @@ mcpOAuth:
   # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair (MCP hosts refresh from several parallel tool calls at once); after it, re-presentation is treated as reuse and revokes the whole token family
   refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT2M}
   # Default: 10
-  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window (one per parallel host request that lost the rotation race). One more re-presentation than this is treated as reuse and revokes the whole token family
+  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window (one per parallel host request that lost the rotation race). Requests beyond it are refused with invalid_grant one by one; the family and the pairs already handed out stay valid, since hitting the cap is oversubscription, not reuse
   refreshRotationMaxRetries: ${MCP_OAUTH_REFRESH_ROTATION_MAX_RETRIES:-10}
   # Default: PT10S
   # Description: Lease of the per-family Redis lock under which refresh-token rotation, in-grace retries and revocation run. Must outlast the MySQL transaction that rotates a token; if it lapses mid-rotation a concurrent refresh with the same token may be refused instead of served
