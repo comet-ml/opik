@@ -1,4 +1,4 @@
-export { test, expect } from './summarised-datasets.fixture';
+export { test, expect } from './timed-threads.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -126,4 +126,9 @@ export type {
   SummarisedDatasetsFixtures,
 } from './summarised-datasets.fixture';
 export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
+export type {
+  TimedThreadRef,
+  DurationThreadsRef,
+  TimedThreadsFixtures,
+} from './timed-threads.fixture';
 export type { ProjectRef } from '../core/backend';
