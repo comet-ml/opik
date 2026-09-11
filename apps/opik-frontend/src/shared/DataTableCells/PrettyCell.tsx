@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
-import { ROW_HEIGHT } from "@/types/shared";
+import { JsonNode, ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
@@ -21,7 +21,7 @@ type CustomMeta<TData> = {
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 
-const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
+const PrettyCell = <TData,>(context: CellContext<TData, JsonNode>) => {
   const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
@@ -32,7 +32,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     colorIndicator = false,
     getPrettifyConfig,
   } = (custom ?? {}) as CustomMeta<TData>;
-  const value = context.getValue() as string | object | undefined | null;
+  const value = context.getValue();
   const prettifyConfig = getPrettifyConfig?.(context.row.original, fieldType);
   const rowInput = prettifyConfig?.openInferenceInput;
   const openInferenceHint = prettifyConfig?.openInferenceHint;

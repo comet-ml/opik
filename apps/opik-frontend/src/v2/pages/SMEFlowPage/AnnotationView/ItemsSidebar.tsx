@@ -32,7 +32,7 @@ const getItemPreviews = (
     return {
       name,
       input: getPreviewText(thread, "input"),
-      output: thread.last_message ? getPreviewText(thread, "output") : "",
+      output: getPreviewText(thread, "output"),
     };
   }
   const trace = item as Trace;

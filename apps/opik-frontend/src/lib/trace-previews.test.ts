@@ -33,7 +33,29 @@ describe("trace preview context", () => {
   });
 });
 
-describe("thread preview and export context", () => {
+describe("thread preview context", () => {
+  it.each([0, false, true, "Plain answer", null, ["First", "Second"]])(
+    "accepts the JSON wire domain without casting: %j",
+    (value) => {
+      const thread = { first_message: value, last_message: value };
+      const input = prettifyThreadField(thread, "input");
+      const output = prettifyThreadField(thread, "output");
+      if (
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        typeof value === "string"
+      ) {
+        expect(input.message).toBe(String(value));
+        expect(output.message).toBe(String(value));
+      } else if (value === null) {
+        expect(input.message).toBeUndefined();
+        expect(output.message).toBeUndefined();
+      } else {
+        expect(input.message).toEqual(value);
+        expect(output.message).toEqual(value);
+      }
+    },
+  );
   it("extracts canonical messages without source metadata", () => {
     const thread = {
       first_message: { messages: [{ role: "human", content: "Question" }] },

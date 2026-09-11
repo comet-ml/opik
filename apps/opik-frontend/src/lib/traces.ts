@@ -789,6 +789,7 @@ export const prettifyThreadField = (
   type: "input" | "output",
 ) =>
   prettifyMessage(
-    type === "input" ? source.first_message : source.last_message,
+    (type === "input" ? source.first_message : source.last_message) ??
+      undefined,
     getThreadPrettifyConfig(source, type),
   );
