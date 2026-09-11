@@ -1151,4 +1151,32 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code azure_ai}, {@code vercel_ai_gateway} and {@code openrouter} as
+     * canonical providers so that their token-priced entries in
+     * {@code model_prices_and_context_window.json} are no longer silently dropped at load time. Each
+     * case exercises a representative token-priced model routed through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("provideGatewayCanonicalProviderCases")
+    void calculateCostHandlesGatewayCanonicalProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGatewayCanonicalProviderCases() {
+        return Stream.of(
+                // azure_ai/gpt-oss-120b: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("azure_ai", "azure_ai/gpt-oss-120b", "0.00027"),
+                // vercel_ai_gateway/alibaba/qwen-3-14b: input 8e-08, output 2.4e-07
+                // 1000*8e-08 + 200*2.4e-07 = 0.000128
+                Arguments.of("vercel_ai_gateway", "vercel_ai_gateway/alibaba/qwen-3-14b", "0.000128"),
+                // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
+                // 1000*3e-06 + 200*1.5e-05 = 0.006
+                Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+    }
 }
