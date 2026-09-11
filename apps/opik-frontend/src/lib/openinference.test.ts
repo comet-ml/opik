@@ -1,10 +1,45 @@
 import { describe, expect, it } from "vitest";
 import {
   isSafeOpenInferenceMediaUrl,
+  isOpenInferenceField,
   parseOpenInferenceFields,
 } from "./openinference";
 
 describe("parseOpenInferenceFields", () => {
+  it.each([0, 2147483647])("accepts backend-compatible index %s", (index) => {
+    const parsed = parseOpenInferenceFields(
+      {
+        [`llm.input_messages.${index}.message.content`]: "Question",
+        [`llm.tools.${index}.tool.name`]: "search",
+        [`llm.prompts.${index}.prompt.text`]: "Prompt",
+      },
+      { [`llm.choices.${index}.completion.text`]: "Answer" },
+    );
+    expect(parsed.inputMessages).toEqual([{ content: "Question" }]);
+    expect(parsed.tools).toEqual([{ name: "search" }]);
+    expect(parsed.prompts).toEqual(["Prompt"]);
+    expect(parsed.choices).toEqual(["Answer"]);
+  });
+
+  it.each([2147483648, Number.MAX_SAFE_INTEGER])(
+    "does not render out-of-range index %s",
+    (index) => {
+      const input = {
+        [`llm.input_messages.${index}.message.content`]: "Question",
+        [`llm.tools.${index}.tool.name`]: "search",
+        [`llm.prompts.${index}.prompt.text`]: "Prompt",
+      };
+      const output = { [`llm.choices.${index}.completion.text`]: "Answer" };
+      const parsed = parseOpenInferenceFields(input, output);
+      expect(parsed.inputMessages).toEqual([]);
+      expect(parsed.tools).toEqual([]);
+      expect(parsed.prompts).toEqual([]);
+      expect(parsed.choices).toEqual([]);
+      expect(isOpenInferenceField(input, "input", true, false)).toBe(false);
+      expect(isOpenInferenceField(output, "output", true, false)).toBe(false);
+    },
+  );
+
   it("retains semantic output attributes stored alongside canonical messages", () => {
     const messages = [{ role: "assistant", content: "Answer" }];
     const parsed = parseOpenInferenceFields(
