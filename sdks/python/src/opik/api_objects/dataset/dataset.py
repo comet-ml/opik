@@ -827,7 +827,7 @@ class Dataset(DatasetExportOperations):
 
     def _upload_via_rest_client(
         self,
-        payloads: List[Dict[str, Any]],
+        payloads: Iterable[Dict[str, Any]],
         batch_group_id: str,
         num_threads: int,
     ) -> None:
@@ -836,13 +836,12 @@ class Dataset(DatasetExportOperations):
         Used when the Dataset has no HTTP client of its own, which is the case for one
         constructed directly from a REST client. That construction predates the streaming
         path and still works; it just does not get the single-pass serialisation.
+
+        The iterable is consumed one item at a time and the number of requests in flight
+        is bounded, so this path is slower than the streaming one but no less bounded in
+        memory. Batches are split where `sequence_splitter.split_into_batches` split them,
+        so the requests themselves are unchanged.
         """
-        items = [rest_dataset_item.DatasetItemWrite(**payload) for payload in payloads]
-        batches = sequence_splitter.split_into_batches(
-            items,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
-            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
-        )
 
         def send(batch: List[rest_dataset_item.DatasetItemWrite]) -> None:
             rest_helpers.ensure_rest_api_call_respecting_rate_limit(
@@ -854,14 +853,54 @@ class Dataset(DatasetExportOperations):
                 )
             )
 
+        def batches() -> Iterator[List[rest_dataset_item.DatasetItemWrite]]:
+            max_payload_size_MB = config.MAX_BATCH_SIZE_MB
+            max_length = constants.DATASET_ITEMS_MAX_BATCH_SIZE
+            current_batch: List[rest_dataset_item.DatasetItemWrite] = []
+            current_batch_size_MB = 0.0
+
+            for payload in payloads:
+                item = rest_dataset_item.DatasetItemWrite(**payload)
+                item_size_MB = sequence_splitter.get_payload_size_MB(item)
+
+                # An item at or over the cap cannot share a batch, and the batch being
+                # filled stays open rather than being cut short by it -- both as in the
+                # splitter, so the same input still produces the same batches.
+                if item_size_MB >= max_payload_size_MB:
+                    yield [item]
+                    continue
+
+                if (
+                    len(current_batch) == max_length
+                    or current_batch_size_MB + item_size_MB > max_payload_size_MB
+                ):
+                    yield current_batch
+                    current_batch, current_batch_size_MB = [], 0.0
+
+                current_batch.append(item)
+                current_batch_size_MB += item_size_MB
+
+            if len(current_batch) > 0:
+                yield current_batch
+
         if num_threads <= 1:
-            for batch in batches:
+            for batch in batches():
                 send(batch)
             return
 
         with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
-            submitted = [pool.submit(send, batch) for batch in batches]
-            for future in futures.as_completed(submitted):
+            pending: Set["futures.Future[None]"] = set()
+            for batch in batches():
+                # Bounded like the streaming pool, and for the same reason: submitting
+                # every batch up front would hold the whole upload as queued futures.
+                if len(pending) >= num_threads * 2:
+                    done, pending = futures.wait(
+                        pending, return_when=futures.FIRST_COMPLETED
+                    )
+                    for future in done:
+                        future.result()
+                pending.add(pool.submit(send, batch))
+            for future in futures.as_completed(pending):
                 future.result()
 
     def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
@@ -993,10 +1032,10 @@ class Dataset(DatasetExportOperations):
 
         if self._upload_transport() is None:
             self._upload_via_rest_client(
-                [
+                (
                     self._item_payload(item)
                     for item in self._deduplicating(items, deduplication)
-                ],
+                ),
                 batch_group_id,
                 num_threads,
             )
@@ -1014,7 +1053,7 @@ class Dataset(DatasetExportOperations):
             max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
             max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
             flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
-            gzip_level=opik_config.request_compression_level,
+            gzip_level=opik_config.dataset_upload_compression_level,
             use_orjson=opik_config.enable_orjson_serialization,
         )
 

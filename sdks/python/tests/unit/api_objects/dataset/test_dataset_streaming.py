@@ -1,14 +1,19 @@
 """Streaming behaviour of `Dataset.insert`: laziness, memory, and the widened signature."""
 
 import json
+import threading
+import time
 import tracemalloc
 from unittest.mock import Mock
 
 import pytest
 
+import opik.config as config
 from opik import exceptions
-from opik.api_objects.dataset import converters
+from opik.api_objects import constants
+from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
+from opik.message_processing.batching import sequence_splitter
 
 from .upload_capture import UploadCapture, make_dataset
 
@@ -261,3 +266,159 @@ def test_insert__streaming__server_error_raises():
 
     with pytest.raises(ApiError):
         dataset.insert(_items(1))
+
+
+def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatch):
+    """A bulk upload has its own level; the global request level must not leak into it."""
+    monkeypatch.setenv("OPIK_REQUEST_COMPRESSION_LEVEL", "9")
+    monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", "2")
+
+    levels = []
+    original = streaming_writer.StreamingBatchWriter
+
+    def spy(**kwargs):
+        levels.append(kwargs["gzip_level"])
+        return original(**kwargs)
+
+    monkeypatch.setattr(streaming_writer, "StreamingBatchWriter", spy)
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert(_items(2))
+
+    assert levels == [2]
+    assert len(capture.items) == 2
+
+
+# --------------------------------------------------------------------------- #
+# the rest-client-only fallback: slower, but bounded the same way
+# --------------------------------------------------------------------------- #
+def _fallback_dataset(rest_client):
+    """A Dataset with no HTTP client of its own, so uploads take the fallback path."""
+    return Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=rest_client,
+    )
+
+
+def test_insert__rest_client_only__generator_consumed_lazily_not_drained_up_front(
+    monkeypatch,
+):
+    """The fallback used to build the whole upload as a list before batching."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    mock_rest_client = Mock()
+    dataset = _fallback_dataset(mock_rest_client)
+
+    drawn = []
+    drawn_when_sent = []
+
+    def source():
+        for item in _items(6):
+            drawn.append(item)
+            yield item
+
+    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
+        lambda **kwargs: drawn_when_sent.append(len(drawn))
+    )
+
+    dataset.insert(source(), num_threads=1)
+
+    assert drawn_when_sent == [1, 2, 3, 4, 5, 6], (
+        "Each request should go out as its batch fills, not after the source is drained"
+    )
+
+
+def test_insert__rest_client_only__requests_in_flight_are_bounded(monkeypatch):
+    """Submitting every batch up front would hold the whole upload as queued futures."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    num_threads = 4
+    total = 200
+
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
+    dataset = _fallback_dataset(mock_rest_client)
+
+    release = threading.Event()
+    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
+        lambda **kwargs: release.wait(10)
+    )
+
+    drawn = []
+
+    def source():
+        for item in _items(total):
+            drawn.append(item)
+            yield item
+
+    drawn_while_blocked = []
+
+    def unblock_once_the_producer_stalls():
+        previous = -1
+        while previous != len(drawn):
+            previous = len(drawn)
+            time.sleep(0.1)
+        drawn_while_blocked.append(len(drawn))
+        release.set()
+
+    watcher = threading.Thread(target=unblock_once_the_producer_stalls, daemon=True)
+    watcher.start()
+    dataset.insert(source(), num_threads=num_threads)
+    watcher.join(5)
+
+    assert drawn_while_blocked, "The watcher never observed the upload"
+    assert drawn_while_blocked[0] <= num_threads * 2 + 1, (
+        f"Work in flight is not bounded: {drawn_while_blocked[0]} items were drawn "
+        f"while every worker was blocked"
+    )
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == total
+
+
+def test_insert__rest_client_only__batches_match_the_splitter(monkeypatch):
+    """Incremental batching must split exactly where `split_into_batches` split."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)
+    monkeypatch.setattr(constants, "DATASET_ITEMS_MAX_BATCH_SIZE", 3)
+
+    # Mixed sizes, two of them past the cap, so the oversized-item boundary is exercised
+    # and not only the count limit.
+    payloads = [
+        {"i": i, "input": "x" * (4000 if i in (4, 5) else 120)} for i in range(14)
+    ]
+    mock_rest_client = Mock()
+    dataset = _fallback_dataset(mock_rest_client)
+
+    dataset.insert(payloads, num_threads=1)
+
+    create = mock_rest_client.datasets.create_or_update_dataset_items
+    sent = [call.kwargs["items"] for call in create.call_args_list]
+    in_source_order = sorted(
+        (item for batch in sent for item in batch), key=lambda item: item.data["i"]
+    )
+    expected = sequence_splitter.split_into_batches(
+        in_source_order,
+        max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+        max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+    )
+
+    def indices(batches):
+        return [[item.data["i"] for item in batch] for batch in batches]
+
+    assert indices(sent) == indices(expected), "Batching diverged from the splitter"
+    assert len(in_source_order) == len(payloads), "Every item must be sent exactly once"
+    groups = {call.kwargs["batch_group_id"] for call in create.call_args_list}
+    assert len(groups) == 1, "All batches must share one batch_group_id"
+
+
+def test_insert__rest_client_only__batch_failure_propagates(monkeypatch):
+    """A failing batch must raise, as it did when every batch was submitted up front."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 1e-9)  # one item per request
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
+    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = ValueError(
+        "backend rejected the batch"
+    )
+    dataset = _fallback_dataset(mock_rest_client)
+
+    with pytest.raises(ValueError):
+        dataset.insert(_items(50), num_threads=4)
