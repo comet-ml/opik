@@ -2,7 +2,7 @@ import { test as baseTest } from './annotation-queue.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import {
   uuid7,
-  type AnnotationQueueAutomationRef,
+  type AnnotationQueueAutomationSeed,
   type BackendClient,
 } from '../core/backend';
 
@@ -12,7 +12,7 @@ export interface AutomatedQueueRef {
   projectId: string;
   projectName: string;
   /** Exactly what was sent on create — the baseline every "unchanged" assertion compares against. */
-  automation: AnnotationQueueAutomationRef;
+  automation: AnnotationQueueAutomationSeed;
 }
 
 export interface AnnotationQueueAutomationFixtures {
@@ -27,7 +27,7 @@ export interface AnnotationQueueAutomationFixtures {
  * automation-shaped". A single group of one condition would survive a backend
  * that dropped every group past the first, or collapsed a conjunction.
  */
-const SEED_AUTOMATION: AnnotationQueueAutomationRef = {
+const SEED_AUTOMATION: AnnotationQueueAutomationSeed = {
   enabled: true,
   conditions: {
     groups: [
@@ -43,7 +43,7 @@ const SEED_AUTOMATION: AnnotationQueueAutomationRef = {
 };
 
 /** Deliberately distinguishable from SEED_AUTOMATION, so a mix-up between the two fails. */
-const BYSTANDER_AUTOMATION: AnnotationQueueAutomationRef = {
+const BYSTANDER_AUTOMATION: AnnotationQueueAutomationSeed = {
   enabled: true,
   conditions: {
     groups: [{ conditions: [{ score: 'bystander-score', operator: '=', value: 1 }] }],
@@ -60,16 +60,22 @@ const BYSTANDER_AUTOMATION: AnnotationQueueAutomationRef = {
  * The id is chosen here (`uuid7()`) rather than read back from the response:
  * `POST /v1/private/annotation-queues` answers 201 with no body, so a
  * server-chosen id would be unknown to teardown if anything about the response
- * were unexpected. Annotation queues cascade with neither the project fixture
- * nor the run-prefix sweep in `global-teardown.ts`, so a leaked one is
- * permanent.
+ * were unexpected. (`global-teardown.ts` does sweep annotation queues by run
+ * prefix, so a leak is reclaimed at the end of the run rather than permanent —
+ * but only for a name that carries the prefix, and only once the whole run is
+ * over, which is too late for an in-run `total`-shaped assertion.)
+ *
+ * A non-201 deletes before it throws, because the failure mode is not
+ * hypothetical: a create whose `automation` the backend rejects answers 400
+ * *having already written the queue row* (queue first, automation second — the
+ * two are in different stores and the write is not transactional).
  */
 async function seedAutomatedQueue(args: {
   backendClient: BackendClient;
   projectId: string;
   projectName: string;
   name: string;
-  automation: AnnotationQueueAutomationRef;
+  automation: AnnotationQueueAutomationSeed;
 }): Promise<AutomatedQueueRef> {
   const id = uuid7();
   const created = await args.backendClient.createAnnotationQueue({
@@ -79,6 +85,12 @@ async function seedAutomatedQueue(args: {
     automation: args.automation,
   });
   if (created.status !== 201) {
+    try {
+      await args.backendClient.deleteAnnotationQueue(id);
+    } catch {
+      // Swallowed deliberately: the create's status is the diagnosis, and a
+      // delete that 404s is the ordinary case (nothing was written).
+    }
     throw new Error(
       `seeding annotation queue '${args.name}' answered ${created.status}: ${created.message}`,
     );

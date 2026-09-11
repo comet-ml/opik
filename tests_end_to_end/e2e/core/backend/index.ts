@@ -44,6 +44,7 @@ export {
   type AnnotationQueueReviewerRef,
   type AnnotationQueueRecordRef,
   type AnnotationQueueAutomationRef,
+  type AnnotationQueueAutomationSeed,
   type AnnotationQueueSeed,
   type AnnotationQueueUpdateWrite,
   type ScoreConditionOperator,

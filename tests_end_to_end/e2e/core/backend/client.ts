@@ -528,6 +528,23 @@ export interface AnnotationQueueRecordRef {
 }
 
 /**
+ * A create-time automation, where `conditions` is required rather than nullable.
+ *
+ * Not `AnnotationQueueAutomationRef`: the "null means leave the stored
+ * conditions alone" branch only makes sense once something is stored, and on a
+ * first save there is nothing to leave alone. Verified against the local stack —
+ * `POST /v1/private/annotation-queues` with `automation: {enabled: true}` and no
+ * conditions answers **400 "Annotation queue automation requires conditions"
+ * having already written the queue row**, so the caller is left holding an
+ * error and a queue. Requiring the field here makes that unreachable from a
+ * spec rather than a 400 to discover at runtime.
+ */
+export interface AnnotationQueueAutomationSeed {
+  enabled: boolean;
+  conditions: ScoreConditionsRef;
+}
+
+/**
  * A queue create, with the id chosen by the caller.
  *
  * The endpoint answers 201 with no body, so a server-chosen id would only be
@@ -540,7 +557,7 @@ export interface AnnotationQueueSeed {
   projectId: string;
   name: string;
   description?: string;
-  automation?: AnnotationQueueAutomationRef;
+  automation?: AnnotationQueueAutomationSeed;
 }
 
 /**
@@ -3201,16 +3218,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             name: seed.name,
             scope: 'trace',
             ...(seed.description === undefined ? {} : { description: seed.description }),
-            ...(seed.automation === undefined
-              ? {}
-              : {
-                  automation: {
-                    enabled: seed.automation.enabled,
-                    ...(seed.automation.conditions === null
-                      ? {}
-                      : { conditions: seed.automation.conditions }),
-                  },
-                }),
+            // Sent whole, not key-by-key: `AnnotationQueueAutomationSeed`
+            // requires `conditions`, so there is no absent-conditions case left
+            // to strip out — and stripping one would send the request the
+            // backend answers 400 to after creating the queue.
+            ...(seed.automation === undefined ? {} : { automation: seed.automation }),
           },
         },
       );

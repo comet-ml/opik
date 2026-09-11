@@ -1,16 +1,17 @@
 import { test, expect } from '@e2e/fixtures';
-import { uuid7, type AnnotationQueueAutomationRef } from '@e2e/core/backend';
+import { uuid7, type AnnotationQueueAutomationSeed } from '@e2e/core/backend';
 
 /**
  * An annotation queue's automation config — the rules that decide which traces
  * get pulled into the queue by their feedback scores — must survive the trip to
  * storage and back, and must not outlive the queue it belongs to.
  *
- * API-level throughout, deliberately. No page renders automation today: the
- * frontend has no reference to it on annotation queues, and the create/edit
- * dialog has no automation controls, so there is no UI reading of this to make.
- * That is also why neither test claims to cover the create dialog — see the
- * `@cap:` note in the PR that added this spec.
+ * API-level throughout, deliberately, and verified to be forced rather than
+ * assumed: `grep -ri automation` over the annotation-queues frontend returns
+ * nothing at this commit, so no page renders an automation config and there is
+ * no UI reading of it to make. The `@cap:` tags say so — `create-queue` carries
+ * a note scoping it to the API create, because the AddEditAnnotationQueueDialog
+ * create path is not what these two tests drive.
  *
  * Two read paths, not one. `GET /{id}` and the LIST endpoint resolve a queue's
  * automation through different queries (`findByQueueId` vs `findByQueueIds`),
@@ -29,7 +30,7 @@ import { uuid7, type AnnotationQueueAutomationRef } from '@e2e/core/backend';
  * that dropped every group past the first, or that flattened a conjunction
  * into a disjunction.
  */
-const AUTOMATION: AnnotationQueueAutomationRef = {
+const AUTOMATION: AnnotationQueueAutomationSeed = {
   enabled: true,
   conditions: {
     groups: [
@@ -103,13 +104,15 @@ test.describe(
 
     test(
       "Deleting a queue takes its automation with it and leaves another queue's alone",
-      { tag: ['@cap:annotation-queues.create-queue'] },
+      // delete-queue, not create-queue: what this test asserts is the delete's
+      // cascade and its blast radius. The queue it creates at the end exists
+      // only to read a deleted id back, not as a create assertion.
+      { tag: ['@cap:annotation-queues.delete-queue'] },
       async ({
         project,
         backendClient,
         automatedQueue,
         bystanderAutomatedQueue,
-        registerAnnotationQueueCleanup,
         testNamespace,
       }) => {
         await test.step('Both seeded queues hold their own automation', async () => {
@@ -133,25 +136,27 @@ test.describe(
           expect(await backendClient.getAnnotationQueueRecord(automatedQueue.id)).toBeNull();
         });
 
-        await test.step('A new queue in the same project starts with no automation', async () => {
-          // The automation row is keyed on the queue, in a different store from
-          // the queue itself. A delete that dropped only the queue would leave
-          // the config behind for the next queue in that project to inherit.
-          const freshId = uuid7();
-          const freshName = `${testNamespace}-after-delete`;
-          registerAnnotationQueueCleanup(freshId, freshName);
+        await test.step('A queue recreated on the deleted id has no automation', async () => {
+          // The same id, deliberately. The automation row lives in a different
+          // store from the queue and is keyed on the queue id, so this is the
+          // one read that can distinguish "the delete cascaded" from "the
+          // automation row is still there, orphaned": a new id could never
+          // resolve an orphan keyed on the old one, and asserting null for it
+          // would be a step that cannot fail.
           const created = await backendClient.createAnnotationQueue({
-            id: freshId,
+            id: automatedQueue.id,
             projectId: project.id,
-            name: freshName,
+            name: `${testNamespace}-recreated-on-deleted-id`,
           });
           expect(created.status, created.message).toBe(201);
+          // No cleanup registration: the id belongs to the `automatedQueue`
+          // fixture, whose teardown deletes it whatever this test did to it.
 
-          const record = await backendClient.getAnnotationQueueRecord(freshId);
-          expect(record, 'the new queue must exist to assert about').not.toBeNull();
+          const record = await backendClient.getAnnotationQueueRecord(automatedQueue.id);
+          expect(record, 'the recreated queue must exist to assert about').not.toBeNull();
           expect(
             record!.automation,
-            'a queue created without an automation must not inherit a deleted one',
+            "the deleted queue's automation must not come back with a queue recreated on its id",
           ).toBeNull();
         });
 
