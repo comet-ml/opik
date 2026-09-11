@@ -31,6 +31,21 @@ title: Observability for Cursor with Opik
 The Cursor extension for Opik allows you to log all your Cursor conversations to Opik. Once they are available in Opik,
 you can easily review them and share them with your team.
 
+<Callout type="info">
+  Cursor does not expose an OpenTelemetry exporter for its chat, so the extension is the supported
+  way to get Cursor sessions into Opik. If you want the other direction, letting Cursor read your
+  traces, score outputs and run evaluations from chat, the extension registers the
+  [Opik MCP server](/mcp-server) for you; see the MCP Server Integration section on this page.
+</Callout>
+
+<Tip title="Looking to reduce Cursor spend rather than review sessions?">
+  Opik shows you **what Cursor did**. If the question is **where the tokens went and how to spend
+  fewer of them**, that is [Cost Intelligence](/cost-intelligence/overview): every Cursor API call
+  captured on the wire and attributed to system prompt, tools, MCP servers and user input, per
+  user and per repository, with policy controls that typically cut spend by 15% to 30%. Only
+  counts and metadata leave the machine, never content. It runs side by side with this extension.
+</Tip>
+
 <Frame>
   <img src="/img/tracing/cursor_opik_thread.png" />
 </Frame>

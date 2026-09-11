@@ -663,9 +663,24 @@ navigation:
         skip-slug: true
         icon: fa-regular fa-robot
         contents:
+          - page: Overview
+            path: ./docs-v2/integrations/coding-agents.mdx
+            slug: coding-agents
           - page: MCP Server
             path: ./docs-v2/prompt_engineering/mcp-server.mdx
             slug: mcp-server
+          - page: Claude Code
+            path: ./docs-v2/integrations/claude-code.mdx
+            slug: claude-code
+          - page: Cursor
+            path: ./docs-v2/integrations/cursor.mdx
+            slug: cursor
+          - page: GitHub Copilot
+            path: ./docs-v2/integrations/github-copilot.mdx
+            slug: github-copilot
+          - page: OpenAI Codex
+            path: ./docs-v2/integrations/openai-codex.mdx
+            slug: openai-codex
       - section: TypeScript
         skip-slug: true
         icon: fa-brands fa-js
@@ -930,9 +945,6 @@ navigation:
         skip-slug: true
         icon: fa-solid fa-wand-magic-sparkles
         contents:
-          - page: Cursor
-            path: ./docs-v2/integrations/cursor.mdx
-            slug: cursor
           - page: Dify
             path: ./docs-v2/integrations/dify.mdx
             slug: dify
@@ -951,9 +963,6 @@ navigation:
           - page: OpenClaw
             path: ./docs-v2/integrations/openclaw.mdx
             slug: openclaw
-          - page: OpenAI Codex
-            path: ./docs-v2/integrations/openai-codex.mdx
-            slug: openai-codex
           - page: OpenWebUI
             path: ./docs-v2/integrations/openwebui.mdx
             slug: openwebui

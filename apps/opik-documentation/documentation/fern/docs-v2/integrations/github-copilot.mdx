@@ -1,0 +1,260 @@
+---
+description: Send GitHub Copilot Chat (VS Code) and Copilot CLI sessions to Opik over OpenTelemetry, with clear content-capture and endpoint expectations.
+headline: GitHub Copilot
+og:description: GitHub Copilot exports traces over OpenTelemetry; this guide maps the VS Code settings, environment variables and enterprise managed settings to Opik endpoints.
+og:site_name: Opik Documentation
+og:title: GitHub Copilot Integration - Opik
+title: Observability for GitHub Copilot with Opik
+---
+
+[GitHub Copilot](https://github.com/features/copilot) can export traces, metrics and events over
+OpenTelemetry (OTel) from both the Copilot Chat extension in VS Code and the Copilot CLI. The spans
+follow the [OTel GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/),
+which Opik ingests natively, so every chat turn, model call and tool execution lands in Opik as a
+trace you can review, evaluate and share.
+
+## When this guide applies
+
+Use this guide if you want to **log Copilot conversations to Opik**: the prompts your developers
+send, the models Copilot calls, the tools it runs, and the tokens each turn consumed.
+
+<Callout type="info">
+  This guide covers telemetry flowing **from Copilot to Opik**. For the other direction, letting
+  Copilot read your traces, score outputs and run evaluations from chat, register the
+  [Opik MCP server](/mcp-server) with it. One command, `uvx opik mcp configure`, installs the server and
+  the Opik skills. The two are independent, and you can use either or both.
+</Callout>
+
+<Tip title="Looking to reduce coding-agent spend rather than review sessions?">
+  Opik shows you **what your agents did**. If the question is **where the tokens went and how to
+  spend fewer of them**, that is [Cost Intelligence](/cost-intelligence/overview): exact per-call
+  token attribution across system prompt, tools, MCP servers, skills and memory, per-user and
+  per-repository, with policy controls that typically cut spend by 15% to 30%. Cost Intelligence
+  currently supports [Claude Code, Codex and Cursor](/cost-intelligence/overview#supported-agents);
+  talk to your Comet account team about Copilot coverage.
+</Tip>
+
+## Quick start
+
+Copilot Chat in VS Code and Copilot CLI both honor the standard OpenTelemetry environment
+variables. For a single developer on Opik Cloud, this is the whole setup:
+
+```bash wordWrap
+export COPILOT_OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+export COPILOT_OTEL_CAPTURE_CONTENT=true   # omit to log structure and tokens only, no prompt text
+```
+
+Then launch VS Code from that shell with `code .` (or run `copilot` for the CLI) and start a chat.
+The trace appears in the Opik project named in `projectName`. The rest of this page covers the
+other configuration paths, self-hosted endpoints, what the spans contain and how to validate.
+
+## Prerequisites
+
+- An Opik API key and workspace name. Opik Cloud: [comet.com/api/my/settings](https://www.comet.com/api/my/settings).
+- GitHub Copilot Chat extension in VS Code, or GitHub Copilot CLI, signed in.
+- Permission from your organization to export prompt content, if you plan to enable content capture.
+
+## What Opik receives
+
+Copilot emits four span kinds, all with `gen_ai.*` attributes:
+
+| Span | What it represents | Key attributes Opik maps |
+| --- | --- | --- |
+| `invoke_agent` | One chat turn (root span) | `gen_ai.agent.name`, `gen_ai.conversation.id` |
+| `chat` | A model request | `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, cache read/creation tokens |
+| `execute_tool` | A tool call | `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` |
+| `execute_hook` | A hook run | hook metadata |
+
+Opik maps `gen_ai.input.messages` and `gen_ai.output.messages` to the trace and span **input**
+and **output**, and uses `gen_ai.usage.*` for token counts. `gen_ai.conversation.id` groups turns
+into a thread in the Opik **Threads** tab.
+
+<Warning>
+  **Content is off by default.** Copilot does not export prompt text, responses or tool arguments
+  unless you turn on content capture (`github.copilot.chat.otel.captureContent` or
+  `COPILOT_OTEL_CAPTURE_CONTENT`). Without it your Opik traces show structure, timing and token
+  counts, but empty input and output. Check your organization's policy before enabling it.
+</Warning>
+
+## Opik OTLP endpoint modes
+
+The examples on this page use the Opik Cloud endpoint. Swap in the endpoint for your deployment
+from the tabs here; everything else stays the same. Copilot appends the signal path (`/v1/traces`,
+`/v1/metrics`, `/v1/logs`) to the base endpoint itself, so always give it the **base** URL, not
+the `/v1/traces` URL. For endpoint behavior in general, see the
+[Opik OpenTelemetry overview](/integrations/opentelemetry).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName` (recommended; defaults to `Default Project`)
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName` (recommended)
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - none by default (depends on your self-hosted auth setup)
+
+        Optional headers:
+        - `projectName` (recommended)
+        - auth headers if your instance enforces auth
+    </Tab>
+</Tabs>
+
+## Configure Copilot Chat in VS Code
+
+Copilot Chat reads its OTel configuration from VS Code settings, from environment variables, or
+from enterprise managed settings. Pick the one that matches how you roll out configuration.
+
+<Tabs>
+    <Tab value="settings" title="VS Code settings + env headers">
+        The exporter settings live in `settings.json`, but **exporter headers cannot be set in
+        `settings.json`**. Opik Cloud and Enterprise deployments need the `Authorization` and
+        `Comet-Workspace` headers, so those still come from one environment variable.
+
+        1. Add to your user or workspace `settings.json`:
+
+        ```json title="settings.json"
+        {
+          "github.copilot.chat.otel.enabled": true,
+          "github.copilot.chat.otel.exporterType": "otlp-http",
+          "github.copilot.chat.otel.otlpEndpoint": "https://www.comet.com/opik/api/v1/private/otel",
+          "github.copilot.chat.otel.captureContent": true
+        }
+        ```
+
+        2. Export the headers in your shell profile:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        3. Launch VS Code from that shell with `code .`, then reload the window.
+
+        The same macOS note applies: a Dock or Spotlight launch does not inherit the variable.
+    </Tab>
+    <Tab value="env" title="Environment variables only">
+        Every setting has an environment-variable equivalent. This is the simplest path when VS
+        Code is launched from a terminal or a wrapper script. Put the block in your shell profile
+        (`~/.zshrc`, `~/.bashrc`, or the Windows equivalent).
+
+        ```bash wordWrap
+        export COPILOT_OTEL_ENABLED=true
+        export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        export COPILOT_OTEL_CAPTURE_CONTENT=true
+        export OTEL_SERVICE_NAME=copilot-chat
+        ```
+
+        Start VS Code from the same shell with `code .` so the extension host inherits the
+        variables.
+
+        <Note>
+          On macOS, VS Code launched from the Dock or Spotlight does not inherit variables set in
+          your shell profile. Either launch it from a terminal with `code .`, or use the managed
+          settings path.
+        </Note>
+    </Tab>
+    <Tab value="managed" title="Enterprise managed settings (recommended for teams)">
+        Organizations can **mandate** where Copilot sends OTel data through the `telemetry` block
+        in [Copilot managed settings](https://github.blog/changelog/2026-07-08-enterprise-managed-opentelemetry-export-for-vs-code-and-cli/).
+        Admins deliver it via native MDM (Windows Registry or macOS managed preferences), via a
+        server-managed policy tied to the signed-in GitHub account, or via a `managed-settings.json`
+        file on disk. It applies to both the Copilot Chat extension in VS Code and the agent host
+        process behind Copilot CLI.
+
+        The block lets you set:
+
+        - the OTLP endpoint and protocol (`otlp-http` for Opik)
+        - the OTel service name and resource attributes
+        - exporter headers, which is where the Opik `Authorization`, `Comet-Workspace` and
+          `projectName` headers go
+        - whether prompt, response and tool content is captured, and whether developers may
+          change that
+
+        A managed value always wins over environment variables and user settings, and managed
+        headers are applied only to the Copilot Chat exporter and never passed through environment
+        variables, so the Opik API key never reaches subprocess tools.
+
+        Refer to the GitHub changelog linked at the start of this tab for the exact schema of the `telemetry`
+        block for your Copilot plan.
+    </Tab>
+</Tabs>
+
+## Configure Copilot CLI
+
+Copilot CLI uses the same exporter and the same environment variables as the Quick start. It exports
+OTLP over HTTP only (`http/protobuf` or `http/json`); gRPC is not supported.
+
+```bash wordWrap
+export COPILOT_OTEL_ENABLED=true
+export COPILOT_OTEL_EXPORTER_TYPE=otlp-http
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+export COPILOT_OTEL_CAPTURE_CONTENT=true
+export OTEL_SERVICE_NAME=copilot-cli
+```
+
+Run `copilot` from that shell and traces are exported as you work.
+
+## Validation
+
+1. Reload VS Code (or start a new Copilot CLI session) after applying the configuration.
+2. Ask Copilot something that triggers a tool call, for example "list the files in this repo".
+3. Open the target project in Opik. You should see an `invoke_agent` trace with nested `chat` and
+   `execute_tool` spans, token counts on the `chat` spans, and, with content capture enabled, the
+   prompt and response in the trace input and output.
+4. Open the **Threads** tab to see the conversation grouped by `gen_ai.conversation.id`.
+
+If nothing arrives, set `COPILOT_OTEL_LOG_LEVEL=debug` and check the **GitHub Copilot Chat**
+output channel in VS Code for exporter errors. A `401` means the `Authorization` or
+`Comet-Workspace` header did not reach the exporter; the most common cause is VS Code not
+inheriting the environment variable.
+
+## Notes
+
+- Opik ingests the **traces** signal only. Copilot also sends metrics to `/v1/metrics` and events
+  to `/v1/logs` on the same base endpoint; Opik has no receiver for those and rejects them, which
+  is harmless and does not affect trace ingestion.
+- Keep content capture off unless your policy explicitly allows prompt and response export.
+  Metadata, timing and token counts are still logged without it.
+- Cost on `chat` spans is calculated when the `gen_ai.request.model` value matches a model in
+  Opik's price table. Copilot-hosted model names may not match; if you see `$0` cost, check the
+  `model` field on the span and reach out so we can add the alias.
+
+## Source references
+
+- [Monitor agent usage with OpenTelemetry (VS Code)](https://code.visualstudio.com/docs/agents/guides/monitoring-agents)
+- [Enterprise-managed OpenTelemetry export for VS Code and CLI (GitHub changelog)](https://github.blog/changelog/2026-07-08-enterprise-managed-opentelemetry-export-for-vs-code-and-cli/)
+- [Copilot Chat agent monitoring reference (microsoft/vscode-copilot-chat)](https://github.com/microsoft/vscode-copilot-chat/blob/main/docs/monitoring/agent_monitoring.md)
+- [Opik OpenTelemetry overview](/integrations/opentelemetry)
