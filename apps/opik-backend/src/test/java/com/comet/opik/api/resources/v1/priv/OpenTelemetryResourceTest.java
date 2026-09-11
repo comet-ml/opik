@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.OpenTelemetryResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
@@ -129,6 +130,7 @@ class OpenTelemetryResourceTest {
     private String baseURI;
     private ClientSupport client;
     private TraceResourceClient traceResourceClient;
+    private OpenTelemetryResourceClient otelResourceClient;
     private SpanResourceClient spanResourceClient;
 
     @BeforeAll
@@ -143,6 +145,7 @@ class OpenTelemetryResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE);
 
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.otelResourceClient = new OpenTelemetryResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
@@ -188,15 +191,8 @@ class OpenTelemetryResourceTest {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
 
-            try (Response actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, okApikey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .header(HttpHeaders.CONTENT_TYPE, "application/x-protobuf")
-                    .method("POST")) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-            }
+            otelResourceClient.exportWithoutBody("application/x-protobuf", workspaceName, okApikey,
+                    HttpStatus.SC_OK);
         }
 
         @ParameterizedTest(name = "{0}")
@@ -213,7 +209,8 @@ class OpenTelemetryResourceTest {
             mockTargetWorkspace(okApikey, workspaceName);
             String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
-            post(payload, mediaType, projectName, workspaceName, HttpStatus.SC_OK);
+            otelResourceClient.exportTraces(payload, mediaType, projectName, workspaceName, okApikey,
+                    HttpStatus.SC_OK);
 
             // What the empty export must NOT do — create the project — is not asserted here, and it is
             // worth saying why rather than leaving a silent gap. Reading the project store needs
@@ -249,29 +246,6 @@ class OpenTelemetryResourceTest {
                             Entity.json("{\"resourceSpans\":[{\"scopeSpans\":[{}]}]}")));
         }
 
-        private void post(Entity<?> payload, String mediaType, String workspaceName, int expectedStatus) {
-            post(payload, mediaType, null, workspaceName, expectedStatus);
-        }
-
-        private void post(Entity<?> payload, String mediaType, String projectName, String workspaceName,
-                int expectedStatus) {
-            var requestBuilder = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .request(mediaType)
-                    .header(HttpHeaders.AUTHORIZATION, okApikey)
-                    .header(WORKSPACE_HEADER, workspaceName);
-
-            if (StringUtils.isNotEmpty(projectName)) {
-                requestBuilder.header(RequestContext.PROJECT_NAME, projectName);
-            }
-
-            try (Response actualResponse = requestBuilder.post(payload)) {
-                var body = actualResponse.hasEntity() ? actualResponse.readEntity(String.class) : "";
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode())
-                        .as("response body: %s", body)
-                        .isEqualTo(expectedStatus);
-            }
-        }
     }
 
     @Nested
