@@ -17,7 +17,7 @@ import org.redisson.client.codec.Codec;
 import java.util.concurrent.TimeUnit;
 
 @Data
-public class DatasetExportConfig implements StreamConfiguration {
+public class ExportConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
 

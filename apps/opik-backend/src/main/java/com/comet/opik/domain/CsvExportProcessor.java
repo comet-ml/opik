@@ -1,12 +1,12 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.ExportParams;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.domain.export.ExportSource;
+import com.comet.opik.domain.export.ExportSourceRegistry;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -32,9 +32,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -42,16 +41,16 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Service responsible for generating CSV files from dataset items and uploading them to S3/MinIO.
  */
-@ImplementedBy(CsvDatasetExportProcessorImpl.class)
-public interface CsvDatasetExportProcessor {
+@ImplementedBy(CsvExportProcessorImpl.class)
+public interface CsvExportProcessor {
 
     /**
-     * Generates a CSV file from dataset items and uploads it to S3/MinIO.
+     * Generates a CSV file and uploads it to S3/MinIO.
      *
-     * @param datasetId The dataset ID to export
+     * @param params What to export, shaped per export type
      * @return A Mono containing the export result with file path and expiration
      */
-    Mono<CsvExportResult> generateAndUploadCsv(UUID datasetId);
+    Mono<CsvExportResult> generateAndUploadCsv(ExportParams params);
 
     /**
      * Result of CSV export containing file metadata
@@ -66,36 +65,39 @@ public interface CsvDatasetExportProcessor {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
+class CsvExportProcessorImpl implements CsvExportProcessor {
 
-    private final @NonNull DatasetItemDAO datasetItemDao;
+    private final @NonNull ExportSourceRegistry sourceRegistry;
     private final @NonNull FileService fileService;
-    private final @NonNull @Config("datasetExport") DatasetExportConfig exportConfig;
+    private final @NonNull @Config("datasetExport") ExportConfig exportConfig;
 
     private static final String CSV_CONTENT_TYPE = "text/csv";
     private static final int S3_MIN_PART_SIZE = 5242880; // 5 MB - S3 requirement for non-final parts
 
     @Override
-    public Mono<CsvExportResult> generateAndUploadCsv(@NonNull UUID datasetId) {
-        log.info("Starting CSV generation for dataset: '{}'", datasetId);
+    public Mono<CsvExportResult> generateAndUploadCsv(@NonNull ExportParams params) {
+        ExportSource source = sourceRegistry.get(params);
+
+        log.info("Starting CSV generation for '{}' export", params.exportType());
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // Step 1: Discover all columns in the dataset
-            return discoverColumns(datasetId)
+            // Step 1: ask the source which columns it will produce
+            return source.discoverColumns(params)
+                    .map(LinkedHashSet::new)
                     .flatMap(columns -> {
-                        log.info("Discovered '{}' columns for dataset '{}'", columns.size(), datasetId);
+                        log.info("Discovered '{}' columns for '{}' export", columns.size(), params.exportType());
 
                         // Step 2: Generate CSV and upload using streaming approach
-                        return generateAndUploadCsvStreaming(datasetId, columns, workspaceId)
+                        return generateAndUploadCsvStreaming(source, params, columns, workspaceId)
                                 .map(filePath -> {
                                     // Step 3: Calculate expiration time
                                     Duration ttl = exportConfig.getDefaultTtl().toJavaDuration();
                                     Instant expiresAt = Instant.now().plus(ttl);
 
-                                    log.info("CSV export completed for dataset '{}', expires at: '{}'",
-                                            datasetId, expiresAt);
+                                    log.info("CSV export completed for '{}', expires at: '{}'",
+                                            params.exportType(), expiresAt);
 
                                     return CsvExportResult.builder()
                                             .filePath(filePath)
@@ -107,48 +109,29 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
     }
 
     /**
-     * Discovers all unique column names from the dataset items.
-     * Columns are returned in the order provided by the DAO (LinkedHashMap preserves insertion order).
-     *
-     * @param datasetId The dataset ID
-     * @return A Mono containing an ordered set of column names
-     */
-    private Mono<Set<String>> discoverColumns(@NonNull UUID datasetId) {
-        log.debug("Discovering columns for dataset: '{}'", datasetId);
-
-        return datasetItemDao.getColumns(datasetId)
-                .map(columnsMap -> {
-                    // LinkedHashMap from DAO preserves insertion order
-                    Set<String> columnNames = new LinkedHashSet<>(columnsMap.keySet());
-                    log.debug("Found columns for dataset '{}': '{}'", datasetId, columnNames);
-                    return columnNames;
-                });
-    }
-
-    /**
      * Generates CSV and uploads it directly to S3/MinIO using multipart upload.
      * This approach streams data reactively to S3/MinIO without loading everything into memory.
      * Data is buffered only until reaching the minimum part size, then uploaded immediately.
      * Buffers are discarded after upload to allow garbage collection.
      * Parts metadata is kept minimal (only partNumber and eTag) to avoid memory issues.
      *
-     * @param datasetId   The dataset ID
+     * @param params      What to export
      * @param columns     The ordered set of column names
      * @param workspaceId The workspace ID
      * @return A Mono containing the S3/MinIO key of the uploaded file
      */
-    private Mono<String> generateAndUploadCsvStreaming(@NonNull UUID datasetId, @NonNull Set<String> columns,
-            @NonNull String workspaceId) {
+    private Mono<String> generateAndUploadCsvStreaming(@NonNull ExportSource source, @NonNull ExportParams params,
+            @NonNull Set<String> columns, @NonNull String workspaceId) {
         // Enforce S3's hard minimum of 5MB for non-final parts
         int minPartSize = Math.max(exportConfig.getMinPartSize(), S3_MIN_PART_SIZE);
         int maxPartSize = Math.max(exportConfig.getMaxPartSize(), minPartSize);
         int itemBatchSize = exportConfig.getItemBatchSize();
 
-        log.debug("Generating and uploading CSV for dataset '{}' with '{}' columns using multipart upload. " +
+        log.debug("Generating and uploading CSV for '{}' with '{}' columns using multipart upload. " +
                 "Config: minPartSize='{}', maxPartSize='{}', itemBatchSize='{}'",
-                datasetId, columns.size(), minPartSize, maxPartSize, itemBatchSize);
+                params.exportType(), columns.size(), minPartSize, maxPartSize, itemBatchSize);
 
-        String filePath = generateFilePath(workspaceId, datasetId);
+        String filePath = generateFilePath(workspaceId, params);
         List<String> columnList = new ArrayList<>(columns);
 
         // Create CSV header
@@ -162,8 +145,6 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                     // Create state holders for streaming - using AtomicReference for thread safety
                     AtomicInteger partNumber = new AtomicInteger(1);
                     AtomicInteger totalPartsUploaded = new AtomicInteger(0);
-                    AtomicReference<UUID> lastRetrievedId = new AtomicReference<>(null);
-
                     // List to collect part metadata (only partNumber and eTag - minimal memory footprint)
                     // This is necessary for S3 CompleteMultipartUpload API
                     List<MultipartUploadPart> uploadedParts = new CopyOnWriteArrayList<>();
@@ -174,8 +155,8 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                             createNewBuffer(headerBytes, maxPartSize));
 
                     // Stream items reactively and process in batches
-                    return streamAllItems(datasetId, lastRetrievedId, itemBatchSize)
-                            .map(item -> convertItemToCsvRow(item, columnList))
+                    return source.streamRows(params, itemBatchSize)
+                            .map(row -> convertRowToCsv(row, columnList))
                             .buffer(itemBatchSize)
                             .concatMap(rows -> {
                                 ByteArrayOutputStream currentBuffer = bufferRef.get();
@@ -234,7 +215,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                 if (partData.length > 0) {
                                     int currentPartNumber = partNumber.getAndIncrement();
                                     log.debug("Uploading final part '{}' of '{}' bytes for dataset '{}'",
-                                            currentPartNumber, partData.length, datasetId);
+                                            currentPartNumber, partData.length, params.exportType());
 
                                     return uploadPartAndCollect(filePath, uploadId, currentPartNumber, partData,
                                             uploadedParts, totalPartsUploaded)
@@ -244,7 +225,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                 if (uploadedParts.isEmpty() && headerBytes.length > 0) {
                                     int currentPartNumber = partNumber.getAndIncrement();
                                     log.debug("Uploading header-only part '{}' of '{}' bytes for empty dataset '{}'",
-                                            currentPartNumber, headerBytes.length, datasetId);
+                                            currentPartNumber, headerBytes.length, params.exportType());
 
                                     return uploadPartAndCollect(filePath, uploadId, currentPartNumber, headerBytes,
                                             uploadedParts, totalPartsUploaded)
@@ -255,22 +236,23 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                             .flatMap(parts -> {
                                 if (parts.isEmpty()) {
                                     // Edge case: no columns and no items - upload empty CSV
-                                    log.warn("No parts to upload for dataset '{}', uploading empty file", datasetId);
+                                    log.warn("No parts to upload for dataset '{}', uploading empty file",
+                                            params.exportType());
                                     return abortMultipartUpload(filePath, uploadId)
                                             .then(uploadEmptyFile(filePath));
                                 }
                                 log.info("Completing multipart upload for dataset '{}' with '{}' parts",
-                                        datasetId, parts.size());
+                                        params.exportType(), parts.size());
                                 return completeMultipartUpload(filePath, uploadId, parts)
                                         .thenReturn(filePath);
                             })
                             .doOnSuccess(path -> log.info(
                                     "Successfully completed upload for dataset '{}', file: '{}', totalParts: '{}'",
-                                    datasetId, path, totalPartsUploaded.get()))
+                                    params.exportType(), path, totalPartsUploaded.get()))
                             .onErrorResume(error -> {
                                 log.error(
                                         "Failed to generate and upload CSV for dataset '{}', aborting multipart upload",
-                                        datasetId, error);
+                                        params.exportType(), error);
                                 return abortMultipartUpload(filePath, uploadId)
                                         .then(Mono.error(new InternalServerErrorException(
                                                 "Failed to export dataset. Please try again later.")));
@@ -324,30 +306,18 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
      * Streams all dataset items using cursor-based pagination.
      * Repeatedly fetches pages until an empty page or partial page is returned.
      */
-    private Flux<DatasetItem> streamAllItems(UUID datasetId, AtomicReference<UUID> lastRetrievedId, int batchSize) {
-        return Flux.defer(() -> {
-            return datasetItemDao.getItems(datasetId, batchSize, lastRetrievedId.get())
-                    .collectList()
-                    .flatMapMany(items -> {
-                        if (items.isEmpty()) {
-                            // No more items, stop pagination
-                            return Flux.empty();
-                        }
+    /**
+     * Writes a source-produced row in column order; absent keys become empty cells.
+     */
+    private byte[] convertRowToCsv(SequencedMap<String, String> row, List<String> columnList) {
+        return writeCsv(csvPrinter -> {
+            List<String> cells = new ArrayList<>(columnList.size());
 
-                        // Update cursor to last item
-                        lastRetrievedId.set(items.get(items.size() - 1).id());
+            for (String column : columnList) {
+                cells.add(row.getOrDefault(column, ""));
+            }
 
-                        // Emit all items from this page
-                        Flux<DatasetItem> pageFlux = Flux.fromIterable(items);
-
-                        // If we got a full page, there might be more data - recurse
-                        if (items.size() == batchSize) {
-                            return pageFlux.concatWith(streamAllItems(datasetId, lastRetrievedId, batchSize));
-                        }
-
-                        // Partial page means this is the last page
-                        return pageFlux;
-                    });
+            csvPrinter.printRecord(cells);
         });
     }
 
@@ -360,30 +330,6 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
         }
 
         return writeCsv(csvPrinter -> csvPrinter.printRecord(columns));
-    }
-
-    /**
-     * Converts a DatasetItem to a CSV row as bytes.
-     * Returns raw bytes to avoid unnecessary String allocation and subsequent getBytes() call.
-     */
-    private byte[] convertItemToCsvRow(DatasetItem item, List<String> columnList) {
-        return writeCsv(csvPrinter -> {
-            List<String> row = new ArrayList<>(columnList.size());
-            Map<String, JsonNode> data = item.data();
-
-            for (String column : columnList) {
-                JsonNode value = data.get(column);
-                if (value == null || value.isNull()) {
-                    row.add("");
-                } else if (value.isTextual()) {
-                    row.add(value.asText());
-                } else {
-                    row.add(JsonUtils.writeValueAsString(value));
-                }
-            }
-
-            csvPrinter.printRecord(row);
-        });
     }
 
     /**
@@ -474,11 +420,13 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
      * Generates the S3/MinIO file path for the CSV export.
      *
      * @param workspaceId The workspace ID
-     * @param datasetId   The dataset ID
+     * @param params      What to export
      * @return The S3/MinIO key
      */
-    private String generateFilePath(@NonNull String workspaceId, @NonNull UUID datasetId) {
+    private String generateFilePath(@NonNull String workspaceId, @NonNull ExportParams params) {
         String timestamp = Instant.now().toString().replace(":", "-");
-        return String.format("exports/%s/datasets/%s/export_%s.csv", workspaceId, datasetId, timestamp);
+        // The params hash stands in for "which rows" without the path having to know what scopes this export type.
+        return String.format("exports/%s/%s/%s/export_%s.csv", workspaceId, params.exportType(),
+                params.canonicalHash(), timestamp);
     }
 }

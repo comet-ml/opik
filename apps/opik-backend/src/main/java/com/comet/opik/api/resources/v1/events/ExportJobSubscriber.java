@@ -1,9 +1,9 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.domain.CsvDatasetExportProcessor;
-import com.comet.opik.domain.DatasetExportJobService;
-import com.comet.opik.domain.DatasetExportMessage;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.domain.CsvExportProcessor;
+import com.comet.opik.domain.ExportJobService;
+import com.comet.opik.domain.ExportMessage;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -19,19 +19,19 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
  */
 @Slf4j
 @Singleton
-public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExportMessage> {
+public class ExportJobSubscriber extends BaseRedisSubscriber<ExportMessage> {
 
-    private final DatasetExportConfig config;
-    private final DatasetExportJobService jobService;
-    private final CsvDatasetExportProcessor csvProcessor;
+    private final ExportConfig config;
+    private final ExportJobService jobService;
+    private final CsvExportProcessor csvProcessor;
 
     @Inject
-    public DatasetExportJobSubscriber(
-            @NonNull @Config("datasetExport") DatasetExportConfig config,
+    public ExportJobSubscriber(
+            @NonNull @Config("datasetExport") ExportConfig config,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull DatasetExportJobService jobService,
-            @NonNull CsvDatasetExportProcessor csvProcessor) {
-        super(config, redisClient, DatasetExportConfig.PAYLOAD_FIELD, "opik", "dataset_export");
+            @NonNull ExportJobService jobService,
+            @NonNull CsvExportProcessor csvProcessor) {
+        super(config, redisClient, ExportConfig.PAYLOAD_FIELD, "opik", "dataset_export");
         this.config = config;
         this.jobService = jobService;
         this.csvProcessor = csvProcessor;
@@ -63,13 +63,13 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
     }
 
     @Override
-    protected Mono<Void> processEvent(@NonNull DatasetExportMessage message) {
-        log.info("Processing dataset export job: jobId='{}', datasetId='{}', workspaceId='{}'",
-                message.jobId(), message.datasetId(), message.workspaceId());
+    protected Mono<Void> processEvent(@NonNull ExportMessage message) {
+        log.info("Processing export job: jobId='{}', exportType='{}', workspaceId='{}'",
+                message.jobId(), message.params().exportType(), message.workspaceId());
 
         // Set reactive context for the processing
         return jobService.updateJobToProcessing(message.jobId()) // Set status to PROCESSING first
-                .then(csvProcessor.generateAndUploadCsv(message.datasetId()))
+                .then(csvProcessor.generateAndUploadCsv(message.params()))
                 .flatMap(result -> {
                     log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
                             message.jobId(), result.filePath(), result.expiresAt());

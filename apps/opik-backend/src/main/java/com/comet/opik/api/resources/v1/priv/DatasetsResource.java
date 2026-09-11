@@ -7,8 +7,7 @@ import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetExportParams;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -20,6 +19,8 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.api.JsonUploadFormat;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
@@ -30,8 +31,8 @@ import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.CsvDatasetExportService;
 import com.comet.opik.domain.CsvDatasetItemProcessor;
+import com.comet.opik.domain.CsvExportService;
 import com.comet.opik.domain.DatasetCriteria;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
@@ -126,7 +127,7 @@ public class DatasetsResource {
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
     private final @NonNull JsonDatasetItemProcessor jsonProcessor;
     private final @NonNull FeatureFlags featureFlags;
-    private final @NonNull CsvDatasetExportService csvExportService;
+    private final @NonNull CsvExportService csvExportService;
     private final @NonNull AnalyticsService analyticsService;
 
     @GET
@@ -905,10 +906,10 @@ public class DatasetsResource {
     @POST
     @Path("/{id}/export")
     @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.", responses = {
-            @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
-            @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
+            @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = ExportJob.class))),
+            @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = ExportJob.class)))
     })
-    @JsonView(DatasetExportJob.View.Public.class)
+    @JsonView(ExportJob.View.Public.class)
     @RateLimited
     public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
 
@@ -917,9 +918,10 @@ public class DatasetsResource {
         log.info("Starting CSV export for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
 
         // Verify dataset exists
-        service.findById(datasetId);
+        var dataset = service.findById(datasetId);
 
-        DatasetExportJob job = csvExportService.startExport(datasetId)
+        ExportJob job = csvExportService
+                .startExport(DatasetExportParams.builder().datasetId(datasetId).build(), dataset.name())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -927,7 +929,7 @@ public class DatasetsResource {
                 workspaceId);
 
         // Return 202 if new job was created (PENDING status), 200 if existing job found
-        var status = job.status() == DatasetExportStatus.PENDING
+        var status = job.status() == ExportStatus.PENDING
                 ? Response.Status.ACCEPTED
                 : Response.Status.OK;
 
@@ -936,18 +938,18 @@ public class DatasetsResource {
 
     @GET
     @Path("/export-jobs/{jobId}")
-    @Operation(operationId = "getDatasetExportJob", summary = "Get dataset export job status", description = "Retrieves the current status of a dataset export job", responses = {
-            @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
+    @Operation(operationId = "getExportJob", summary = "Get dataset export job status", description = "Retrieves the current status of a dataset export job", responses = {
+            @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = ExportJob.class))),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
-    @JsonView(DatasetExportJob.View.Public.class)
-    public Response getDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
+    @JsonView(ExportJob.View.Public.class)
+    public Response getExportJob(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Getting export job '{}' on workspaceId '{}'", jobId, workspaceId);
 
-        DatasetExportJob job = csvExportService.getJob(jobId)
+        ExportJob job = csvExportService.getJob(jobId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -958,11 +960,11 @@ public class DatasetsResource {
 
     @PUT
     @Path("/export-jobs/{jobId}/mark-viewed")
-    @Operation(operationId = "markDatasetExportJobViewed", summary = "Mark dataset export job as viewed", description = "Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.", responses = {
+    @Operation(operationId = "markExportJobViewed", summary = "Mark dataset export job as viewed", description = "Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.", responses = {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
-    public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
+    public Response markExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -979,11 +981,11 @@ public class DatasetsResource {
 
     @GET
     @Path("/export-jobs")
-    @Operation(operationId = "getDatasetExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
-            @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetExportJob.class))))
+    @Operation(operationId = "getExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
+            @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = ExportJob.class))))
     })
-    @JsonView(DatasetExportJob.View.Public.class)
-    public Response getDatasetExportJobs() {
+    @JsonView(ExportJob.View.Public.class)
+    public Response getExportJobs() {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -1013,7 +1015,7 @@ public class DatasetsResource {
         log.info("Downloading export file for job '{}' on workspaceId '{}'", jobId, workspaceId);
 
         // Get job to extract dataset name for filename
-        DatasetExportJob job = csvExportService.getJob(jobId)
+        ExportJob job = csvExportService.getJob(jobId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -1021,8 +1023,8 @@ public class DatasetsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        // Generate filename from dataset name or fallback to job ID
-        String filename = FileNameUtils.buildDatasetExportFilename(job.datasetName(), jobId);
+        // Generate filename from the resource name snapshotted on the job, or fallback to job ID
+        String filename = FileNameUtils.buildDatasetExportFilename(job.resourceName(), jobId);
 
         log.info("Completed download for export job '{}' on workspaceId '{}'", jobId, workspaceId);
 

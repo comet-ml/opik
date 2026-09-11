@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.domain.CsvDatasetExportProcessor;
-import com.comet.opik.domain.DatasetExportJobService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.domain.CsvExportProcessor;
+import com.comet.opik.domain.ExportJobService;
+import com.comet.opik.infrastructure.ExportConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -16,31 +16,31 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for DatasetExportJobSubscriber lifecycle gating.
+ * Unit tests for ExportJobSubscriber lifecycle gating.
  * Tests verify that the subscriber respects the enabled/disabled configuration.
  */
 @ExtendWith(MockitoExtension.class)
-class DatasetExportJobSubscriberTest {
+class ExportJobSubscriberTest {
 
     @Mock
-    private DatasetExportConfig config;
+    private ExportConfig config;
 
     @Mock
     private RedissonReactiveClient redisClient;
 
     @Mock
-    private DatasetExportJobService jobService;
+    private ExportJobService jobService;
 
     @Mock
-    private CsvDatasetExportProcessor csvProcessor;
+    private CsvExportProcessor csvProcessor;
 
-    private DatasetExportJobSubscriber subscriber;
+    private ExportJobSubscriber subscriber;
 
     @Test
     void start_shouldSkipStartup_whenDisabled() {
         // Given
         when(config.isEnabled()).thenReturn(false);
-        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor));
+        subscriber = spy(new ExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
         subscriber.start();
@@ -53,7 +53,7 @@ class DatasetExportJobSubscriberTest {
     void stop_shouldSkipShutdown_whenDisabled() {
         // Given
         when(config.isEnabled()).thenReturn(false);
-        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor));
+        subscriber = spy(new ExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
         subscriber.stop();

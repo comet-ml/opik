@@ -3,7 +3,7 @@ import { DatasetExportJob } from "@/types/datasets";
 
 export interface ExportJobInfo {
   job: DatasetExportJob;
-  datasetName: string;
+  resourceName: string;
 }
 
 interface DatasetExportState {
@@ -15,7 +15,7 @@ interface DatasetExportState {
   isHydrated: boolean;
 
   // Actions
-  addJob: (job: DatasetExportJob, datasetName: string) => void;
+  addJob: (job: DatasetExportJob, resourceName: string) => void;
   updateJob: (job: DatasetExportJob) => void;
   removeJob: (jobId: string) => void;
   togglePanelExpanded: () => void;
@@ -28,11 +28,11 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
   isPanelExpanded: false,
   isHydrated: false,
 
-  addJob: (job, datasetName) =>
+  addJob: (job, resourceName) =>
     set((state) => {
       // Create new Map with the new job first (most recent at top)
       const newJobs = new Map<string, ExportJobInfo>();
-      newJobs.set(job.id, { job, datasetName });
+      newJobs.set(job.id, { job, resourceName });
       // Then add existing jobs
       for (const [id, jobInfo] of state.activeJobs) {
         if (id !== job.id) {
@@ -77,7 +77,7 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
       for (const job of jobs) {
         newJobs.set(job.id, {
           job,
-          datasetName: job.dataset_name || "Unknown Dataset",
+          resourceName: job.resource_name || "Unknown export",
         });
       }
 

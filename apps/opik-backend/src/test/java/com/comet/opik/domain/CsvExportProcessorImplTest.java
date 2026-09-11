@@ -1,8 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DatasetExportParams;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.domain.export.DatasetExportSource;
+import com.comet.opik.domain.export.ExportSourceRegistry;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,7 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class CsvDatasetExportProcessorImplTest {
+class CsvExportProcessorImplTest {
 
     @Mock
     private DatasetItemDAO datasetItemDao;
@@ -42,9 +45,12 @@ class CsvDatasetExportProcessorImplTest {
     @Mock
     private FileService fileService;
 
-    private DatasetExportConfig exportConfig;
+    @Mock
+    private DatasetService datasetService;
 
-    private CsvDatasetExportProcessorImpl processor;
+    private ExportConfig exportConfig;
+
+    private CsvExportProcessorImpl processor;
 
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final String WORKSPACE_ID = "test-workspace";
@@ -52,7 +58,7 @@ class CsvDatasetExportProcessorImplTest {
     @BeforeEach
     void setUp() {
         // Use real config with default values
-        exportConfig = new DatasetExportConfig();
+        exportConfig = new ExportConfig();
 
         // Mock multipart upload methods (lenient because not all tests use them)
         CreateMultipartUploadResponse multipartResponse = CreateMultipartUploadResponse.builder()
@@ -62,7 +68,11 @@ class CsvDatasetExportProcessorImplTest {
         lenient().when(fileService.uploadPart(any(), any(), anyInt(), any())).thenReturn("test-etag");
         lenient().when(fileService.completeMultipartUpload(any(), any(), any())).thenReturn(null);
 
-        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, exportConfig);
+        // Exercise the dataset path through the real source, so the test covers the seam the processor now uses.
+        var registry = new ExportSourceRegistry(
+                java.util.Set.of(new DatasetExportSource(datasetItemDao, datasetService)));
+
+        processor = new CsvExportProcessorImpl(registry, fileService, exportConfig);
     }
 
     @Test
@@ -84,14 +94,15 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvExportProcessor.CsvExportResult> result = processor
+                .generateAndUploadCsv(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
                 .assertNext(exportResult -> {
                     assertThat(exportResult.filePath())
-                            .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
+                            .startsWith("exports/" + WORKSPACE_ID + "/" + DatasetExportParams.TYPE + "/");
                     assertThat(exportResult.filePath()).endsWith(".csv");
                     assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
@@ -116,14 +127,15 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.empty());
 
         // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvExportProcessor.CsvExportResult> result = processor
+                .generateAndUploadCsv(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
                 .assertNext(exportResult -> {
                     assertThat(exportResult.filePath())
-                            .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
+                            .startsWith("exports/" + WORKSPACE_ID + "/" + DatasetExportParams.TYPE + "/");
                     assertThat(exportResult.filePath()).endsWith(".csv");
                     assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
@@ -152,7 +164,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvExportProcessor.CsvExportResult> result = processor
+                .generateAndUploadCsv(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -185,7 +198,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvExportProcessor.CsvExportResult> result = processor
+                .generateAndUploadCsv(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -206,7 +220,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.error(new RuntimeException("DB error")));
 
         // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvExportProcessor.CsvExportResult> result = processor
+                .generateAndUploadCsv(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -236,7 +251,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvExportProcessor.CsvExportResult> result = processor
+                .generateAndUploadCsv(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
