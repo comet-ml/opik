@@ -138,32 +138,54 @@ class TestStreamIntoBatches:
     """The streaming half, which `split_into_batches` is now built from.
 
     It exists so a caller can hand in a generator and hold one batch of memory
-    instead of the whole sequence, so what these pin down is that it yields the
-    same batches as the eager version and pulls no further ahead than it must.
+    instead of the whole sequence, so what these pin down is the batch boundaries
+    it yields and that it pulls no further ahead than it must.
     """
 
     @pytest.mark.parametrize(
-        "items, limits",
+        "items, limits, expected",
         [
-            ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], {"max_length": 4}),
-            ([1, 2, 3], {"max_length": 10}),
-            ([], {"max_length": 4}),
+            (
+                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                {"max_length": 4},
+                [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10]],
+            ),
+            ([1, 2, 3], {"max_length": 10}, [[1, 2, 3]]),
+            ([], {"max_length": 4}, []),
             (
                 [ONE_MEGABYTE_OBJECT_A] * 2 + [ONE_MEGABYTE_OBJECT_B] * 2,
                 {"max_payload_size_MB": 3.5},
+                [
+                    [
+                        ONE_MEGABYTE_OBJECT_A,
+                        ONE_MEGABYTE_OBJECT_A,
+                        ONE_MEGABYTE_OBJECT_B,
+                    ],
+                    [ONE_MEGABYTE_OBJECT_B],
+                ],
             ),
             (
                 [ONE_MEGABYTE_OBJECT_A] * 2
                 + [[ONE_MEGABYTE_OBJECT_C] * 4]
                 + [ONE_MEGABYTE_OBJECT_B] * 2,
                 {"max_length": 2, "max_payload_size_MB": 3.5},
+                [
+                    [[ONE_MEGABYTE_OBJECT_C] * 4],
+                    [ONE_MEGABYTE_OBJECT_A, ONE_MEGABYTE_OBJECT_A],
+                    [ONE_MEGABYTE_OBJECT_B, ONE_MEGABYTE_OBJECT_B],
+                ],
             ),
         ],
     )
-    def test_stream__yields_what_the_eager_version_returns(self, items, limits):
-        assert list(sequence_splitter.stream_into_batches(items, **limits)) == (
-            sequence_splitter.split_into_batches(items, **limits)
-        )
+    def test_stream__yields_the_documented_batches(self, items, limits, expected):
+        """Pinned literally rather than compared against `split_into_batches`.
+
+        That is now `list(stream_into_batches(...))`, so asserting one against the
+        other would hold for any implementation - including one whose boundaries
+        moved. These are the same boundaries the eager tests above pin, which is
+        what makes them a regression test for the refactor.
+        """
+        assert list(sequence_splitter.stream_into_batches(items, **limits)) == expected
 
     def test_stream__generator_input__needs_no_length(self):
         """A `Sequence` was required only because the eager version called `len()`."""

@@ -859,7 +859,12 @@ class TestStreamingInsert:
         def counting_source():
             nonlocal pulled
             for item in _make_items(item_count):
-                pulled += 1
+                # Under the same lock the uploads read it: the producer runs on
+                # the submitting thread and the uploads on the pool's, so an
+                # unguarded increment would make `peak_gap` a reading of an
+                # arbitrary interleaving rather than of a consistent snapshot.
+                with lock:
+                    pulled += 1
                 yield item
 
         def tracked_upload(*args, **kwargs):
