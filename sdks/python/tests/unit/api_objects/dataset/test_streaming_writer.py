@@ -8,6 +8,7 @@ import uuid
 import pytest
 
 from opik.api_objects.dataset import streaming_writer
+from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
 
 
@@ -330,3 +331,97 @@ def test_add__batch_never_exceeds_the_payload_cap():
         assert len(json.dumps(payload["items"]).encode("utf-8")) <= 300 or (
             len(payload["items"]) == 1
         ), "Only a single oversized item may fill a request past the cap"
+
+
+# --------------------------------------------------------------------------- #
+# the hand-written mapper against the model it mirrors
+# --------------------------------------------------------------------------- #
+def _generated_form(**payload):
+    """What the generated client puts on the wire when built from the same payload.
+
+    `exclude_unset` is how it omits fields the conversion never touched -- `tags` -- while
+    still serialising an explicit `None` as null.
+    """
+    return json.loads(DatasetItemWrite(**payload).json(exclude_unset=True))
+
+
+@pytest.mark.parametrize(
+    "evaluators, execution_policy",
+    [
+        pytest.param(None, None, id="both-null"),
+        pytest.param(
+            [{"name": "judge", "type": "llm_judge", "config": {"model": "gpt-4"}}],
+            {"runs_per_item": 3, "pass_threshold": 2},
+            id="both-set",
+        ),
+        pytest.param(
+            [{"name": "judge", "type": "llm_judge", "config": {}}],
+            None,
+            id="evaluators-only",
+        ),
+        pytest.param(None, {"runs_per_item": 1, "pass_threshold": 1}, id="policy-only"),
+    ],
+)
+def test_item_payload__matches_the_generated_model(evaluators, execution_policy):
+    """The mapper is hand-written; the model it mirrors is generated and can move."""
+    payload = streaming_writer.item_payload(
+        item_id="item-1",
+        trace_id=None,
+        span_id=None,
+        source="sdk",
+        data={"input": "q"},
+        description=None,
+        evaluators=evaluators,
+        execution_policy=execution_policy,
+    )
+
+    assert json.loads(json.dumps(payload)) == _generated_form(**payload), (
+        "The hand-written payload and the generated model disagree on the wire form"
+    )
+
+
+def test_item_payload__field_names_match_the_model():
+    """A field the model drops, or one it has that we never send, both matter."""
+    payload = streaming_writer.item_payload(
+        item_id="item-1",
+        trace_id="t",
+        span_id="s",
+        source="sdk",
+        data={"input": "q"},
+        description="d",
+        evaluators=None,
+        execution_policy=None,
+    )
+
+    model_fields = set(DatasetItemWrite.model_fields)
+    assert set(payload) <= model_fields, (
+        f"Payload carries fields the model does not: {set(payload) - model_fields}"
+    )
+    assert model_fields - set(payload) == {"tags"}, (
+        "Only `tags` should be absent; the conversion has never set it"
+    )
+
+
+def test_item_payload__explicit_nulls_are_sent_not_omitted():
+    """`DatasetItem` leaves these unset far more often than not, and null is the signal."""
+    payload = streaming_writer.item_payload(
+        item_id=None,
+        trace_id=None,
+        span_id=None,
+        source="sdk",
+        data={"input": "q"},
+        description=None,
+        evaluators=None,
+        execution_policy=None,
+    )
+
+    assert payload == {
+        "id": None,
+        "trace_id": None,
+        "span_id": None,
+        "source": "sdk",
+        "data": {"input": "q"},
+        "description": None,
+        "evaluators": None,
+        "execution_policy": None,
+    }

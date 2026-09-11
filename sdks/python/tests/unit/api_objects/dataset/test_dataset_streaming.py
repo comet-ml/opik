@@ -589,9 +589,6 @@ def test_insert_delete_reinsert__numeric_id__the_item_is_not_skipped():
     assert len(capture.items) == 1
 
     dataset.delete(["123"])
-    assert dataset._id_to_hash == {}, "The delete must drop the hash it cached"
-    assert dataset._hashes == set()
-
     dataset.insert([item], deduplication=True)
 
     assert len(capture.items) == 2, (

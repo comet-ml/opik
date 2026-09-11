@@ -956,34 +956,6 @@ class Dataset(DatasetExportOperations):
         self._parallel_insert_supported_cache = supported
         return supported
 
-    def _deduplicate(
-        self, items: List[dataset_item.DatasetItem]
-    ) -> List[dataset_item.DatasetItem]:
-        """Drop items whose content hash was already seen locally or on the backend."""
-        # Lazy-sync against the backend the first time we insert into a
-        # dataset that was fetched from the backend (list or get-by-name
-        # factory), so content-hash dedup still works without paying an
-        # N+1 sync at list time.
-        if not self._hashes_synced:
-            self.__internal_api__sync_hashes__()
-
-        deduplicated_items: List[dataset_item.DatasetItem] = []
-        for item in items:
-            item_hash = item.content_hash()
-
-            if item_hash in self._hashes:
-                LOGGER.debug(
-                    "Duplicate item found with hash: %s - ignored the event",
-                    item_hash,
-                )
-                continue
-
-            deduplicated_items.append(item)
-            self._hashes.add(item_hash)
-            self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
-
-        return deduplicated_items
-
     def __internal_api__insert_items_as_dataclasses__(
         self,
         items: Iterable[dataset_item.DatasetItem],
@@ -1086,11 +1058,13 @@ class Dataset(DatasetExportOperations):
 
         Args:
             items: Dicts (or ``DatasetItem`` objects) to add to the dataset. Any
-                iterable is accepted, including a generator, and it is consumed lazily so
-                the whole upload is never held in memory. A list keeps working as before,
-                and is checked before the first request goes out; from a generator an
-                invalid item can only be found once earlier items have been sent, and
-                those stay persisted.
+                iterable is accepted, including a generator, and it is consumed lazily, so
+                no item is retained once its request has been sent. Deduplication still
+                keeps one content digest per item for the life of the ``Dataset`` -- pass
+                ``deduplication=False`` for an upload that retains nothing at all. A
+                list keeps working as before, and is checked before the first request goes
+                out; from a generator an invalid item can only be found once earlier items
+                have been sent, and those stay persisted.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -1220,11 +1194,21 @@ class Dataset(DatasetExportOperations):
         Delete items from the dataset. A new dataset version will be created.
 
         Args:
-            items_ids: List of item ids to delete.
+            items_ids: List of item ids to delete. Ids are normalised the way
+                :meth:`insert` normalises them, so an item inserted with a numeric id can
+                be deleted by either its numeric or its string form.
+
+        Raises:
+            ValueError: If an id is ``None``. The item's position in the input is
+                included in the message.
         """
         # Through the same canonicalisation the upload used, so an id given here in a
         # different form than it was inserted in still matches the cached hash.
-        canonical_ids = [streaming_writer.canonical_id(id_) for id_ in items_ids]
+        canonical_ids = []
+        for index, id_ in enumerate(items_ids):
+            if id_ is None:
+                raise ValueError(f"Dataset item id at index {index} is None")
+            canonical_ids.append(streaming_writer.canonical_id(id_))
         batches = sequence_splitter.split_into_batches(
             canonical_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )

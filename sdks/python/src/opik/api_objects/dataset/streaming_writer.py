@@ -4,7 +4,8 @@ The batching path accumulates every item, splits the list into batches, then ser
 compresses each batch. That holds the whole upload in memory and walks each item several
 times over. This writer serialises a row once as it is added, feeds the bytes straight into
 a zlib stream, and hands a finished request body to a callback when a threshold trips, so
-peak memory tracks one in-flight body rather than the upload.
+what it holds is one in-flight body rather than the upload. What the caller keeps around
+it -- deduplication digests, say -- is its own business.
 
 Serialisation here is for the wire only. Content hashes are computed elsewhere, with the
 standard library, so item identity never depends on which serialiser is in use.
@@ -73,7 +74,7 @@ class SendWorkersGoneError(RuntimeError):
     """No worker thread is left to send a dataset upload batch."""
 
 
-def _encode_flexible(value: Any) -> Any:
+def encode_flexible(value: Any) -> Any:
     """One value the wire serialiser could not encode, in the form the client sent before.
 
     Called only for values a serialiser rejects, so ordinary JSON-native items never pay
@@ -85,7 +86,7 @@ def _encode_flexible(value: Any) -> Any:
 
 
 def _dumps_stdlib(value: Any) -> bytes:
-    return json.dumps(value, default=_encode_flexible).encode("utf-8")
+    return json.dumps(value, default=encode_flexible).encode("utf-8")
 
 
 def _dumps_orjson(value: Any) -> bytes:
@@ -93,7 +94,7 @@ def _dumps_orjson(value: Any) -> bytes:
     # so the wire form of a date does not depend on which serialiser is in use.
     try:
         return orjson.dumps(
-            value, default=_encode_flexible, option=orjson.OPT_PASSTHROUGH_DATETIME
+            value, default=encode_flexible, option=orjson.OPT_PASSTHROUGH_DATETIME
         )
     except TypeError:
         # Non-string mapping keys, which `json.dumps` coerces. Supporting them costs about
@@ -101,7 +102,7 @@ def _dumps_orjson(value: Any) -> bytes:
         # instead of every item paying for the option.
         return orjson.dumps(
             value,
-            default=_encode_flexible,
+            default=encode_flexible,
             option=orjson.OPT_PASSTHROUGH_DATETIME | orjson.OPT_NON_STR_KEYS,
         )
 

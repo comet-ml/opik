@@ -7,13 +7,15 @@ wire serialiser every stored digest would stop matching and dedup would silently
 against existing datasets. These tests are the gate on that.
 """
 
+import datetime
+import decimal
 import hashlib
 import json
 from unittest.mock import Mock
 
 import pytest
 
-from opik.api_objects.dataset import dataset_item
+from opik.api_objects.dataset import dataset_item, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 
 from .upload_capture import UploadCapture, make_dataset
@@ -94,3 +96,54 @@ def test_insert__duplicate_far_apart_in_the_stream__still_caught():
         "A duplicate separated by many items must still be dropped"
     )
     assert len(capture.items) == 51
+
+
+# --------------------------------------------------------------------------- #
+# values that used to have no digest at all
+# --------------------------------------------------------------------------- #
+FLEXIBLE_SHAPES = [
+    pytest.param(
+        {"when": datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone.utc)},
+        id="datetime",
+    ),
+    pytest.param({"raw": b"bytes"}, id="bytes"),
+    pytest.param({"tags": {"a"}}, id="set"),
+    pytest.param({"amount": decimal.Decimal("1.5")}, id="decimal"),
+]
+
+
+@pytest.mark.parametrize("content", FLEXIBLE_SHAPES)
+def test_content_hash__flexible_value__hashes_instead_of_raising(content):
+    """The upload accepts these, so deduplication -- the default -- must not reject them."""
+    digest = dataset_item.DatasetItem(**content).content_hash()
+
+    assert len(digest) == 64
+    assert digest == dataset_item.DatasetItem(**content).content_hash(), (
+        "The digest must be stable across calls"
+    )
+
+
+@pytest.mark.parametrize("content", ITEM_SHAPES)
+def test_content_hash__ordinary_value__does_not_use_the_fallback(content, monkeypatch):
+    """The fallback must be unreachable for anything that already serialises.
+
+    Its bytes would be the same here, so equality with the legacy digest cannot prove the
+    old path was taken; making the encoder explode does.
+    """
+
+    def explode(value):
+        raise AssertionError("the flexible encoder must not be consulted")
+
+    monkeypatch.setattr(streaming_writer, "encode_flexible", explode)
+
+    assert dataset_item.DatasetItem(**content).content_hash() == _legacy_digest(
+        dataset_item.DatasetItem(**content).get_content()
+    )
+
+
+def test_content_hash__unhashable_value__still_raises():
+    class NotSerializable:
+        pass
+
+    with pytest.raises(TypeError):
+        dataset_item.DatasetItem(input=NotSerializable()).content_hash()
