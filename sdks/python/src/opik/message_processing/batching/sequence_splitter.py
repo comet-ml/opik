@@ -73,9 +73,11 @@ def stream_into_batches(
 ) -> Iterator[List[T]]:
     """Yield batches as they fill, so an input that is never materialised can be batched.
 
-    The rules live here rather than being restated by a streaming caller: an item at or
-    over the size cap is yielded on its own, and the batch being filled stays open rather
-    than being cut short by it.
+    The rules live here rather than being restated by a streaming caller. An item at or
+    over the size cap is yielded on its own, after whatever was being filled -- so the
+    input's order survives batching. It used to be yielded first, leaving the accumulating
+    batch open; a writer that compresses into one open body cannot hold a batch aside to
+    emit another before it, so that ordering could not be reproduced by every caller.
     """
     assert (max_payload_size_MB is not None) or (max_length is not None), (
         "At least one limitation must be set for splitting"
@@ -93,6 +95,9 @@ def stream_into_batches(
         item_size_MB = _get_expected_payload_size_MB(item)
 
         if item_size_MB >= size_limit_MB:
+            if len(current_batch) > 0:
+                yield current_batch
+                current_batch, current_batch_size_MB = [], 0.0
             yield [item]
             continue
 

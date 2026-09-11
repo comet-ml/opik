@@ -516,3 +516,59 @@ def test_insert__rest_client_only__generator_input__earlier_items_are_already_se
     assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 4, (
         "The items before the invalid one are sent, as the docstring says"
     )
+
+
+# --------------------------------------------------------------------------- #
+# the two upload paths must agree
+# --------------------------------------------------------------------------- #
+def _payloads_with_an_oversized_item():
+    """Small, small, one item past the cap, small -- the boundary case that reorders."""
+    return [
+        {"i": 0, "input": "a" * 50},
+        {"i": 1, "input": "b" * 50},
+        {"i": 2, "input": "c" * 4000},
+        {"i": 3, "input": "d" * 50},
+    ]
+
+
+def test_insert__oversized_item__both_paths_emit_the_same_requests(monkeypatch):
+    """Same input, same batches, same order, whichever transport sends it."""
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)
+
+    capture = UploadCapture()
+    streaming = make_dataset(Dataset, Mock(), capture)
+    streaming.insert(_payloads_with_an_oversized_item(), num_threads=1)
+    via_streaming = [[item["data"]["i"] for item in batch] for batch in capture.batches]
+
+    mock_rest_client = Mock()
+    fallback = _fallback_dataset(mock_rest_client)
+    fallback.insert(_payloads_with_an_oversized_item(), num_threads=1)
+    create = mock_rest_client.datasets.create_or_update_dataset_items
+    via_fallback = [
+        [item.data["i"] for item in call.kwargs["items"]]
+        for call in create.call_args_list
+    ]
+
+    assert via_streaming == via_fallback, "The transports disagree on batching"
+    assert via_streaming == [[0, 1], [2], [3]], (
+        "The oversized item gets its own request, and the input order is kept"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# identifiers on the wire
+# --------------------------------------------------------------------------- #
+def test_insert__numeric_item_id__sent_as_a_string_on_both_paths():
+    """`DatasetItem` skips validating its id, so a number reaches the writer unchecked."""
+    capture = UploadCapture()
+    streaming = make_dataset(Dataset, Mock(), capture)
+    streaming.insert([{"id": 123, "input": {"k": "v"}}])
+
+    assert capture.items[0]["id"] == "123", "A numeric id must not go out as a number"
+
+    mock_rest_client = Mock()
+    fallback = _fallback_dataset(mock_rest_client)
+    fallback.insert([{"id": 123, "input": {"k": "v"}}])
+
+    sent = mock_rest_client.datasets.create_or_update_dataset_items.call_args.kwargs
+    assert sent["items"][0].id == "123", "The fallback must agree, not reject it"

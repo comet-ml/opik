@@ -46,11 +46,13 @@ def test_split_list_into_batches__by_memory_and_by_size():
         items, max_length=2, max_payload_size_MB=3.5
     )
 
-    # Object C comes before object A because if item is bigger than the max payload size
-    # it is immediately added to the result batches list before batch which is currently accumulating
+    # An item bigger than the max payload size gets a batch to itself, and the batch that
+    # was accumulating is closed before it rather than after, so the batches come out in
+    # the order the items went in. A writer that compresses straight into one open request
+    # body cannot emit a later item first, and both have to batch an input the same way.
     assert batches == [
-        [FOUR_MEGABYTE_OBJECT_C],
         [ONE_MEGABYTE_OBJECT_A, ONE_MEGABYTE_OBJECT_A],
+        [FOUR_MEGABYTE_OBJECT_C],
         [ONE_MEGABYTE_OBJECT_B, ONE_MEGABYTE_OBJECT_B],
     ]
 

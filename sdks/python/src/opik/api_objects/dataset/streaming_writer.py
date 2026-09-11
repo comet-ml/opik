@@ -182,9 +182,10 @@ class StreamingBatchWriter:
 
         # Close the batch before an item that would take it past the cap rather than
         # after, so an item at or over the cap on its own ends up in a request of its own
-        # -- where the batching splitter has always put it. A request rejected for its
-        # size then fails that one row instead of every row that shared its batch.
-        if self._items > 0 and self._logical_bytes + 1 + len(payload) >= (
+        # -- where the batching splitter puts it. A request rejected for its size then
+        # fails that one row instead of every row that shared its batch. The comparison is
+        # the splitter's own, strictness included, so both paths group an input alike.
+        if self._items > 0 and self._logical_bytes + 1 + len(payload) > (
             self._max_payload_bytes
         ):
             self.flush()
@@ -317,6 +318,10 @@ class BoundedSendPool:
             raise self._error
 
 
+def _as_optional_str(value: Any) -> Optional[str]:
+    return value if value is None or isinstance(value, str) else str(value)
+
+
 def item_payload(
     *,
     item_id: Optional[str],
@@ -334,11 +339,17 @@ def item_payload(
     the model declares `tags` as well, but the conversion never sets it, and the generated
     client omits fields that were never set while serialising explicit `None`s as null.
     Anything added here that the generated client does not send would change the request.
+
+    The three identifiers are forced to strings because `DatasetItem` declares them
+    `SkipValidation[str]` and so passes whatever it was given straight through. Serialising
+    one of those as a JSON number would put an id on the wire that the REST contract does
+    not allow, and it is the same conversion pydantic did for these fields before it
+    stopped coercing, so callers that have always passed a number keep working.
     """
     return {
-        "id": item_id,
-        "trace_id": trace_id,
-        "span_id": span_id,
+        "id": _as_optional_str(item_id),
+        "trace_id": _as_optional_str(trace_id),
+        "span_id": _as_optional_str(span_id),
         "source": source,
         "data": data,
         "description": description,
