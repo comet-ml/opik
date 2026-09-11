@@ -39,6 +39,7 @@ public class McpOAuthConfig {
     // Java-side defaults on the settings added after the first release, so an externally supplied mcpOAuth block
     // that predates them still validates.
     @Valid @JsonProperty
+    @Builder.Default
     @NotNull private Duration refreshTokenAbsoluteTtl = Duration.ofDays(30);
 
     @Valid @JsonProperty
@@ -48,9 +49,11 @@ public class McpOAuthConfig {
     @NotNull private Duration refreshRotationGrace;
 
     @Valid @JsonProperty
+    @Builder.Default
     @Positive private int refreshRotationMaxRetries = 10;
 
     @Valid @JsonProperty
+    @Builder.Default
     @NotNull private Duration refreshLockLease = Duration.ofSeconds(10);
 
     @Valid @JsonProperty
