@@ -3255,8 +3255,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         scope: q.scope ?? '',
         commentsEnabled: q.comments_enabled,
         instructions: q.instructions ?? '',
+        // `== null` rather than `=== undefined`: the API omits the key today
+        // for a queue created without automation, but an explicit `null` is the
+        // other shape it is free to serialise, and dereferencing that would
+        // throw a TypeError instead of returning the null this promises.
         automation:
-          q.automation === undefined
+          q.automation == null
             ? null
             : {
                 enabled: Boolean(q.automation.enabled),
