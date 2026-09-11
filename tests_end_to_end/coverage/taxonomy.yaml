@@ -770,6 +770,7 @@ areas:
     spec_dir: alerts
     specs:
       - alerts/alerts-crud.spec.ts
+      - alerts/alert-name-suggestion.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }
       create-alert:        { covered: true,  tier: t1-smoke }
@@ -778,6 +779,12 @@ areas:
       webhook-destination: { covered: true,  tier: t1-smoke }
       enable-disable:      { covered: true,  tier: t2-cuj }
       delete-alert:        { covered: true,  tier: t2-cuj }
+      # The create form names a new alert after its triggers, and stops once
+      # the user types. Covered end-to-end rather than only in unit tests: the
+      # string building is pinned by alertNameHelpers.test.ts, but the wiring
+      # (does the field fill, does typing win, is the "(2)" counter decided
+      # against the project's real alerts) is where the bugs are.
+      suggest-alert-name:  { covered: true,  tier: t2-cuj }
       # "Test connection" / "Test trigger" POST the draft alert to the endpoint
       # in the form. Asserting a *success* needs a receiver the suite controls;
       # against example.com the mutation answers failure, so a passing test
