@@ -181,6 +181,11 @@ test.describe(
           '@cap:dashboards.metric-date-range',
           '@cap:dashboards.create-dashboard',
           '@cap:dashboards.add-widget',
+          // The widget is scoped to one project and given its metric through
+          // the widget dialog before the range is touched at all — the same
+          // assertions project-span-metrics files under this key. Untagged it
+          // would be coverage the map cannot see.
+          '@cap:dashboards.configure-widget',
         ],
       },
       async ({

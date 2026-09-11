@@ -252,6 +252,8 @@ areas:
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
       - trace-explore/span-cost-resolution.spec.ts
+      - trace-explore/span-kpi-cards.spec.ts
+      - trace-explore/spans-view-pagination.spec.ts
       - trace-explore/trace-attachments.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-explore-smoke.spec.ts
@@ -381,6 +383,7 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-metrics-weekly-interval.spec.ts
       - dashboards/project-span-metrics.spec.ts
       - dashboards/workspace-span-metrics.spec.ts
     capabilities:
@@ -392,7 +395,7 @@ areas:
       add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
       configure-widget:     { covered: true,  tier: t2-cuj, note: "scoping a Time series widget to one project and picking its metric through the widget dialog, plus the data contract of the per-project read it then makes (POST /projects/{id}/metrics across every MetricType and span breakdown); the widget dialog's remaining options — chart type, filters, group by, sub-metric — are uncovered" }
       widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
-      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget; also the WEEKLY branch a range longer than 30 days takes — every MetricType served at WEEKLY on the per-project endpoint, buckets exactly seven days apart, and a Past 60 days widget re-reading at WEEKLY and still drawing its chart. The alltime preset is NOT covered: it sends no interval_start and is refused with a 400 before any WEEKLY query runs" }
 
   # ===================== DEVELOPMENT =====================
 
@@ -829,9 +832,10 @@ areas:
     spec_dir: projects
     specs:
       - projects/project-delete.spec.ts
+      - projects/project-stats-far-future-id.spec.ts
       - projects/projects-list-stats.spec.ts
     capabilities:
-      list-projects:         { covered: true,  tier: t2-cuj }
+      list-projects:         { covered: true,  tier: t2-cuj, note: "the list and its 30-day windowed stat columns, at the API and rendered in the table; also a trace whose UUIDv7 id embeds mid-2200 — excluded from the windowed trace count and from the error count at every window, while still counted by the unwindowed read" }
       create-project:        { covered: false }
       delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }
