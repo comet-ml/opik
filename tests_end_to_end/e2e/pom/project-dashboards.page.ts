@@ -82,8 +82,14 @@ export class ProjectDashboardsPage {
   async expectSelectedView(viewName: string): Promise<void> {
     await test.step(`The view selector shows "${viewName}"`, async () => {
       const trigger = this.viewSelector(viewName);
-      await expect(trigger, `the selected view is "${viewName}"`).toBeVisible();
+      // Count first, then visibility. `toBeVisible()` on a name that matched
+      // two controls raises a strict-mode violation instead of this
+      // assertion's message, so the ambiguity would be reported as a
+      // Playwright internal rather than as "the name is ambiguous" — and a
+      // second match that is only transient would fail the step outright
+      // rather than being waited out.
       await expect(trigger, `"${viewName}" names exactly one control`).toHaveCount(1);
+      await expect(trigger, `the selected view is "${viewName}"`).toBeVisible();
     });
   }
 

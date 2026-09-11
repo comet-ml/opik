@@ -104,7 +104,12 @@ test.describe(
           // other runs would defeat a count comparison, but it cannot defeat
           // this — one foreign, project-bound row is a failure however many
           // rows there are.
-          for (const project of [projectA, projectB]) {
+          // Both directions, from one read each. Checking only A's list would
+          // pass against a backend that had simply pinned every answer to A.
+          for (const { project, ownView, otherView } of [
+            { project: projectA, ownView: viewA, otherView: viewB },
+            { project: projectB, ownView: viewB, otherView: viewA },
+          ]) {
             const scoped = await backendClient.findInsightsViews({ projectId: project.id });
             const foreign = scoped.filter(
               (view) => view.projectId !== null && view.projectId !== project.id,
@@ -118,13 +123,12 @@ test.describe(
             expect(ids, `${project.name} is offered the project-less view`).toContain(
               legacyView.id,
             );
+            expect(ids, `${project.name} is offered its own view`).toContain(ownView.id);
+            expect(
+              ids,
+              `${project.name} is not offered the other project's view`,
+            ).not.toContain(otherView.id);
           }
-
-          const scopedToA = (await backendClient.findInsightsViews({ projectId: projectA.id })).map(
-            (view) => view.id,
-          );
-          expect(scopedToA, "A is offered A's view").toContain(viewA.id);
-          expect(scopedToA, "A is not offered B's view").not.toContain(viewB.id);
         });
       },
     );
