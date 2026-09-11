@@ -3,6 +3,7 @@ import decimal
 import enum
 import gzip
 import json
+import threading
 import uuid
 
 import pytest
@@ -425,3 +426,44 @@ def test_item_payload__explicit_nulls_are_sent_not_omitted():
         "evaluators": None,
         "execution_policy": None,
     }
+
+
+def test_pool__workers_follow_the_upload_not_the_ceiling():
+    """`num_threads` is a ceiling. A three-body upload must not start sixty-four threads."""
+    pool = streaming_writer.BoundedSendPool(lambda body: None, num_threads=64)
+
+    assert pool._workers == [], "No worker should exist before there is a body to send"
+
+    for _ in range(3):
+        pool.submit(b"body", 1)
+    pool.close()
+
+    assert len(pool._workers) <= 3, (
+        f"Started {len(pool._workers)} threads for three bodies"
+    )
+
+
+def test_pool__sustained_load__grows_to_the_ceiling_and_no_further():
+    """Growing lazily must not cost concurrency when the upload actually needs it."""
+    release = threading.Event()
+    started = threading.Semaphore(0)
+
+    def blocked_send(body: bytes) -> None:
+        started.release()
+        release.wait(5)
+
+    pool = streaming_writer.BoundedSendPool(blocked_send, num_threads=8)
+    try:
+        for expected in range(1, 9):
+            pool.submit(b"body", 1)
+            # Wait for the body to be picked up, so the next submit sees no idle worker.
+            assert started.acquire(timeout=5), "the body was never picked up"
+            assert len(pool._workers) == expected, (
+                "A body with every worker busy should have grown the pool"
+            )
+
+        pool.submit(b"body", 1)
+        assert len(pool._workers) == 8, "num_threads is a ceiling and must hold"
+    finally:
+        release.set()
+        pool.close()

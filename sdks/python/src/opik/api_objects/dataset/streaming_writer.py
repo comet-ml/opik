@@ -232,8 +232,10 @@ class BoundedSendPool:
     number of bodies in flight.
 
     With a single worker the body is sent inline, which keeps the common case free of
-    threads. The first failure is re-raised to the producer; as before there is no
-    rollback, so bodies already accepted stay persisted.
+    threads, and above that workers are started as bodies arrive rather than up front, so
+    the count follows the upload rather than the ceiling the caller allowed. The first
+    failure is re-raised to the producer; as before there is no rollback, so bodies
+    already accepted stay persisted.
     """
 
     def __init__(
@@ -250,20 +252,35 @@ class BoundedSendPool:
         if not self._threaded:
             return
 
+        self._max_workers = num_threads
+        self._idle = 0
         self._queue: "queue.Queue[Optional[bytes]]" = queue.Queue(
             maxsize=max_pending if max_pending is not None else num_threads * 2
         )
         self._lock = threading.Lock()
-        self._workers = [
-            threading.Thread(target=self._worker, daemon=True)
-            for _ in range(num_threads)
-        ]
-        for worker in self._workers:
+
+    def _grow(self) -> None:
+        """Add a worker only when there is no idle one to take the next body.
+
+        `num_threads` is a ceiling, not an order: `ThreadPoolExecutor` -- which the other
+        upload path uses directly -- starts a thread per submitted task up to its own
+        ceiling, so a three-batch upload does not start sixty-four threads because the
+        caller allowed that many.
+        """
+        with self._lock:
+            if self._idle > 0 or len(self._workers) >= self._max_workers:
+                return
+            worker = threading.Thread(target=self._worker, daemon=True)
             worker.start()
+            self._workers.append(worker)
 
     def _worker(self) -> None:
         while True:
+            with self._lock:
+                self._idle += 1
             body = self._queue.get()
+            with self._lock:
+                self._idle -= 1
             try:
                 if body is None:
                     return
@@ -301,6 +318,7 @@ class BoundedSendPool:
             self._send(body)
             return
         self._raise_if_failed()
+        self._grow()
         self._put(body)
 
     def close(self) -> None:
