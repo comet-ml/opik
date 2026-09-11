@@ -66,7 +66,7 @@ class StreamingBatchWriter:
         max_payload_bytes: int,
         max_items: int,
         flush_interval_seconds: Optional[float] = None,
-        gzip_level: int = 6,
+        gzip_level: int,
         use_orjson: bool = True,
     ) -> None:
         self._flush_callback = flush_callback
