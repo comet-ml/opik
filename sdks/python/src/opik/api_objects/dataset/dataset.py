@@ -815,7 +815,11 @@ class Dataset(DatasetExportOperations):
 
         def send() -> None:
             response = httpx_client.send_prepared_json(
-                httpx_client_, base_url, "v1/private/datasets/items", body
+                httpx_client_,
+                base_url,
+                "v1/private/datasets/items",
+                body,
+                headers=httpx_client.wrapper_headers(self._rest_client),
             )
             if response.status_code >= 300:
                 raise ApiError(

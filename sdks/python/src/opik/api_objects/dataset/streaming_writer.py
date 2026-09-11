@@ -33,10 +33,12 @@ LOGGER = logging.getLogger(__name__)
 try:
     import orjson
 except ImportError:  # pragma: no cover
-    # orjson is a declared dependency, so this is a broken or stripped install rather
-    # than a supported configuration. Degrading to the standard library keeps such an
-    # install working instead of failing at import; turning the serialiser off on
-    # purpose is what `enable_orjson_serialization` is for.
+    # Not dead code: orjson is declared for every platform that has a wheel, and
+    # deliberately not required on Windows ARM64 below Python 3.11, where none is
+    # published. The standard library is the supported serialiser there, so this branch
+    # is a real configuration rather than defensive coding -- do not delete it without
+    # revisiting that marker in setup.py. Turning the serialiser off on purpose is a
+    # separate thing, and is what `enable_orjson_serialization` is for.
     orjson = None  # type: ignore[assignment]
 
 # gzip container rather than a raw deflate stream, matching what the server expects.

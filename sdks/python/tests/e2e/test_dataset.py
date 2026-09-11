@@ -12,6 +12,7 @@ import opik.exceptions
 from opik import synchronization
 
 from opik.api_objects.dataset import dataset, dataset_item
+from opik.rest_api import client as rest_api_client
 from opik.api_objects import constants, helpers
 from . import verifiers
 from ..testlib import generate_project_name
@@ -765,6 +766,46 @@ def test_insert__dataset_built_from_a_rest_client__stores_identical_items(
     assert _streamed_content(streaming_dataset) == _streamed_content(
         fallback_dataset
     ), "A Dataset built from a REST client alone must store the same item"
+
+
+def test_insert__standalone_rest_client__uploads_authenticated(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """A REST client configured on its own must upload with its own credentials.
+
+    `Opik` puts auth and workspace headers on the httpx client, so a Dataset built from
+    its REST client would upload authenticated no matter what the sender did. A public
+    `OpikApi` built directly keeps them on the wrapper and the generated client applies
+    them per request -- so this is the construction that catches a prepared-body sender
+    that forgets them, and the only one that reaches a real server to prove it.
+    """
+    config = opik_client.config
+    rest_client = rest_api_client.OpikApi(
+        base_url=config.url_override,
+        api_key=config.api_key,
+        workspace_name=config.workspace,
+    )
+    try:
+        name = f"{dataset_name}-standalone-rest-client"
+        opik_client.create_dataset(
+            name, description="E2E standalone REST client", project_name=PROJECT_NAME
+        )
+        standalone = dataset.Dataset(
+            name=name,
+            description="E2E standalone REST client",
+            project_name=PROJECT_NAME,
+            rest_client=rest_client,
+        )
+
+        items = [{"input": {"question": f"question {i}"}} for i in range(3)]
+        standalone.insert(items)
+
+        _wait_for_item_count(standalone, len(items))
+        assert {
+            item["input"]["question"] for item in _stream_all_items(standalone)
+        } == {f"question {i}" for i in range(len(items))}
+    finally:
+        rest_client._client_wrapper.httpx_client.httpx_client.close()
 
 
 def test_insert__request_compression_disabled__items_are_still_stored(

@@ -105,11 +105,31 @@ def compresses_json_requests(client: httpx.Client) -> bool:
     return compress
 
 
+def wrapper_headers(rest_client: Any) -> Dict[str, str]:
+    """The headers the generated client applies to each request it sends.
+
+    Auth and workspace live on the generated client's *wrapper*, not on the httpx client,
+    whenever the REST client was built directly -- `OpikApi(api_key=..., workspace_name=...)`.
+    A client built by `Opik` carries them on the httpx client instead, so this repeats
+    what is already there. Sending a prepared body talks to the httpx client, so without
+    this a standalone REST client would upload unauthenticated.
+
+    Returns nothing for a REST client that is not a generated one, which has no wrapper.
+    """
+    wrapper = getattr(rest_client, "_client_wrapper", None)
+    get_headers = getattr(wrapper, "get_headers", None)
+    headers = get_headers() if callable(get_headers) else None
+    if not isinstance(headers, dict):
+        return {}
+    return {key: value for key, value in headers.items() if isinstance(value, str)}
+
+
 def send_prepared_json(
     client: httpx.Client,
     base_url: str,
     path: str,
     body: bytes,
+    headers: Optional[Dict[str, str]] = None,
 ) -> httpx.Response:
     """PUT an already-serialised JSON body.
 
@@ -122,11 +142,15 @@ def send_prepared_json(
     url = urllib.parse.urljoin(
         base_url if base_url.endswith("/") else base_url + "/", path
     )
-    headers = {"Content-Type": "application/json;charset=utf-8"}
+    # Ours last: the caller's headers carry identity, never the framing of this request.
+    request_headers = {
+        **(headers or {}),
+        "Content-Type": "application/json;charset=utf-8",
+    }
     if compresses_json_requests(client):
-        headers["Content-Encoding"] = "gzip"
+        request_headers["Content-Encoding"] = "gzip"
 
-    return client.request("PUT", url, content=body, headers=headers)
+    return client.request("PUT", url, content=body, headers=request_headers)
 
 
 class OpikHttpxClient(httpx.Client):

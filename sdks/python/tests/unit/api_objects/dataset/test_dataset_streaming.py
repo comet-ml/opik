@@ -576,3 +576,42 @@ def test_insert__producer_error_with_a_worker_error_pending__producer_error_wins
 
     with pytest.raises(streaming_writer.ItemNotSerializableError):
         dataset.insert(items, num_threads=4)
+
+
+def test_insert__standalone_rest_client__sends_its_auth_and_workspace_headers():
+    """A REST client built directly carries its credentials on the wrapper, not the client.
+
+    `Opik` puts them on the httpx client, so an SDK-built client uploads authenticated
+    whatever the sender does. A `OpikApi(api_key=..., workspace_name=...)` built by hand
+    does not: the generated client applies them per request. Sending a prepared body goes
+    straight to the httpx client, so without them the upload is anonymous.
+    """
+    from opik.rest_api.client import OpikApi
+
+    capture = UploadCapture()
+    rest_client = OpikApi(
+        base_url=capture.base_url, api_key="SECRET-KEY", workspace_name="my-workspace"
+    )
+    # The transport this Dataset resolves, with the wrapper's credentials left where the
+    # generated client keeps them.
+    rest_client._client_wrapper.httpx_client.httpx_client = capture
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=rest_client,
+    )
+
+    # num_threads=1 so the parallel gate does not probe the backend version through the
+    # same capture first; the upload is then the only request.
+    dataset.insert(_items(1), num_threads=1)
+
+    assert capture.request_count == 1
+    sent = capture.request_headers[0]
+    assert sent.get("Authorization") == "SECRET-KEY", (
+        "The upload went out unauthenticated"
+    )
+    assert sent.get("Comet-Workspace") == "my-workspace", "The upload had no workspace"
+    assert sent["Content-Type"] == "application/json;charset=utf-8", (
+        "Identity headers must not displace the framing of the request"
+    )

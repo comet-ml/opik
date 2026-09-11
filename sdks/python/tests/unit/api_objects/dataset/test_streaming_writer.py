@@ -522,3 +522,45 @@ def test_item_payload__explicit_nulls_are_sent_not_omitted():
         "evaluators": None,
         "execution_policy": None,
     }
+
+
+# --------------------------------------------------------------------------- #
+# the platform where orjson is not installed at all
+# --------------------------------------------------------------------------- #
+def test_select_dumps__orjson_absent__uses_the_standard_library(monkeypatch):
+    """orjson is not required on Windows ARM64 below 3.11, where no wheel is published.
+
+    `enable_orjson_serialization` still defaults to True there, so asking for orjson when
+    the import failed has to degrade rather than raise.
+    """
+    monkeypatch.setattr(streaming_writer, "orjson", None)
+
+    assert (
+        streaming_writer.select_dumps(use_orjson=True) is streaming_writer._dumps_stdlib
+    )
+
+
+def test_writer__orjson_absent__still_serialises_flexible_values(monkeypatch):
+    """The upload path must not assume orjson anywhere behind the selection."""
+    monkeypatch.setattr(streaming_writer, "orjson", None)
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback)  # the shipped default: use_orjson=True
+
+    writer.add({"id": "a", "data": {"when": datetime.date(2024, 1, 2), "n": 2**70}})
+    writer.flush()
+
+    sent = _decode(bodies[0][0])["items"][0]["data"]
+    assert sent == {"when": "2024-01-02", "n": 2**70}
+
+
+def test_content_hash__digest_does_not_depend_on_orjson(monkeypatch):
+    """Digests must not vary by platform, or dedup breaks for anyone moving between them."""
+    from opik.api_objects.dataset import dataset_item
+
+    content = {"input": {"nested": [1, "two", None]}, "when": datetime.date(2024, 1, 2)}
+    with_orjson = dataset_item.DatasetItem(**content).content_hash()
+
+    monkeypatch.setattr(streaming_writer, "orjson", None)
+    without_orjson = dataset_item.DatasetItem(**content).content_hash()
+
+    assert with_orjson == without_orjson

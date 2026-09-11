@@ -67,9 +67,13 @@ setup(
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
         "openai",
         # The wire serialiser for dataset uploads, which `enable_orjson_serialization`
-        # turns on by default. Declared rather than optional so the shipped default is
-        # the configuration that is actually installed and tested.
-        "orjson",
+        # turns on by default. Declared rather than optional so the shipped default is the
+        # configuration that is actually installed and tested. Excluded on the one
+        # combination in our support matrix with no wheel -- orjson publishes win_arm64
+        # from cp311 -- where installing it would mean building the Rust extension from
+        # the sdist. The SDK falls back to the standard library there; PEP 508 has no
+        # `not`, hence the De Morgan form.
+        "orjson; sys_platform != 'win32' or platform_machine != 'ARM64' or python_version >= '3.11'",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
