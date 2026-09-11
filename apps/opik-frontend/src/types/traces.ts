@@ -1,4 +1,4 @@
-import { UsageData } from "@/types/shared";
+import { JsonNode, UsageData } from "@/types/shared";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { CommentItems } from "./comment";
 import { GuardrailValidation } from "./guardrails";
@@ -137,8 +137,8 @@ export interface Thread {
   start_time: string;
   end_time: string;
   duration: number;
-  first_message: object;
-  last_message: object;
+  first_message?: JsonNode;
+  last_message?: JsonNode;
   number_of_messages: number;
   usage?: UsageData;
   total_estimated_cost?: number;

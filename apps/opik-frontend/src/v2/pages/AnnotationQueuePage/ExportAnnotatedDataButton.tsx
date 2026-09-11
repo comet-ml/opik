@@ -26,7 +26,7 @@ import {
   getFeedbackScoresByUser,
   getCommentsByUser,
 } from "@/lib/annotation-queues";
-import { prettifyThreadField, prettifyTraceField } from "@/lib/traces";
+import { prettifyTraceField } from "@/lib/traces";
 import { JsonNode } from "@/types/shared";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -55,8 +55,8 @@ interface ExportTraceData {
 
 interface ExportThreadData {
   id: string;
-  first_message: JsonNode;
-  last_message: JsonNode;
+  first_message?: JsonNode;
+  last_message?: JsonNode;
   [reviewerName: string]: unknown;
 }
 
@@ -170,10 +170,9 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       return threads.map((thread: Thread) => {
         const baseData: ExportThreadData = {
           id: thread.id,
-          first_message: prettifyThreadField(thread, "input")
-            .message as JsonNode,
-          last_message: prettifyThreadField(thread, "output")
-            .message as JsonNode,
+          // Export stored payloads, not UI previews that omit turns/tools/media.
+          first_message: thread.first_message,
+          last_message: thread.last_message,
         };
 
         reviewers.forEach((reviewerName) => {
