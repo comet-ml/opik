@@ -47,6 +47,21 @@ interface AnnotationQueueAutomationDAO {
             @Bind("queueId") UUID queueId);
 
     /**
+     * The same row, locked for the caller's transaction.
+     *
+     * <p>Saving resolves omitted fields from what is already stored and then rewrites the whole row, so a
+     * non-locking read would let two concurrent edits both resolve against the same snapshot and the later
+     * write restore values the earlier one had just changed.
+     */
+    @SqlQuery("""
+            SELECT * FROM annotation_queue_automations
+            WHERE workspace_id = :workspaceId AND queue_id = :queueId
+            FOR UPDATE
+            """)
+    Optional<AnnotationQueueAutomationModel> findByQueueIdForUpdate(@Bind("workspaceId") String workspaceId,
+            @Bind("queueId") UUID queueId);
+
+    /**
      * Batch lookup for the queue list endpoint, so a page of queues costs one query rather than one per row.
      */
     @SqlQuery("""

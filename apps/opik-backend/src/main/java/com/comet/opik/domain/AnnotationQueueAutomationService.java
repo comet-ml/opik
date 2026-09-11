@@ -14,10 +14,12 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -45,7 +47,7 @@ public class AnnotationQueueAutomationService {
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AnnotationQueueAutomationDAO.class);
-            var resolved = resolve(dao.findByQueueId(workspaceId, queueId), automation);
+            var resolved = resolve(dao.findByQueueIdForUpdate(workspaceId, queueId), automation);
 
             dao.save(workspaceId, queueId, projectId, scope.getValue(), enabled, resolved.conditions(),
                     resolved.maxItemsInQueue(), userName);
@@ -89,6 +91,8 @@ public class AnnotationQueueAutomationService {
     private ResolvedAutomation resolve(Optional<AnnotationQueueAutomationModel> existing,
             AnnotationQueueAutomation automation) {
 
+        rejectNonFiniteThresholds(automation.conditions());
+
         // A null conditions payload means "leave the stored conditions alone" — the toggle-only
         // request. There is nothing to leave alone on a first save, so require them there.
         String conditions = automation.conditions() != null
@@ -111,6 +115,33 @@ public class AnnotationQueueAutomationService {
     }
 
     private record ResolvedAutomation(String conditions, Integer maxItemsInQueue) {
+    }
+
+    /**
+     * Rejects NaN and the infinities.
+     *
+     * <p>The request mapper has {@code ALLOW_NON_NUMERIC_NUMBERS} enabled, so they parse, satisfy
+     * {@code @NotNull}, and serialise into the stored JSON as strings. Nothing downstream would fail:
+     * every comparison against NaN is false, so the automation would be saved, shown back as configured,
+     * and quietly never match.
+     */
+    private void rejectNonFiniteThresholds(AnnotationQueueAutomation.Conditions conditions) {
+        if (conditions == null || conditions.groups() == null) {
+            return;
+        }
+
+        boolean nonFinite = conditions.groups().stream()
+                .filter(Objects::nonNull)
+                .flatMap(group -> group.conditions() == null
+                        ? Stream.<AnnotationQueueAutomation.ScoreCondition>empty()
+                        : group.conditions().stream())
+                .filter(Objects::nonNull)
+                .map(AnnotationQueueAutomation.ScoreCondition::value)
+                .anyMatch(value -> value != null && !Double.isFinite(value));
+
+        if (nonFinite) {
+            throw new BadRequestException("Annotation queue automation thresholds must be finite numbers");
+        }
     }
 
     private boolean hasAnyCondition(String conditionsJson) {

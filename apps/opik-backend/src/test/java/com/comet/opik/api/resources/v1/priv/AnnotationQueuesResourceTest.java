@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueAutomation;
+import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueReviewer;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -564,7 +565,7 @@ class AnnotationQueuesResourceTest {
             return AnnotationQueueAutomation.Conditions.builder()
                     .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
                             .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
-                                    .score(score)
+                                    .scoreName(score)
                                     .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
                                     .value(value)
                                     .build()))
@@ -667,6 +668,36 @@ class AnnotationQueuesResourceTest {
             // was told it did not create.
             annotationQueuesResourceClient.getAnnotationQueueById(
                     queue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        private Stream<Arguments> nonFiniteThresholds() {
+            return Stream.of(
+                    arguments(Double.NaN, "NaN"),
+                    arguments(Double.POSITIVE_INFINITY, "+Infinity"),
+                    arguments(Double.NEGATIVE_INFINITY, "-Infinity"));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource("nonFiniteThresholds")
+        @DisplayName("should reject a threshold that is not a finite number:")
+        void nonFiniteThresholdIsRejected(double value, String label) {
+            var conditions = AnnotationQueueAutomation.Conditions.builder()
+                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
+                            .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
+                                    .scoreName("safety")
+                                    .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
+                                    .value(value)
+                                    .build()))
+                            .build()))
+                    .build();
+
+            // Non-finite values parse and pass @NotNull, and every comparison against NaN is false, so
+            // without this they would be stored and the automation would silently never match.
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(conditions)
+                    .build(),
+                    HttpStatus.SC_BAD_REQUEST);
         }
 
         @Test
@@ -825,6 +856,56 @@ class AnnotationQueuesResourceTest {
                     Set.of(annotationQueue.id()), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isZero();
+        }
+
+        @Test
+        @DisplayName("should return membership metadata for queue members and omit non-members")
+        void searchItemsReturnsMembershipAndOmitsNonMembers() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var member = idGenerator.generateId();
+            var nonMember = idGenerator.generateId();
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), Set.of(member), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var found = annotationQueuesResourceClient.searchAnnotationQueueItems(
+                    annotationQueue.id(), Set.of(member, nonMember), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(found.content()).hasSize(1);
+            assertThat(found.content().getFirst().id()).isEqualTo(member);
+            // Added through the API, so it is a person's doing rather than an automation's.
+            assertThat(found.content().getFirst().source()).isEqualTo(AnnotationQueueItemSource.MANUAL);
+        }
+
+        @Test
+        @DisplayName("should return an empty result when none of the ids are in the queue")
+        void searchItemsWithNoMembers() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue().toBuilder().projectId(projectId).build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var found = annotationQueuesResourceClient.searchAnnotationQueueItems(
+                    annotationQueue.id(), Set.of(idGenerator.generateId()), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+
+            assertThat(found.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should return 404 when searching items of a non-existent annotation queue")
+        void searchItemsOfMissingQueue() {
+            annotationQueuesResourceClient.searchAnnotationQueueItems(
+                    idGenerator.generateId(), Set.of(idGenerator.generateId()), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
