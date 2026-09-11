@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.FastBindConnectionFactory;
 import com.google.inject.Provides;
 import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.util.Duration;
@@ -29,8 +30,11 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Override
     protected void configure() {
         databaseAnalyticsFactory = configuration().getDatabaseAnalytics();
-        connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
-                .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
+        // FastBindConnectionFactory makes every statement bind parameters by index; see its javadoc.
+        connectionFactory = new FastBindConnectionFactory(
+                R2dbcTelemetry.create(GlobalOpenTelemetry.get())
+                        .wrapConnectionFactory(databaseAnalyticsFactory.build(),
+                                ConnectionFactoryOptions.builder().build()));
 
         clickHouseClient = databaseAnalyticsFactory.buildClient();
         environment().lifecycle().manage(new Managed() {
