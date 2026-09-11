@@ -119,6 +119,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_O1,
       label: "GPT o1",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_LIVE_1,
+      label: "GPT Live 1",
+    },
   ],
 
   [PROVIDER_TYPE.ANTHROPIC]: [
@@ -688,6 +692,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-pro-0813:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_1_FLASH,
+      label: "deepseek/deepseek-v4.1-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
       label: "dots-studio/dots-3-note-preview:free",
     },
@@ -990,6 +998,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_SANTE_FREE,
       label: "inclusionai/ling-3.0-flash-sante:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_VL_FREE,
+      label: "inclusionai/ling-3.0-flash-vl:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,

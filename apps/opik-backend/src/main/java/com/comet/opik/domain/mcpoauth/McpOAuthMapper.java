@@ -21,20 +21,23 @@ interface McpOAuthMapper {
     @Mapping(target = "type", source = "type")
     @Mapping(target = "familyId", source = "familyId")
     @Mapping(target = "expiresAt", source = "expiresAt")
+    @Mapping(target = "absoluteExpiresAt", source = "absoluteExpiresAt")
     @Mapping(target = "rotatedFromId", ignore = true)
     @Mapping(target = "issuedAt", ignore = true)
     @Mapping(target = "revokedAt", ignore = true)
     @Mapping(target = "revokedReason", ignore = true)
     McpOAuthToken toToken(McpOAuthCode code, String type, String id, String tokenHash, String familyId,
-            Instant expiresAt);
+            Instant expiresAt, Instant absoluteExpiresAt);
 
     @Mapping(target = "id", source = "id")
     @Mapping(target = "tokenHash", source = "tokenHash")
     @Mapping(target = "type", source = "type")
     @Mapping(target = "expiresAt", source = "expiresAt")
+    @Mapping(target = "absoluteExpiresAt", source = "absoluteExpiresAt")
     @Mapping(target = "rotatedFromId", source = "source.id")
     @Mapping(target = "issuedAt", ignore = true)
     @Mapping(target = "revokedAt", ignore = true)
     @Mapping(target = "revokedReason", ignore = true)
-    McpOAuthToken toRotatedToken(McpOAuthToken source, String type, String id, String tokenHash, Instant expiresAt);
+    McpOAuthToken toRotatedToken(McpOAuthToken source, String type, String id, String tokenHash, Instant expiresAt,
+            Instant absoluteExpiresAt);
 }

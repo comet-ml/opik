@@ -9,16 +9,16 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.cloud.vertexai.VertexAI;
-import com.google.cloud.vertexai.api.GenerationConfig;
-import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.common.base.Preconditions;
+import com.google.genai.Client;
+import com.google.genai.types.HttpOptions;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
+import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel;
-import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiStreamingChatModel;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -29,55 +29,89 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Slf4j
+@RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     private final @NonNull LlmProviderClientConfig clientConfig;
 
-    public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig) {
-        this.clientConfig = clientConfig;
-    }
-
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request,
-                (generativeModel, generationConfig, vertexAI) -> new CloseableVertexAiChatModel(
-                        new VertexAiGeminiChatModel(generativeModel, generationConfig), vertexAI));
-    }
+        return buildOwnedClient(apiKey, request, (client, model) -> {
+            var builder = GoogleGenAiChatModel.builder()
+                    .client(client)
+                    .modelName(model);
 
-    private GenerativeModel getGenerativeModel(ChatCompletionRequest request, VertexAI vertexAI,
-            GenerationConfig generationConfig) {
-        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
+            Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
+            Optional.ofNullable(request.topP()).ifPresent(builder::topP);
+            Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
+            Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
+            Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
+            Optional.ofNullable(request.maxTokens()).ifPresent(builder::maxOutputTokens);
+            Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
-        return new GenerativeModel(vertexAIModelName.toString(), vertexAI)
-                .withGenerationConfig(generationConfig);
+            applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
+
+            return new CloseableVertexAiChatModel(builder.build(), client);
+        });
     }
 
     CloseableVertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request,
-                (generativeModel, generationConfig, vertexAI) -> new CloseableVertexAiStreamingChatModel(
-                        new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig), vertexAI));
+        return buildOwnedClient(apiKey, request, (client, model) -> {
+            var builder = GoogleGenAiStreamingChatModel.builder()
+                    .client(client)
+                    .modelName(model);
+
+            Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
+            Optional.ofNullable(request.topP()).ifPresent(builder::topP);
+            Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
+            Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
+            Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
+            Optional.ofNullable(request.maxTokens()).ifPresent(builder::maxOutputTokens);
+            Optional.ofNullable(request.seed()).ifPresent(builder::seed);
+
+            applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
+
+            return new CloseableVertexAiStreamingChatModel(builder.build(), client);
+        });
     }
 
-    // Fresh VertexAI per call, handed to the wrapper that owns and closes it; closed here if setup fails first.
+    /**
+     * Takes the setters rather than a builder because the chat and streaming builders share these methods but no
+     * supertype. At most one of level and budget is ever present — the SDK throws if both are set.
+     * <p>
+     * {@code include_thoughts} is deliberately not forwarded: the module drops thought parts unless
+     * {@code returnThinking} is set, so asking for them would bill thinking tokens and surface nothing.
+     */
+    private static void applyThinking(Consumer<String> level, Consumer<Integer> budget, String model,
+            Map<String, Object> customParameters) {
+        var params = GeminiThinkingParams.from(customParameters);
+
+        params.wireLevelFor(model).ifPresent(level);
+        params.wireBudgetFor(model).ifPresent(budget);
+    }
+
+    // Fresh Client per call, handed to the wrapper that owns and closes it; closed here if setup fails first.
+    // Built here rather than by the model builder, which keeps its client private and is not closeable.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
-        VertexAI vertexAI = buildVertexAI(apiKey);
+        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
+
+        Client client = buildClient(apiKey);
         try {
-            GenerationConfig generationConfig = getGenerationConfig(request);
-            GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-            return factory.create(generativeModel, generationConfig, vertexAI);
+            return factory.create(client, vertexAIModelName.toString());
         } catch (RuntimeException e) {
-            closeSuppressing(vertexAI, e);
+            closeSuppressing(client, e);
             throw e;
         }
     }
 
     @FunctionalInterface
     private interface OwnedClientFactory<T> {
-        T create(GenerativeModel generativeModel, GenerationConfig generationConfig, VertexAI vertexAI);
+        T create(Client client, String model);
     }
 
     private InternalServerErrorException failWithError(Exception e) {
@@ -85,106 +119,64 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     // Close a client we built but couldn't hand to a wrapping owner, so it can't outlive the failure.
-    private static void closeSuppressing(VertexAI vertexAI, RuntimeException failure) {
+    private static void closeSuppressing(Client client, RuntimeException failure) {
         try {
-            vertexAI.close();
+            client.close();
         } catch (Exception e) {
             failure.addSuppressed(e);
         }
     }
 
-    private GenerationConfig getGenerationConfig(ChatCompletionRequest request) {
-        var generationConfig = GenerationConfig.newBuilder();
-
-        Optional.ofNullable(request.temperature())
-                .map(Double::floatValue)
-                .ifPresent(generationConfig::setTemperature);
-
-        Optional.ofNullable(request.topP())
-                .map(Double::floatValue)
-                .ifPresent(generationConfig::setTopP);
-
-        Optional.ofNullable(request.stop())
-                .ifPresent(values -> values.forEach(generationConfig::addStopSequences));
-
-        Optional.ofNullable(request.presencePenalty())
-                .map(Double::floatValue)
-                .ifPresent(generationConfig::setPresencePenalty);
-
-        Optional.ofNullable(request.frequencyPenalty())
-                .map(Double::floatValue)
-                .ifPresent(generationConfig::setFrequencyPenalty);
-
-        Optional.ofNullable(request.maxTokens())
-                .ifPresent(generationConfig::setMaxOutputTokens);
-
-        Optional.ofNullable(request.seed())
-                .ifPresent(generationConfig::setSeed);
-
-        thinkingConfig(GeminiThinkingParams.from(request.customParameters()))
-                .ifPresent(generationConfig::setThinkingConfig);
-
-        return generationConfig.build();
-    }
-
     /**
-     * Vertex's {@code ThinkingConfig} has no level field, so a level is translated into the budget it maps to.
-     */
-    private static Optional<GenerationConfig.ThinkingConfig> thinkingConfig(GeminiThinkingParams params) {
-        if (params.isAbsent()) {
-            return Optional.empty();
-        }
-
-        var thinkingConfig = GenerationConfig.ThinkingConfig.newBuilder();
-
-        Optional.ofNullable(params.budgetForLevel()).ifPresent(thinkingConfig::setThinkingBudget);
-        // include_thoughts is deliberately not forwarded here either. Nothing on the Vertex path
-        // filters thought parts: langchain4j builds the answer from ResponseHandler.getText(), which
-        // concatenates every part with no thought check and has no returnThinking equivalent. Asking
-        // for thoughts would prepend the reasoning trace to the answer, and on the judge path that
-        // breaks the JSON parse in OnlineScoringEngine, yielding no scores at all.
-
-        return Optional.of(thinkingConfig.build());
-    }
-
-    /**
-     * The location is free-text in the provider configuration but ends up in the {@code locations/%s} resource path as
-     * well as the host, so it has to be canonicalised before either is derived from it. The configured endpoint keys
-     * are constrained to the same lower-case form, so both sides of the lookup agree on the key.
+     * The location is free-text in the configuration but reaches both the {@code locations/%s} resource path and the
+     * endpoint lookup, whose keys are constrained to this same lower-case form.
      */
     private static String canonicalLocation(String location) {
         return location.strip().toLowerCase(Locale.ROOT);
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {
-        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation));
+        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation))
+                .map(VertexAIClientGenerator::withScheme);
     }
 
-    private VertexAI buildVertexAI(LlmProviderClientApiConfig config) {
+    /**
+     * The SDK concatenates the endpoint into a URL and re-parses it, so a bare host would land in the path and
+     * misroute the request silently. The configuration still accepts one, so default the scheme here instead.
+     */
+    private static String withScheme(String endpoint) {
+        return endpoint.startsWith("http://") || endpoint.startsWith("https://") ? endpoint : "https://" + endpoint;
+    }
+
+    private Client buildClient(LlmProviderClientApiConfig config) {
         var location = Optional.ofNullable(config.configuration().get("location"))
                 .filter(StringUtils::isNotBlank)
                 .map(VertexAIClientGenerator::canonicalLocation);
 
-        return buildVertexAI(config.apiKey(), location);
-    }
-
-    private VertexAI buildVertexAI(String apiKey, Optional<String> location) {
         try {
             var credentials = ServiceAccountCredentials.fromStream(
-                    new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+                    new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
 
-            VertexAI.Builder builder = new VertexAI.Builder();
+            var builder = Client.builder()
+                    .vertexAI(true)
+                    .project(credentials.getProjectId())
+                    .credentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()));
 
-            location.ifPresent(canonicalLocation -> {
-                builder.setLocation(canonicalLocation);
-                apiEndpointFor(canonicalLocation).ifPresent(builder::setApiEndpoint);
-            });
+            location.ifPresent(builder::location);
 
-            return builder
-                    .setProjectId(credentials.getProjectId())
-                    .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                    .setTransport(clientConfig.getVertexAIClient().transport())
-                    .build();
+            // Only multi-region locations are remapped; single-region ones keep the SDK-derived endpoint.
+            // Must go through httpOptions: Client.Builder#baseUrl is ignored once project/location is set.
+            var httpOptions = HttpOptions.builder();
+            location.flatMap(this::apiEndpointFor).ifPresent(httpOptions::baseUrl);
+
+            // The SDK disables its HTTP client's timeouts, so without this a request can hang indefinitely.
+            // The SDK takes milliseconds as an int, and the configuration is only bounded below, so clamp rather
+            // than let a value over ~24.8 days wrap into a negative timeout.
+            Optional.ofNullable(clientConfig.getCallTimeout())
+                    .map(timeout -> (int) Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE))
+                    .ifPresent(httpOptions::timeout);
+
+            return builder.httpOptions(httpOptions.build()).build();
         } catch (IOException e) {
             throw failWithError(e);
         }
@@ -192,7 +184,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     @Override
     public ChatModel generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
-        Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got " + params.length);
+        Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got %s", params.length);
         ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
 

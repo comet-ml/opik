@@ -941,6 +941,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return { id, name: args.name, description: args.description };
     },
 
+    /**
+     * A dashboard does not hang off a project, so no project delete reaches
+     * it. `global-teardown` sweeps dashboards by run prefix, but only at the
+     * end of the run — a spec that builds one deletes it per-test.
+     */
     async deleteDashboard(id: string): Promise<void> {
       try {
         await opik.api.dashboards.deleteDashboard(id);
@@ -1587,26 +1592,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         },
       );
       return { status, message, series: toMetricSeries(json) };
-    },
-
-    /**
-     * `DELETE /v1/private/dashboards/{id}`.
-     *
-     * A dashboard does not hang off a project, so no project delete reaches
-     * it. `global-teardown` does sweep dashboards by run prefix, but only at
-     * the end of the run — a spec that builds one deletes it per-test.
-     */
-    async deleteDashboard(id: string): Promise<void> {
-      const headers = workspaceHeaders();
-      const res = await fetch(`${env.apiBaseUrl}/v1/private/dashboards/${id}`, {
-        method: 'DELETE',
-        headers,
-      });
-      if (!res.ok && res.status !== 404) {
-        throw new Error(
-          `DELETE /v1/private/dashboards/${id} -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
-        );
-      }
     },
 
     /**
