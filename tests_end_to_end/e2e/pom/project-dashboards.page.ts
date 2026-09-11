@@ -164,6 +164,24 @@ export class ProjectDashboardsPage {
   }
 
   /**
+   * Asserts the picker has settled on `viewName`, and that the name is
+   * unambiguous.
+   *
+   * Count first, then visibility. `toBeVisible()` on a name matching two
+   * controls raises a strict-mode violation instead of this assertion's message,
+   * so the ambiguity would surface as a Playwright internal rather than as "the
+   * name is ambiguous" — and a second, merely transient match would fail here
+   * outright rather than being quietly waited out.
+   */
+  async expectSelectedView(viewName: string): Promise<void> {
+    await test.step(`The view picker shows "${viewName}"`, async () => {
+      const trigger = this.viewPickerShowing(viewName);
+      await expect(trigger, `"${viewName}" names exactly one control`).toHaveCount(1);
+      await expect(trigger, `the selected view is "${viewName}"`).toBeVisible();
+    });
+  }
+
+  /**
    * One option row in the open picker, by exact label.
    *
    * Exact, and scoped to the popover: a substring match would let a view named

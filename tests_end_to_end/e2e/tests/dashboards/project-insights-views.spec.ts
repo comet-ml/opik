@@ -60,10 +60,8 @@ test.describe(
           // made against a list that actually arrived.
           await dashboardsA.goto();
           await dashboardsA.waitForReady();
-          await expect(
-            dashboardsA.viewPickerShowing(DEFAULT_PROJECT_VIEW_NAME),
-            'a project with no view restored opens on the built-in template',
-          ).toBeVisible();
+          // A project with no view restored opens on the built-in template.
+          await dashboardsA.expectSelectedView(DEFAULT_PROJECT_VIEW_NAME);
 
           await dashboardsA.openViewPicker(DEFAULT_PROJECT_VIEW_NAME);
           await expect(
@@ -107,9 +105,15 @@ test.describe(
           // exhaustive: every view a scoped read returns must belong to the
           // project asked for or to no project at all. A workspace shared with
           // other runs would defeat a count comparison, but it cannot defeat
-          // this — one foreign, project-bound row is a failure however many rows
-          // there are.
-          for (const project of [projectA, projectB]) {
+          // this — one foreign, project-bound row is a failure however many
+          // rows there are.
+          //
+          // Both directions, from one read each. Checking only A's list would
+          // pass against a backend that had simply pinned every answer to A.
+          for (const { project, ownView, otherView } of [
+            { project: projectA, ownView: viewA, otherView: viewB },
+            { project: projectB, ownView: viewB, otherView: viewA },
+          ]) {
             const scoped = await backendClient.listInsightsViews({ projectId: project.id });
             expect(
               scoped
@@ -117,10 +121,15 @@ test.describe(
                 .map((view) => `${view.name} (${view.projectId})`),
               `views ${project.name} was offered that belong to another project`,
             ).toEqual([]);
-            expect(
-              scoped.map((view) => view.id),
-              `${project.name} is offered the project-less view`,
-            ).toContain(legacyView.id);
+
+            const ids = scoped.map((view) => view.id);
+            expect(ids, `${project.name} is offered the project-less view`).toContain(
+              legacyView.id,
+            );
+            expect(ids, `${project.name} is offered its own view`).toContain(ownView.id);
+            expect(ids, `${project.name} is not offered the other project's view`).not.toContain(
+              otherView.id,
+            );
           }
         });
       },
@@ -142,10 +151,7 @@ test.describe(
           // once the lookup resolves, so an id that merely *survived* could be a
           // snapshot taken before the fallback ran — while the view's own section
           // on screen is the page having committed to it.
-          await expect(
-            dashboardsB.viewPickerShowing(legacyView.name),
-            'the selector settles on the project-less view',
-          ).toBeVisible();
+          await dashboardsB.expectSelectedView(legacyView.name);
           await expect(
             dashboardsB.sectionTitle(sectionTitleOf(legacyView)),
             "the project-less view's own section is what renders",
@@ -189,10 +195,8 @@ test.describe(
           await dashboardsA.goto({ dashboardId: viewA.id });
           await dashboardsA.waitForReady();
 
-          await expect(
-            dashboardsA.viewPickerShowing(viewA.name),
-            "A's own view opens under A",
-          ).toBeVisible();
+          // A's own view opens under A.
+          await dashboardsA.expectSelectedView(viewA.name);
           await expect(
             dashboardsA.sectionTitle(sectionTitleOf(viewA)),
             "and it is that view's dashboard that renders",
@@ -215,10 +219,8 @@ test.describe(
           await dashboardsA.openViewPicker(viewA.name);
           await dashboardsA.selectView(legacyView.name, legacyView.id);
 
-          await expect(
-            dashboardsA.viewPickerShowing(legacyView.name),
-            'the picker now shows the project-less view',
-          ).toBeVisible();
+          // The picker now shows the project-less view.
+          await dashboardsA.expectSelectedView(legacyView.name);
           await expect(
             dashboardsA.sectionTitle(sectionTitleOf(legacyView)),
             'and that view is the dashboard on screen',
