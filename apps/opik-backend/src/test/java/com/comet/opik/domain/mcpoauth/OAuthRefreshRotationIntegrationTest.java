@@ -33,10 +33,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.ERROR_INVALID_GRANT;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_GRANT_TYPE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REFRESH_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.REVOKE_PATH;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -55,6 +58,8 @@ class OAuthRefreshRotationIntegrationTest {
     private static final String REDIRECT_URI = "http://localhost:1234/callback";
     private static final String RESOURCE_URI = "http://localhost:8080/api/v1/mcp";
     private static final int PARALLEL_REFRESHES = 5;
+    // One rotation plus this many in-grace retries may be served off a single refresh token.
+    private static final int MAX_RETRIES = PARALLEL_REFRESHES - 1;
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -83,7 +88,9 @@ class OAuthRefreshRotationIntegrationTest {
                                 new CustomConfig("mcpOAuth.enabled", "true"),
                                 new CustomConfig("mcpOAuth.baseUrl", "http://localhost:8080"),
                                 new CustomConfig("mcpOAuth.mcpResourceUri", RESOURCE_URI),
-                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT2M")))
+                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT2M"),
+                                new CustomConfig("mcpOAuth.refreshRotationMaxRetries",
+                                        String.valueOf(MAX_RETRIES))))
                         .build());
     }
 
@@ -131,6 +138,56 @@ class OAuthRefreshRotationIntegrationTest {
                     .as("a refresh token handed out during the burst rotates normally afterwards")
                     .isEqualTo(Response.Status.OK.getStatusCode());
         }
+    }
+
+    @Test
+    @DisplayName("one more retry than the cap is treated as reuse and revokes the whole family")
+    void retriesBeyondCap_revokeFamily() {
+        var minted = oauthClient.mintArtifacts();
+        String clientId = minted.clientId();
+        String original = minted.tokens().refreshToken();
+
+        RefreshOutcome rotation = refresh(clientId, original);
+        assertThat(rotation.status()).isEqualTo(Response.Status.OK.getStatusCode());
+
+        String latest = rotation.tokens().refreshToken();
+        for (int retry = 1; retry <= MAX_RETRIES; retry++) {
+            RefreshOutcome allowed = refresh(clientId, original);
+            assertThat(allowed.status()).as("retry %d of %d is still served", retry, MAX_RETRIES)
+                    .isEqualTo(Response.Status.OK.getStatusCode());
+            latest = allowed.tokens().refreshToken();
+        }
+
+        RefreshOutcome overCap = refresh(clientId, original);
+        assertThat(overCap.status()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(overCap.error().error()).isEqualTo(ERROR_INVALID_GRANT);
+
+        RefreshOutcome afterKill = refresh(clientId, latest);
+        assertThat(afterKill.status()).as("the family is gone, including the pairs handed out before the cap")
+                .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(afterKill.error().error()).isEqualTo(ERROR_INVALID_GRANT);
+    }
+
+    @Test
+    @DisplayName("an in-grace retry is refused once the client has revoked the family")
+    void retryAfterClientRevocation_isRejected() {
+        var minted = oauthClient.mintArtifacts();
+        String clientId = minted.clientId();
+        String original = minted.tokens().refreshToken();
+
+        RefreshOutcome rotation = refresh(clientId, original);
+        assertThat(rotation.status()).isEqualTo(Response.Status.OK.getStatusCode());
+
+        var revoke = new Form()
+                .param(PARAM_TOKEN, rotation.tokens().refreshToken())
+                .param(PARAM_CLIENT_ID, clientId);
+        try (Response response = client.target(baseURI + REVOKE_PATH).request().post(Entity.form(revoke))) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
+        }
+
+        RefreshOutcome retry = refresh(clientId, original);
+        assertThat(retry.status()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(retry.error().error()).isEqualTo(ERROR_INVALID_GRANT);
     }
 
     private RefreshOutcome refresh(String clientId, String refreshToken) {

@@ -2,6 +2,7 @@ package com.comet.opik.domain.mcpoauth;
 
 import com.comet.opik.infrastructure.McpOAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -11,15 +12,20 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_ACCESS;
 import static com.comet.opik.domain.mcpoauth.McpOAuthToken.TYPE_REFRESH;
@@ -35,8 +41,16 @@ public class McpOAuthService {
 
     private static final Base64.Encoder URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
 
+    // Every write that changes a token family's state (rotation, retry, revocation) runs under this lock, keyed by
+    // family_id, so concurrent refreshes with the same token serialize and a revocation can never interleave with
+    // the minting of a descendant pair. A row lock cannot do this without gap locks: a FOR UPDATE over the family
+    // followed by an INSERT into the same range deadlocks against a second refresh doing the same.
+    private static final String FAMILY_LOCK = "McpOAuthFamily";
+    private static final Duration FAMILY_LOCK_LEASE = Duration.ofSeconds(2);
+
     private final @NonNull TransactionTemplate template;
     private final @NonNull OpikConfiguration opikConfig;
+    private final @NonNull LockService lockService;
 
     private McpOAuthConfig config() {
         return opikConfig.getMcpOAuth();
@@ -97,6 +111,19 @@ public class McpOAuthService {
         });
     }
 
+    /**
+     * Rotates a refresh token: the presented token is revoked and a new access + refresh pair is issued in the
+     * same family, with the same absolute refresh expiry.
+     * <p>
+     * MCP hosts run several tool calls in parallel, and when the access token expires each of them answers the
+     * 401 by refreshing with the same stored refresh token. Only one of those requests can be the rotation; the
+     * others re-present a token that was revoked moments earlier. Within {@code refreshRotationGrace}, and for at
+     * most {@code refreshRotationMaxRetries} of them, such a re-presentation is the legitimate client retrying and
+     * still gets a fresh pair off the same family rather than {@code invalid_grant}: a host that sees
+     * {@code invalid_grant} on refresh discards its tokens and forces the user to re-authorize (RFC 6819 §5.2.2.3
+     * flags exactly this clustered-client hazard of rotation). Outside the window, or past the cap, the
+     * re-presentation is treated as reuse and the whole family is revoked, per OAuth 2.1 §4.3.1.
+     */
     public TokenResponse refresh(@NonNull String refreshToken, @NonNull String clientId) {
         String tokenHash = McpOAuthTokenUtils.hash(refreshToken);
         Instant now = Instant.now();
@@ -108,79 +135,89 @@ public class McpOAuthService {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
-        if (row.revokedAt() != null) {
-            if (!isBenignRotationRetry(row, now)) { // Reuse detected: kill the whole lineage
-                template.inTransaction(WRITE, handle -> handle.attach(McpOAuthTokenDAO.class)
-                        .revokeFamily(row.familyId(), RevokedReason.REUSE));
-                throw new BadRequestException(ERROR_INVALID_GRANT);
-            }
-            // The host is re-presenting a token that was rotated moments ago: hand it its own pair (see
-            // mintRotatedPair) instead of an invalid_grant that would make it discard its credentials.
-            return mintRotatedPair(row, now, false);
-        }
-
-        return mintRotatedPair(row, now, true);
+        return underFamilyLock(row.familyId(), () -> rotate(row, now))
+                .orElseThrow(() -> new BadRequestException(ERROR_INVALID_GRANT));
     }
 
     /**
-     * Issues a new access + refresh pair descending from {@code source}, in the same family and with the same
-     * absolute refresh expiry.
-     * <p>
-     * MCP hosts run several tool calls in parallel, and when the access token expires each of them answers the
-     * 401 by refreshing with the same stored refresh token. Only one request can revoke the source token
-     * ({@code revokeSource}); the others land either after that rotation committed or inside the same race. Both
-     * are the legitimate client retrying, not a replay by a thief, as long as the rotation happened within
-     * {@code refreshRotationGrace}. Such a retry gets its own fresh pair off the same family rather than
-     * {@code invalid_grant}: a host that sees {@code invalid_grant} on refresh discards its tokens and forces the
-     * user to re-authorize (RFC 6819 §5.2.2.3 flags exactly this clustered-client hazard of rotation). After the
-     * grace window the re-presentation is treated as reuse and the family is revoked, per OAuth 2.1 §4.3.1.
+     * The locked half of {@link #refresh}: re-reads the family under the lock, decides between rotation, in-grace
+     * retry and reuse, and returns the minted pair, or empty when the presentation was reuse and the family has
+     * just been revoked. The decision and its writes share one transaction; the caller turns "empty" into
+     * {@code invalid_grant} outside it so the revocation is never rolled back by the rejection.
      */
-    private TokenResponse mintRotatedPair(McpOAuthToken source, Instant now, boolean revokeSource) {
+    private Optional<TokenResponse> rotate(McpOAuthToken row, Instant now) {
         String accessToken = McpOAuthTokenUtils.generateAccessToken();
         String newRefreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
 
-            if (revokeSource && tokenDao.revoke(source.tokenHash(), RevokedReason.ROTATED) != 1) {
-                // Lost the revoke race to a concurrent refresh with the same token. Same rule as above: a
-                // rotation that just happened means this is the host's own retry and it still gets a pair.
-                McpOAuthToken current = tokenDao.findByHash(source.tokenHash());
-                if (current == null || !isBenignRotationRetry(current, Instant.now())) {
-                    throw new BadRequestException(ERROR_INVALID_GRANT);
-                }
+            List<McpOAuthToken> family = tokenDao.findFamily(row.familyId());
+            McpOAuthToken current = family.stream()
+                    .filter(token -> token.id().equals(row.id()))
+                    .findFirst()
+                    .orElseThrow(() -> new BadRequestException(ERROR_INVALID_GRANT));
+
+            if (isFamilyRevoked(family)) {
+                throw new BadRequestException(ERROR_INVALID_GRANT);
             }
 
-            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(source, TYPE_ACCESS,
+            if (current.revokedAt() == null) {
+                if (tokenDao.revoke(current.tokenHash(), RevokedReason.ROTATED) != 1) {
+                    throw new BadRequestException(ERROR_INVALID_GRANT);
+                }
+            } else
+                if (!isBenignRotationRetry(current, now)
+                        || countDescendantPairs(family, current) > config().getRefreshRotationMaxRetries()) {
+                            // Reuse detected: kill the whole lineage
+                            tokenDao.revokeFamily(current.familyId(), RevokedReason.REUSE);
+                            return Optional.empty();
+                        }
+
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
                     now.plus(config().getAccessTokenTtl())));
-            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(source, TYPE_REFRESH,
+            tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_REFRESH,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(newRefreshToken),
-                    source.expiresAt()));
+                    current.expiresAt()));
 
-            return buildTokenResponse(accessToken, newRefreshToken, source.workspaceId(), source.workspaceName());
+            return Optional.of(buildTokenResponse(accessToken, newRefreshToken, current.workspaceId(),
+                    current.workspaceName()));
         });
     }
 
     public void revoke(@NonNull String token) {
         String tokenHash = McpOAuthTokenUtils.hash(token);
 
-        template.inTransaction(WRITE, handle -> {
-            var tokenDao = handle.attach(McpOAuthTokenDAO.class);
+        McpOAuthToken row = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(McpOAuthTokenDAO.class).findByHash(tokenHash));
+        if (row == null) {
+            return;
+        }
 
-            McpOAuthToken row = tokenDao.findByHash(tokenHash);
-            if (row == null) {
+        underFamilyLock(row.familyId(), () -> {
+            template.inTransaction(WRITE, handle -> {
+                var tokenDao = handle.attach(McpOAuthTokenDAO.class);
+
+                if (TYPE_REFRESH.equals(row.type())) {
+                    tokenDao.revokeFamily(row.familyId(), RevokedReason.CLIENT_REQUEST);
+                } else {
+                    tokenDao.revoke(row.tokenHash(), RevokedReason.CLIENT_REQUEST);
+                }
+
                 return null;
-            }
-
-            if (TYPE_REFRESH.equals(row.type())) {
-                tokenDao.revokeFamily(row.familyId(), RevokedReason.CLIENT_REQUEST);
-            } else {
-                tokenDao.revoke(row.tokenHash(), RevokedReason.CLIENT_REQUEST);
-            }
-
-            return null;
+            });
+            return Optional.empty();
         });
+    }
+
+    private <T> Optional<T> underFamilyLock(String familyId, Supplier<Optional<T>> action) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(familyId, FAMILY_LOCK),
+                Mono.fromSupplier(action).subscribeOn(Schedulers.boundedElastic()),
+                FAMILY_LOCK_LEASE)
+                .blockOptional()
+                .orElseGet(Optional::empty);
     }
 
     public ValidatedToken validateAccessTokenForWorkspace(@NonNull String token, String headerWorkspace) {
@@ -258,6 +295,28 @@ public class McpOAuthService {
     private boolean isBenignRotationRetry(McpOAuthToken token, Instant now) {
         return token.revokedReason() == RevokedReason.ROTATED
                 && !now.isAfter(token.revokedAt().plus(config().getRefreshRotationGrace()));
+    }
+
+    /**
+     * A family is dead once any of its refresh tokens was revoked for something other than rotation: the client
+     * asked for it ({@code /oauth/revoke}) or reuse detection fired. Rotation revocations are the normal lineage
+     * and say nothing about the family; access-token-only revocations never touch refresh rows.
+     */
+    private static boolean isFamilyRevoked(List<McpOAuthToken> family) {
+        return family.stream()
+                .filter(token -> TYPE_REFRESH.equals(token.type()))
+                .anyMatch(token -> token.revokedReason() == RevokedReason.REUSE
+                        || token.revokedReason() == RevokedReason.CLIENT_REQUEST);
+    }
+
+    /**
+     * How many token pairs already descend directly from {@code source}: one for the rotation itself, plus one
+     * per in-grace retry served so far. Counted on access rows; every pair has exactly one.
+     */
+    private static long countDescendantPairs(List<McpOAuthToken> family, McpOAuthToken source) {
+        return family.stream()
+                .filter(token -> TYPE_ACCESS.equals(token.type()) && source.id().equals(token.rotatedFromId()))
+                .count();
     }
 
     /**

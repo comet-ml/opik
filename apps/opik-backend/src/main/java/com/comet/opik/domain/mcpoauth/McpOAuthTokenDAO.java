@@ -12,6 +12,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @RegisterConstructorMapper(McpOAuthToken.class)
@@ -29,6 +30,9 @@ interface McpOAuthTokenDAO {
 
     @SqlQuery("SELECT * FROM mcp_oauth_tokens WHERE token_hash = :tokenHash")
     McpOAuthToken findByHash(@Bind("tokenHash") String tokenHash);
+
+    @SqlQuery("SELECT * FROM mcp_oauth_tokens WHERE family_id = :familyId")
+    List<McpOAuthToken> findFamily(@Bind("familyId") String familyId);
 
     @UseStringTemplateEngine
     @SqlUpdate("""

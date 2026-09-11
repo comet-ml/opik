@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -40,6 +41,9 @@ public class McpOAuthConfig {
 
     @Valid @JsonProperty
     @NotNull private Duration refreshRotationGrace;
+
+    @Valid @JsonProperty
+    @Positive private int refreshRotationMaxRetries;
 
     @Valid @JsonProperty
     @NotNull private Duration scrubLockTimeout;
