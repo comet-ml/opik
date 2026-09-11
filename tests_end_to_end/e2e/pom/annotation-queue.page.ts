@@ -90,7 +90,12 @@ export class AnnotationQueuesPage {
       const dialog = this.editQueueDialog;
       await dialog.waitFor({ state: 'visible' });
       await dialog.getByLabel('Name', { exact: true }).fill(newName);
-      await dialog.getByRole('button', { name: 'Update annotation queue' }).click();
+      // Either copy the submit button carries, because the two live on sibling
+      // branches of one stack: "Update annotation queue" today, "Update queue"
+      // once OPIK-6303's automation-ui branch lands (it rewrites `submitText`
+      // in AddEditAnnotationQueueDialog). Anchored, so it still cannot match a
+      // different button — this drives the dialog, it does not assert its copy.
+      await dialog.getByRole('button', { name: /^Update (annotation )?queue$/ }).click();
 
       await dialog.waitFor({ state: 'hidden' });
       await expect(row.getByText(newName, { exact: true })).toBeVisible();
