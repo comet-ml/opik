@@ -16,21 +16,11 @@ import {
 
 export type DemoProjectVerdict = {
   isDemoProject: boolean;
-  /**
-   * Whether the answer above is the real one yet. It comes from a query, so
-   * "not a demo project" and "we do not know yet" are the same `false` — a
-   * distinction that matters to anything counting impressions, which must not
-   * count a user it is about to hide a banner from.
-   */
+  // False while the project query is pending, which also reads as "not a demo".
   isSettled: boolean;
 };
 
-/**
- * Is this project one of the seeded demo projects?
- *
- * Membership is by name — no field on the project marks a demo project — which
- * is why `DEMO_PROJECT_NAMES` is a list rather than a single constant.
- */
+// Demo membership is by name: nothing on the project marks it.
 export const useIsDemoProjectById = (
   projectId?: string | null,
 ): DemoProjectVerdict => {
@@ -41,24 +31,17 @@ export const useIsDemoProjectById = (
 
   return {
     isDemoProject: !!project?.name && DEMO_PROJECT_NAMES.includes(project.name),
-    // No project to resolve is a settled answer, not a pending one: a disabled
-    // query stays "pending" forever.
+    // A disabled query stays pending forever, so no project counts as settled.
     isSettled: !projectId || !isPending,
   };
 };
 
 export type DemoProjectBannerVisibility = {
-  /** Whether the demo-project banner belongs on screen right now. */
   isBannerVisible: boolean;
-  /** Whether the page being viewed belongs to a seeded demo project. */
   isOnDemoProjectPage: boolean;
-  /** Whether the page's demo verdict has resolved; see DemoProjectVerdict. */
   isSettled: boolean;
-  /**
-   * Whether the *sticky* active project is a demo project. This outlives the
-   * page it was opened from, so it answers "which project is this user working
-   * in", not "what is on screen". Onboarding auto-completion needs the former.
-   */
+  // The sticky active project, which outlives the page it was opened from.
+  // Onboarding auto-completion keys off this, not off the page.
   isDemoProjectActive: boolean;
   isOnboardingActive: boolean;
   isManualFlow: boolean;
@@ -68,20 +51,9 @@ export type DemoProjectBannerVisibility = {
   >;
 };
 
-/**
- * The single source of truth for whether the demo-project banner is on screen.
- *
- * Two banners need this answer: the demo banner itself, and the MCP
- * announcement banner, which must stand aside for it. Deriving it in both
- * places is how they drift into showing together or hiding together.
- *
- * Visibility follows the page, which is what OPIK-6027 asked for ("while
- * browsing the demo project") and what OPIK-6192 extended to the manual
- * "skip and explore" flow. It deliberately does not follow the active project:
- * that id is persisted per workspace and cleared only on deletion, so keying
- * the bar to it kept the bar on screen across the whole app long after the
- * user had left the demo project.
- */
+// Shared by the demo banner and the MCP announcement, which stands aside for it.
+// Visibility follows the page (OPIK-6027: "while browsing the demo project"),
+// not the sticky active project.
 export const useDemoProjectBannerVisibility =
   (): DemoProjectBannerVisibility => {
     const activeProjectId = useActiveProjectId();
@@ -102,8 +74,6 @@ export const useDemoProjectBannerVisibility =
         `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
       );
 
-    // Unresolved (PostHog unavailable, or flags not loaded yet) falls back to
-    // the manual flow, matching every other call site of this flag.
     const variant =
       useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
       DEFAULT_ONBOARDING_FLOW;

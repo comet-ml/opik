@@ -1,18 +1,8 @@
 import { useCallback, useState } from "react";
 
-/**
- * A working in-memory stand-in for `use-local-storage-state`.
- *
- * It holds real state, so "the value survives a remount" is an assertion about
- * the code under test rather than a mock echoing itself back. Pass the same
- * store object to every mock in a file and clear it between tests.
- *
- *   const storage: Record<string, unknown> = {};
- *   vi.mock("use-local-storage-state", async () => ({
- *     default: (await import("@/testing/localStorageStateMock"))
- *       .createLocalStorageStateMock(storage),
- *   }));
- */
+// In-memory stand-in for use-local-storage-state that keeps real React state,
+// so "the value survives a remount" is a real assertion. Share one `storage`
+// object per test file and clear it between tests.
 export const createLocalStorageStateMock = (storage: Record<string, unknown>) =>
   function useLocalStorageStateMock(
     key: string,

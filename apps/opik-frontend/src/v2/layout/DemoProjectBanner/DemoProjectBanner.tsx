@@ -3,9 +3,8 @@ import { Link } from "@tanstack/react-router";
 
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import { cn } from "@/lib/utils";
 import { AGENT_ONBOARDING_STEPS } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
-import { DEMO_BANNER_HEIGHT, DEMO_BANNER_HEIGHT_CLASS } from "./constants";
+import { DEMO_BANNER_HEIGHT } from "./constants";
 import { useDemoProjectBannerVisibility } from "./useDemoProjectBannerVisibility";
 import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
@@ -33,18 +32,14 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     onChangeHeight(node.clientHeight);
   });
 
-  // Keyed to the sticky active project, not the page: this watches the user's
-  // own project for its first trace and has to keep doing that wherever they
-  // navigate, including away from the demo project that started the flow.
+  // Sticky active project on purpose: this must keep running after the user
+  // leaves the demo project.
   useAutoCompleteAgentOnboarding({
     agentName: onboardingState?.agentName,
     enabled: isDemoProjectActive && isOnboardingActive,
   });
 
-  // Layout effect, and the height known from the styling rather than a
-  // measurement: visibility resolves from a query, so the bar appears a beat
-  // after mount, and a height published only once a resize observer had run
-  // left the layout at 0 with the bar overlapping the content.
+  // Before paint, with the known height, or the bar overlaps the content.
   useLayoutEffect(() => {
     onChangeHeight(isBannerVisible ? heightRef.current : 0);
   }, [isBannerVisible, onChangeHeight]);
@@ -68,10 +63,7 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   return (
     <div
       ref={ref}
-      className={cn(
-        "z-10 flex items-center justify-center gap-1.5 bg-primary px-4",
-        DEMO_BANNER_HEIGHT_CLASS,
-      )}
+      className="z-10 flex h-8 items-center justify-center gap-1.5 bg-primary px-4"
     >
       <span className="comet-body-xs text-center text-white">
         You are viewing a demo project,{" "}
