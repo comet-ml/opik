@@ -623,7 +623,7 @@ llmProviderClient:
     scope: https://www.googleapis.com/auth/cloud-platform
     # Description: API endpoint per multi-region location, keyed by lower-case location. Single-region locations are
     # not listed and keep the endpoint the SDK derives from the location itself. Required: these endpoints exist only
-    # here, the application defines no fallback for them. Values may be a bare host or an absolute URL.
+    # here, the application defines no fallback for them. Values may be a bare host or an https:// URL.
     multiRegionApiEndpoints:
       global: https://aiplatform.googleapis.com
       eu: https://aiplatform.eu.rep.googleapis.com
