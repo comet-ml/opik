@@ -207,3 +207,57 @@ def test_insert__dataset_built_without_an_owning_client__still_uploads():
         "Without an HTTP client of its own the upload must fall back to the REST client"
     )
     assert len(create.call_args.kwargs["items"]) == 2
+
+
+# --------------------------------------------------------------------------- #
+# transport-sensitive behaviour, asserted on the streaming path
+#
+# The pre-existing dataset tests construct a Dataset from a REST client alone, which is a
+# supported shape that takes the fallback path, so they keep covering that path unchanged.
+# These cover the same behaviours where the streaming path implements them differently.
+# --------------------------------------------------------------------------- #
+def test_insert__streaming__worker_count_gated_by_backend_version(monkeypatch):
+    """The parallel-upload gate must apply to the streaming pool too."""
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": "2.2.7"}  # predates parallel
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
+
+    used_workers = []
+    original = Dataset._open_send_pool
+
+    def spy(self, num_threads):
+        used_workers.append(num_threads)
+        return original(self, num_threads)
+
+    monkeypatch.setattr(Dataset, "_open_send_pool", spy)
+    dataset.insert(_items(4), num_threads=4)
+
+    assert used_workers == [1], (
+        "An old backend must force a sequential upload on the streaming path as well"
+    )
+    assert len(capture.items) == 4
+
+
+def test_insert__streaming__rate_limited_request_is_retried(monkeypatch):
+    """429 handling lives outside the generated client now, so it needs its own check."""
+    monkeypatch.setattr("opik.api_objects.rest_helpers._sleep", lambda _seconds: None)
+    capture = UploadCapture(
+        responses=[429, 204],
+        response_headers={"x-ratelimit-reset": "1"},
+    )
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert(_items(1))
+
+    assert capture.request_count == 2, "The throttled request should have been retried"
+
+
+def test_insert__streaming__server_error_raises():
+    capture = UploadCapture(status_code=500)
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    from opik.rest_api.core.api_error import ApiError
+
+    with pytest.raises(ApiError):
+        dataset.insert(_items(1))
