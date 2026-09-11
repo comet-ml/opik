@@ -488,3 +488,205 @@ def test_conversation_thread_metric_with_trace_thread_type(client, app):
     assert score['value'] == 1.0  # 2 messages is within 2-10 range
     assert score['reason'] == "Conversation has 2 messages"
     assert score['scoring_failed'] is False
+
+
+@pytest.fixture
+def process_client():
+    """Endpoint client pinned to the in-repo ProcessExecutor.
+
+    The Docker executor runs the *published* sandbox image, so it cannot exercise
+    an unreleased change to that image's scoring_runner. Pinning keeps these
+    assertions about this repo's own code; the sandbox runner's equivalent cases
+    are gated by its selftest.sh at image build time.
+    """
+    executor = ProcessExecutor()
+    if hasattr(executor, 'start_services'):
+        executor.start_services()
+    try:
+        from opik_backend import create_app
+        app = create_app(should_init_executor=False)
+        app.executor = executor
+        yield app.test_client()
+    finally:
+        if hasattr(executor, 'cleanup'):
+            executor.cleanup()
+
+
+REQUIRED_METADATA_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class RequiresMetadata(base_metric.BaseMetric):
+    def __init__(
+        self,
+        name: str = "requires_metadata_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(
+        self, output: str, metadata, **ignored_kwargs: Any
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=1.0, name=self.name, reason=f"metadata={metadata!r}"
+        )
+"""
+
+OPTIONAL_THRESHOLD_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class OptionalThreshold(base_metric.BaseMetric):
+    def __init__(
+        self,
+        name: str = "optional_threshold_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(
+        self, output: str, threshold: float = 0.5, **ignored_kwargs: Any
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=threshold, name=self.name, reason=f"threshold={threshold!r}"
+        )
+"""
+
+KEYWORD_ONLY_METADATA_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class KeywordOnlyMetadata(base_metric.BaseMetric):
+    def __init__(
+        self,
+        name: str = "keyword_only_metadata_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(self, output: str, *, metadata) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=1.0, name=self.name, reason=f"metadata={metadata!r}"
+        )
+"""
+
+
+# A rule maps each score() parameter to a trace/span field, but a field the entity
+# never logged resolves to nothing and reaches the evaluator with that key absent.
+# Spreading that as score(**data) used to miss an argument the signature required,
+# failing the whole rule -- which is what the shipped default template did on any
+# trace logged without metadata.
+@pytest.mark.parametrize("code, expected_name, expected_value, expected_reason", [
+    (REQUIRED_METADATA_METRIC, "requires_metadata_metric", 1.0, "metadata=None"),
+    (KEYWORD_ONLY_METADATA_METRIC, "keyword_only_metadata_metric", 1.0, "metadata=None"),
+])
+def test_missing_required_argument_is_bound_to_none(
+        process_client, code, expected_name, expected_value, expected_reason):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": code
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == expected_name
+    assert scores[0]["value"] == expected_value
+    assert scores[0]["reason"] == expected_reason
+    assert scores[0]["scoring_failed"] is False
+
+
+# The counterpart the fill-in must not break: None is a value, so binding it over a
+# parameter that has a default would silently replace the default rather than let it
+# apply.
+def test_missing_optional_argument_keeps_its_default(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": OPTIONAL_THRESHOLD_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "optional_threshold_metric"
+    assert scores[0]["value"] == 0.5, "the metric's own default must survive"
+    assert scores[0]["reason"] == "threshold=0.5"
+    assert scores[0]["scoring_failed"] is False
+
+
+# A resolvable mapping must reach the metric untouched -- the contrast that shows the
+# fill-in only covers absence.
+def test_present_argument_is_passed_through(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc", "metadata": '{"env":"test"}'},
+        "code": REQUIRED_METADATA_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "requires_metadata_metric"
+    assert scores[0]["value"] == 1.0
+    assert scores[0]["reason"] == "metadata='{\"env\":\"test\"}'"
+    assert scores[0]["scoring_failed"] is False
+
+
+# Binding absent arguments must not paper over a genuinely wrong call: an argument the
+# signature has no place for is still a reported failure, and the reported cause must
+# name it rather than coming back empty.
+def test_unexpected_argument_still_fails_and_names_the_cause(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc", "metadata": "x"},
+        "code": """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class NoKwargs(base_metric.BaseMetric):
+    def __init__(self, name: str = "no_kwargs_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)
+"""
+    })
+
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "The provided 'code' and 'data' fields can't be evaluated" in error
+    assert "unexpected keyword argument 'metadata'" in error, (
+        "the cause must be named -- a fixed-length traceback slice used to drop it"
+    )
+
+
+# `code` is untyped JSON and is parsed in the request thread, ahead of the executor,
+# to read the score() signature. A non-string raises TypeError rather than
+# SyntaxError there, which would surface as a 500 instead of the executor's 400 for
+# invalid code.
+@pytest.mark.parametrize("code", [42, ["x"], {"a": 1}])
+def test_non_string_code_is_rejected_as_bad_request(process_client, code):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": code
+    })
+
+    assert response.status_code == 400, "must not surface as a 500"
+    error = str(response.json["error"])
+    # Pin the cause, not just the status: an unrelated 400 would otherwise pass.
+    assert "Field 'code' contains invalid Python code" in error, (
+        "the rejection must come from the executor's invalid-code path"
+    )
+    # exec() raises with no user frame, so this is also the shortest traceback
+    # there is -- the shape a fixed-length slice used to leave empty.
+    assert "TypeError" in error
