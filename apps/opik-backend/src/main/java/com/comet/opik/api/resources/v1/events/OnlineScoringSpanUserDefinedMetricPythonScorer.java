@@ -86,9 +86,9 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for spanId '{}':\n\n{}", span.id(), scoreResults)))
                 .flatMap(scoreResults -> {
-                    var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
-                    OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc,
-                            pythonScores.valuelessNames(), "spanId", span.id());
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
+                    OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores,
+                            "spanId", span.id());
                     return storeSpanScores(toFeedbackScores(pythonScores.storable(), span), span,
                             message.userName(), message.workspaceId());
                 })

@@ -1547,8 +1547,8 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Splits Python evaluator results into the ones that can be stored and the names of the ones that
-     * carry no value. Shared by the trace, span and thread Python scorers.
+     * Splits Python evaluator results three ways: the ones that can be stored, and the names of the ones
+     * that cannot, by reason. Shared by the trace, span and thread Python scorers.
      *
      * <p>A user metric is free to return a score with no value — {@code ScoreResult(value=None)} for a
      * check that did not apply, or a scoring attempt the metric itself gave up on. Such a score cannot
@@ -1557,45 +1557,65 @@ public class OnlineScoringEngine {
      * whole batch — every other score for the same entity was lost with it, and the rule's user saw only
      * a generic "Unexpected error" naming neither the metric nor the reason. Dropped per score instead,
      * mirroring how the judge path treats a null judge score.
+     *
+     * <p>A result the metric itself flagged with {@code scoring_failed} is dropped for a different
+     * reason: the SDK pairs that flag with a placeholder {@code 0.0}, so the score is storable but
+     * storing it would record a failed evaluation as a genuine zero, indistinguishable in the UI from a
+     * metric that deliberately scored zero.
      */
-    public StorablePythonScores toStorablePythonScores(List<PythonScoreResult> scoreResults) {
+    public PythonScoreSplit splitPythonScores(List<PythonScoreResult> scoreResults) {
         if (CollectionUtils.isEmpty(scoreResults)) {
-            return StorablePythonScores.builder().build();
+            return PythonScoreSplit.builder().build();
         }
 
         var storable = new ArrayList<PythonScoreResult>(scoreResults.size());
         var valuelessNames = new ArrayList<String>();
 
+        var failedNames = new ArrayList<String>();
+
         scoreResults.forEach(scoreResult -> {
             // A null entry is what a JSON `null` inside the evaluator's array deserializes to. It carries no
             // value either, so it joins the dropped scores rather than being dereferenced — one unusable
-            // entry must not cost the batch, which is the whole point of this split.
-            if (scoreResult != null && scoreResult.value() != null) {
+            // entry must not cost the batch, which is the whole point of this split. An unnamed score keeps
+            // its missing name here; the record normalizes it, and it is reported as <unnamed>.
+            if (scoreResult == null) {
+                valuelessNames.add(null);
+            } else if (BooleanUtils.isTrue(scoreResult.scoringFailed())) {
+                // Checked before the value, so a metric that both failed and returned nothing is reported by
+                // its cause rather than the symptom. Either way the score is dropped.
+                failedNames.add(scoreResult.name());
+            } else if (scoreResult.value() == null) {
+                valuelessNames.add(scoreResult.name());
+            } else {
                 storable.add(scoreResult);
-                return;
             }
-
-            // Normalized on collection, because a metric may leave a score unnamed and List.copyOf rejects a
-            // null element — that would fail the batch from inside the code meant to save it. Rendered as
-            // <unnamed> when the name is reported.
-            var name = scoreResult == null ? null : scoreResult.name();
-            valuelessNames.add(StringUtils.defaultString(name));
         });
 
-        return StorablePythonScores.builder()
+        return PythonScoreSplit.builder()
                 .storable(storable)
                 .valuelessNames(valuelessNames)
+                .failedNames(failedNames)
                 .build();
     }
 
     @Builder(toBuilder = true)
-    public record StorablePythonScores(List<PythonScoreResult> storable, List<String> valuelessNames) {
+    public record PythonScoreSplit(List<PythonScoreResult> storable, List<String> valuelessNames,
+            List<String> failedNames) {
 
-        // Snapshotted and defaulted here rather than at the call site: this record hands both lists to its
-        // callers, so it is the one place that has to guarantee they are immutable and never null.
-        public StorablePythonScores {
+        // Snapshotted, defaulted and normalized here rather than at the call sites: this record hands its
+        // lists to its callers, so it is the one place that has to guarantee they are immutable, never null,
+        // and free of null elements — a metric may leave a score unnamed, and List.copyOf rejects a null
+        // element, which would throw from inside the type meant to make an unusable score harmless.
+        public PythonScoreSplit {
             storable = storable == null ? List.of() : List.copyOf(storable);
-            valuelessNames = valuelessNames == null ? List.of() : List.copyOf(valuelessNames);
+            valuelessNames = copyOfNames(valuelessNames);
+            failedNames = copyOfNames(failedNames);
+        }
+
+        private static List<String> copyOfNames(List<String> names) {
+            return names == null
+                    ? List.of()
+                    : names.stream().map(StringUtils::defaultString).toList();
         }
     }
 
@@ -1612,28 +1632,40 @@ public class OnlineScoringEngine {
      * paths but the caller-supplied thread id on the thread one — a CR/LF in it would forge entries in the
      * log, and an oversized one would flood a single entry.
      */
-    public void logValuelessPythonScores(
+    public void logDroppedPythonScores(
             @NonNull Logger userFacingLogger,
             @NonNull Map<String, String> mdc,
-            List<String> valuelessNames,
+            @NonNull PythonScoreSplit scores,
             @NonNull String entityLabel,
             @NonNull Object entityId) {
-        if (CollectionUtils.isEmpty(valuelessNames)) {
+        if (CollectionUtils.isEmpty(scores.valuelessNames()) && CollectionUtils.isEmpty(scores.failedNames())) {
+            return;
+        }
+
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            var safeEntityId = sanitize(String.valueOf(entityId));
+            logDropped(userFacingLogger, scores.valuelessNames(), entityLabel, safeEntityId,
+                    "Skipped {} for {} '{}' because the metric returned no value");
+            logDropped(userFacingLogger, scores.failedNames(), entityLabel, safeEntityId,
+                    "Skipped {} for {} '{}' because the metric reported the scoring as failed");
+        }
+    }
+
+    private void logDropped(Logger userFacingLogger, List<String> names, String entityLabel, String safeEntityId,
+            String message) {
+        if (names.isEmpty()) {
             return;
         }
 
         // A metric is free to leave a score unnamed; rendered rather than dropped, so the count a user sees
         // still matches the scores their rule ran.
-        var reported = valuelessNames.stream()
+        var reported = names.stream()
                 .map(name -> StringUtils.isBlank(name) ? "<unnamed>" : name)
                 .limit(MAX_REPORTED_FIELD_NAMES)
                 .toList();
-        var omitted = valuelessNames.size() - reported.size();
 
-        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
-            userFacingLogger.warn("Skipped {} for {} '{}' because the metric returned no value",
-                    renderNames(reported, omitted), entityLabel, sanitize(String.valueOf(entityId)));
-        }
+        userFacingLogger.warn(message, renderNames(reported, names.size() - reported.size()), entityLabel,
+                safeEntityId);
     }
 
     /**
