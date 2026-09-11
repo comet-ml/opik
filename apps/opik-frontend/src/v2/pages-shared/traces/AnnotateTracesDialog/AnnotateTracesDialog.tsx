@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -272,10 +273,10 @@ const AnnotateTracesDialog: React.FunctionComponent<
       <DialogContent className="max-w-lg" data-testid="annotate-bulk-dialog">
         <DialogHeader>
           <DialogTitle>Annotate {entityCopy}</DialogTitle>
+          <DialogDescription className="comet-body-s text-light-slate">
+            Apply the same feedback score to {rows.length} selected {entityCopy}.
+          </DialogDescription>
         </DialogHeader>
-        <p className="comet-body-s text-light-slate">
-          Apply the same feedback score to {rows.length} selected {entityCopy}.
-        </p>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleApply)}
