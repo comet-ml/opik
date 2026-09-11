@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import decimal
 import enum
@@ -585,18 +586,29 @@ def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound():
         failed.wait(5)
 
     pool = streaming_writer.BoundedSendPool(send, num_threads=2)  # a bound of four
+    try:
+        attempts = 0
+        with pytest.raises(ValueError, match="body-0 was rejected"):
+            for index in range(20):
+                attempts += 1
+                pool.submit(f"body-{index}".encode(), 1)
 
-    attempts = 0
-    with pytest.raises(ValueError, match="body-0 was rejected"):
-        for index in range(20):
-            attempts += 1
-            pool.submit(f"body-{index}".encode(), 1)
+        # Four submits fill the bound; the fifth waits, collects the failed future and
+        # raises.
+        assert attempts == 5, (
+            "The failure must surface on the submit that waits at the bound, not at close"
+        )
 
-    # Four submits fill the bound; the fifth waits, collects the failed future and raises.
-    assert attempts == 5, (
-        "The failure must surface on the submit that waits at the bound, not at close"
-    )
-
-    # Reported once, not twice: the failed future was collected by that wait, so the close
-    # `insert` runs in its `except` cannot raise over the producer's own exception.
-    pool.close()
+        # Reported once, not twice: the failed future was collected by that wait, so a
+        # second close finds nothing left to raise. `Dataset.insert` depends on that when
+        # it closes the pool in its `except` branch, which
+        # `test_insert__producer_error_with_a_worker_error_pending__producer_error_wins`
+        # covers at the insert level -- this test does not reach `insert` at all.
+        pool.close()
+    finally:
+        # Release anything still waiting and shut the executor down even if an assertion
+        # above failed, so a broken assertion here cannot leak threads into the rest of
+        # the file. Closing twice is safe: the second finds no pending futures.
+        failed.set()
+        with contextlib.suppress(Exception):
+            pool.close()
