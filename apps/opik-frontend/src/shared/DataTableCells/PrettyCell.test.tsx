@@ -13,7 +13,7 @@ import {
   PrettifyMessageConfig,
   PrettifySource,
 } from "@/lib/traces";
-import { ROW_HEIGHT } from "@/types/shared";
+import { JsonNode, ROW_HEIGHT } from "@/types/shared";
 import PrettyCell from "./PrettyCell";
 
 function TestTable<TData>({
@@ -22,10 +22,10 @@ function TestTable<TData>({
   config,
 }: {
   row: TData;
-  value: (row: TData) => string | object;
+  value: (row: TData) => JsonNode;
   config?: (row: TData, field: "input" | "output") => PrettifyMessageConfig;
 }) {
-  const columns: ColumnDef<TData, string | object>[] = [
+  const columns: ColumnDef<TData, JsonNode>[] = [
     {
       id: "output",
       accessorFn: value,
@@ -44,6 +44,16 @@ function TestTable<TData>({
 }
 
 describe("PrettyCell", () => {
+  it.each([0, false])("preserves scalar thread output %s", (last_message) => {
+    const html = renderToStaticMarkup(
+      <TestTable
+        row={{ last_message }}
+        value={(thread) => thread.last_message ?? null}
+        config={getThreadPrettifyConfig}
+      />,
+    );
+    expect(html).toContain(`>${last_message}</`);
+  });
   it("recovers an empty trace output using the column's trace context", () => {
     const row: PrettifySource = {
       input: { "llm.output_messages.0.message.content": "Recovered answer" },
